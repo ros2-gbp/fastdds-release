@@ -81,6 +81,9 @@ giving the user full access to the protocol internals.
 %if !0%{?with_tests}
     -DBUILD_TESTING=OFF \
 %endif
+    -DINSTALL_EXAMPLES=OFF \
+    -DSECURITY=ON \
+    -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON \
 
 %cmake3_build
 
