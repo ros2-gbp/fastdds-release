@@ -20,17 +20,18 @@
 
 #include <gtest/gtest.h>
 
-#include <fastrtps/transport/TCPv4TransportDescriptor.h>
-#include <fastrtps/transport/TCPv6TransportDescriptor.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
 
 #include "../api/dds-pim/TCPReqRepHelloWorldRequester.hpp"
 #include "../api/dds-pim/TCPReqRepHelloWorldReplier.hpp"
+#include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 #include "DatagramInjectionTransport.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 enum communication_type
 {
@@ -51,11 +52,11 @@ public:
             // TODO: fix IPv6 issues related with zone ID
             GTEST_SKIP() << "TCPv6 tests are disabled in Mac";
 #endif // ifdef __APPLE__
-            test_transport_ = std::make_shared<TCPv6TransportDescriptor>();
+            test_transport_ = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
         }
         else
         {
-            test_transport_ = std::make_shared<TCPv4TransportDescriptor>();
+            test_transport_ = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
         }
     }
 
@@ -64,7 +65,7 @@ public:
         use_ipv6 = false;
     }
 
-    std::shared_ptr<TCPTransportDescriptor> test_transport_;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> test_transport_;
 };
 
 // TCP and Domain management with logical ports tests
@@ -524,98 +525,92 @@ TEST_P(TransportTCP, TCPLocalhost)
 // Test for ==operator TCPTransportDescriptor is not required as it is an abstract class and in TCPv6 is same method
 // Test for copy TCPTransportDescriptor is not required as it is an abstract class and in TCPv6 is same method
 
-// Test == operator for TCPv4
-TEST_P(TransportTCP, TCPv4_equal_operator)
+// Test == operator for TCPv4/v6
+TEST_P(TransportTCP, TCP_equal_operator)
 {
-    // TCPv4TransportDescriptor
-    TCPv4TransportDescriptor tcpv4_transport_1;
-    TCPv4TransportDescriptor tcpv4_transport_2;
+    if (use_ipv6)
+    {
+        // TCPv6TransportDescriptor
+        TCPv6TransportDescriptor transport1;
+        TCPv6TransportDescriptor transport2;
+        // Compare equal in defult values
+        ASSERT_EQ(transport1, transport2);
 
-    // Compare equal in defult values
-    ASSERT_EQ(tcpv4_transport_1, tcpv4_transport_2);
+        // Modify some default values in 1
+        transport1.enable_tcp_nodelay = !transport1.enable_tcp_nodelay; // change default value
+        transport1.max_logical_port = transport1.max_logical_port + 10; // change default value
+        transport1.add_listener_port(123u * 98u);
+        ASSERT_FALSE(transport1 == transport2); // operator== != operator!=, using operator== == false instead
 
-    // Modify default values in 1
-    tcpv4_transport_1.set_WAN_address("80.80.99.45");
+        // Modify some default values in 2
+        transport2.enable_tcp_nodelay = !transport2.enable_tcp_nodelay; // change default value
+        transport2.max_logical_port = transport2.max_logical_port + 10; // change default value
+        transport2.add_listener_port(123u * 98u);
+        ASSERT_EQ(transport1, transport2);
+    }
+    else
+    {
+        // TCPv4TransportDescriptor
+        TCPv4TransportDescriptor transport1;
+        TCPv4TransportDescriptor transport2;
+        // Compare equal in defult values
+        ASSERT_EQ(transport1, transport2);
 
-    ASSERT_FALSE(tcpv4_transport_1 == tcpv4_transport_2); // operator== != operator!=, using operator== == false instead
+        // Modify default values in 1
+        transport1.set_WAN_address("80.80.99.45");
+        ASSERT_FALSE(transport1 == transport2); // operator== != operator!=, using operator== == false instead
 
-    // Modify default values in 2
-    tcpv4_transport_2.set_WAN_address("80.80.99.45");
-
-    ASSERT_EQ(tcpv4_transport_1, tcpv4_transport_2);
+        // Modify default values in 2
+        transport2.set_WAN_address("80.80.99.45");
+        ASSERT_EQ(transport1, transport2);
+    }
 }
 
-// Test copy constructor and copy assignment for TCPv4
-TEST_P(TransportTCP, TCPv4_copy)
+// Test copy constructor and copy assignment for TCPv4/v6
+TEST_P(TransportTCP, TCP_copy)
 {
-    TCPv4TransportDescriptor tcpv4_transport;
-    tcpv4_transport.set_WAN_address("80.80.99.45");
+    if (use_ipv6)
+    {
+        // Change some varibles in order to check the non default creation
+        TCPv6TransportDescriptor tcpv6_transport;
+        tcpv6_transport.enable_tcp_nodelay = !tcpv6_transport.enable_tcp_nodelay; // change default value
+        tcpv6_transport.max_logical_port = tcpv6_transport.max_logical_port + 10; // change default value
+        tcpv6_transport.add_listener_port(123u * 98u);
+        // Copy constructor
+        TCPv6TransportDescriptor tcpv6_transport_copy_constructor(tcpv6_transport);
+        EXPECT_EQ(tcpv6_transport, tcpv6_transport_copy_constructor);
 
-    // Copy constructor
-    TCPv4TransportDescriptor tcpv4_transport_copy_constructor(tcpv4_transport);
-    EXPECT_EQ(tcpv4_transport, tcpv4_transport_copy_constructor);
+        // Copy assignment
+        TCPv6TransportDescriptor tcpv6_transport_copy = tcpv6_transport;
+        EXPECT_EQ(tcpv6_transport_copy, tcpv6_transport);
+    }
+    else
+    {
+        TCPv4TransportDescriptor tcpv4_transport;
+        tcpv4_transport.set_WAN_address("80.80.99.45");
 
-    // Copy assignment
-    TCPv4TransportDescriptor tcpv4_transport_copy = tcpv4_transport;
-    EXPECT_EQ(tcpv4_transport_copy, tcpv4_transport);
+        // Copy constructor
+        TCPv4TransportDescriptor tcpv4_transport_copy_constructor(tcpv4_transport);
+        EXPECT_EQ(tcpv4_transport, tcpv4_transport_copy_constructor);
+
+        // Copy assignment
+        TCPv4TransportDescriptor tcpv4_transport_copy = tcpv4_transport;
+        EXPECT_EQ(tcpv4_transport_copy, tcpv4_transport);
+    }
 }
 
 // Test get_WAN_address member function
-TEST_P(TransportTCP, TCPv4_get_WAN_address)
+TEST(TransportTCP, TCPv4_get_WAN_address)
 {
     // TCPv4TransportDescriptor
-    TCPv4TransportDescriptor tcpv4_transport;
+    eprosima::fastdds::rtps::TCPv4TransportDescriptor tcpv4_transport;
     tcpv4_transport.set_WAN_address("80.80.99.45");
     ASSERT_EQ(tcpv4_transport.get_WAN_address(), "80.80.99.45");
 }
 
-// Test == operator for TCPv6
-TEST_P(TransportTCP, TCPv6_equal_operator)
-{
-    // TCPv6TransportDescriptor
-    TCPv6TransportDescriptor tcpv6_transport_1;
-    TCPv6TransportDescriptor tcpv6_transport_2;
-
-    // Compare equal in defult values
-    ASSERT_EQ(tcpv6_transport_1, tcpv6_transport_2);
-
-    // Modify some default values in 1
-    tcpv6_transport_1.enable_tcp_nodelay = !tcpv6_transport_1.enable_tcp_nodelay; // change default value
-    tcpv6_transport_1.max_logical_port = tcpv6_transport_1.max_logical_port + 10; // change default value
-    tcpv6_transport_1.add_listener_port(123u * 98u);
-
-    ASSERT_FALSE(tcpv6_transport_1 == tcpv6_transport_2); // operator== != operator!=, using operator== == false instead
-
-
-    // Modify some default values in 2
-    tcpv6_transport_2.enable_tcp_nodelay = !tcpv6_transport_2.enable_tcp_nodelay; // change default value
-    tcpv6_transport_2.max_logical_port = tcpv6_transport_2.max_logical_port + 10; // change default value
-    tcpv6_transport_2.add_listener_port(123u * 98u);
-
-    ASSERT_EQ(tcpv6_transport_1, tcpv6_transport_2);
-}
-
-// Test copy constructor and copy assignment for TCPv6
-TEST_P(TransportTCP, TCPv6_copy)
-{
-    // Change some varibles in order to check the non default creation
-    TCPv6TransportDescriptor tcpv6_transport;
-    tcpv6_transport.enable_tcp_nodelay = !tcpv6_transport.enable_tcp_nodelay; // change default value
-    tcpv6_transport.max_logical_port = tcpv6_transport.max_logical_port + 10; // change default value
-    tcpv6_transport.add_listener_port(123u * 98u);
-
-    // Copy constructor
-    TCPv6TransportDescriptor tcpv6_transport_copy_constructor(tcpv6_transport);
-    EXPECT_EQ(tcpv6_transport, tcpv6_transport_copy_constructor);
-
-    // Copy assignment
-    TCPv6TransportDescriptor tcpv6_transport_copy = tcpv6_transport;
-    EXPECT_EQ(tcpv6_transport_copy, tcpv6_transport);
-}
-
 // Test connection is successfully restablished after dropping and relaunching a TCP client (requester)
 // Issue -> https://github.com/eProsima/Fast-DDS/issues/2409
-TEST(TransportTCP, Client_reconnection)
+TEST_P(TransportTCP, Client_reconnection)
 {
     TCPReqRepHelloWorldReplier* replier;
     TCPReqRepHelloWorldRequester* requester;
@@ -674,14 +669,28 @@ TEST(TransportTCP, Client_reconnection)
     delete requester;
 }
 
-// Test zero listening port for TCPv4
-TEST_P(TransportTCP, TCPv4_autofill_port)
+// Test zero listening port for TCPv4/v6
+TEST_P(TransportTCP, TCP_autofill_port)
 {
     PubSubReader<HelloWorldPubSubType> p1(TEST_TOPIC_NAME);
     PubSubReader<HelloWorldPubSubType> p2(TEST_TOPIC_NAME);
 
+    std::shared_ptr<TCPTransportDescriptor> p1_transport;
+    std::shared_ptr<TCPTransportDescriptor> p2_transport;
+    if (use_ipv6)
+    {
+        // TCPv6TransportDescriptor
+        p1_transport = std::make_shared<TCPv6TransportDescriptor>();
+        p2_transport = std::make_shared<TCPv6TransportDescriptor>();
+    }
+    else
+    {
+        // TCPv4TransportDescriptor
+        p1_transport = std::make_shared<TCPv4TransportDescriptor>();
+        p2_transport = std::make_shared<TCPv4TransportDescriptor>();
+    }
+
     // Add TCP Transport with listening port 0
-    auto p1_transport = std::make_shared<TCPv4TransportDescriptor>();
     p1_transport->add_listener_port(0);
     p1.disable_builtin_transport().add_user_transport_to_pparams(p1_transport);
     p1.init();
@@ -689,37 +698,6 @@ TEST_P(TransportTCP, TCPv4_autofill_port)
 
     // Add TCP Transport with listening port different from 0
     uint16_t port = 12345;
-    auto p2_transport = std::make_shared<TCPv4TransportDescriptor>();
-    p2_transport->add_listener_port(port);
-    p2.disable_builtin_transport().add_user_transport_to_pparams(p2_transport);
-    p2.init();
-    ASSERT_TRUE(p2.isInitialized());
-
-    LocatorList_t p1_locators;
-    p1.get_native_reader().get_listening_locators(p1_locators);
-    EXPECT_TRUE(IPLocator::getPhysicalPort(p1_locators.begin()[0]) != 0);
-
-    LocatorList_t p2_locators;
-    p2.get_native_reader().get_listening_locators(p2_locators);
-    EXPECT_TRUE(IPLocator::getPhysicalPort(p2_locators.begin()[0]) == port);
-}
-
-// Test zero listening port for TCPv6
-TEST_P(TransportTCP, TCPv6_autofill_port)
-{
-    PubSubReader<HelloWorldPubSubType> p1(TEST_TOPIC_NAME);
-    PubSubReader<HelloWorldPubSubType> p2(TEST_TOPIC_NAME);
-
-    // Add TCP Transport with listening port 0
-    auto p1_transport = std::make_shared<TCPv6TransportDescriptor>();
-    p1_transport->add_listener_port(0);
-    p1.disable_builtin_transport().add_user_transport_to_pparams(p1_transport);
-    p1.init();
-    ASSERT_TRUE(p1.isInitialized());
-
-    // Add TCP Transport with listening port different from 0
-    uint16_t port = 12345;
-    auto p2_transport = std::make_shared<TCPv6TransportDescriptor>();
     p2_transport->add_listener_port(port);
     p2.disable_builtin_transport().add_user_transport_to_pparams(p2_transport);
     p2.init();
@@ -765,17 +743,17 @@ TEST_P(TransportTCP, large_data_topology)
     // Reliable Keep_all to wait for all acked as end condition
     for (uint16_t i = 0; i < n_participants; i++)
     {
-        writers[i]->reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-                .durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
-                .lease_duration(eprosima::fastrtps::c_TimeInfinite, eprosima::fastrtps::Duration_t(3, 0))
+        writers[i]->reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+                .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
+                .lease_duration(eprosima::fastdds::dds::c_TimeInfinite, eprosima::fastdds::dds::Duration_t(3, 0))
                 .resource_limits_max_instances(1)
                 .resource_limits_max_samples_per_instance(samples_per_participant);
 
-        readers[i]->reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-                .durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
-                .lease_duration(eprosima::fastrtps::c_TimeInfinite, eprosima::fastrtps::Duration_t(3, 0))
+        readers[i]->reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+                .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
+                .lease_duration(eprosima::fastdds::dds::c_TimeInfinite, eprosima::fastdds::dds::Duration_t(3, 0))
                 .resource_limits_max_instances(n_participants)
                 .resource_limits_max_samples_per_instance(samples_per_participant);
 
@@ -851,31 +829,22 @@ TEST_P(TransportTCP, multiple_listening_ports)
     uint16_t server_port_1 = 10000;
     uint16_t server_port_2 = 10001;
 
-    std::shared_ptr<TCPTransportDescriptor> server_transport;
-    if (use_ipv6)
-    {
-        server_transport = std::make_shared<TCPv6TransportDescriptor>();
-    }
-    else
-    {
-        server_transport = std::make_shared<TCPv4TransportDescriptor>();
-    }
-    server_transport->add_listener_port(server_port_1);
-    server_transport->add_listener_port(server_port_2);
-    server->disable_builtin_transport().add_user_transport_to_pparams(server_transport).init();
+    test_transport_->add_listener_port(server_port_1);
+    test_transport_->add_listener_port(server_port_2);
+    server->disable_builtin_transport().add_user_transport_to_pparams(test_transport_).init();
     ASSERT_TRUE(server->isInitialized());
 
     // Create two clients each one connecting to a different port
     PubSubWriter<HelloWorldPubSubType>* client_1 = new PubSubWriter<HelloWorldPubSubType>(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType>* client_2 = new PubSubWriter<HelloWorldPubSubType>(TEST_TOPIC_NAME);
-    std::shared_ptr<TCPTransportDescriptor> client_transport_1;
-    std::shared_ptr<TCPTransportDescriptor> client_transport_2;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport_1;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport_2;
     Locator_t initialPeerLocator_1;
     Locator_t initialPeerLocator_2;
     if (use_ipv6)
     {
-        client_transport_1 = std::make_shared<TCPv6TransportDescriptor>();
-        client_transport_2 = std::make_shared<TCPv6TransportDescriptor>();
+        client_transport_1 = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
+        client_transport_2 = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
         initialPeerLocator_1.kind = LOCATOR_KIND_TCPv6;
         initialPeerLocator_2.kind = LOCATOR_KIND_TCPv6;
         IPLocator::setIPv6(initialPeerLocator_1, "::1");
@@ -883,8 +852,8 @@ TEST_P(TransportTCP, multiple_listening_ports)
     }
     else
     {
-        client_transport_1 = std::make_shared<TCPv4TransportDescriptor>();
-        client_transport_2 = std::make_shared<TCPv4TransportDescriptor>();
+        client_transport_1 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
+        client_transport_2 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
         initialPeerLocator_1.kind = LOCATOR_KIND_TCPv4;
         initialPeerLocator_2.kind = LOCATOR_KIND_TCPv4;
         IPLocator::setIPv4(initialPeerLocator_1, 127, 0, 0, 1);
@@ -989,17 +958,17 @@ TEST_P(TransportTCP, send_resource_cleanup)
     // Client
     auto initialize_client = [&](PubSubWriter<HelloWorldPubSubType>* client)
             {
-                std::shared_ptr<TCPTransportDescriptor> client_transport;
+                std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport;
                 Locator_t initialPeerLocator;
                 if (use_ipv6)
                 {
-                    client_transport = std::make_shared<TCPv6TransportDescriptor>();
+                    client_transport = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
                     initialPeerLocator.kind = LOCATOR_KIND_TCPv6;
                     IPLocator::setIPv6(initialPeerLocator, "::1");
                 }
                 else
                 {
-                    client_transport = std::make_shared<TCPv4TransportDescriptor>();
+                    client_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
                     initialPeerLocator.kind = LOCATOR_KIND_TCPv4;
                     IPLocator::setIPv4(initialPeerLocator, 127, 0, 0, 1);
                 }
@@ -1012,7 +981,7 @@ TEST_P(TransportTCP, send_resource_cleanup)
             };
     auto initialize_udp_participant = [&](PubSubWriter<HelloWorldPubSubType>* udp_participant)
             {
-                auto udp_participant_transport = std::make_shared<UDPv4TransportDescriptor>();
+                auto udp_participant_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
                 udp_participant->disable_builtin_transport().add_user_transport_to_pparams(udp_participant_transport);
                 udp_participant->init();
             };
@@ -1132,7 +1101,7 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
     initial_peer_list.push_back(initialPeerLocator);
     client->initial_peers(initial_peer_list);
 
-    auto low_level_transport = std::make_shared<UDPv4TransportDescriptor>();
+    auto low_level_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
     auto client_chaining_transport = std::make_shared<DatagramInjectionTransportDescriptor>(low_level_transport);
     client->disable_builtin_transport().add_user_transport_to_pparams(test_transport_).add_user_transport_to_pparams(
         client_chaining_transport).init();
@@ -1141,14 +1110,14 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
     // Server
     auto initialize_server = [&](PubSubReader<HelloWorldPubSubType>* server)
             {
-                std::shared_ptr<TCPTransportDescriptor> server_transport;
+                std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> server_transport;
                 if (use_ipv6)
                 {
-                    server_transport = std::make_shared<TCPv6TransportDescriptor>();
+                    server_transport = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
                 }
                 else
                 {
-                    server_transport = std::make_shared<TCPv4TransportDescriptor>();
+                    server_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
                 }
                 server_transport->add_listener_port(server_port);
                 server->disable_builtin_transport().add_user_transport_to_pparams(server_transport);
@@ -1156,7 +1125,7 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
             };
     auto initialize_udp_participant = [&](PubSubReader<HelloWorldPubSubType>* udp_participant)
             {
-                auto udp_participant_transport = std::make_shared<UDPv4TransportDescriptor>();
+                auto udp_participant_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
                 udp_participant->disable_builtin_transport().add_user_transport_to_pparams(udp_participant_transport);
                 udp_participant->init();
             };
@@ -1233,8 +1202,8 @@ TEST_P(TransportTCP, large_message_send_receive)
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
-    std::shared_ptr<TCPTransportDescriptor> writer_transport;
-    std::shared_ptr<TCPTransportDescriptor> reader_transport;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> writer_transport;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> reader_transport;
     Locator_t initialPeerLocator;
     if (use_ipv6)
     {
@@ -1333,18 +1302,40 @@ TEST_P(TransportTCP, TCP_initial_peers_connection)
     PubSubReader<HelloWorldPubSubType> p3(TEST_TOPIC_NAME);
 
     // Add TCP Transport with listening port
-    auto p1_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
+    std::shared_ptr<TCPTransportDescriptor> p1_transport;
+    std::shared_ptr<TCPTransportDescriptor> p2_transport;
+    std::shared_ptr<TCPTransportDescriptor> p3_transport;
+    if (use_ipv6)
+    {
+        // TCPv6TransportDescriptor
+        p1_transport = std::make_shared<TCPv6TransportDescriptor>();
+        p2_transport = std::make_shared<TCPv6TransportDescriptor>();
+        p3_transport = std::make_shared<TCPv6TransportDescriptor>();
+    }
+    else
+    {
+        // TCPv4TransportDescriptor
+        p1_transport = std::make_shared<TCPv4TransportDescriptor>();
+        p2_transport = std::make_shared<TCPv4TransportDescriptor>();
+        p3_transport = std::make_shared<TCPv4TransportDescriptor>();
+    }
     p1_transport->add_listener_port(global_port);
-    auto p2_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     p2_transport->add_listener_port(global_port + 1);
-    auto p3_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     p3_transport->add_listener_port(global_port - 1);
 
     // Add initial peer to clients
     Locator_t initialPeerLocator;
-    initialPeerLocator.kind = LOCATOR_KIND_TCPv4;
-    IPLocator::setIPv4(initialPeerLocator, 127, 0, 0, 1);
     initialPeerLocator.port = global_port;
+    if (use_ipv6)
+    {
+        initialPeerLocator.kind = LOCATOR_KIND_TCPv6;
+        IPLocator::setIPv6(initialPeerLocator, "::1");
+    }
+    else
+    {
+        initialPeerLocator.kind = LOCATOR_KIND_TCPv4;
+        IPLocator::setIPv4(initialPeerLocator, 127, 0, 0, 1);
+    }
     LocatorList_t initial_peer_list;
     initial_peer_list.push_back(initialPeerLocator);
 
@@ -1383,6 +1374,136 @@ TEST_P(TransportTCP, TCP_initial_peers_connection)
 
     p2.block_for_all();
     p3.block_for_all();
+}
+
+TEST_P(TransportTCP, tcp_unique_network_flows_init)
+{
+    // TCP Writer creation should fail as feature is not implemented for writers
+    {
+        PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+        PropertyPolicy properties;
+        properties.properties().emplace_back("fastdds.unique_network_flows", "");
+
+        test_transport_->add_listener_port(global_port);
+        writer.disable_builtin_transport().add_user_transport_to_pparams(test_transport_);
+
+        writer.entity_property_policy(properties).init();
+
+        EXPECT_FALSE(writer.isInitialized());
+    }
+
+    // Two readers on the same participant not requesting unique flows should give the same logical port and same physical port
+    {
+        PubSubParticipant<HelloWorldPubSubType> participant(0, 2, 0, 0);
+
+        participant.sub_topic_name(TEST_TOPIC_NAME);
+
+        participant.disable_builtin_transport().add_user_transport_to_pparams(test_transport_);
+
+        ASSERT_TRUE(participant.init_participant());
+        ASSERT_TRUE(participant.init_subscriber(0));
+        ASSERT_TRUE(participant.init_subscriber(1));
+
+        LocatorList_t locators;
+        LocatorList_t locators2;
+
+        participant.get_native_reader(0).get_listening_locators(locators);
+        participant.get_native_reader(1).get_listening_locators(locators2);
+
+        EXPECT_TRUE(locators == locators2);
+        // LocatorList size depends on the number of interfaces. Different address but same port.
+        ASSERT_GT(locators.size(), 0);
+        ASSERT_GT(locators2.size(), 0);
+        auto locator1 = locators.begin();
+        auto locator2 = locators2.begin();
+        EXPECT_EQ(IPLocator::getPhysicalPort(*locator1), IPLocator::getPhysicalPort(*locator2));
+        EXPECT_EQ(IPLocator::getLogicalPort(*locator1), IPLocator::getLogicalPort(*locator2));
+    }
+
+    // Two TCP readers on the same participant requesting unique flows should give different logical ports but same physical port
+    {
+        PubSubParticipant<HelloWorldPubSubType> participant(0, 2, 0, 0);
+
+        PropertyPolicy properties;
+        properties.properties().emplace_back("fastdds.unique_network_flows", "");
+        participant.sub_topic_name(TEST_TOPIC_NAME).sub_property_policy(properties);
+
+        participant.disable_builtin_transport().add_user_transport_to_pparams(test_transport_);
+
+        ASSERT_TRUE(participant.init_participant());
+        ASSERT_TRUE(participant.init_subscriber(0));
+        ASSERT_TRUE(participant.init_subscriber(1));
+
+        LocatorList_t locators;
+        LocatorList_t locators2;
+
+        participant.get_native_reader(0).get_listening_locators(locators);
+        participant.get_native_reader(1).get_listening_locators(locators2);
+
+        EXPECT_FALSE(locators == locators2);
+        // LocatorList size depends on the number of interfaces. Different address but same port.
+        ASSERT_GT(locators.size(), 0);
+        ASSERT_GT(locators2.size(), 0);
+        auto locator1 = locators.begin();
+        auto locator2 = locators2.begin();
+        EXPECT_EQ(IPLocator::getPhysicalPort(*locator1), IPLocator::getPhysicalPort(*locator2));
+        EXPECT_NE(IPLocator::getLogicalPort(*locator1), IPLocator::getLogicalPort(*locator2));
+    }
+}
+
+TEST_P(TransportTCP, tcp_unique_network_flows_communication)
+{
+    PubSubParticipant<HelloWorldPubSubType> readers(0, 2, 0, 2);
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+
+    PropertyPolicy properties;
+    properties.properties().emplace_back("fastdds.unique_network_flows", "");
+    readers.disable_builtin_transport().add_user_transport_to_pparams(test_transport_);
+
+    eprosima::fastdds::rtps::Locator_t initial_peer_locator;
+    if (use_ipv6)
+    {
+        initial_peer_locator.kind = LOCATOR_KIND_TCPv6;
+        eprosima::fastdds::rtps::IPLocator::setIPv6(initial_peer_locator, "::1");
+    }
+    else
+    {
+        initial_peer_locator.kind = LOCATOR_KIND_TCPv4;
+        eprosima::fastdds::rtps::IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
+    }
+    eprosima::fastdds::rtps::IPLocator::setPhysicalPort(initial_peer_locator, global_port);
+    eprosima::fastdds::rtps::LocatorList_t initial_peer_list;
+    initial_peer_list.push_back(initial_peer_locator);
+
+    readers.sub_topic_name(TEST_TOPIC_NAME)
+            .sub_property_policy(properties)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .initial_peers(initial_peer_list);
+
+    ASSERT_TRUE(readers.init_participant());
+    ASSERT_TRUE(readers.init_subscriber(0));
+    ASSERT_TRUE(readers.init_subscriber(1));
+
+    test_transport_->add_listener_port(global_port);
+    writer.disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport_)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_depth(100);
+
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    // Wait for discovery.
+    writer.wait_discovery();
+    readers.sub_wait_discovery();
+
+    // Send data
+    auto data = default_helloworld_data_generator();
+    writer.send(data);
+    // In this test all data should be sent.
+    ASSERT_TRUE(data.empty());
+    // Block until readers have acknowledged all samples.
+    EXPECT_TRUE(writer.waitForAllAcked(std::chrono::seconds(30)));
 }
 
 #ifdef INSTANTIATE_TEST_SUITE_P

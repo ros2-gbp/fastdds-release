@@ -18,22 +18,24 @@
 
 #include <asio.hpp>
 #include <gtest/gtest.h>
-#include <MockReceiverResource.h>
-#include "mock/MockTCPChannelResource.h"
-#include "mock/MockTCPv4Transport.h"
+
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastrtps/transport/TCPv4TransportDescriptor.h>
-#include <fastrtps/utils/Semaphore.h>
-#include <fastrtps/utils/IPFinder.h>
-#include <fastrtps/utils/IPLocator.h>
-#include <rtps/transport/TCPv4Transport.h>
-#include <rtps/transport/tcp/RTCPHeader.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/NetworkBuffer.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using TCPv4Transport = eprosima::fastdds::rtps::TCPv4Transport;
-using TCPHeader = eprosima::fastdds::rtps::TCPHeader;
+#include "mock/MockTCPChannelResource.h"
+#include "mock/MockTCPv4Transport.h"
+#include <MockReceiverResource.h>
+
+#include <rtps/transport/tcp/RTCPHeader.h>
+#include <rtps/transport/TCPv4Transport.h>
+#include <utils/Semaphore.hpp>
+
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 #if defined(_WIN32)
 #define GET_PID _getpid
@@ -275,6 +277,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_ports)
     ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
     ASSERT_FALSE(send_resource_list.empty());
     octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < 5; ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
 
     Semaphore sem;
     std::function<void()> recCallback = [&]()
@@ -294,7 +301,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_ports)
                     Locators input_end(locator_list.end());
 
                     sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
@@ -334,7 +341,9 @@ TEST_F(TCPv4Tests, send_is_rejected_if_buffer_size_is_bigger_to_size_specified_i
 
     // Then
     std::vector<octet> receiveBufferWrongSize(descriptor.sendBufferSize + 1);
-    ASSERT_FALSE(send_resource_list.at(0)->send(receiveBufferWrongSize.data(), (uint32_t)receiveBufferWrongSize.size(),
+    std::vector<NetworkBuffer> buffer_list;
+    buffer_list.emplace_back(receiveBufferWrongSize.data(), (uint32_t)receiveBufferWrongSize.size());
+    ASSERT_FALSE(send_resource_list.at(0)->send(buffer_list, (uint32_t)receiveBufferWrongSize.size(),
             &destination_begin, &destination_end, (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
 }
 
@@ -400,7 +409,12 @@ TEST_F(TCPv4Tests, send_to_wrong_interface)
     Locators wrong_end(locator_list.end());
 
     std::vector<octet> message = { 'H', 'e', 'l', 'l', 'o' };
-    ASSERT_FALSE(send_resource_list.at(0)->send(message.data(), (uint32_t)message.size(), &wrong_begin, &wrong_end,
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < message.size(); ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
+    ASSERT_FALSE(send_resource_list.at(0)->send(buffer_list, (uint32_t)message.size(), &wrong_begin, &wrong_end,
             (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
 }
 
@@ -430,7 +444,12 @@ TEST_F(TCPv4Tests, send_to_blocked_interface)
     Locators wrong_end(locator_list.end());
 
     std::vector<octet> message = { 'H', 'e', 'l', 'l', 'o' };
-    ASSERT_FALSE(send_resource_list.at(0)->send(message.data(), (uint32_t)message.size(), &wrong_begin, &wrong_end,
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < message.size(); ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
+    ASSERT_FALSE(send_resource_list.at(0)->send(buffer_list, (uint32_t)message.size(), &wrong_begin, &wrong_end,
             (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
 }
 
@@ -490,6 +509,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports)
                 ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
                 ASSERT_FALSE(send_resource_list.empty());
                 octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+                std::vector<NetworkBuffer> buffer_list;
+                for (size_t i = 0; i < 5; ++i)
+                {
+                    buffer_list.emplace_back(&message[i], 1);
+                }
                 bool bOk = false;
                 std::function<void()> recCallback = [&]()
                         {
@@ -506,7 +530,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports)
                             Locators input_end(locator_list.end());
 
                             bool sent =
-                                    send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                                    send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                             (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                             while (!bFinish && !sent)
                             {
@@ -514,7 +538,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports)
                                 Locators input_end2(locator_list.end());
 
                                 sent =
-                                        send_resource_list.at(0)->send(message, 5, &input_begin2, &input_end2,
+                                        send_resource_list.at(0)->send(buffer_list, 5, &input_begin2, &input_end2,
                                                 (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                             }
@@ -598,6 +622,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports_by_name)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
         bool bOk = false;
         std::function<void()> recCallback = [&]()
                 {
@@ -614,7 +643,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports_by_name)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!bFinish && !sent)
                     {
@@ -622,7 +651,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports_by_name)
                         Locators input_end2(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &input_begin2, &input_end2,
+                                send_resource_list.at(0)->send(buffer_list, 5, &input_begin2, &input_end2,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -737,6 +766,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_client_verifies)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -753,7 +787,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_client_verifies)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!sent)
                     {
@@ -761,7 +795,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_client_verifies)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -836,6 +870,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_server_verifies)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -852,7 +891,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_server_verifies)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!sent)
                     {
@@ -860,7 +899,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_server_verifies)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5,  &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5,  &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -938,6 +977,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -954,7 +998,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!sent)
                     {
@@ -962,7 +1006,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -1040,6 +1084,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_untrusted)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -1057,7 +1106,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_untrusted)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     int count = 0;
                     while (!sent && count < 30)
@@ -1066,7 +1115,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_untrusted)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         ++count;
@@ -1146,6 +1195,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_clients_1)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -1162,7 +1216,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_clients_1)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!sent)
                     {
@@ -1170,7 +1224,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_clients_1)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -1245,6 +1299,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_untrusted_server)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -1262,7 +1321,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_untrusted_server)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     int count = 0;
                     while (!sent && count < 30)
@@ -1270,7 +1329,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_untrusted_server)
                         Locators l_input_begin(locator_list.begin());
                         Locators l_input_end(locator_list.end());
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         ++count;
@@ -1355,6 +1414,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_with_sni)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -1371,7 +1435,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_with_sni)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!sent)
                     {
@@ -1379,7 +1443,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_with_sni)
                         Locators l_input_end(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                send_resource_list.at(0)->send(buffer_list, 5, &l_input_begin, &l_input_end,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -1505,17 +1569,21 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     auto sender_unbound_channel_resources = senderTransportUnderTest.get_unbound_channel_resources();
     ASSERT_TRUE(sender_unbound_channel_resources.size() == 1u);
     auto sender_channel_resource =
-            std::static_pointer_cast<TCPChannelResourceBasic>(sender_unbound_channel_resources[0]);
+            std::static_pointer_cast<TCPChannelResourceBasic>(
+        sender_unbound_channel_resources[0]);
 
     // Prepare the message
     asio::error_code ec;
     std::vector<octet> message(msg_size * 2, 0);
     const octet* data = message.data();
     size_t size = message.size();
+    NetworkBuffer buffers(data, size);
+    std::vector<NetworkBuffer> buffer_list;
+    buffer_list.push_back(buffers);
 
     // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
     // it should be able to send a message of msg_size*2.
-    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
     // Now wait until the receive buffer is flushed (send buffer will be empty too)
@@ -1529,7 +1597,9 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     message.resize(msg_size * 2 + 1);
     data = message.data();
     size = message.size();
-    bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    buffer_list.clear();
+    buffer_list.emplace_back(data, size);
+    bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
     secure_socket->lowest_layer().close(ec);
@@ -1580,6 +1650,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_localhost_interfaces_ports)
         ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
         ASSERT_FALSE(send_resource_list.empty());
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
         bool bOk = false;
         std::function<void()> recCallback = [&]()
                 {
@@ -1596,7 +1671,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_localhost_interfaces_ports)
                     Locators input_end(locator_list.end());
 
                     bool sent =
-                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                            send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                     (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                     while (!bFinish && !sent)
                     {
@@ -1604,7 +1679,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_allowed_localhost_interfaces_ports)
                         Locators input_end2(locator_list.end());
 
                         sent =
-                                send_resource_list.at(0)->send(message, 5, &input_begin2, &input_end2,
+                                send_resource_list.at(0)->send(buffer_list, 5, &input_begin2, &input_end2,
                                         (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -1675,6 +1750,11 @@ TEST_F(TCPv4Tests, send_and_receive_between_blocked_interfaces_ports)
                 ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
                 ASSERT_FALSE(send_resource_list.empty());
                 octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+                std::vector<NetworkBuffer> buffer_list;
+                for (size_t i = 0; i < 5; ++i)
+                {
+                    buffer_list.emplace_back(&message[i], 1);
+                }
                 bool bOk = false;
                 std::function<void()> recCallback = [&]()
                         {
@@ -1691,7 +1771,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_blocked_interfaces_ports)
                             Locators input_end(locator_list.end());
 
                             bool sent =
-                                    send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                                    send_resource_list.at(0)->send(buffer_list, 5, &input_begin, &input_end,
                                             (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                             while (!bFinished && !sent)
                             {
@@ -1699,7 +1779,7 @@ TEST_F(TCPv4Tests, send_and_receive_between_blocked_interfaces_ports)
                                 Locators input_end2(locator_list.end());
 
                                 sent =
-                                        send_resource_list.at(0)->send(message, 5, &input_begin2, &input_end2,
+                                        send_resource_list.at(0)->send(buffer_list, 5, &input_begin2, &input_end2,
                                                 (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
                                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                             }
@@ -1870,8 +1950,8 @@ TEST_F(TCPv4Tests, header_read_interrumption)
     IPLocator::setIPv4(locator, 127, 0, 0, 1);
     IPLocator::setLogicalPort(locator, 7410);
 
-    std::weak_ptr<eprosima::fastdds::rtps::RTCPMessageManager> rtcp_manager =
-            std::make_shared<eprosima::fastdds::rtps::RTCPMessageManager>(&transportUnderTest);
+    std::weak_ptr<RTCPMessageManager> rtcp_manager =
+            std::make_shared<RTCPMessageManager>(&transportUnderTest);
     std::shared_ptr<TCPChannelResource> channel = std::make_shared<MockTCPChannelResource>(&transportUnderTest, locator,
                     32767);
     octet* buffer = {};
@@ -1921,6 +2001,9 @@ TEST_F(TCPv4Tests, autofill_port)
 // This test verifies server's channel resources mapping keys uniqueness, where keys are clients locators.
 // Clients typically communicated its PID as its locator port. When having several clients in the same
 // process this lead to overwriting server's channel resources map elements.
+// In order to ensure communication in TCP Discovery Server, a different entry is created in the server's
+// channel resources map for each IP interface found, all of them using the same TCP channel. Thus, two
+// clients will generate at least two entries in the server's channel resources map.
 TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 {
     TCPv4TransportDescriptor recvDescriptor;
@@ -1952,7 +2035,12 @@ TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    ASSERT_EQ(receiveTransportUnderTest.get_channel_resources().size(), 2u);
+    std::set<std::shared_ptr<TCPChannelResource>> channels_created;
+    for (const auto& channel_resource : receiveTransportUnderTest.get_channel_resources())
+    {
+        channels_created.insert(channel_resource.second);
+    }
+    ASSERT_EQ(channels_created.size(), 2u);
 }
 
 #ifndef _WIN32
@@ -2018,17 +2106,21 @@ TEST_F(TCPv4Tests, non_blocking_send)
     auto sender_unbound_channel_resources = senderTransportUnderTest.get_unbound_channel_resources();
     ASSERT_TRUE(sender_unbound_channel_resources.size() == 1u);
     auto sender_channel_resource =
-            std::static_pointer_cast<TCPChannelResourceBasic>(sender_unbound_channel_resources[0]);
+            std::static_pointer_cast<TCPChannelResourceBasic>(
+        sender_unbound_channel_resources[0]);
 
     // Prepare the message
     asio::error_code ec;
     std::vector<octet> message(msg_size * 2, 0);
     const octet* data = message.data();
     size_t size = message.size();
+    NetworkBuffer buffers(data, size);
+    std::vector<NetworkBuffer> buffer_list;
+    buffer_list.push_back(buffers);
 
     // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
     // it should be able to send a message of msg_size*2.
-    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
     // Now wait until the receive buffer is flushed (send buffer will be empty too)
@@ -2040,7 +2132,9 @@ TEST_F(TCPv4Tests, non_blocking_send)
     message.resize(msg_size * 2 + 1);
     data = message.data();
     size = message.size();
-    bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    buffer_list.clear();
+    buffer_list.emplace_back(data, size);
+    bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
     socket.shutdown(asio::ip::tcp::socket::shutdown_both);

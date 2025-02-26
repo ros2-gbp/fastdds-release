@@ -27,17 +27,18 @@
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
-#include <fastrtps/transport/test_UDPv4TransportDescriptor.h>
-#include <fastrtps/types/TypesBase.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 
+#include "../utils/filter_helpers.hpp"
 #include "BlackboxTests.hpp"
 #include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 #define INCOMPATIBLE_TEST_TOPIC_NAME std::string( \
         std::string("incompatible_") + TEST_TOPIC_NAME)
@@ -56,12 +57,12 @@ public:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -74,12 +75,12 @@ public:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -101,7 +102,7 @@ TEST_P(DDSDataReader, LivelinessChangedStatusGet)
 
     // Create and start reader that will not invoke listener for liveliness_changed
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
-    reader.liveliness_kind(AUTOMATIC_LIVELINESS_QOS)
+    reader.liveliness_kind(eprosima::fastdds::dds::AUTOMATIC_LIVELINESS_QOS)
             .liveliness_lease_duration(lease_duration)
             .deactivate_status_listener(eprosima::fastdds::dds::StatusMask::liveliness_changed());
     reader.init();
@@ -111,7 +112,7 @@ TEST_P(DDSDataReader, LivelinessChangedStatusGet)
     std::unique_ptr<PubSubParticipant<HelloWorldPubSubType>> writers;
     writers.reset(new PubSubParticipant<HelloWorldPubSubType>(num_times, 0, num_times, 0));
     writers->pub_topic_name(TEST_TOPIC_NAME)
-            .pub_liveliness_kind(AUTOMATIC_LIVELINESS_QOS)
+            .pub_liveliness_kind(eprosima::fastdds::dds::AUTOMATIC_LIVELINESS_QOS)
             .pub_liveliness_announcement_period(announcement_period)
             .pub_liveliness_lease_duration(lease_duration);
     ASSERT_TRUE(writers->init_participant());
@@ -210,7 +211,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     eprosima::fastdds::dds::DataReader& reader = pubsub_reader.get_native_reader();
     eprosima::fastdds::dds::SampleInfo info;
 
-    EXPECT_EQ(ReturnCode_t::RETCODE_NO_DATA, reader.get_first_untaken_info(&info));
+    EXPECT_EQ(eprosima::fastdds::dds::RETCODE_NO_DATA, reader.get_first_untaken_info(&info));
 
     // Wait for discovery.
     pubsub_reader.wait_discovery();
@@ -231,7 +232,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     //! Checks whether total_unread_ is consistent with
     //! the number of unread changes in history
     //! This API call should NOT modify the history
-    EXPECT_EQ(ReturnCode_t::RETCODE_OK, reader.get_first_untaken_info(&info));
+    EXPECT_EQ(eprosima::fastdds::dds::RETCODE_OK, reader.get_first_untaken_info(&info));
 
     HelloWorld msg;
     eprosima::fastdds::dds::SampleInfo sinfo;
@@ -240,7 +241,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     auto result = reader.take_next_sample((void*)&msg, &sinfo);
 
     //! Assert last operation
-    ASSERT_EQ(result, ReturnCode_t::RETCODE_OK) << "Reader's unread count is: " << reader.get_unread_count();
+    ASSERT_EQ(result, eprosima::fastdds::dds::RETCODE_OK) << "Reader's unread count is: " << reader.get_unread_count();
 }
 
 //! Regression test for #20706
@@ -256,13 +257,13 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     // The reader should not take nor read any sample in this test
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME, false, false, false);
 
-    auto testTransport_1 = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport_1 = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
 
     EntityId_t writer1_id;
     EntityId_t reader_id;
 
     testTransport_1->drop_data_messages_filter_ =
-            [&writer1_id, &reader_id](eprosima::fastrtps::rtps::CDRMessage_t& msg)-> bool
+            [&writer1_id, &reader_id](eprosima::fastdds::rtps::CDRMessage_t& msg)-> bool
             {
                 uint32_t old_pos = msg.pos;
 
@@ -273,9 +274,17 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
 
                 msg.pos += 2; // flags
                 msg.pos += 2; // octets to inline quos
-                CDRMessage::readEntityId(&msg, &readerID);
-                CDRMessage::readEntityId(&msg, &writerID);
-                CDRMessage::readSequenceNumber(&msg, &sn);
+                readerID = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                writerID = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                sn.high = (int32_t)eprosima::fastdds::helpers::cdr_parse_u32(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                sn.low = eprosima::fastdds::helpers::cdr_parse_u32(
+                    (char*)&msg.buffer[msg.pos]);
 
                 // restore buffer pos
                 msg.pos = old_pos;
@@ -327,7 +336,7 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     eprosima::fastdds::dds::SampleInfo info;
     for (size_t i = 0; i < 3; i++)
     {
-        ASSERT_NE(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK, reader.get_native_reader().get_first_untaken_info(
+        ASSERT_NE(eprosima::fastdds::dds::RETCODE_OK, reader.get_native_reader().get_first_untaken_info(
                     &info));
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
@@ -338,12 +347,12 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     reader.block_for_unread_count_of(3);
 
     // get_first_untaken_info() must return OK now
-    ASSERT_EQ(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK,
+    ASSERT_EQ(eprosima::fastdds::dds::RETCODE_OK,
             reader.get_native_reader().get_first_untaken_info(&info));
     eprosima::fastdds::dds::StackAllocatedSequence<HelloWorld, 1> data_values;
     eprosima::fastdds::dds::SampleInfoSeq sample_infos{1};
     // As get_first_untaken_info() returns OK, take() must return OK too
-    ASSERT_EQ(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK,
+    ASSERT_EQ(eprosima::fastdds::dds::RETCODE_OK,
             reader.get_native_reader().take(data_values, sample_infos));
 }
 
@@ -355,9 +364,9 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
 TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
 {
     //! Manually set intraprocess
-    LibrarySettingsAttributes library_settings;
-    library_settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_FULL;
-    xmlparser::XMLProfileManager::library_settings(library_settings);
+    eprosima::fastdds::LibrarySettings library_settings;
+    library_settings.intraprocess_delivery = eprosima::fastdds::INTRAPROCESS_FULL;
+    eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
 
     auto participant = DomainParticipantFactory::get_instance()->create_participant(
         (uint32_t)GET_PID() % 230,
@@ -365,7 +374,7 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
         eprosima::fastdds::dds::StatusMask::none());
 
     eprosima::fastdds::dds::TypeSupport t_type{ new HelloWorldPubSubType() };
-    ASSERT_TRUE(t_type.register_type( participant ) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(t_type.register_type( participant ) == eprosima::fastdds::dds::RETCODE_OK);
 
     auto topic = participant->create_topic( TEST_TOPIC_NAME, t_type.get_type_name(),
                     participant->get_default_topic_qos());
@@ -374,20 +383,20 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
     auto publisher = participant->create_publisher( participant->get_default_publisher_qos());
 
     auto writer_qos = eprosima::fastdds::dds::DATAWRITER_QOS_DEFAULT;
-    writer_qos.durability().kind = DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
-    writer_qos.reliability().kind = ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
+    writer_qos.durability().kind = eprosima::fastdds::dds::DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
+    writer_qos.reliability().kind = eprosima::fastdds::dds::ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
     auto writer = publisher->create_datawriter( topic, writer_qos );
 
     auto data = HelloWorld{};
-    ASSERT_TRUE(writer->write( &data ));
+    ASSERT_EQ(writer->write( &data ), eprosima::fastdds::dds::RETCODE_OK);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     // create a late joiner subscriber and reader
     auto subscriber = participant->create_subscriber( participant->get_default_subscriber_qos());
     auto reader_qos = eprosima::fastdds::dds::DATAREADER_QOS_DEFAULT;
-    reader_qos.durability().kind = DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
-    reader_qos.reliability().kind = ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
+    reader_qos.durability().kind = eprosima::fastdds::dds::DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
+    reader_qos.reliability().kind = eprosima::fastdds::dds::ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
     auto reader = subscriber->create_datareader( topic, reader_qos );
 
     eprosima::fastdds::dds::SubscriptionMatchedStatus status;
@@ -410,8 +419,8 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
     ASSERT_TRUE(unread_count > 0);
 
     //! Reset back to INTRAPROCESS_OFF
-    library_settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_OFF;
-    xmlparser::XMLProfileManager::library_settings(library_settings);
+    library_settings.intraprocess_delivery = eprosima::fastdds::INTRAPROCESS_OFF;
+    eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
 }
 
 /**
@@ -465,7 +474,7 @@ template<>
 void TestsDataReaderQosCommonUtils::set_representation_qos(
         eprosima::fastdds::dds::DataReaderQos& qos)
 {
-    qos.type_consistency().representation.m_value.push_back(
+    qos.representation().m_value.push_back(
         eprosima::fastdds::dds::DataRepresentationId_t::XCDR2_DATA_REPRESENTATION);
 }
 

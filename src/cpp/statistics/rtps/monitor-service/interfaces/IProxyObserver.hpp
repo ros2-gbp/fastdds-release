@@ -20,7 +20,7 @@
 #ifndef _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_IPROXYOBSERVER_HPP_
 #define _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_IPROXYOBSERVER_HPP_
 
-#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Guid.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -39,7 +39,7 @@ struct IProxyObserver
      * @return Whether the implementor has been properly notified
      */
     virtual bool on_local_entity_change(
-            const fastrtps::rtps::GUID_t& guid,
+            const fastdds::rtps::GUID_t& guid,
             bool is_alive) const = 0;
 };
 

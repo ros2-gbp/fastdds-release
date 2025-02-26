@@ -38,21 +38,20 @@
 #include <asio/ssl/verify_context.hpp>
 #endif // if TLS_FOUND
 
+#include <fastdds/config.hpp>
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
-#include <fastdds/rtps/common/CDRMessage_t.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.hpp>
 #include <fastdds/rtps/common/LocatorSelector.hpp>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
-#include <fastdds/rtps/common/PortParameters.h>
-#include <fastdds/rtps/common/Types.h>
-#include <fastdds/rtps/transport/SenderResource.h>
-#include <fastdds/rtps/transport/SocketTransportDescriptor.h>
-#include <fastdds/rtps/transport/TCPTransportDescriptor.h>
-#include <fastdds/rtps/transport/TransportReceiverInterface.h>
-#include <fastrtps/config.h>
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/utils/System.h>
+#include <fastdds/rtps/common/PortParameters.hpp>
+#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/transport/SenderResource.hpp>
+#include <fastdds/rtps/transport/SocketTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TransportReceiverInterface.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
 #include <rtps/transport/asio_helpers.hpp>
 #include <statistics/rtps/messages/RTPSStatisticsMessages.hpp>
@@ -77,13 +76,6 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using octet = fastrtps::rtps::octet;
-using IPLocator = fastrtps::rtps::IPLocator;
-using SenderResource = fastrtps::rtps::SenderResource;
-using CDRMessage_t = fastrtps::rtps::CDRMessage_t;
-using LocatorSelector = fastrtps::rtps::LocatorSelector;
-using LocatorSelectorEntry = fastrtps::rtps::LocatorSelectorEntry;
-using PortParameters = fastrtps::rtps::PortParameters;
 using Log = fastdds::dds::Log;
 
 static const int s_default_keep_alive_frequency = 5000; // 5 SECONDS
@@ -99,7 +91,6 @@ TCPTransportDescriptor::TCPTransportDescriptor()
     , logical_port_increment(2)
     , tcp_negotiation_timeout(0)
     , enable_tcp_nodelay(false)
-    , wait_for_tcp_negotiation(false)
     , calculate_crc(true)
     , check_crc(true)
     , apply_security(false)
@@ -118,7 +109,6 @@ TCPTransportDescriptor::TCPTransportDescriptor(
     , logical_port_increment(t.logical_port_increment)
     , tcp_negotiation_timeout(t.tcp_negotiation_timeout)
     , enable_tcp_nodelay(t.enable_tcp_nodelay)
-    , wait_for_tcp_negotiation(t.wait_for_tcp_negotiation)
     , calculate_crc(t.calculate_crc)
     , check_crc(t.check_crc)
     , apply_security(t.apply_security)
@@ -141,7 +131,6 @@ TCPTransportDescriptor& TCPTransportDescriptor::operator =(
     logical_port_increment = t.logical_port_increment;
     tcp_negotiation_timeout = t.tcp_negotiation_timeout;
     enable_tcp_nodelay = t.enable_tcp_nodelay;
-    wait_for_tcp_negotiation = t.wait_for_tcp_negotiation;
     calculate_crc = t.calculate_crc;
     check_crc = t.check_crc;
     apply_security = t.apply_security;
@@ -163,7 +152,6 @@ bool TCPTransportDescriptor::operator ==(
            this->logical_port_increment == t.logical_port_increment &&
            this->tcp_negotiation_timeout == t.tcp_negotiation_timeout &&
            this->enable_tcp_nodelay == t.enable_tcp_nodelay &&
-           this->wait_for_tcp_negotiation == t.wait_for_tcp_negotiation &&
            this->calculate_crc == t.calculate_crc &&
            this->check_crc == t.check_crc &&
            this->apply_security == t.apply_security &&
@@ -203,6 +191,7 @@ void TCPTransportInterface::clean()
 
     {
         std::vector<std::shared_ptr<TCPChannelResource>> channels;
+        std::vector<eprosima::fastdds::rtps::Locator> delete_channels;
 
         {
             std::unique_lock<std::mutex> scopedLock(sockets_map_mutex_);
@@ -212,8 +201,20 @@ void TCPTransportInterface::clean()
 
             for (auto& channel : channel_resources_)
             {
-                channels.push_back(channel.second);
+                if (std::find(channels.begin(), channels.end(), channel.second) == channels.end())
+                {
+                    channels.push_back(channel.second);
+                }
+                else
+                {
+                    delete_channels.push_back(channel.first);
+                }
             }
+        }
+
+        for (auto& delete_channel : delete_channels)
+        {
+            channel_resources_.erase(delete_channel);
         }
 
         for (auto& channel : channels)
@@ -291,7 +292,7 @@ Locator TCPTransportInterface::local_endpoint_to_locator(
     return locator;
 }
 
-void TCPTransportInterface::bind_socket(
+ResponseCode TCPTransportInterface::bind_socket(
         std::shared_ptr<TCPChannelResource>& channel)
 {
     std::unique_lock<std::mutex> scopedLock(sockets_map_mutex_);
@@ -300,7 +301,29 @@ void TCPTransportInterface::bind_socket(
     auto it_remove = std::find(unbound_channel_resources_.begin(), unbound_channel_resources_.end(), channel);
     assert(it_remove != unbound_channel_resources_.end());
     unbound_channel_resources_.erase(it_remove);
-    channel_resources_[channel->locator()] = channel;
+
+    ResponseCode ret = RETCODE_OK;
+    const auto insert_ret = channel_resources_.insert(
+        decltype(channel_resources_)::value_type{channel->locator(), channel});
+    if (false == insert_ret.second)
+    {
+        // There is an existing channel that can be used. Force the Client to close unnecessary socket
+        ret = RETCODE_SERVER_ERROR;
+    }
+
+    std::vector<fastdds::rtps::IPFinder::info_IP> local_interfaces;
+    // Check if the locator is from an owned interface to link all local interfaces to the channel
+    is_own_interface(channel->locator(), local_interfaces);
+    if (!local_interfaces.empty())
+    {
+        Locator local_locator(channel->locator());
+        for (auto& interface_it : local_interfaces)
+        {
+            IPLocator::setIPv4(local_locator, interface_it.locator);
+            channel_resources_.insert(decltype(channel_resources_)::value_type{local_locator, channel});
+        }
+    }
+    return ret;
 }
 
 bool TCPTransportInterface::check_crc(
@@ -318,13 +341,17 @@ bool TCPTransportInterface::check_crc(
 
 void TCPTransportInterface::calculate_crc(
         TCPHeader& header,
-        const octet* data,
-        uint32_t size) const
+        const std::vector<NetworkBuffer>& buffers) const
 {
     uint32_t crc(0);
-    for (uint32_t i = 0; i < size; ++i)
+    for (const NetworkBuffer& buffer : buffers)
     {
-        crc = RTCPMessageManager::addToCRC(crc, data[i]);
+        size_t size = buffer.size;
+        const octet* data = static_cast<const octet*>(buffer.buffer);
+        for (size_t i = 0; i < size; ++i)
+        {
+            crc = RTCPMessageManager::addToCRC(crc, data[i]);
+        }
     }
     header.crc = crc;
 }
@@ -420,15 +447,15 @@ uint16_t TCPTransportInterface::create_acceptor_socket(
 
 void TCPTransportInterface::fill_rtcp_header(
         TCPHeader& header,
-        const octet* send_buffer,
-        uint32_t send_buffer_size,
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
         uint16_t logical_port) const
 {
-    header.length = send_buffer_size + static_cast<uint32_t>(TCPHeader::size());
+    header.length = total_bytes + static_cast<uint32_t>(TCPHeader::size());
     header.logical_port = logical_port;
     if (configuration()->calculate_crc)
     {
-        calculate_crc(header, send_buffer, send_buffer_size);
+        calculate_crc(header, buffers);
     }
 }
 
@@ -440,7 +467,7 @@ bool TCPTransportInterface::DoInputLocatorsMatch(
 }
 
 bool TCPTransportInterface::init(
-        const fastrtps::rtps::PropertyPolicy*,
+        const fastdds::rtps::PropertyPolicy*,
         const uint32_t& max_msg_size_no_frag)
 {
     uint32_t maximumMessageSize = max_msg_size_no_frag == 0 ? s_maximumMessageSize : max_msg_size_no_frag;
@@ -666,7 +693,7 @@ bool TCPTransportInterface::transform_remote_locator(
 }
 
 void TCPTransportInterface::SenderResourceHasBeenClosed(
-        fastrtps::rtps::Locator_t& locator)
+        fastdds::rtps::Locator_t& locator)
 {
     // The TCPSendResource associated channel cannot be removed from the channel_resources_ map. On transport's destruction
     // this map is consulted to send the unbind requests. If not sending it, the other participant wouldn't disconnect the
@@ -826,7 +853,7 @@ bool TCPTransportInterface::OpenOutputChannel(
         if (IPLocator::getPhysicalPort(physical_locator) == listening_port)
         {
             std::vector<Locator> list;
-            std::vector<fastrtps::rtps::IPFinder::info_IP> local_interfaces;
+            std::vector<fastdds::rtps::IPFinder::info_IP> local_interfaces;
             get_ips(local_interfaces, false, false);
             for (const auto& interface_it : local_interfaces)
             {
@@ -891,7 +918,7 @@ bool TCPTransportInterface::OpenOutputChannels(
         const LocatorSelectorEntry& locator_selector_entry)
 {
     bool success = false;
-    if (locator_selector_entry.remote_guid == fastrtps::rtps::c_Guid_Unknown)
+    if (locator_selector_entry.remote_guid == fastdds::rtps::c_Guid_Unknown)
     {
         // Only unicast is used in TCP
         for (size_t i = 0; i < locator_selector_entry.state.unicast.size(); ++i)
@@ -931,7 +958,7 @@ bool TCPTransportInterface::CreateInitialConnect(
     std::lock_guard<std::mutex> socketsLock(sockets_map_mutex_);
 
     // We try to find a SenderResource that has this locator.
-    // Note: This is done in this level because if we do in NetworkFactory level, we have to mantain what transport
+    // Note: This is done in this level because if we do it at NetworkFactory level, we have to mantain what transport
     // already reuses a SenderResource.
     for (auto& sender_resource : send_resource_list)
     {
@@ -994,6 +1021,19 @@ bool TCPTransportInterface::CreateInitialConnect(
     statistics_info_.add_entry(locator);
     send_resource_list.emplace_back(
         static_cast<SenderResource*>(new TCPSenderResource(*this, physical_locator)));
+
+    std::vector<fastdds::rtps::IPFinder::info_IP> local_interfaces;
+    // Check if the locator is from an owned interface to link all local interfaces to the channel
+    is_own_interface(physical_locator, local_interfaces);
+    if (!local_interfaces.empty())
+    {
+        Locator local_locator(physical_locator);
+        for (auto& interface_it : local_interfaces)
+        {
+            IPLocator::setIPv4(local_locator, interface_it.locator);
+            channel_resources_[local_locator] = channel;
+        }
+    }
 
     return true;
 }
@@ -1138,7 +1178,7 @@ void TCPTransportInterface::perform_listen_operation(
     {
         // Blocking receive.
         CDRMessage_t& msg = channel->message_buffer();
-        fastrtps::rtps::CDRMessage::initCDRMsg(&msg);
+        fastdds::rtps::CDRMessage::initCDRMsg(&msg);
         if (!Receive(rtcp_manager, channel, msg.buffer, msg.max_size, msg.length, msg.msg_endian, remote_locator))
         {
             continue;
@@ -1279,7 +1319,7 @@ bool TCPTransportInterface::Receive(
         octet* receive_buffer,
         uint32_t receive_buffer_capacity,
         uint32_t& receive_buffer_size,
-        fastrtps::rtps::Endianness_t msg_endian,
+        fastdds::rtps::Endianness_t msg_endian,
         Locator& remote_locator)
 {
     bool success = false;
@@ -1426,13 +1466,13 @@ bool TCPTransportInterface::Receive(
 }
 
 bool TCPTransportInterface::send(
-        const octet* send_buffer,
-        uint32_t send_buffer_size,
-        const fastrtps::rtps::Locator_t& locator,
-        fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-        fastrtps::rtps::LocatorsIterator* destination_locators_end)
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
+        const fastdds::rtps::Locator_t& locator,
+        fastdds::rtps::LocatorsIterator* destination_locators_begin,
+        fastdds::rtps::LocatorsIterator* destination_locators_end)
 {
-    fastrtps::rtps::LocatorsIterator& it = *destination_locators_begin;
+    fastdds::rtps::LocatorsIterator& it = *destination_locators_begin;
 
     bool ret = true;
 
@@ -1440,7 +1480,7 @@ bool TCPTransportInterface::send(
     {
         if (IsLocatorSupported(*it))
         {
-            ret &= send(send_buffer, send_buffer_size, locator, *it);
+            ret &= send(buffers, total_bytes, locator, *it);
         }
 
         ++it;
@@ -1450,9 +1490,9 @@ bool TCPTransportInterface::send(
 }
 
 bool TCPTransportInterface::send(
-        const octet* send_buffer,
-        uint32_t send_buffer_size,
-        const fastrtps::rtps::Locator_t& locator,
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
+        const fastdds::rtps::Locator_t& locator,
         const Locator& remote_locator)
 {
     using namespace eprosima::fastdds::statistics::rtps;
@@ -1476,7 +1516,7 @@ bool TCPTransportInterface::send(
         }
     }
 
-    if (locator_mismatch || send_buffer_size > configuration()->sendBufferSize)
+    if (locator_mismatch || total_bytes > configuration()->sendBufferSize)
     {
         return false;
     }
@@ -1527,21 +1567,22 @@ bool TCPTransportInterface::send(
                 scoped_lock.lock();
             }
             TCPHeader tcp_header;
-            statistics_info_.set_statistics_message_data(remote_locator, send_buffer, send_buffer_size);
-            fill_rtcp_header(tcp_header, send_buffer, send_buffer_size, logical_port);
+            // Statistics submessage is always the last buffer to be added
+            statistics_info_.set_statistics_message_data(remote_locator, buffers.back(), total_bytes);
+            fill_rtcp_header(tcp_header, buffers, total_bytes, logical_port);
             {
                 asio::error_code ec;
                 size_t sent = channel->send(
                     (octet*)&tcp_header,
                     static_cast<uint32_t>(TCPHeader::size()),
-                    send_buffer,
-                    send_buffer_size,
+                    buffers,
+                    total_bytes,
                     ec);
 
-                if (sent != static_cast<uint32_t>(TCPHeader::size() + send_buffer_size) || ec)
+                if (sent != static_cast<uint32_t>(TCPHeader::size() + total_bytes) || ec)
                 {
                     EPROSIMA_LOG_WARNING(DEBUG, "Failed to send RTCP message (" << sent << " of " <<
-                            TCPHeader::size() + send_buffer_size << " b): " << ec.message());
+                            TCPHeader::size() + total_bytes << " b): " << ec.message());
                     success = false;
                 }
                 else
@@ -1568,7 +1609,7 @@ bool TCPTransportInterface::send(
 void TCPTransportInterface::select_locators(
         LocatorSelector& selector) const
 {
-    fastrtps::ResourceLimitedVector<LocatorSelectorEntry*>& entries =  selector.transport_starts();
+    fastdds::ResourceLimitedVector<LocatorSelectorEntry*>& entries =  selector.transport_starts();
 
     for (size_t i = 0; i < entries.size(); ++i)
     {
@@ -2020,7 +2061,7 @@ void TCPTransportInterface::fill_local_physical_port(
 void TCPTransportInterface::cleanup_sender_resources(
         SendResourceList& send_resource_list,
         const LocatorList& remote_participant_locators,
-        const LocatorList& participant_initial_peers) const
+        const LocatorList& participant_initial_peers_and_ds) const
 {
     // Since send resources handle physical locators, we need to convert the remote participant locators to physical
     std::set<Locator> remote_participant_physical_locators;
@@ -2037,8 +2078,8 @@ void TCPTransportInterface::cleanup_sender_resources(
         }
     }
 
-    // Exlude initial peers.
-    for (const auto& initial_peer : participant_initial_peers)
+    // Exclude initial peers.
+    for (const auto& initial_peer : participant_initial_peers_and_ds)
     {
         if (std::find(remote_participant_physical_locators.begin(), remote_participant_physical_locators.end(),
                 IPLocator::toPhysicalLocator(initial_peer)) != remote_participant_physical_locators.end())
@@ -2086,6 +2127,28 @@ void TCPTransportInterface::send_channel_pending_logical_ports(
     }
 }
 
+void TCPTransportInterface::is_own_interface(
+        const Locator& locator,
+        std::vector<fastdds::rtps::IPFinder::info_IP>& locNames) const
+{
+    std::vector<fastdds::rtps::IPFinder::info_IP> local_interfaces;
+    get_ips(local_interfaces, true, false);
+    for (const auto& interface_it : local_interfaces)
+    {
+        if (IPLocator::compareAddress(locator, interface_it.locator) && is_interface_allowed(interface_it.name))
+        {
+            locNames = local_interfaces;
+            // Remove interface of original locator from the list
+            locNames.erase(std::remove_if(locNames.begin(), locNames.end(),
+                    [&interface_it](const fastdds::rtps::IPFinder::info_IP& locInterface)
+                    {
+                        return locInterface.locator == interface_it.locator;
+                    }), locNames.end());
+            break;
+        }
+    }
+}
+
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

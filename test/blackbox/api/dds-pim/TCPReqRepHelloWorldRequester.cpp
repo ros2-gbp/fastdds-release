@@ -17,29 +17,26 @@
  *
  */
 
-#include "../../common/BlackboxTests.hpp"
 #include "TCPReqRepHelloWorldRequester.hpp"
-
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/domain/DomainParticipant.hpp>
-#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-
-#include <fastdds/dds/subscriber/Subscriber.hpp>
-#include <fastdds/dds/subscriber/DataReader.hpp>
-
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
-
-#include <fastdds/dds/publisher/Publisher.hpp>
-#include <fastdds/dds/publisher/DataWriter.hpp>
-
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/utils/IPFinder.h>
 
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
+#include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
+#include <fastdds/dds/publisher/DataWriter.hpp>
+#include <fastdds/dds/publisher/Publisher.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/subscriber/Subscriber.hpp>
+#include <fastdds/rtps/common/WriteParams.hpp>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
+#include "../../common/BlackboxTests.hpp"
+
 using namespace eprosima::fastdds::rtps;
 using namespace eprosima::fastdds::dds;
 
@@ -150,11 +147,11 @@ void TCPReqRepHelloWorldRequester::init(
     std::shared_ptr<TCPTransportDescriptor> descriptor;
     if (use_ipv6)
     {
-        descriptor = std::make_shared<TCPv6TransportDescriptor>();
+        descriptor = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
     }
     else
     {
-        descriptor = std::make_shared<TCPv4TransportDescriptor>();
+        descriptor = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     }
 
     if (maxInitialPeer > 0)
@@ -164,8 +161,8 @@ void TCPReqRepHelloWorldRequester::init(
 
     if (certs_folder != nullptr)
     {
-        using TLSOptions = TCPTransportDescriptor::TLSConfig::TLSOptions;
-        using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
+        using TLSOptions = eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSOptions;
+        using TLSVerifyMode = eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
         descriptor->apply_security = true;
         //descriptor->tls_config.password = "testkey";
         descriptor->tls_config.verify_file = std::string(certs_folder) + "/maincacert.pem";
@@ -179,7 +176,7 @@ void TCPReqRepHelloWorldRequester::init(
     participant_qos.transport().user_transports.push_back(descriptor);
 
     participant_qos.wire_protocol().participant_id = participantId;
-    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastrtps::c_TimeInfinite;
+    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastdds::dds::c_TimeInfinite;
     participant_qos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod = Duration_t(1, 0);
 
     participant_ = eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
@@ -189,7 +186,7 @@ void TCPReqRepHelloWorldRequester::init(
 
     // Register type
     type_.reset(new HelloWorldPubSubType());
-    ASSERT_EQ(participant_->register_type(type_), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant_->register_type(type_), RETCODE_OK);
 
     //Create subscriber
     reply_subscriber_ = participant_->create_subscriber(eprosima::fastdds::dds::SUBSCRIBER_QOS_DEFAULT);
@@ -203,13 +200,13 @@ void TCPReqRepHelloWorldRequester::init(
 
     configDatareader("Reply");
     reply_topic_ = participant_->create_topic(datareader_topicname_,
-                    type_->getName(), eprosima::fastdds::dds::TOPIC_QOS_DEFAULT);
+                    type_->get_name(), eprosima::fastdds::dds::TOPIC_QOS_DEFAULT);
     ASSERT_NE(reply_topic_, nullptr);
     ASSERT_TRUE(reply_topic_->is_enabled());
 
     configDatawriter("Request");
     request_topic_ = participant_->create_topic(datawriter_topicname_,
-                    type_->getName(), eprosima::fastdds::dds::TOPIC_QOS_DEFAULT);
+                    type_->get_name(), eprosima::fastdds::dds::TOPIC_QOS_DEFAULT);
     ASSERT_NE(request_topic_, nullptr);
     ASSERT_TRUE(request_topic_->is_enabled());
 
@@ -311,7 +308,7 @@ void TCPReqRepHelloWorldRequester::ReplyListener::on_data_available(
     HelloWorld hello;
     eprosima::fastdds::dds::SampleInfo info;
 
-    if (ReturnCode_t::RETCODE_OK == datareader->take_next_sample((void*)&hello, &info))
+    if (RETCODE_OK == datareader->take_next_sample((void*)&hello, &info))
     {
         if (info.valid_data)
         {
@@ -334,7 +331,7 @@ void TCPReqRepHelloWorldRequester::send(
         current_number_ = number;
     }
 
-    ASSERT_EQ(request_datawriter_->write((void*)&hello, wparams), true);
+    ASSERT_EQ(request_datawriter_->write((void*)&hello, wparams), RETCODE_OK);
     related_sample_identity_ = wparams.sample_identity();
     ASSERT_NE(related_sample_identity_.sequence_number(), SequenceNumber_t());
 }

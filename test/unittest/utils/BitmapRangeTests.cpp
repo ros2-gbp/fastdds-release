@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include <cstdint>
-#include <fastrtps/utils/fixed_size_bitmap.hpp>
+#include <fastdds/utils/fixed_size_bitmap.hpp>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -22,7 +22,7 @@
 
 using namespace std;
 using ValueType = uint32_t;
-using TestType = eprosima::fastrtps::BitmapRange<ValueType>;
+using TestType = eprosima::fastdds::BitmapRange<ValueType>;
 
 template<class T>
 struct BitmapRangeExposer : T

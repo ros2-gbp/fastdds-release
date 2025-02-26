@@ -22,11 +22,11 @@
 
 #include <asio.hpp>
 
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/utils/IPLocator.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 static const std::regex IPv4_REGEX("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}"
@@ -1143,5 +1143,5 @@ bool IPLocator::isIPv6(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

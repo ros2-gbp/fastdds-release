@@ -20,7 +20,7 @@
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/common/CdrSerialization.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
+#include <rtps/messages/CDRMessage.hpp>
 
 #include <openssl/aes.h>
 #include <openssl/evp.h>
@@ -38,17 +38,11 @@
 #undef max
 #endif // ifdef WIN32
 
-#if FASTCDR_VERSION_MAJOR == 1
-#define change_endianness changeEndianness
-#define get_serialized_data_length getSerializedDataLength
-#define get_state getState
-#define get_current_position getCurrentPosition
-#define get_buffer_pointer getBufferPointer
-#define set_state setState
-#endif // FASTCDR_VERSION_MAJOR == 1
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+using namespace security;
 
 constexpr int initialization_vector_suffix_length = 8;
 
@@ -2322,3 +2316,7 @@ bool AESGCMGMAC_Transform::lookup_writer(
 
     return false;
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

@@ -16,7 +16,7 @@
 #define __TRANSPORT_TCPSENDERRESOURCE_HPP__
 
 #include <fastdds/rtps/common/LocatorsIterator.hpp>
-#include <fastdds/rtps/transport/SenderResource.h>
+#include <fastdds/rtps/transport/SenderResource.hpp>
 
 #include <rtps/transport/ChainingSenderResource.hpp>
 #include <rtps/transport/TCPChannelResource.h>
@@ -26,14 +26,14 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class TCPSenderResource : public fastrtps::rtps::SenderResource
+class TCPSenderResource : public SenderResource
 {
 public:
 
     TCPSenderResource(
             TCPTransportInterface& transport,
-            eprosima::fastrtps::rtps::Locator_t& locator)
-        : fastrtps::rtps::SenderResource(transport.kind())
+            Locator_t& locator)
+        : SenderResource(transport.kind())
         , locator_(locator)
     {
         // Implementation functions are bound to the right transport parameters
@@ -42,14 +42,14 @@ public:
                     transport.SenderResourceHasBeenClosed(locator_);
                 };
 
-        send_lambda_ = [this, &transport](
-            const fastrtps::rtps::octet* data,
-            uint32_t dataSize,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end,
+        send_buffers_lambda_ = [this, &transport](
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end,
             const std::chrono::steady_clock::time_point&) -> bool
                 {
-                    return transport.send(data, dataSize, locator_, destination_locators_begin,
+                    return transport.send(buffers, total_bytes, locator_, destination_locators_begin,
                                    destination_locators_end);
                 };
     }
@@ -62,7 +62,7 @@ public:
         }
     }
 
-    fastrtps::rtps::Locator_t& locator()
+    Locator_t& locator()
     {
         return locator_;
     }
@@ -102,11 +102,11 @@ private:
     TCPSenderResource& operator =(
             const SenderResource&) = delete;
 
-    fastrtps::rtps::Locator_t locator_;
+    Locator_t locator_;
 };
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif // __TRANSPORT_UDPSENDERRESOURCE_HPP__

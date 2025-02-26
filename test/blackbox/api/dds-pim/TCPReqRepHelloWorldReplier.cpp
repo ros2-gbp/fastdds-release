@@ -17,29 +17,26 @@
  *
  */
 
-#include "../../common/BlackboxTests.hpp"
 #include "TCPReqRepHelloWorldReplier.hpp"
-
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/domain/DomainParticipant.hpp>
-#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/dds/topic/Topic.hpp>
-
-#include <fastdds/dds/subscriber/Subscriber.hpp>
-#include <fastdds/dds/subscriber/DataReader.hpp>
-
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
-
-#include <fastdds/dds/publisher/Publisher.hpp>
-#include <fastdds/dds/publisher/DataWriter.hpp>
-
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
 
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
+#include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
+#include <fastdds/dds/publisher/DataWriter.hpp>
+#include <fastdds/dds/publisher/Publisher.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/subscriber/Subscriber.hpp>
+#include <fastdds/dds/topic/Topic.hpp>
+#include <fastdds/rtps/common/WriteParams.hpp>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
+#include "../../common/BlackboxTests.hpp"
+
 using namespace eprosima::fastdds::rtps;
 using namespace eprosima::fastdds::dds;
 
@@ -99,18 +96,18 @@ void TCPReqRepHelloWorldReplier::init(
     DomainParticipantQos participant_qos;
     participant_qos.wire_protocol().participant_id = participantId;
     participant_qos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod = Duration_t(1, 0);
-    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastrtps::c_TimeInfinite;
+    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastdds::dds::c_TimeInfinite;
 
     participant_qos.transport().use_builtin_transports = false;
 
     std::shared_ptr<TCPTransportDescriptor> descriptor;
     if (use_ipv6)
     {
-        descriptor = std::make_shared<TCPv6TransportDescriptor>();
+        descriptor = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
     }
     else
     {
-        descriptor = std::make_shared<TCPv4TransportDescriptor>();
+        descriptor = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     }
 
     descriptor->sendBufferSize = 0;
@@ -123,8 +120,8 @@ void TCPReqRepHelloWorldReplier::init(
 
     if (certs_folder != nullptr)
     {
-        using TLSOptions = TCPTransportDescriptor::TLSConfig::TLSOptions;
-        using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
+        using TLSOptions = eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSOptions;
+        using TLSVerifyMode = eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
         descriptor->apply_security = true;
         descriptor->tls_config.password = "testkey";
         descriptor->tls_config.cert_chain_file = std::string(certs_folder) + "/mainsubcert.pem";
@@ -145,17 +142,17 @@ void TCPReqRepHelloWorldReplier::init(
 
     // Register type
     type_.reset(new HelloWorldPubSubType());
-    ASSERT_EQ(participant_->register_type(type_), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant_->register_type(type_), RETCODE_OK);
 
     configDatareader("Request");
     request_topic_ = participant_->create_topic(datareader_topicname_,
-                    type_->getName(), TOPIC_QOS_DEFAULT);
+                    type_->get_name(), TOPIC_QOS_DEFAULT);
     ASSERT_NE(request_topic_, nullptr);
     ASSERT_TRUE(request_topic_->is_enabled());
 
     configDatawriter("Reply");
     reply_topic_ = participant_->create_topic(datawriter_topicname_,
-                    type_->getName(), TOPIC_QOS_DEFAULT);
+                    type_->get_name(), TOPIC_QOS_DEFAULT);
     ASSERT_NE(reply_topic_, nullptr);
     ASSERT_TRUE(reply_topic_->is_enabled());
 
@@ -197,7 +194,7 @@ void TCPReqRepHelloWorldReplier::newNumber(
     hello.index(number);
     hello.message("GoodBye");
     wparams.related_sample_identity(sample_identity);
-    ASSERT_EQ(reply_datawriter_->write((void*)&hello, wparams), true);
+    ASSERT_EQ(reply_datawriter_->write((void*)&hello, wparams), RETCODE_OK);
 }
 
 void TCPReqRepHelloWorldReplier::wait_discovery(
@@ -283,7 +280,7 @@ void TCPReqRepHelloWorldReplier::ReplyListener::on_data_available(
     HelloWorld hello;
     SampleInfo info;
 
-    if (ReturnCode_t::RETCODE_OK == datareader->take_next_sample((void*)&hello, &info))
+    if (RETCODE_OK == datareader->take_next_sample((void*)&hello, &info))
     {
         if (info.valid_data)
         {

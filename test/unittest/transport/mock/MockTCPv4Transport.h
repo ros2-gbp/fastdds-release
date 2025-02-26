@@ -15,16 +15,15 @@
 #ifndef MOCK_TRANSPORT_TCP4_STUFF_H
 #define MOCK_TRANSPORT_TCP4_STUFF_H
 
-#include <fastrtps/transport/TCPv4TransportDescriptor.h>
+#include <vector>
+
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+
 #include <rtps/transport/TCPv4Transport.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
-
-using TCPv4Transport = eprosima::fastdds::rtps::TCPv4Transport;
-using TCPChannelResource = eprosima::fastdds::rtps::TCPChannelResource;
-using TCPChannelResourceBasic = eprosima::fastdds::rtps::TCPChannelResourceBasic;
 
 class MockTCPv4Transport : public TCPv4Transport
 {
@@ -57,12 +56,15 @@ public:
     }
 
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
+            const fastdds::rtps::octet* send_buffer,
             uint32_t send_buffer_size,
-            const fastrtps::rtps::Locator_t& send_resource_locator,
+            const Locator_t& send_resource_locator,
             const Locator_t& remote_locator)
     {
-        return TCPv4Transport::send(send_buffer, send_buffer_size, send_resource_locator, remote_locator);
+        eprosima::fastdds::rtps::NetworkBuffer buffers(send_buffer, send_buffer_size);
+        std::vector<eprosima::fastdds::rtps::NetworkBuffer> buffer_list;
+        buffer_list.push_back(buffers);
+        return TCPv4Transport::send(buffer_list, send_buffer_size, send_resource_locator, remote_locator);
     }
 
     const std::map<Locator_t, std::set<uint16_t>>& get_channel_pending_logical_ports() const
@@ -73,7 +75,7 @@ public:
 };
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif //MOCK_TRANSPORT_TCP4_STUFF_H

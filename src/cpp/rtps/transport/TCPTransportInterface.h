@@ -26,9 +26,9 @@
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
 #include <fastdds/rtps/transport/network/AllowedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
-#include <fastdds/rtps/transport/TCPTransportDescriptor.h>
-#include <fastdds/rtps/transport/TransportInterface.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 #include <rtps/transport/tcp/RTCPHeader.h>
 #include <rtps/transport/TCPAcceptorBasic.h>
@@ -138,18 +138,17 @@ protected:
     //! Methods to manage the TCP headers and their CRC values.
     bool check_crc(
             const TCPHeader& header,
-            const fastrtps::rtps::octet* data,
+            const octet* data,
             uint32_t size) const;
 
     void calculate_crc(
             TCPHeader& header,
-            const fastrtps::rtps::octet* data,
-            uint32_t size) const;
+            const std::vector<NetworkBuffer>& buffers) const;
 
     void fill_rtcp_header(
             TCPHeader& header,
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
             uint16_t logical_port) const;
 
     //! Closes the given p_channel_resource and unbind it from every resource.
@@ -161,7 +160,7 @@ protected:
             const Locator& locator);
 
     virtual bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& loc_names,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& loc_names,
             bool return_loopback,
             bool force_lookup) const = 0;
 
@@ -174,7 +173,7 @@ protected:
             std::weak_ptr<RTCPMessageManager> rtcp_manager);
 
     bool read_body(
-            fastrtps::rtps::octet* receive_buffer,
+            octet* receive_buffer,
             uint32_t receive_buffer_capacity,
             uint32_t* bytes_received,
             std::shared_ptr<TCPChannelResource>& channel,
@@ -225,9 +224,9 @@ protected:
      * There must exist a channel bound to the locator, otherwise the send will be skipped.
      */
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            const eprosima::fastrtps::rtps::Locator_t& locator,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            const eprosima::fastdds::rtps::Locator_t& locator,
             const Locator& remote_locator);
 
     void create_listening_thread(
@@ -240,7 +239,7 @@ public:
     virtual ~TCPTransportInterface();
 
     //! Stores the binding between the given locator and the given TCP socket. Server side.
-    void bind_socket(
+    ResponseCode bind_socket(
             std::shared_ptr<TCPChannelResource>&);
 
     //! Removes the listening socket for the specified port.
@@ -249,7 +248,7 @@ public:
 
     //! Resets the locator bound to the sender resource.
     void SenderResourceHasBeenClosed(
-            fastrtps::rtps::Locator_t& locator);
+            Locator_t& locator);
 
     //! Reports whether Locators correspond to the same port.
     bool DoInputLocatorsMatch(
@@ -278,7 +277,7 @@ public:
     virtual uint16_t GetMaxLogicalPort() const = 0;
 
     bool init(
-            const fastrtps::rtps::PropertyPolicy* properties = nullptr,
+            const PropertyPolicy* properties = nullptr,
             const uint32_t& max_msg_size_no_frag = 0) override;
 
     //! Checks whether there are open and bound sockets for the given port.
@@ -331,7 +330,7 @@ public:
      */
     bool OpenOutputChannels(
             SendResourceList& sender_resource_list,
-            const fastrtps::rtps::LocatorSelectorEntry& locator_selector_entry) override;
+            const LocatorSelectorEntry& locator_selector_entry) override;
 
     /**
      * Acts like OpenOutputChannel but ensures that a new CONNECT channel is created for the given locator
@@ -376,22 +375,22 @@ public:
      * @param receive_buffer vector with enough capacity (not size) to accomodate a full receive buffer. That
      * capacity must not be less than the receive_buffer_size supplied to this class during construction.
      * @param receive_buffer_capacity maximum size of the buffer.
-     * @param[out] receive_buffer_size Size of the packet received.
-     * @param[out] remote_locator associated remote locator.
+     * @param [out] receive_buffer_size Size of the packet received.
+     * @param [out] remote_locator associated remote locator.
      */
     bool Receive(
             std::weak_ptr<RTCPMessageManager>& rtcp_manager,
             std::shared_ptr<TCPChannelResource>& channel,
-            fastrtps::rtps::octet* receive_buffer,
+            octet* receive_buffer,
             uint32_t receive_buffer_capacity,
             uint32_t& receive_buffer_size,
-            fastrtps::rtps::Endianness_t msg_endian,
+            Endianness_t msg_endian,
             Locator& remote_locator);
 
     /**
-     * Blocking Send through the channel inside channel_resources_ matching the locator provided.
-     * @param send_buffer Slice into the raw data to send.
-     * @param send_buffer_size Size of the raw data. It will be used as a bounds check for the previous argument.
+     * Blocking Send through the specified channel.
+     * @param buffers Vector of buffers to send.
+     * @param total_bytes Total amount of bytes to send. It will be used as a bounds check for the previous argument.
      * It must not exceed the send_buffer_size fed to this class during construction.
      * @param locator Physical locator we're sending to.
      * @param destination_locators_begin pointer to destination locators iterator begin, the iterator can be advanced inside this fuction
@@ -400,11 +399,11 @@ public:
      * so should not be reuse.
      */
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            const fastrtps::rtps::Locator_t& locator,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end);
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            const Locator_t& locator,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end);
 
     /**
      * Performs the locator selection algorithm for this transport.
@@ -421,7 +420,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            fastrtps::rtps::LocatorSelector& selector) const override;
+            LocatorSelector& selector) const override;
 
     //! Callback called each time that an incoming connection is accepted.
     void SocketAccepted(
@@ -470,7 +469,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator& locator,
-            const fastrtps::rtps::PortParameters& port_params,
+            const PortParameters& port_params,
             uint32_t domainId,
             LocatorList& list) const override;
 
@@ -511,12 +510,13 @@ public:
      *
      * @param send_resource_list List of send resources associated to the local participant.
      * @param remote_participant_locators Set of locators associated to the remote participant.
-     * @param participant_initial_peers List of locators associated to the initial peers of the local participant.
+     * @param participant_initial_peers_and_ds List of locators associated to the initial peers and direct servers
+     * of the local participant.
      */
     void cleanup_sender_resources(
             SendResourceList& send_resource_list,
             const LocatorList& remote_participant_locators,
-            const LocatorList& participant_initial_peers) const;
+            const LocatorList& participant_initial_peers_and_ds) const;
 
     /**
      * Method to add the logical ports associated to a channel that was not available
@@ -525,6 +525,16 @@ public:
      */
     void send_channel_pending_logical_ports(
             std::shared_ptr<TCPChannelResource>& channel);
+
+    /**
+     * Method to check if a locator contains an interface that belongs to the same host.
+     * If it occurs, @c locNames will be updated with the list of interfaces of the host.
+     * @param [in]     locator Locator to check.
+     * @param [in,out] locNames Vector of interfaces to be updated.
+     */
+    void is_own_interface(
+            const Locator& locator,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames) const;
 };
 
 } // namespace rtps

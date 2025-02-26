@@ -12,25 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <security/OpenSSLInit.hpp>
-
-#include <fastrtps/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
-#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
-
-#include <fastrtps/rtps/messages/CDRMessage.h>
-#include <security/authentication/PKIDH.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/authentication/PKIHandshakeHandle.h>
-#include <security/accesscontrol/Permissions.h>
-#include <security/accesscontrol/AccessPermissionsHandle.h>
+#include <iostream>
+#include <string>
 
 #include <gtest/gtest.h>
 
-#include <iostream>
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/messages/CDRMessage.hpp>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
+#include <security/accesscontrol/Permissions.h>
+#include <security/authentication/PKIDH.h>
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/OpenSSLInit.hpp>
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastdds::rtps::security;
 
 static const char* certs_path = nullptr;
 
@@ -41,7 +40,9 @@ protected:
     virtual void SetUp()
     {
         fill_candidate_participant_key();
+        permissions_ca = "maincacert.pem";
         permissions_file = "permissions_access_control_tests.smime";
+        governance_file = "governance_helloworld_all_enable.smime";
     }
 
     virtual void TearDown()
@@ -50,7 +51,7 @@ protected:
 
     AccessControlTest()
     {
-        static eprosima::fastrtps::rtps::security::OpenSSLInit openssl_init;
+        static eprosima::fastdds::rtps::security::OpenSSLInit openssl_init;
     }
 
     void fill_common_participant_security_attributes(
@@ -88,6 +89,8 @@ public:
     uint32_t domain_id = 0;
     std::string topic_name;
     std::vector<std::string> partitions;
+    std::string permissions_ca;
+    std::string governance_file;
     std::string permissions_file;
 };
 
@@ -149,10 +152,10 @@ void AccessControlTest::fill_common_participant_security_attributes(
             emplace_back(Property("dds.sec.access.authentication_plugin", "builtin.Access-Permissions"));
     participant_attr.properties.properties().
             emplace_back(Property("dds.sec.access.builtin.Access-Permissions.permissions_ca",
-            "file://" + std::string(certs_path) + "/maincacert.pem"));
+            "file://" + std::string(certs_path) + "/" + permissions_ca));
     participant_attr.properties.properties().
             emplace_back(Property("dds.sec.access.builtin.Access-Permissions.governance",
-            "file://" + std::string(certs_path) + "/governance_helloworld_all_enable.smime"));
+            "file://" + std::string(certs_path) + "/" + governance_file));
     participant_attr.properties.properties().
             emplace_back(Property("dds.sec.access.builtin.Access-Permissions.permissions",
             "file://" + std::string(certs_path) + "/" + permissions_file));
@@ -230,7 +233,7 @@ void AccessControlTest::check_remote_datareader(
     SecurityException exception;
 
     ReaderProxyData reader_proxy_data(1, 1);
-    reader_proxy_data.topicName(eprosima::fastrtps::string_255(topic_name));
+    reader_proxy_data.topicName(eprosima::fastcdr::string_255(topic_name));
     reader_proxy_data.m_qos.m_partition.setNames(partitions);
     bool relay_only;
     bool result = access_plugin.check_remote_datareader(
@@ -288,7 +291,7 @@ void AccessControlTest::check_remote_datawriter(
     SecurityException exception;
 
     WriterProxyData writer_proxy_data(1, 1);
-    writer_proxy_data.topicName(eprosima::fastrtps::string_255(topic_name));
+    writer_proxy_data.topicName(eprosima::fastcdr::string_255(topic_name));
     writer_proxy_data.m_qos.m_partition.setNames(partitions);
     bool result = access_plugin.check_remote_datawriter(
         *access_handle,
@@ -464,6 +467,46 @@ TEST_F(AccessControlTest, validate_fail_on_self_signed_permissions)
 
     PermissionsHandle* access_handle;
     get_access_handle(subscriber_participant_attr, &access_handle, false);
+}
+
+/* Regression test for advisory GHSA-w33g-jmm2-8983
+ *
+ * Creating a participant with an expired Permissions CA should fail.
+ */
+TEST_F(AccessControlTest, validate_fail_on_expired_permissions_ca)
+{
+    permissions_ca = "expired_ca_cert.pem";
+    permissions_file = "permissions_signed_by_expired_ca.smime";
+    governance_file = "governance_signed_by_expired_ca.smime";
+
+    RTPSParticipantAttributes subscriber_participant_attr;
+    fill_subscriber_participant_security_attributes(subscriber_participant_attr);
+
+    PermissionsHandle* access_handle;
+    get_access_handle(subscriber_participant_attr, &access_handle, false);
+}
+
+/* Regression test for advisory GHSA-w33g-jmm2-8983
+ *
+ * Permissions signed by an intermediate CA should be valid.
+ */
+TEST_F(AccessControlTest, validation_ok_on_chained_ca)
+{
+    permissions_ca = "chainedcacert.pem";
+    permissions_file = "permissions_signed_by_chained_ca.smime";
+    governance_file = "governance_signed_by_chained_ca.smime";
+    
+    topic_name = "HelloWorldTopic_no_partitions";
+
+    RTPSParticipantAttributes subscriber_participant_attr;
+    fill_subscriber_participant_security_attributes(subscriber_participant_attr);
+    check_local_datareader(subscriber_participant_attr, true);
+    check_remote_datareader(subscriber_participant_attr, true);
+
+    RTPSParticipantAttributes publisher_participant_attr;
+    fill_publisher_participant_security_attributes(publisher_participant_attr);
+    check_local_datawriter(publisher_participant_attr, true);
+    check_remote_datawriter(publisher_participant_attr, true);
 }
 
 int main(

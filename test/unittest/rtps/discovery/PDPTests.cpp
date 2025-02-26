@@ -13,29 +13,34 @@
 // limitations under the License.
 
 #include <chrono>
-#include <iostream>
 #include <future>
+#include <iostream>
 #include <memory>
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 #include <string>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include <fastdds/core/policy/ParameterList.hpp>
-#include <fastdds/dds/builtin/typelookup/TypeLookupManager.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
-#include <fastdds/rtps/builtin/BuiltinProtocols.h>
-#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
-#include <fastdds/rtps/reader/ReaderListener.h>
-#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
-#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/builtin/data/BuiltinEndpoints.hpp>
+#include <fastdds/rtps/reader/ReaderListener.hpp>
 
+#include <rtps/builtin/BuiltinProtocols.h>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/builtin/discovery/participant/PDP.h>
 #include <rtps/builtin/discovery/participant/PDPEndpoints.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 #include <statistics/rtps/StatisticsBase.hpp>
+
+#if HAVE_SECURITY
+#include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
+#endif // if HAVE_SECURITY
 
 #if defined(__cplusplus_winrt)
 #define GET_PID GetCurrentProcessId
@@ -47,18 +52,7 @@
 #endif // if defined(_WIN32)
 
 namespace eprosima {
-
 namespace fastdds {
-namespace dds {
-namespace builtin {
-
-const fastrtps::rtps::SampleIdentity INVALID_SAMPLE_IDENTITY;
-
-} // namespace builtin
-} // namespace dds
-} // namespace fastdds
-
-namespace fastrtps {
 namespace rtps {
 
 using ::testing::Return;
@@ -68,47 +62,48 @@ class TesterPDPEndpoints : public fastdds::rtps::PDPEndpoints
 {
     ~TesterPDPEndpoints() override = default;
 
-    fastrtps::rtps::BuiltinEndpointSet_t builtin_endpoints() const override
+    fastdds::rtps::BuiltinEndpointSet_t builtin_endpoints() const override
     {
-        return DISC_BUILTIN_ENDPOINT_PARTICIPANT_ANNOUNCER | DISC_BUILTIN_ENDPOINT_PARTICIPANT_DETECTOR;
+        return fastdds::rtps::DISC_BUILTIN_ENDPOINT_PARTICIPANT_ANNOUNCER |
+               fastdds::rtps::DISC_BUILTIN_ENDPOINT_PARTICIPANT_DETECTOR;
     }
 
-    const std::unique_ptr<fastrtps::rtps::ReaderListener>& main_listener() const override
+    const std::unique_ptr<fastdds::rtps::ReaderListener>& main_listener() const override
     {
         return no_listener_;
     }
 
     bool enable_pdp_readers(
-            fastrtps::rtps::RTPSParticipantImpl*) override
+            fastdds::rtps::RTPSParticipantImpl*) override
     {
         return true;
     }
 
     void disable_pdp_readers(
-            fastrtps::rtps::RTPSParticipantImpl*) override
+            fastdds::rtps::RTPSParticipantImpl*) override
     {
 
     }
 
     void delete_pdp_endpoints(
-            fastrtps::rtps::RTPSParticipantImpl* ) override
+            fastdds::rtps::RTPSParticipantImpl* ) override
     {
 
     }
 
     void remove_from_pdp_reader_history(
-            const fastrtps::rtps::InstanceHandle_t&) override
+            const fastdds::rtps::InstanceHandle_t&) override
     {
 
     }
 
     void remove_from_pdp_reader_history(
-            fastrtps::rtps::CacheChange_t*) override
+            fastdds::rtps::CacheChange_t*) override
     {
 
     }
 
-    std::unique_ptr<fastrtps::rtps::ReaderListener> no_listener_;
+    std::unique_ptr<fastdds::rtps::ReaderListener> no_listener_;
 
 };
 
@@ -215,7 +210,7 @@ public:
 
     bool remove_remote_participant(
             const GUID_t& /*participant_guid*/,
-            ParticipantDiscoveryInfo::DISCOVERY_STATUS /*reason*/) override
+            ParticipantDiscoveryStatus /*reason*/) override
     {
         return true;
     }
@@ -264,18 +259,8 @@ public:
 
     void on_participant_discovery(
             fastdds::dds::DomainParticipant* participant,
-            fastrtps::rtps::ParticipantDiscoveryInfo&& /*info*/) override
-    {
-        if (std::find(p_matched_.begin(), p_matched_.end(), participant->guid()) == p_matched_.end())
-        {
-            matched++;
-            p_matched_.push_back(participant->guid());
-        }
-    }
-
-    void on_participant_discovery(
-            fastdds::dds::DomainParticipant* participant,
-            fastrtps::rtps::ParticipantDiscoveryInfo&& /*info*/,
+            fastdds::rtps::ParticipantDiscoveryStatus /*status*/,
+            const fastdds::rtps::ParticipantBuiltinTopicData& /*info*/,
             bool& /*should_be_ignored*/) override
     {
         if (std::find(p_matched_.begin(), p_matched_.end(), participant->guid()) == p_matched_.end())
@@ -289,7 +274,7 @@ public:
 
 private:
 
-    std::vector<fastrtps::rtps::GUID_t> p_matched_;
+    std::vector<fastdds::rtps::GUID_t> p_matched_;
 };
 
 class PDPTests : public ::testing::Test
@@ -448,7 +433,7 @@ TEST_F(PDPTests, iproxy_queryable_get_serialized_proxy)
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 int main(

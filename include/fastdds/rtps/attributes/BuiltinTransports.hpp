@@ -16,14 +16,14 @@
  * @file BuiltinTransports.hpp
  */
 
-#ifndef _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_
-#define _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_
+#ifndef FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP
+#define FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP
 
 #include <ostream>
 #include <cstdint>
-#include <fastdds/rtps/transport/TransportInterface.h>
 
-#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/fastdds_dll.hpp>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -33,7 +33,7 @@ namespace rtps {
 /**
  * @brief Options for configuring the built-in transports when using LARGE_DATA mode.
  */
-struct RTPS_DllAPI BuiltinTransportsOptions
+struct FASTDDS_EXPORTED_API BuiltinTransportsOptions
 {
     //! Whether to use non-blocking send operation.
     bool non_blocking_send = false;
@@ -155,4 +155,4 @@ inline std::ostream& operator <<(
 }  // namespace fastdds
 }  // namespace eprosima
 
-#endif  // _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_
+#endif  // FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP

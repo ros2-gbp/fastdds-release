@@ -22,6 +22,7 @@
 #include <gmock/gmock.h>
 
 #include <fastdds/core/policy/ParameterSerializer.hpp>
+#include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/qos/DomainParticipantFactoryQos.hpp>
@@ -38,11 +39,10 @@
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
-#include <fastrtps/transport/test_UDPv4TransportDescriptor.h>
-#include <fastrtps/types/TypesBase.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 
+#include "../utils/filter_helpers.hpp"
 #include "BlackboxTests.hpp"
 #include "mock/BlackboxMockConsumer.h"
 #include "../api/dds-pim/CustomPayloadPool.hpp"
@@ -50,15 +50,13 @@
 #include "../api/dds-pim/PubSubReader.hpp"
 #include "../api/dds-pim/PubSubWriter.hpp"
 #include "../api/dds-pim/PubSubWriterReader.hpp"
-#include "../types/FixedSized.h"
-#include "../types/FixedSizedPubSubTypes.h"
-#include "../types/HelloWorldPubSubTypes.h"
+#include "../types/FixedSized.hpp"
+#include "../types/FixedSizedPubSubTypes.hpp"
+#include "../types/HelloWorldPubSubTypes.hpp"
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
-
-using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
 
 /**
  * This is a regression test for redmine issue #21060.
@@ -68,16 +66,15 @@ using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
  */
 TEST(DDSBasic, WarningOnDelete)
 {
-    using namespace eprosima::fastrtps;
     namespace dds = eprosima::fastdds::dds;
     auto factory = dds::DomainParticipantFactory::get_instance();
 
     // Set intraprocess delivery to full
-    LibrarySettingsAttributes library_settings;
-    library_settings = xmlparser::XMLProfileManager::library_settings();
+    LibrarySettings library_settings;
+    factory->get_library_settings(library_settings);
     auto old_library_settings = library_settings;
     library_settings.intraprocess_delivery = INTRAPROCESS_FULL;
-    xmlparser::XMLProfileManager::library_settings(library_settings);
+    factory->set_library_settings(library_settings);
 
     // Create participants
     auto participant_1 = factory->create_participant(0, dds::PARTICIPANT_QOS_DEFAULT);
@@ -99,7 +96,7 @@ TEST(DDSBasic, WarningOnDelete)
     helper_consumer->clear_entries();
 
     // Restore library settings
-    xmlparser::XMLProfileManager::library_settings(old_library_settings);
+    factory->set_library_settings(old_library_settings);
 }
 
 /**
@@ -114,7 +111,7 @@ TEST(DDSBasic, DeleteDisabledEntities)
     ASSERT_NE(nullptr, factory);
     factory->set_qos(factory_qos);
     DomainParticipantFactoryQos factory_qos_check;
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, factory->get_qos(factory_qos_check));
+    ASSERT_EQ(RETCODE_OK, factory->get_qos(factory_qos_check));
     ASSERT_EQ(false, factory_qos_check.entity_factory().autoenable_created_entities);
 
     // Create a disabled DomainParticipant, setting it to in turn create disable entities
@@ -123,7 +120,7 @@ TEST(DDSBasic, DeleteDisabledEntities)
     DomainParticipant* participant = factory->create_participant((uint32_t)GET_PID() % 230, participant_qos);
     ASSERT_NE(nullptr, participant);
     DomainParticipantQos participant_qos_check;
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->get_qos(participant_qos_check));
+    ASSERT_EQ(RETCODE_OK, participant->get_qos(participant_qos_check));
     ASSERT_EQ(false, participant_qos_check.entity_factory().autoenable_created_entities);
 
     // Create a disabled Publisher, setting it to in turn create disable entities
@@ -132,7 +129,7 @@ TEST(DDSBasic, DeleteDisabledEntities)
     Publisher* publisher = participant->create_publisher(publisher_qos);
     ASSERT_NE(nullptr, publisher);
     PublisherQos publisher_qos_check;
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, publisher->get_qos(publisher_qos_check));
+    ASSERT_EQ(RETCODE_OK, publisher->get_qos(publisher_qos_check));
     ASSERT_EQ(false, publisher_qos_check.entity_factory().autoenable_created_entities);
 
     // Create a disabled Subscriber, setting it to in turn create disable entities
@@ -141,7 +138,7 @@ TEST(DDSBasic, DeleteDisabledEntities)
     Subscriber* subscriber = participant->create_subscriber(subscriber_qos);
     ASSERT_NE(nullptr, subscriber);
     SubscriberQos subscriber_qos_check;
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, subscriber->get_qos(subscriber_qos_check));
+    ASSERT_EQ(RETCODE_OK, subscriber->get_qos(subscriber_qos_check));
     ASSERT_EQ(false, subscriber_qos_check.entity_factory().autoenable_created_entities);
 
     // Register type
@@ -213,7 +210,7 @@ TEST(DDSBasic, MultithreadedPublisherCreation)
                 }
 
                 /* Delete publisher */
-                ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->delete_publisher(publisher));
+                ASSERT_EQ(RETCODE_OK, participant->delete_publisher(publisher));
             };
 
     {
@@ -239,7 +236,7 @@ TEST(DDSBasic, MultithreadedPublisherCreation)
     }
 
     /* Clean up */
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, factory->delete_participant(participant));
+    ASSERT_EQ(RETCODE_OK, factory->delete_participant(participant));
 }
 
 TEST(DDSBasic, MultithreadedReaderCreationDoesNotDeadlock)
@@ -300,7 +297,7 @@ TEST(DDSBasic, MultithreadedReaderCreationDoesNotDeadlock)
                             return should_finish;
                         });
 
-                ASSERT_EQ(ReturnCode_t::RETCODE_OK, subscriber->delete_datareader(reader));
+                ASSERT_EQ(RETCODE_OK, subscriber->delete_datareader(reader));
             };
 
     {
@@ -322,31 +319,31 @@ TEST(DDSBasic, MultithreadedReaderCreationDoesNotDeadlock)
         }
     }
 
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, publisher->delete_datawriter(writer));
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->delete_publisher(publisher));
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->delete_subscriber(subscriber));
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->delete_topic(topic));
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, factory->delete_participant(participant));
+    ASSERT_EQ(RETCODE_OK, publisher->delete_datawriter(writer));
+    ASSERT_EQ(RETCODE_OK, participant->delete_publisher(publisher));
+    ASSERT_EQ(RETCODE_OK, participant->delete_subscriber(subscriber));
+    ASSERT_EQ(RETCODE_OK, participant->delete_topic(topic));
+    ASSERT_EQ(RETCODE_OK, factory->delete_participant(participant));
 }
 
 /**
  * Read a parameterList from a CDRMessage.
  * Search for PID_CUSTOM_RELATED_SAMPLE_IDENTITY and PID_RELATED_SAMPLE_IDENTITY.
  * Overwrite PID_CUSTOM_RELATED_SAMPLE_IDENTITY to just leave the new one in msg.
- * @param[in] msg Reference to the message.
- * @param[out] exists_pid_related_sample_identity True if the parameter is inside msg.
- * @param[out] exists_pid_custom_related_sample_identity True if the parameter is inside msg.
+ * @param [in] msg Reference to the message.
+ * @param [out] exists_pid_related_sample_identity True if the parameter is inside msg.
+ * @param [out] exists_pid_custom_related_sample_identity True if the parameter is inside msg.
  * @return true if parsing was correct, false otherwise.
  */
 bool check_related_sample_identity_field(
-        fastrtps::rtps::CDRMessage_t& msg,
+        fastdds::rtps::CDRMessage_t& msg,
         bool& exists_pid_related_sample_identity,
         bool& exists_pid_custom_related_sample_identity)
 {
     uint32_t qos_size = 0;
 
     auto parameter_process = [&](
-        fastrtps::rtps::CDRMessage_t* msg,
+        fastdds::rtps::CDRMessage_t* msg,
         ParameterId_t& pid,
         uint16_t plength,
         uint32_t& pid_pos)
@@ -398,11 +395,14 @@ bool check_related_sample_identity_field(
         msg.pos = original_pos + qos_size;
 
         ParameterId_t pid{PID_SENTINEL};
-        uint16_t plength = 0;
         bool valid = true;
         auto msg_pid_pos = msg.pos;
-        valid &= fastrtps::rtps::CDRMessage::readUInt16(&msg, (uint16_t*)&pid);
-        valid &= fastrtps::rtps::CDRMessage::readUInt16(&msg, &plength);
+        pid = (ParameterId_t)eprosima::fastdds::helpers::cdr_parse_u16(
+            (char*)&msg.buffer[msg.pos]);
+        msg.pos += 2;
+        uint16_t plength = eprosima::fastdds::helpers::cdr_parse_u16(
+            (char*)&msg.buffer[msg.pos]);
+        msg.pos += 2;
 
         if (pid == PID_SENTINEL)
         {
@@ -445,13 +445,13 @@ TEST(DDSBasic, PidRelatedSampleIdentity)
     PubSubReader<HelloWorldPubSubType> reliable_reader(TEST_TOPIC_NAME);
 
     // Test transport will be used in order to filter inlineQoS
-    auto test_transport = std::make_shared<eprosima::fastrtps::rtps::test_UDPv4TransportDescriptor>();
+    auto test_transport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     bool exists_pid_related_sample_identity = false;
     bool exists_pid_custom_related_sample_identity = false;
 
     test_transport->drop_data_messages_filter_ =
             [&exists_pid_related_sample_identity, &exists_pid_custom_related_sample_identity]
-                (eprosima::fastrtps::rtps::CDRMessage_t& msg)-> bool
+                (eprosima::fastdds::rtps::CDRMessage_t& msg)-> bool
             {
                 // Inside this filter, the two flags passed in register whether both PIDs are included in the msg to be sent.
                 // The legacy value is overwritten in order to send a msg with only the standard PID_RELATED_SAMPLE_IDENTITY as valid parameter,
@@ -481,29 +481,29 @@ TEST(DDSBasic, PidRelatedSampleIdentity)
 
     HelloWorld data;
     // Send reply associating it with the client request.
-    eprosima::fastrtps::rtps::WriteParams write_params;
-    eprosima::fastrtps::rtps::SampleIdentity related_sample_identity_;
-    eprosima::fastrtps::rtps::GUID_t unknown_guid;
+    eprosima::fastdds::rtps::WriteParams write_params;
+    eprosima::fastdds::rtps::SampleIdentity related_sample_identity_;
+    eprosima::fastdds::rtps::GUID_t unknown_guid;
     related_sample_identity_.writer_guid(unknown_guid);
-    eprosima::fastrtps::rtps::SequenceNumber_t seq(51, 24);
+    eprosima::fastdds::rtps::SequenceNumber_t seq(51, 24);
     related_sample_identity_.sequence_number(seq);
     write_params.related_sample_identity() = related_sample_identity_;
 
     // Publish the new value, deduce the instance handle
-    bool write_ret = native_writer.write((void*)&data, write_params);
-    ASSERT_EQ(true, write_ret);
+    ReturnCode_t write_ret = native_writer.write((void*)&data, write_params);
+    ASSERT_EQ(RETCODE_OK, write_ret);
 
     DataReader& native_reader = reliable_reader.get_native_reader();
 
     HelloWorld read_data;
     eprosima::fastdds::dds::SampleInfo info;
-    eprosima::fastrtps::Duration_t timeout;
+    eprosima::fastdds::dds::Duration_t timeout;
     timeout.seconds = 2;
     while (!native_reader.wait_for_unread_message(timeout))
     {
     }
 
-    ASSERT_EQ(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK,
+    ASSERT_EQ(RETCODE_OK,
             native_reader.take_next_sample((void*)&read_data, &info));
 
     ASSERT_TRUE(exists_pid_related_sample_identity);
@@ -532,14 +532,15 @@ TEST(DDSBasic, IgnoreParticipant)
 
         void on_participant_discovery(
                 DomainParticipant* /*participant*/,
-                eprosima::fastrtps::rtps::ParticipantDiscoveryInfo&& info,
+                eprosima::fastdds::rtps::ParticipantDiscoveryStatus status,
+                const eprosima::fastdds::dds::ParticipantBuiltinTopicData& info,
                 bool& should_be_ignored) override
         {
             std::cout << "Using custom listener" << std::endl;
-            if (info.status == info.DISCOVERED_PARTICIPANT)
+            if (status == eprosima::fastdds::rtps::ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
             {
                 std::cout << "Discovered participant" << std::endl;
-                if (info.info.m_userData == std::vector<eprosima::fastrtps::rtps::octet>({ 'i', 'g', 'n' }))
+                if (info.user_data == std::vector<eprosima::fastdds::rtps::octet>({ 'i', 'g', 'n' }))
                 {
                     std::cout << "Ignoring participant" << std::endl;
                     should_be_ignored = true;
@@ -671,7 +672,7 @@ TEST(DDSBasic, participant_ignore_local_endpoints)
 
         // Create the DomainParticipant with the appropriate value for the property
         PubSubWriterReader<HelloWorldPubSubType> writer_reader(TEST_TOPIC_NAME);
-        eprosima::fastrtps::rtps::PropertyPolicy property_policy;
+        eprosima::fastdds::rtps::PropertyPolicy property_policy;
         property_policy.properties().emplace_back("fastdds.ignore_local_endpoints", test_config.property_value);
         writer_reader.property_policy(property_policy);
 
@@ -718,7 +719,7 @@ TEST(DDSBasic, participant_ignore_local_endpoints_two_participants)
     /* Set up */
 
     // Create the DomainParticipants with the appropriate value for the property
-    eprosima::fastrtps::rtps::PropertyPolicy property_policy;
+    eprosima::fastdds::rtps::PropertyPolicy property_policy;
     property_policy.properties().emplace_back("fastdds.ignore_local_endpoints", "true");
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
@@ -803,8 +804,15 @@ TEST(DDSBasic, endpoint_custom_payload_pools)
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    ASSERT_EQ(reader_payload_pool->requested_payload_count, 1u);
-    ASSERT_EQ(writer_payload_pool->requested_payload_count, 1u);
+    // There are 4 calls to get_payload, two for the reader and two for the writer:
+    // 1. Reader:
+    //      a. The first time the payload allocated in stack is processed (no payload_owner)
+    //      b. Payload used to add the change in reception
+    ASSERT_EQ(reader_payload_pool->requested_payload_count, 2u);
+    // 2. Writer:
+    //      a. Payload requested to the pool when creating the change
+    //      b. Extra call using gather-send to avoid releasing the payload that contains the data before sending it
+    ASSERT_EQ(writer_payload_pool->requested_payload_count, 2u);
 
     participant->delete_contained_entities();
 }
@@ -821,7 +829,7 @@ TEST(DDSBasic, max_output_message_size_participant)
     auto testTransport =  std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     const uint32_t segment_size = 1470;
     std::string segment_size_str = std::to_string(segment_size);
-    testTransport->messages_filter_ = [segment_size](eprosima::fastrtps::rtps::CDRMessage_t& datagram)
+    testTransport->messages_filter_ = [segment_size](eprosima::fastdds::rtps::CDRMessage_t& datagram)
             {
                 EXPECT_LE(datagram.length, segment_size);
                 // Never drop samples
@@ -829,7 +837,7 @@ TEST(DDSBasic, max_output_message_size_participant)
             };
 
     // Create the DomainParticipants with the appropriate value for the property
-    eprosima::fastrtps::rtps::PropertyPolicy property_policy;
+    eprosima::fastdds::rtps::PropertyPolicy property_policy;
     property_policy.properties().emplace_back("fastdds.max_message_size", segment_size_str);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
     writer.property_policy(property_policy).disable_builtin_transport()
@@ -862,7 +870,7 @@ TEST(DDSBasic, max_output_message_size_writer)
     std::string segment_size_str = std::to_string(segment_size);
 
     auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
-    testTransport->messages_filter_ = [segment_size](eprosima::fastrtps::rtps::CDRMessage_t& datagram)
+    testTransport->messages_filter_ = [segment_size](eprosima::fastdds::rtps::CDRMessage_t& datagram)
             {
                 EXPECT_LE(datagram.length, segment_size);
                 // Never drop samples
@@ -870,7 +878,7 @@ TEST(DDSBasic, max_output_message_size_writer)
             };
 
     // Create the DataWriter with the appropriate value for the property
-    eprosima::fastrtps::rtps::PropertyPolicy property_policy;
+    eprosima::fastdds::rtps::PropertyPolicy property_policy;
     property_policy.properties().emplace_back("fastdds.max_message_size", segment_size_str);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
     writer.entity_property_policy(property_policy).disable_builtin_transport()
@@ -901,6 +909,31 @@ TEST(DDSBasic, max_output_message_size_writer)
 }
 
 /**
+ * @test This test checks that it is possible to register two TypeSupport instances of the same type
+ *       under the same DomainParticipant.
+ */
+TEST(DDSBasic, register_two_identical_typesupports)
+{
+    // Set DomainParticipantFactory to create disabled entities
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_NE(nullptr, factory);
+
+    // Create a disabled DomainParticipant, setting it to in turn create disable entities
+    DomainParticipant* participant = factory->create_participant((uint32_t)GET_PID() % 230, PARTICIPANT_QOS_DEFAULT);
+    ASSERT_NE(nullptr, participant);
+
+    // Register a type support
+    TypeSupport type_support_1;
+    type_support_1.reset(new HelloWorldPubSubType());
+    EXPECT_EQ(RETCODE_OK, participant->register_type(type_support_1));
+
+    // Register a second instance of the type support with the same TopicDataType
+    TypeSupport type_support_2;
+    type_support_2.reset(new HelloWorldPubSubType());
+    EXPECT_EQ(RETCODE_OK, participant->register_type(type_support_2));
+}
+
+/**
  * @test This is a regression test for Redmine Issue 21293.
  * The destruction among intra-process participants should be correctly performed.
  * local_reader() has to return a valid pointer.
@@ -908,12 +941,15 @@ TEST(DDSBasic, max_output_message_size_writer)
  */
 TEST(DDSBasic, successful_destruction_among_intraprocess_participants)
 {
+    namespace dds = eprosima::fastdds::dds;
+    auto factory = dds::DomainParticipantFactory::get_instance();
+
     // Set intraprocess delivery to full
-    fastrtps::LibrarySettingsAttributes library_settings;
-    library_settings = fastrtps::xmlparser::XMLProfileManager::library_settings();
+    LibrarySettings library_settings;
+    factory->get_library_settings(library_settings);
     auto old_library_settings = library_settings;
-    library_settings.intraprocess_delivery = fastrtps::INTRAPROCESS_FULL;
-    fastrtps::xmlparser::XMLProfileManager::library_settings(library_settings);
+    library_settings.intraprocess_delivery = INTRAPROCESS_FULL;
+    factory->set_library_settings(library_settings);
 
     {
         auto participant_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(1u, 1u, 1u, 1u);
@@ -977,9 +1013,83 @@ TEST(DDSBasic, successful_destruction_among_intraprocess_participants)
             rec_thread.join();
         }
     }
+}
+TEST(DDSBasic, reliable_volatile_writer_secure_builtin_no_potential_deadlock)
+{
+    // Create
+    PubSubWriter<HelloWorldPubSubType> writer("HelloWorldTopic_no_potential_deadlock");
+    PubSubReader<HelloWorldPubSubType> reader("HelloWorldTopic_no_potential_deadlock");
 
-    // Restore library settings
-    fastrtps::xmlparser::XMLProfileManager::library_settings(old_library_settings);
+    writer.asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE)
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(20)
+            .init();
+
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(20)
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+
+    auto data = default_helloworld_data_generator(30);
+
+    std::thread th([&]()
+            {
+                reader.startReception(data);
+                reader.block_for_at_least(5);
+            });
+
+    writer.wait_discovery();
+    writer.send(data);
+
+    th.join();
+    reader.destroy();
+    writer.destroy();
+}
+
+TEST(DDSBasic, participant_factory_output_log_error_no_macro_collision)
+{
+    using Log = eprosima::fastdds::dds::Log;
+    using LogConsumer = eprosima::fastdds::dds::LogConsumer;
+
+    // A LogConsumer that just counts the number of entries consumed
+    struct TestConsumer : public LogConsumer
+    {
+        TestConsumer(
+                std::atomic_size_t& n_logs_ref)
+            : n_logs_(n_logs_ref)
+        {
+        }
+
+        void Consume(
+                const Log::Entry&) override
+        {
+            ++n_logs_;
+        }
+
+    private:
+
+        std::atomic_size_t& n_logs_;
+    };
+
+    // Counter for log entries
+    std::atomic<size_t>n_logs{};
+
+    // Prepare Log module to check that no SECURITY errors are produced
+    Log::SetCategoryFilter(std::regex("DOMAIN"));
+    Log::SetVerbosity(Log::Kind::Error);
+    Log::RegisterConsumer(std::unique_ptr<LogConsumer>(new TestConsumer(n_logs)));
+
+    auto dpf = DomainParticipantFactory::get_shared_instance();
+    DomainParticipantQos qos;
+    dpf->get_participant_qos_from_xml("", qos, "");
+    Log::Flush();
+    ASSERT_GE(n_logs.load(), 1u);
 }
 
 } // namespace dds
