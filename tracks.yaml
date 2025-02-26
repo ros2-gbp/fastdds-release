@@ -323,10 +323,10 @@ tracks:
       :{release_inc} --os-name fedora
     - git-bloom-generate -y rosrpm --prefix release/:{ros_distro} :{ros_distro} -i
       :{release_inc} --os-name rhel
-    devel_branch: 2.14.x
+    devel_branch: 3.1.x
     last_release: v2.14.4
     last_version: 2.14.4
-    name: fastrtps
+    name: fastdds
     patches: null
     release_inc: '1'
     release_repo_url: null
