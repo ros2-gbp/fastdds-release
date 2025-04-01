@@ -141,8 +141,10 @@
                     <offsetd1>${XML_PROFILES_ENV_VAR_60}</offsetd1>
                     <offsetd2>${XML_PROFILES_ENV_VAR_61}</offsetd2>
                     <offsetd3>${XML_PROFILES_ENV_VAR_62}</offsetd3>
+                    <offsetd4>${XML_PROFILES_ENV_VAR_168}</offsetd4>
                 </port>
                 <participantID>${XML_PROFILES_ENV_VAR_63}</participantID>
+                <easy_mode_ip>${XML_PROFILES_ENV_VAR_169}</easy_mode_ip>
                 <useBuiltinTransports>${XML_PROFILES_ENV_VAR_64}</useBuiltinTransports>
                 <netmask_filter>${XML_PROFILES_ENV_VAR_162}</netmask_filter>
                 <name>${XML_PROFILES_ENV_VAR_65}</name>

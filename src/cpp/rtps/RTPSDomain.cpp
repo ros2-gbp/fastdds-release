@@ -50,12 +50,30 @@
 #include <rtps/transport/UDPv6Transport.h>
 #include <rtps/writer/BaseWriter.hpp>
 #include <utils/Host.hpp>
+#include <utils/SystemCommandBuilder.hpp>
 #include <utils/SystemInfo.hpp>
 #include <xmlparser/XMLProfileManager.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
+
+const char* EASY_MODE_SERVICE_PROFILE =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
+        "<dds xmlns=\"http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles\">\n"
+        "    <profiles>\n"
+        "        <data_writer profile_name=\"service\">\n"
+        "            <qos>\n"
+        "                <reliability>\n"
+        "                    <max_blocking_time>\n"
+        "                        <sec>1</sec>\n"
+        "                        <nanosec>0</nanosec>\n"
+        "                    </max_blocking_time>\n"
+        "                </reliability>\n"
+        "            </qos>\n"
+        "        </data_writer>\n"
+        "    </profiles>\n"
+        "</dds>\n";
 
 template<typename _Descriptor>
 bool has_user_transport(
@@ -518,59 +536,144 @@ RTPSParticipant* RTPSDomainImpl::clientServerEnvironmentCreationOverride(
     // Is up to the caller guarantee the att argument is not modified during the call
     RTPSParticipantAttributes client_att(att);
 
-    // Retrieve the info from the environment variable
-    LocatorList_t& server_list = client_att.builtin.discovery_config.m_DiscoveryServers;
-    if (load_environment_server_info(server_list) && server_list.empty())
-    {
-        // It's not an error, the environment variable may not be set. Any issue with environment
-        // variable syntax is EPROSIMA_LOG_ERROR already
-        return nullptr;
-    }
+    // Check whether we need to initialize in easy mode
+    const std::string& ros_easy_mode_env_value = ros_easy_mode_env();
 
-    // Check if some address requires the UDPv6, TCPv4 or TCPv6 transport
-    if (server_list.has_kind<LOCATOR_KIND_UDPv6>() &&
-            !has_user_transport<fastdds::rtps::UDPv6TransportDescriptor>(client_att))
+    if (ros_easy_mode_env_value.empty())
     {
-        // Extend builtin transports with the UDPv6 transport
-        auto descriptor = std::make_shared<fastdds::rtps::UDPv6TransportDescriptor>();
-        descriptor->sendBufferSize = client_att.sendSocketBufferSize;
-        descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
-        client_att.userTransports.push_back(std::move(descriptor));
-    }
-    if (server_list.has_kind<LOCATOR_KIND_TCPv4>() &&
-            !has_user_transport<fastdds::rtps::TCPv4TransportDescriptor>(client_att))
-    {
-        // Extend builtin transports with the TCPv4 transport
-        auto descriptor = std::make_shared<fastdds::rtps::TCPv4TransportDescriptor>();
-        // Add automatic port
-        descriptor->add_listener_port(0);
-        descriptor->sendBufferSize = client_att.sendSocketBufferSize;
-        descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
-        client_att.userTransports.push_back(std::move(descriptor));
-    }
-    if (server_list.has_kind<LOCATOR_KIND_TCPv6>() &&
-            !has_user_transport<fastdds::rtps::TCPv6TransportDescriptor>(client_att))
-    {
-        // Extend builtin transports with the TCPv6 transport
-        auto descriptor = std::make_shared<fastdds::rtps::TCPv6TransportDescriptor>();
-        // Add automatic port
-        descriptor->add_listener_port(0);
-        descriptor->sendBufferSize = client_att.sendSocketBufferSize;
-        descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
-        client_att.userTransports.push_back(std::move(descriptor));
-    }
+        // Retrieve the info from the environment variable
+        LocatorList_t& server_list = client_att.builtin.discovery_config.m_DiscoveryServers;
+        if (load_environment_server_info(server_list) && server_list.empty())
+        {
+            // It's not an error, the environment variable may not be set. Any issue with environment
+            // variable syntax is EPROSIMA_LOG_ERROR already
+            return nullptr;
+        }
 
-    EPROSIMA_LOG_INFO(DOMAIN, "Detected auto client-server environment variable."
-            << "Trying to create client with the default server setup: "
-            << client_att.builtin.discovery_config.m_DiscoveryServers);
+        // Check if some address requires the UDPv6, TCPv4 or TCPv6 transport
+        if (server_list.has_kind<LOCATOR_KIND_UDPv6>() &&
+                !has_user_transport<fastdds::rtps::UDPv6TransportDescriptor>(client_att))
+        {
+            // Extend builtin transports with the UDPv6 transport
+            auto descriptor = std::make_shared<fastdds::rtps::UDPv6TransportDescriptor>();
+            descriptor->sendBufferSize = client_att.sendSocketBufferSize;
+            descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
+            client_att.userTransports.push_back(std::move(descriptor));
+        }
+        if (server_list.has_kind<LOCATOR_KIND_TCPv4>() &&
+                !has_user_transport<fastdds::rtps::TCPv4TransportDescriptor>(client_att))
+        {
+            // Extend builtin transports with the TCPv4 transport
+            auto descriptor = std::make_shared<fastdds::rtps::TCPv4TransportDescriptor>();
+            // Add automatic port
+            descriptor->add_listener_port(0);
+            descriptor->sendBufferSize = client_att.sendSocketBufferSize;
+            descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
+            client_att.userTransports.push_back(std::move(descriptor));
+        }
+        if (server_list.has_kind<LOCATOR_KIND_TCPv6>() &&
+                !has_user_transport<fastdds::rtps::TCPv6TransportDescriptor>(client_att))
+        {
+            // Extend builtin transports with the TCPv6 transport
+            auto descriptor = std::make_shared<fastdds::rtps::TCPv6TransportDescriptor>();
+            // Add automatic port
+            descriptor->add_listener_port(0);
+            descriptor->sendBufferSize = client_att.sendSocketBufferSize;
+            descriptor->receiveBufferSize = client_att.listenSocketBufferSize;
+            client_att.userTransports.push_back(std::move(descriptor));
+        }
 
-    client_att.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
-    // RemoteServerAttributes already fill in above
+        EPROSIMA_LOG_INFO(RTPS_DOMAIN, "Detected auto client-server environment variable."
+                << "Trying to create client with the default server setup: "
+                << client_att.builtin.discovery_config.m_DiscoveryServers);
 
-    // Check if the client must become a super client
-    if (ros_super_client_env())
+        client_att.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+        // RemoteServerAttributes already fill in above
+
+        // Check if the client must become a super client
+        if (ros_super_client_env())
+        {
+            client_att.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SUPER_CLIENT;
+        }
+    }
+    else
     {
+        // SUPER_CLIENT
         client_att.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SUPER_CLIENT;
+
+        // P2P transport. Similar to LARGE_DATA, but with UDPv4 unicast
+        client_att.useBuiltinTransports = false;
+        client_att.setup_transports(BuiltinTransports::P2P);
+
+        // Ignore initialpeers
+        client_att.builtin.initialPeersList = LocatorList();
+
+        eprosima::fastdds::rtps::PortParameters port_params;
+
+        auto domain_port = port_params.get_discovery_server_port(domain_id);
+
+        // Add user traffic TCP
+        eprosima::fastdds::rtps::Locator_t locator_tcp;
+        locator_tcp.kind = LOCATOR_KIND_TCPv4;
+
+        IPLocator::setPhysicalPort(locator_tcp, 0);
+        IPLocator::setLogicalPort(locator_tcp, 0);
+        // Initialize to the wan interface
+        IPLocator::setIPv4(locator_tcp, "0.0.0.0");
+
+        client_att.defaultUnicastLocatorList.push_back(locator_tcp);
+
+        // Add remote DS based on port
+        eprosima::fastdds::rtps::Locator_t locator_udp;
+        locator_udp.kind = LOCATOR_KIND_UDPv4;
+
+        locator_udp.port = domain_port;
+        IPLocator::setIPv4(locator_udp, 127, 0, 0, 1);
+
+        // Point to the well known DS port in the corresponding domain
+        client_att.builtin.discovery_config.m_DiscoveryServers.push_back(locator_udp);
+
+        // Load the 'service' profile for ROS2_EASY_MODE services if there is no existing profile yet
+        xmlparser::PublisherAttributes attr;
+        auto ret_if = xmlparser::XMLProfileManager::fillPublisherAttributes("service", attr, false);
+        if (ret_if == xmlparser::XMLP_ret::XML_ERROR)
+        {
+            // An XML_ERROR is returned if there is no existing profile for the given name
+            xmlparser::XMLProfileManager::loadXMLString(EASY_MODE_SERVICE_PROFILE, strlen(EASY_MODE_SERVICE_PROFILE));
+            EPROSIMA_LOG_INFO(RTPS_DOMAIN, "Loaded service profile for ROS2_EASY_MODE servers");
+        }
+        else
+        {
+            // There is already a profile with the given name. Do not overwrite it
+            EPROSIMA_LOG_WARNING(RTPS_DOMAIN, "An XML profile for 'service' was found. When using ROS2_EASY_MODE, please ensure"
+                    " the max_blocking_time is configured with a value higher than the default.");
+        }
+
+        SystemCommandBuilder sys_command;
+        int res = sys_command.executable(FAST_DDS_DEFAULT_CLI_SCRIPT_NAME)
+                        .verb(FAST_DDS_DEFAULT_CLI_DISCOVERY_VERB)
+                        .verb(FAST_DDS_DEFAULT_CLI_AUTO_VERB)
+                        .arg("-d")
+                        .value(std::to_string(domain_id))
+                        .value(ros_easy_mode_env_value + ":" + std::to_string(domain_id))
+                        .build_and_call();
+#ifndef _WIN32
+        // Adecuate Python subprocess return
+        res = WEXITSTATUS(res);
+#endif // _WIN32
+
+        if (res != SystemCommandBuilder::SystemCommandResult::SUCCESS)
+        {
+            if (res == SystemCommandBuilder::SystemCommandResult::BAD_PARAM)
+            {
+                EPROSIMA_LOG_ERROR("DOMAIN", "ROS2_EASY_MODE IP connection conflicts with a previous one.");
+            }
+            else
+            {
+                EPROSIMA_LOG_ERROR(DOMAIN, "Auto discovery server client setup. Unable to spawn daemon.");
+            }
+            return nullptr;
+        }
     }
 
     RTPSParticipant* part = createParticipant(domain_id, enabled, client_att, listen);

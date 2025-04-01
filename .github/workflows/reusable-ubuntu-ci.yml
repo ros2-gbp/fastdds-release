@@ -31,7 +31,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: '2.2.x'
+        default: 'master'
       security:
         description: 'Enable security features'
         required: false
@@ -313,7 +313,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Fast-DDS-python
-          fallback_branch: 2.1.x
+          fallback_branch: main
 
       - name: Download Fast DDS Python repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -463,7 +463,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool xmlschema
+          packages: vcstool xmlschema psutil
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -476,7 +476,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Fast-DDS-docs
-          fallback_branch: 3.1.x
+          fallback_branch: master
 
       - name: Download Fast DDS documentation repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -583,7 +583,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/ShapesDemo
-          fallback_branch: '3.1.x'
+          fallback_branch: 'master'
 
       - name: Download Shapes Demo repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -650,7 +650,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool xmlschema xmltodict==0.13.0 jsondiff==2.0.0 pandas==1.5.2
+          packages: vcstool xmlschema xmltodict==0.13.0 jsondiff==2.0.0 pandas==1.5.2 psutil
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -663,7 +663,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Discovery-Server
-          fallback_branch: '2.0.x'
+          fallback_branch: 'master'
 
       - name: Download Discovery Server repo
         uses: eProsima/eProsima-CI/external/checkout@v0

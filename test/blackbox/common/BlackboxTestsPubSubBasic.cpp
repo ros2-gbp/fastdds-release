@@ -28,8 +28,8 @@
 #include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
-#include "ReqRepAsReliableHelloWorldReplier.hpp"
-#include "ReqRepAsReliableHelloWorldRequester.hpp"
+#include "ReqRepHelloWorldReplier.hpp"
+#include "ReqRepHelloWorldRequester.hpp"
 
 using namespace eprosima::fastdds;
 using namespace eprosima::fastdds::rtps;
@@ -262,8 +262,8 @@ TEST_P(PubSubBasic, AsyncPubSubAsReliableHelloworld)
 
 TEST_P(PubSubBasic, ReqRepAsReliableHelloworld)
 {
-    ReqRepAsReliableHelloWorldRequester requester;
-    ReqRepAsReliableHelloWorldReplier replier;
+    ReqRepHelloWorldRequester requester;
+    ReqRepHelloWorldReplier replier;
     const uint16_t nmsgs = 10;
 
     requester.init();
@@ -384,7 +384,7 @@ TEST_P(PubSubBasic, ReceivedDynamicDataWithNoSizeLimit)
 
     writer.history_depth(100)
             .partition("A").partition("B").partition("C")
-            .userData({'a', 'b', 'c', 'd'}).init();
+            .user_data({'a', 'b', 'c', 'd'}).init();
 
 
     ASSERT_TRUE(writer.isInitialized());
@@ -417,7 +417,7 @@ TEST_P(PubSubBasic, ReceivedDynamicDataWithinSizeLimit)
 
     writer.history_depth(100)
             .partition("A").partition("B").partition("C")
-            .userData({'a', 'b', 'c', 'd'}).init();
+            .user_data({'a', 'b', 'c', 'd'}).init();
 
 
     ASSERT_TRUE(writer.isInitialized());
@@ -451,7 +451,7 @@ TEST_P(PubSubBasic, ReceivedUserDataExceedsSizeLimit)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     writer.history_depth(100)
-            .userData({'a', 'b', 'c', 'd', 'e', 'f'}).init();
+            .user_data({'a', 'b', 'c', 'd', 'e', 'f'}).init();
 
     ASSERT_TRUE(writer.isInitialized());
 

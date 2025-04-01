@@ -1,16 +1,31 @@
 Forthcoming
 -----------
 
-Version v3.1.2
+
+Version v3.2.0
 --------------
 
-* Refactor benchmark example.
-
-Version v3.1.1
---------------
-
-* New property to configure the preferred key agreement algorithm.
+* Added implementation for:
+  * `DataWriter::get_matched_subscription_data()`
+  * `DataWriter::get_matched_subscriptions()`
+  * `DataReader::get_matched_publication_data()`
+  * `DataReader::get_matched_publications()`
+  * `DynamicTypeBuilderFactory::create_type_w_uri`
+* Added ``Extended Incompatible QoS`` feature for monitor service.
+* Machine UUID added to the Data(p) to check Participants in same host, instead of using GUIDs.
 * Windows ci example testing infrastructure and `hello world` example.
+* New property to configure the preferred key agreement algorithm.
+* Refactor benchmark example.
+* Extended CLI ``shm`` command with ``-f`` param to clean Data Sharing segments.
+* New Easy Mode:
+  * New `ROS2_EASY_MODE` environment variable
+  * Extended CLI ``discovery`` command to handle Fast DDS daemon.
+  * Added P2P builtin transport.
+  * Added new `easy_mode_ip` XML tag and `easy_mode` setter in `WireProtocolConfigQos` for Easy Mode IP configuration through XML and code.
+* Added RPC over DDS internal API:
+  * New classes: `Service`, `Requester`, `Replier`, `ServiceTypeSupport`
+  * Added methods in DomainParticipant public API
+* Added builtin flow controller for builtin writers (PDP, EDP, WLP and Type Look Up Service).
 
 Version v3.1.0
 --------------
