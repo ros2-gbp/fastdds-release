@@ -79,7 +79,8 @@ public:
 
     bool init(
             uint32_t domain_id,
-            std::vector<std::string> known_types);
+            std::vector<std::string> known_types,
+            uint32_t builtin_flow_controller_bytes);
 
     bool wait_discovery(
             uint32_t expected_matches,
@@ -818,6 +819,7 @@ private:
         PUBLISHER_TYPE_CREATOR_FUNCTION(SequenceWChar);
         PUBLISHER_TYPE_CREATOR_FUNCTION(SequenceWString);
         PUBLISHER_TYPE_CREATOR_FUNCTION(SequenceWStringBounded);
+        PUBLISHER_TYPE_CREATOR_FUNCTION(NoCommon_Module::My_Structure);
         PUBLISHER_TYPE_CREATOR_FUNCTION(LargeStringStruct);
         PUBLISHER_TYPE_CREATOR_FUNCTION(LargeWStringStruct);
         PUBLISHER_TYPE_CREATOR_FUNCTION(SmallStringStruct);
@@ -877,6 +879,7 @@ private:
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionDiscriminatorUShort);
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionDiscriminatorWChar);
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionDouble);
+        PUBLISHER_TYPE_CREATOR_FUNCTION(UnionFixedStringAlias);
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionFloat);
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionInnerAliasHelper);
         PUBLISHER_TYPE_CREATOR_FUNCTION(UnionInnerBitMaskHelper);

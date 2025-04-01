@@ -89,6 +89,7 @@ set(UDPV4TESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPChannelResource.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPTransportInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPv4Transport.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -120,6 +121,7 @@ set(ASIOHELPERSTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPChannelResource.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPTransportInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPv4Transport.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -153,6 +155,7 @@ set(UDPV6TESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPTransportInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPv4Transport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/UDPv6Transport.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -195,6 +198,7 @@ set(TCPV4TESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TCPTransportInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TCPv4Transport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TransportInterface.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -244,6 +248,7 @@ set(TCPV6TESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TCPTransportInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TCPv6Transport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TransportInterface.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -281,6 +286,7 @@ set(SHAREDMEMTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/shared_mem/SharedMemTransport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/shared_mem/SharedMemTransportDescriptor.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/TransportInterface.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -340,6 +346,9 @@ endif()
 if(MSVC OR MSVC_IDE)
     target_link_libraries(UDPv4Tests ${PRIVACY} iphlpapi Shlwapi )
 endif()
+if (APPLE)
+    target_link_libraries(UDPv4Tests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
+endif()
 gtest_discover_tests(UDPv4Tests)
 
 ##########################
@@ -377,6 +386,9 @@ if(NOT DISABLE_UDPV6_TESTS)
     if(MSVC OR MSVC_IDE)
         target_link_libraries(UDPv6Tests ${PRIVACY} iphlpapi Shlwapi )
     endif()
+    if (APPLE)
+        target_link_libraries(UDPv6Tests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
+    endif()
     gtest_discover_tests(UDPv6Tests)
 
     ##########################
@@ -410,6 +422,8 @@ if(NOT DISABLE_UDPV6_TESTS)
     endif()
     if(MSVC OR MSVC_IDE)
         target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr iphlpapi Shlwapi)
+    elseif(APPLE)
+        target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
     else()
         target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr)
     endif()
@@ -447,6 +461,8 @@ if(QNX)
 endif()
 if(MSVC OR MSVC_IDE)
     target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr iphlpapi Shlwapi)
+elseif(APPLE)
+    target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
 else()
     target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr)
 endif()
@@ -490,6 +506,8 @@ if(IS_THIRDPARTY_BOOST_OK)
     endif()
     if(MSVC OR MSVC_IDE)
         target_link_libraries(SharedMemTests ${PRIVACY} iphlpapi Shlwapi )
+    elseif(APPLE)
+        target_link_libraries(SharedMemTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
     else()
         target_link_libraries(SharedMemTests ${PRIVACY} )
     endif()

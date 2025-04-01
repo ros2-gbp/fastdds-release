@@ -248,16 +248,9 @@ bool WLP::createEndpoints()
     mp_builtinWriterHistory = new WriterHistory(hatt, payload_pool_);
 
     // Built-in writer
-    WriterAttributes watt;
-    watt.endpoint.unicastLocatorList = mp_builtinProtocols->m_metatrafficUnicastLocatorList;
-    watt.endpoint.multicastLocatorList = mp_builtinProtocols->m_metatrafficMulticastLocatorList;
-    watt.endpoint.external_unicast_locators = mp_builtinProtocols->m_att.metatraffic_external_unicast_locators;
-    watt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
+    WriterAttributes watt = mp_participant->pdp()->create_builtin_writer_attributes();
     watt.endpoint.remoteLocatorList = mp_builtinProtocols->m_initialPeersList;
-    watt.matched_readers_allocation = participants_allocation;
-    watt.endpoint.topicKind = WITH_KEY;
-    watt.endpoint.durabilityKind = TRANSIENT_LOCAL;
-    watt.endpoint.reliabilityKind = RELIABLE;
+
     RTPSWriter* wout;
     if (mp_participant->createWriter(
                 &wout,
@@ -292,18 +285,10 @@ bool WLP::createEndpoints()
 
     // Built-in reader
 
-    ReaderAttributes ratt;
-    ratt.endpoint.topicKind = WITH_KEY;
-    ratt.endpoint.durabilityKind = TRANSIENT_LOCAL;
-    ratt.endpoint.reliabilityKind = RELIABLE;
-    ratt.expects_inline_qos = true;
-    ratt.endpoint.unicastLocatorList =  mp_builtinProtocols->m_metatrafficUnicastLocatorList;
-    ratt.endpoint.multicastLocatorList = mp_builtinProtocols->m_metatrafficMulticastLocatorList;
-    ratt.endpoint.external_unicast_locators = mp_builtinProtocols->m_att.metatraffic_external_unicast_locators;
-    ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
+    ReaderAttributes ratt = mp_participant->pdp()->create_builtin_reader_attributes();
     ratt.endpoint.remoteLocatorList = mp_builtinProtocols->m_initialPeersList;
-    ratt.matched_writers_allocation = participants_allocation;
-    ratt.endpoint.topicKind = WITH_KEY;
+    ratt.expects_inline_qos = true;
+
     RTPSReader* rout;
     if (mp_participant->createReader(
                 &rout,
@@ -346,17 +331,9 @@ bool WLP::createSecureEndpoints()
     secure_payload_pool_->reserve_history(writer_pool_cfg, false);
     mp_builtinWriterSecureHistory = new WriterHistory(hatt, secure_payload_pool_);
 
-    WriterAttributes watt;
-    watt.endpoint.unicastLocatorList = mp_builtinProtocols->m_metatrafficUnicastLocatorList;
-    watt.endpoint.multicastLocatorList = mp_builtinProtocols->m_metatrafficMulticastLocatorList;
-    watt.endpoint.external_unicast_locators = mp_builtinProtocols->m_att.metatraffic_external_unicast_locators;
-    watt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
-    watt.matched_readers_allocation = participants_allocation;
+    WriterAttributes watt = mp_participant->pdp()->create_builtin_writer_attributes();
     //	Wparam.topic.topicName = "DCPSParticipantMessageSecure";
     //	Wparam.topic.topicDataType = "RTPSParticipantMessageData";
-    watt.endpoint.topicKind = WITH_KEY;
-    watt.endpoint.durabilityKind = TRANSIENT_LOCAL;
-    watt.endpoint.reliabilityKind = RELIABLE;
 
     const security::ParticipantSecurityAttributes& part_attrs = mp_participant->security_attributes();
     security::PluginParticipantSecurityAttributes plugin_attrs(part_attrs.plugin_participant_attributes);
@@ -398,19 +375,11 @@ bool WLP::createSecureEndpoints()
     secure_payload_pool_->reserve_history(reader_pool_cfg, true);
 
     mp_builtinReaderSecureHistory = new ReaderHistory(hatt);
-    ReaderAttributes ratt;
-    ratt.endpoint.topicKind = WITH_KEY;
-    ratt.endpoint.durabilityKind = TRANSIENT_LOCAL;
-    ratt.endpoint.reliabilityKind = RELIABLE;
+    ReaderAttributes ratt = mp_participant->pdp()->create_builtin_reader_attributes();
     ratt.expects_inline_qos = true;
-    ratt.endpoint.unicastLocatorList = mp_builtinProtocols->m_metatrafficUnicastLocatorList;
-    ratt.endpoint.multicastLocatorList = mp_builtinProtocols->m_metatrafficMulticastLocatorList;
-    ratt.endpoint.external_unicast_locators = mp_builtinProtocols->m_att.metatraffic_external_unicast_locators;
-    ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
-    ratt.matched_writers_allocation = participants_allocation;
     //Rparam.topic.topicName = "DCPSParticipantMessageSecure";
     //Rparam.topic.topicDataType = "RTPSParticipantMessageData";
-    ratt.endpoint.topicKind = WITH_KEY;
+
     sec_attrs = &ratt.endpoint.security_attributes();
     sec_attrs->is_submessage_protected = part_attrs.is_liveliness_protected;
     if (part_attrs.is_liveliness_protected)
@@ -483,33 +452,35 @@ bool WLP::assignRemoteEndpoints(
         bool assign_secure_endpoints)
 {
     const NetworkFactory& network = mp_participant->network_factory();
-    uint32_t endp = pdata.m_availableBuiltinEndpoints;
+    uint32_t endp = pdata.m_available_builtin_endpoints;
     uint32_t auxendp = endp;
     bool use_multicast_locators = !mp_participant->get_attributes().builtin.avoid_builtin_multicast ||
             pdata.metatraffic_locators.unicast.empty();
 
     std::lock_guard<std::mutex> data_guard(temp_data_lock_);
 
-    temp_writer_proxy_data_.guid().guidPrefix = pdata.m_guid.guidPrefix;
-    temp_writer_proxy_data_.persistence_guid(pdata.get_persistence_guid());
-    temp_writer_proxy_data_.set_remote_locators(pdata.metatraffic_locators, network, use_multicast_locators);
-    temp_writer_proxy_data_.topicKind(WITH_KEY);
-    temp_writer_proxy_data_.m_qos.m_durability.kind = dds::TRANSIENT_LOCAL_DURABILITY_QOS;
-    temp_writer_proxy_data_.m_qos.m_reliability.kind = dds::RELIABLE_RELIABILITY_QOS;
+    temp_writer_proxy_data_.guid.guidPrefix = pdata.guid.guidPrefix;
+    temp_writer_proxy_data_.persistence_guid = pdata.get_persistence_guid();
+    temp_writer_proxy_data_.set_remote_locators(pdata.metatraffic_locators, network, use_multicast_locators,
+            pdata.is_from_this_host());
+    temp_writer_proxy_data_.topic_kind = WITH_KEY;
+    temp_writer_proxy_data_.durability.kind = dds::TRANSIENT_LOCAL_DURABILITY_QOS;
+    temp_writer_proxy_data_.reliability.kind = dds::RELIABLE_RELIABILITY_QOS;
 
     temp_reader_proxy_data_.clear();
-    temp_reader_proxy_data_.m_expectsInlineQos = false;
-    temp_reader_proxy_data_.guid().guidPrefix = pdata.m_guid.guidPrefix;
-    temp_reader_proxy_data_.set_remote_locators(pdata.metatraffic_locators, network, use_multicast_locators);
-    temp_reader_proxy_data_.topicKind(WITH_KEY);
-    temp_reader_proxy_data_.m_qos.m_durability.kind = dds::TRANSIENT_LOCAL_DURABILITY_QOS;
-    temp_reader_proxy_data_.m_qos.m_reliability.kind = dds::RELIABLE_RELIABILITY_QOS;
+    temp_reader_proxy_data_.expects_inline_qos = false;
+    temp_reader_proxy_data_.guid.guidPrefix = pdata.guid.guidPrefix;
+    temp_reader_proxy_data_.set_remote_locators(pdata.metatraffic_locators, network, use_multicast_locators,
+            pdata.is_from_this_host());
+    temp_reader_proxy_data_.topic_kind = WITH_KEY;
+    temp_reader_proxy_data_.durability.kind = dds::TRANSIENT_LOCAL_DURABILITY_QOS;
+    temp_reader_proxy_data_.reliability.kind = dds::RELIABLE_RELIABILITY_QOS;
 
     auxendp &= fastdds::rtps::BUILTIN_ENDPOINT_PARTICIPANT_MESSAGE_DATA_WRITER;
     if (auxendp != 0 && this->mp_builtinReader != nullptr)
     {
         EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "Adding remote writer to my local Builtin Reader");
-        temp_writer_proxy_data_.guid().entityId = c_EntityId_WriterLiveliness;
+        temp_writer_proxy_data_.guid.entityId = c_EntityId_WriterLiveliness;
         temp_writer_proxy_data_.set_persistence_entity_id(c_EntityId_WriterLiveliness);
         mp_builtinReader->matched_writer_add_edp(temp_writer_proxy_data_);
     }
@@ -518,7 +489,7 @@ bool WLP::assignRemoteEndpoints(
     if (auxendp != 0 && this->mp_builtinWriter != nullptr)
     {
         EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "Adding remote reader to my local Builtin Writer");
-        temp_reader_proxy_data_.guid().entityId = c_EntityId_ReaderLiveliness;
+        temp_reader_proxy_data_.guid.entityId = c_EntityId_ReaderLiveliness;
         mp_builtinWriter->matched_reader_add_edp(temp_reader_proxy_data_);
     }
 
@@ -528,11 +499,11 @@ bool WLP::assignRemoteEndpoints(
     if (auxendp != 0 && this->mp_builtinReaderSecure != nullptr && assign_secure_endpoints)
     {
         EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "Adding remote writer to my local Builtin Secure Reader");
-        temp_writer_proxy_data_.guid().entityId = c_EntityId_WriterLivelinessSecure;
+        temp_writer_proxy_data_.guid.entityId = c_EntityId_WriterLivelinessSecure;
         temp_writer_proxy_data_.set_persistence_entity_id(c_EntityId_WriterLivelinessSecure);
 
         if (!mp_participant->security_manager().discovered_builtin_writer(
-                    mp_builtinReaderSecure->getGuid(), pdata.m_guid, temp_writer_proxy_data_,
+                    mp_builtinReaderSecure->getGuid(), pdata.guid, temp_writer_proxy_data_,
                     mp_builtinReaderSecure->getAttributes().security_attributes()))
         {
             EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for reader " <<
@@ -544,9 +515,9 @@ bool WLP::assignRemoteEndpoints(
     if (auxendp != 0 && this->mp_builtinWriterSecure != nullptr && assign_secure_endpoints)
     {
         EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "Adding remote reader to my local Builtin Secure Writer");
-        temp_reader_proxy_data_.guid().entityId = c_EntityId_ReaderLivelinessSecure;
+        temp_reader_proxy_data_.guid.entityId = c_EntityId_ReaderLivelinessSecure;
         if (!mp_participant->security_manager().discovered_builtin_reader(
-                    mp_builtinWriterSecure->getGuid(), pdata.m_guid, temp_reader_proxy_data_,
+                    mp_builtinWriterSecure->getGuid(), pdata.guid, temp_reader_proxy_data_,
                     mp_builtinWriterSecure->getAttributes().security_attributes()))
         {
             EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
@@ -564,10 +535,10 @@ void WLP::removeRemoteEndpoints(
         ParticipantProxyData* pdata)
 {
     GUID_t tmp_guid;
-    tmp_guid.guidPrefix = pdata->m_guid.guidPrefix;
+    tmp_guid.guidPrefix = pdata->guid.guidPrefix;
 
-    EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "for RTPSParticipant: " << pdata->m_guid);
-    uint32_t endp = pdata->m_availableBuiltinEndpoints;
+    EPROSIMA_LOG_INFO(RTPS_LIVELINESS, "for RTPSParticipant: " << pdata->guid);
+    uint32_t endp = pdata->m_available_builtin_endpoints;
     uint32_t partdet = endp;
     uint32_t auxendp = endp;
     partdet &= fastdds::rtps::DISC_BUILTIN_ENDPOINT_PARTICIPANT_DETECTOR;
@@ -598,7 +569,7 @@ void WLP::removeRemoteEndpoints(
         if (mp_builtinReaderSecure->matched_writer_remove(tmp_guid))
         {
             mp_participant->security_manager().remove_writer(
-                mp_builtinReaderSecure->getGuid(), pdata->m_guid, tmp_guid);
+                mp_builtinReaderSecure->getGuid(), pdata->guid, tmp_guid);
         }
     }
     auxendp = endp;
@@ -610,7 +581,7 @@ void WLP::removeRemoteEndpoints(
         if (mp_builtinWriterSecure->matched_reader_remove(tmp_guid))
         {
             mp_participant->security_manager().remove_reader(
-                mp_builtinWriterSecure->getGuid(), pdata->m_guid, tmp_guid);
+                mp_builtinWriterSecure->getGuid(), pdata->guid, tmp_guid);
         }
     }
 #endif // if HAVE_SECURITY
