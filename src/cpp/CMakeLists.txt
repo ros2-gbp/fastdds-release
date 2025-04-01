@@ -73,6 +73,10 @@ set(${PROJECT_NAME}_source_files
     fastdds/publisher/qos/DataWriterQos.cpp
     fastdds/publisher/qos/PublisherQos.cpp
     fastdds/publisher/qos/WriterQos.cpp
+    fastdds/rpc/ServiceImpl.cpp
+    fastdds/rpc/ReplierImpl.cpp
+    fastdds/rpc/RequesterImpl.cpp
+    fastdds/rpc/ServiceTypeSupport.cpp
     fastdds/subscriber/DataReader.cpp
     fastdds/subscriber/DataReaderImpl.cpp
     fastdds/subscriber/history/DataReaderHistory.cpp
@@ -117,8 +121,10 @@ set(${PROJECT_NAME}_source_files
     rtps/attributes/ServerAttributes.cpp
     rtps/attributes/ThreadSettings.cpp
     rtps/builtin/BuiltinProtocols.cpp
+    rtps/builtin/data/ParticipantBuiltinTopicData.cpp
     rtps/builtin/data/ParticipantProxyData.cpp
-    rtps/builtin/data/ProxyDataConverters.cpp
+    rtps/builtin/data/PublicationBuiltinTopicData.cpp
+    rtps/builtin/data/SubscriptionBuiltinTopicData.cpp
     rtps/builtin/data/ReaderProxyData.cpp
     rtps/builtin/data/WriterProxyData.cpp
     rtps/builtin/discovery/database/backup/SharedBackupFunctions.cpp
@@ -141,6 +147,7 @@ set(${PROJECT_NAME}_source_files
     rtps/builtin/discovery/participant/PDPServer.cpp
     rtps/builtin/discovery/participant/PDPServerListener.cpp
     rtps/builtin/discovery/participant/PDPSimple.cpp
+    rtps/builtin/discovery/participant/simple/PDPStatelessWriter.cpp
     rtps/builtin/discovery/participant/timedevent/DSClientEvent.cpp
     rtps/builtin/discovery/participant/timedevent/DServerEvent.cpp
     rtps/builtin/liveliness/WLP.cpp
@@ -229,6 +236,7 @@ set(${PROJECT_NAME}_source_files
     statistics/fastdds/domain/DomainParticipant.cpp
     statistics/fastdds/publisher/qos/DataWriterQos.cpp
     statistics/fastdds/subscriber/qos/DataReaderQos.cpp
+    utils/Host.cpp
     utils/IPFinder.cpp
     utils/IPLocator.cpp
     utils/md5.cpp
@@ -506,6 +514,14 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
     eProsima_atomic
     )
+
+if (APPLE)
+    target_link_libraries(${PROJECT_NAME}
+    ${PRIVACY}
+    "-framework CoreFoundation"
+    "-framework IOKit"
+    )
+endif()
 
 if(MSVC OR MSVC_IDE)
     # On installed binaries use manifest to specify dependencies

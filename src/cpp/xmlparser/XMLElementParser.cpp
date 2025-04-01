@@ -593,6 +593,7 @@ XMLP_ret XMLParser::getXMLBuiltinAttributes(
             <xs:element name="readerHistoryMemoryPolicy" type="historyMemoryPolicyType" minOccurs="0"/>
             <xs:element name="writerHistoryMemoryPolicy" type="historyMemoryPolicyType" minOccurs="0"/>
             <xs:element name="mutation_tries" type="uint32Type" minOccurs="0"/>
+            <xs:element name="flow_controller_name" type="stringType" minOccurs="0"/>
         </xs:all>
        </xs:complexType>
      */
@@ -709,6 +710,14 @@ XMLP_ret XMLParser::getXMLBuiltinAttributes(
                 return XMLP_ret::XML_ERROR;
             }
         }
+        else if (strcmp(name, FLOW_CONTROLLER_NAME) == 0)
+        {
+            // flow_controller_name - stringType
+            if (XMLP_ret::XML_OK != getXMLString(p_aux0, &builtin.flow_controller_name, ident))
+            {
+                return XMLP_ret::XML_ERROR;
+            }
+        }
         else
         {
             EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid element found into 'builtinAttributesType'. Name: " << name);
@@ -777,6 +786,7 @@ XMLP_ret XMLParser::getXMLPortParameters(
                 <xs:element name="offsetd1" type="uint16Type" minOccurs="0"/>
                 <xs:element name="offsetd2" type="uint16Type" minOccurs="0"/>
                 <xs:element name="offsetd3" type="uint16Type" minOccurs="0"/>
+                <xs:element name="offsetd4" type="uint16Type" minOccurs="0"/>
             </xs:all>
         </xs:complexType>
      */
@@ -838,6 +848,14 @@ XMLP_ret XMLParser::getXMLPortParameters(
         {
             // offsetd3 - uint16Type
             if (XMLP_ret::XML_OK != getXMLUint(p_aux0, &port.offsetd3, ident))
+            {
+                return XMLP_ret::XML_ERROR;
+            }
+        }
+        else if (strcmp(name, OFFSETD4) == 0)
+        {
+            // offsetd4 - uint16Type
+            if (XMLP_ret::XML_OK != getXMLUint(p_aux0, &port.offsetd4, ident))
             {
                 return XMLP_ret::XML_ERROR;
             }
@@ -3069,24 +3087,11 @@ XMLP_ret XMLParser::getXMLLocatorUDPv4(
             {
                 return XMLP_ret::XML_ERROR;
             }
-            // Check whether the address is IPv4
-            if (!IPLocator::isIPv4(s))
+            if (!IPLocator::setIPv4(locator, s))
             {
-                auto response = rtps::IPLocator::resolveNameDNS(s);
-
-                // Add the first valid IPv4 address that we can find
-                if (response.first.size() > 0)
-                {
-                    s = response.first.begin()->data();
-                }
-                else
-                {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "DNS server did not return any IPv4 address for: '" << s << "'. Name: " << name);
-                    return XMLP_ret::XML_ERROR;
-                }
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Failed to parse UDPv4 locator's " << ADDRESS << " tag");
+                return XMLP_ret::XML_ERROR;
             }
-            IPLocator::setIPv4(locator, s);
         }
         else
         {
@@ -3142,24 +3147,11 @@ XMLP_ret XMLParser::getXMLLocatorUDPv6(
             {
                 return XMLP_ret::XML_ERROR;
             }
-            // Check whether the address is IPv6
-            if (!IPLocator::isIPv6(s))
+            if (!IPLocator::setIPv6(locator, s))
             {
-                auto response = rtps::IPLocator::resolveNameDNS(s);
-
-                // Add the first valid IPv6 address that we can find
-                if (response.second.size() > 0)
-                {
-                    s = response.second.begin()->data();
-                }
-                else
-                {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "DNS server did not return any IPv6 address for: '" << s << "'. Name: " << name);
-                    return XMLP_ret::XML_ERROR;
-                }
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Failed to parse UDPv6 locator's " << ADDRESS << " tag");
+                return XMLP_ret::XML_ERROR;
             }
-            IPLocator::setIPv6(locator, s);
         }
         else
         {
@@ -3230,7 +3222,11 @@ XMLP_ret XMLParser::getXMLLocatorTCPv4(
             {
                 return XMLP_ret::XML_ERROR;
             }
-            IPLocator::setIPv4(locator, s);
+            if (!IPLocator::setIPv4(locator, s))
+            {
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Failed to parse TCPv4 locator's " << ADDRESS << " tag");
+                return XMLP_ret::XML_ERROR;
+            }
         }
         else if (strcmp(name, WAN_ADDRESS) == 0)
         {
@@ -3240,7 +3236,11 @@ XMLP_ret XMLParser::getXMLLocatorTCPv4(
             {
                 return XMLP_ret::XML_ERROR;
             }
-            IPLocator::setWan(locator, s);
+            if (!IPLocator::setWan(locator, s))
+            {
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Failed to parse TCPv4 locator's " << WAN_ADDRESS << " tag");
+                return XMLP_ret::XML_ERROR;
+            }
         }
         else if (strcmp(name, UNIQUE_LAN_ID) == 0)
         {
@@ -3319,7 +3319,11 @@ XMLP_ret XMLParser::getXMLLocatorTCPv6(
             {
                 return XMLP_ret::XML_ERROR;
             }
-            IPLocator::setIPv6(locator, s);
+            if (!IPLocator::setIPv6(locator, s))
+            {
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Failed to parse TCPv6 locator's " << ADDRESS << " tag");
+                return XMLP_ret::XML_ERROR;
+            }
         }
         else
         {
@@ -4678,6 +4682,7 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
                 <xs:enumeration value="UDPv6" />
                 <xs:enumeration value="LARGE_DATA" />
                 <xs:enumeration value="LARGE_DATAv6" />
+                <xs:enumeration value="P2P" />
             </xs:restriction>
         </xs:simpleType>
 
@@ -4839,7 +4844,8 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
             UDPv4, eprosima::fastdds::rtps::BuiltinTransports::UDPv4,
             UDPv6, eprosima::fastdds::rtps::BuiltinTransports::UDPv6,
             LARGE_DATA, eprosima::fastdds::rtps::BuiltinTransports::LARGE_DATA,
-            LARGE_DATAv6, eprosima::fastdds::rtps::BuiltinTransports::LARGE_DATAv6))
+            LARGE_DATAv6, eprosima::fastdds::rtps::BuiltinTransports::LARGE_DATAv6,
+            P2P, eprosima::fastdds::rtps::BuiltinTransports::P2P))
     {
         EPROSIMA_LOG_ERROR(XMLPARSER, "Node '" << KIND << "' bad content");
         ret = XMLP_ret::XML_ERROR;
