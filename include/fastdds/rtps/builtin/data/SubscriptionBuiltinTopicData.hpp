@@ -20,8 +20,13 @@
 #define FASTDDS_RTPS_BUILTIN_DATA__SUBSCRIPTIONBUILTINTOPICDATA_HPP
 
 #include <fastcdr/cdr/fixed_size_string.hpp>
+#include <fastcdr/xcdr/optional.hpp>
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastdds/dds/core/policy/ReaderDataLifecycleQosPolicy.hpp>
+#include <fastdds/dds/core/policy/ReaderResourceLimitsQos.hpp>
+#include <fastdds/dds/core/policy/RTPSReliableReaderQos.hpp>
+#include <fastdds/rtps/attributes/RTPSParticipantAllocationAttributes.hpp>
 #include <fastdds/rtps/builtin/data/BuiltinTopicKey.hpp>
 #include <fastdds/rtps/builtin/data/ContentFilterProperty.hpp>
 #include <fastdds/rtps/common/Guid.hpp>
@@ -30,11 +35,24 @@
 
 namespace eprosima {
 namespace fastdds {
+namespace dds {
+
+class ReaderQos;
+
+} // namespace dds
 namespace rtps {
 
 /// Structure SubscriptionBuiltinTopicData, contains the information on a discovered subscription.
 struct SubscriptionBuiltinTopicData
 {
+    FASTDDS_EXPORTED_API SubscriptionBuiltinTopicData() = default;
+
+    FASTDDS_EXPORTED_API SubscriptionBuiltinTopicData(
+            const size_t max_unicast_locators,
+            const size_t max_multicast_locators,
+            const VariableLengthDataLimits& data_limits,
+            const fastdds::rtps::ContentFilterProperty::AllocationConfiguration& content_filter_limits);
+
     /// Builtin topic Key
     BuiltinTopicKey_t key{{0, 0, 0}};
 
@@ -118,6 +136,24 @@ struct SubscriptionBuiltinTopicData
     /// Information for data sharing compatibility check.
     dds::DataSharingQosPolicy data_sharing;
 
+    /// History Qos, kind and depth
+    fastcdr::optional<dds::HistoryQosPolicy> history;
+
+    /// Resource limits Qos
+    fastcdr::optional<dds::ResourceLimitsQosPolicy> resource_limits;
+
+    /// Reader data lifecycle Qos
+    fastcdr::optional<dds::ReaderDataLifecycleQosPolicy> reader_data_lifecycle;
+
+    /// Reliable reader qos policy
+    fastcdr::optional<dds::RTPSReliableReaderQos> rtps_reliable_reader;
+
+    /// Endpoint qos policy
+    fastcdr::optional<dds::RTPSEndpointQos> endpoint;
+
+    /// Reader resource limits
+    fastcdr::optional<dds::ReaderResourceLimitsQos> reader_resource_limits;
+
     /// GUID
     GUID_t guid;
 
@@ -132,6 +168,9 @@ struct SubscriptionBuiltinTopicData
 
     /// Expects Inline Qos
     bool expects_inline_qos = false;
+
+    /// Property list
+    ParameterPropertyList_t properties;
 };
 
 }   // namespace rtps

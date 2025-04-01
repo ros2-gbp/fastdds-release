@@ -23,6 +23,7 @@
 #include <mutex>
 #include <vector>
 
+#include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastdds/rtps/common/Time_t.hpp>
 #include <fastdds/rtps/history/IChangePool.hpp>
 #include <fastdds/rtps/history/IPayloadPool.hpp>
@@ -57,13 +58,15 @@ public:
 
     virtual ~StatelessWriter();
 
+    void local_actions_on_writer_removed() override;
+
     //vvvvvvvvvvvvvvvvvvvvv [Exported API] vvvvvvvvvvvvvvvvvvvvv
 
     bool matched_reader_add_edp(
-            const ReaderProxyData& data) final;
+            const ReaderProxyData& data) override;
 
     bool matched_reader_remove(
-            const GUID_t& reader_guid) final;
+            const GUID_t& reader_guid) override;
 
     bool matched_reader_is_matched(
             const GUID_t& reader_guid) final;
@@ -96,6 +99,15 @@ public:
     }
 
     bool get_disable_positive_acks() const final;
+
+    /**
+     * @brief Fills the provided vector with the GUIDs of the matched readers.
+     *
+     * @param[out] guids Vector to be filled with the GUIDs of the matched readers.
+     * @return True if the operation was successful.
+     */
+    bool matched_readers_guids(
+            std::vector<GUID_t>& guids) const final;
 
 #ifdef FASTDDS_STATISTICS
     bool get_connections(
@@ -166,23 +178,6 @@ public:
     //^^^^^^^^^^^^^^^^^^^^^^ [BaseWriter API] ^^^^^^^^^^^^^^^^^^^^^^^
 
     /**
-     * @brief Set the locators to which the writer should always send data.
-     *
-     * This method is used to configure the initial peers list on the PDP writer.
-     *
-     * @param locator_list List of locators to which the writer should always send data.
-     *
-     * @return true if the locators were set successfully.
-     */
-    bool set_fixed_locators(
-            const LocatorList_t& locator_list);
-
-    /**
-     * Reset the unsent changes.
-     */
-    void unsent_changes_reset();
-
-    /**
      * Get the number of matched readers
      * @return Number of the matched readers
      */
@@ -193,6 +188,15 @@ public:
                + matched_local_readers_.size()
                + matched_datasharing_readers_.size();
     }
+
+protected:
+
+    mutable LocatorList_t fixed_locators_;
+
+    virtual bool send_to_fixed_locators(
+            const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+            const uint32_t& total_bytes,
+            std::chrono::steady_clock::time_point& max_blocking_time_point) const;
 
 private:
 
@@ -215,7 +219,6 @@ private:
             ReaderLocator& reader_locator);
 
     bool is_inline_qos_expected_ = false;
-    LocatorList_t fixed_locators_;
     ResourceLimitedVector<std::unique_ptr<ReaderLocator>> matched_remote_readers_;
 
     std::condition_variable_any unsent_changes_cond_;
