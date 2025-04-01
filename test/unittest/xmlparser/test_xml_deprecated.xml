@@ -141,8 +141,10 @@
                     <offsetd1>90</offsetd1>
                     <offsetd2>123</offsetd2>
                     <offsetd3>456</offsetd3>
+                    <offsetd4>251</offsetd4>
                 </port>
                 <participantID>9898</participantID>
+                <easy_mode_ip>127.0.0.1</easy_mode_ip>
                 <flow_controller_descriptor_list>
                     <flow_controller_descriptor>
                         <name>test_flow_controller</name>

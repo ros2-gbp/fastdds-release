@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdio>
 #include <thread>
 
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -22,8 +23,6 @@
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
-#include "ReqRepAsReliableHelloWorldReplier.hpp"
-#include "ReqRepAsReliableHelloWorldRequester.hpp"
 
 using namespace eprosima::fastdds;
 using namespace eprosima::fastdds::rtps;
@@ -404,8 +403,8 @@ TEST_P(DDSPersistenceTests, PubSubAsReliablePubTransientWithStaticDiscovery)
             .multicastLocatorList(WriterMulticastLocators)
             .setPublisherIDs(1, 2)
             .setManualTopicName(std::string("BlackBox_StaticDiscovery_") + TOPIC_RANDOM_NUMBER)
-            .userData({'V', 'G', 'W', 0x78, 0x73, 0x69, 0x74, 0x65, 0x72, 0x5f, 0x70, 0x65, 0x72, 0x73, 0x5f, 0x67,
-                       0x75, 0x69})
+            .user_data({'V', 'G', 'W', 0x78, 0x73, 0x69, 0x74, 0x65, 0x72, 0x5f, 0x70, 0x65, 0x72, 0x73, 0x5f, 0x67,
+                        0x75, 0x69})
             .init();
 
     ASSERT_TRUE(writer.isInitialized());

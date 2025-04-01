@@ -20,6 +20,7 @@
 #include <forward_list>
 
 #include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
+#include <fastdds/rtps/common/PortParameters.hpp>
 
 #include <rtps/attributes/ServerAttributes.hpp>
 #include <utils/SystemInfo.hpp>
@@ -68,6 +69,27 @@ const std::string& ros_discovery_server_env()
     return servers;
 }
 
+const std::string& ros_easy_mode_env()
+{
+    static std::string ip_value;
+    SystemInfo::get_env(ROS2_EASY_MODE_URI, ip_value);
+
+    if (!ip_value.empty())
+    {
+        // Check that the value is a valid IPv4 address
+        if (!IPLocator::isIPv4(ip_value))
+        {
+            EPROSIMA_LOG_WARNING(
+                SERVERATTRIBUTES,
+                "Invalid format: Easy Mode IP must be a valid IPv4 address. "
+                "Ignoring " << ROS2_EASY_MODE_URI << " value.");
+
+            ip_value = "";
+        }
+    }
+    return ip_value;
+}
+
 bool load_environment_server_info(
         LocatorList_t& servers_list)
 {
@@ -104,6 +126,14 @@ bool load_environment_server_info(
                 if (port > std::numeric_limits<uint16_t>::max())
                 {
                     throw std::out_of_range("Too large port passed into the server's list");
+                }
+
+                if (port < 420)
+                {
+                    // This is a domain id, not a port. Translate it to a port
+                    PortParameters port_params;
+                    uint16_t port_from_domain = port_params.get_discovery_server_port(port);
+                    port = port_from_domain;
                 }
 
                 if (!IPLocator::setPhysicalPort(server, static_cast<uint16_t>(port)))

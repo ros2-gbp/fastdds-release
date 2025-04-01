@@ -131,6 +131,7 @@
             ├ builtin                              [0~1],
             ├ port                                 [0~1],
             ├ participantID                        [int32],
+            ├ easy_mode_ip                         [string],
             ├ userTransports                       [0~1],
             |   └ transport_id                     [1~*] [string],
             ├ useBuiltinTransports                 [bool],
@@ -172,6 +173,7 @@
                         <xs:element name="builtin" type="builtinAttributesType" minOccurs="0" maxOccurs="1"/>
                         <xs:element name="port" type="portType" minOccurs="0" maxOccurs="1"/>
                         <xs:element name="participantID" type="int32" minOccurs="0" maxOccurs="1"/>
+                        <xs:element name="easy_mode_ip" type="string" minOccurs="0" maxOccurs="1"/>
                         <xs:element name="userTransports" minOccurs="0" maxOccurs="1">
                             <xs:complexType>
                                 <xs:sequence>
@@ -720,7 +722,8 @@
         ├ writerHistoryMemoryPolicy             [0~1],
         ├ readerPayloadSize                     [uint32],
         ├ writerPayloadSize                     [uint32],
-        └ mutation_tries                        [uint32]-->
+        ├ mutation_tries                        [uint32],
+        └ flow_controller_name                  [string] -->
     <xs:complexType name="builtinAttributesType">
         <xs:all>
             <xs:element name="discovery_config" type="discoverySettingsType" minOccurs="0" maxOccurs="1"/>
@@ -735,6 +738,7 @@
             <xs:element name="readerPayloadSize" type="uint32" minOccurs="0" maxOccurs="1"/>
             <xs:element name="writerPayloadSize" type="uint32" minOccurs="0" maxOccurs="1"/>
             <xs:element name="mutation_tries" type="uint32" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="flow_controller_name" type="string" minOccurs="0" maxOccurs="1"/>
         </xs:all>
     </xs:complexType>
 
@@ -816,7 +820,8 @@
         ├ offsetd0          [uint16],
         ├ offsetd1          [uint16],
         ├ offsetd2          [uint16],
-        └ offsetd3          [uint16] -->
+        ├ offsetd3          [uint16],
+        └ offsetd4          [uint16] -->
     <xs:complexType name="portType">
         <xs:all>
             <xs:element name="portBase" type="uint16" minOccurs="0" maxOccurs="1"/>
@@ -826,6 +831,7 @@
             <xs:element name="offsetd1" type="uint16" minOccurs="0" maxOccurs="1"/>
             <xs:element name="offsetd2" type="uint16" minOccurs="0" maxOccurs="1"/>
             <xs:element name="offsetd3" type="uint16" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="offsetd4" type="uint16" minOccurs="0" maxOccurs="1"/>
         </xs:all>
     </xs:complexType>
 
@@ -1961,6 +1967,7 @@
             <xs:enumeration value="UDPv6" />
             <xs:enumeration value="LARGE_DATA" />
             <xs:enumeration value="LARGE_DATAv6" />
+            <xs:enumeration value="P2P" />
         </xs:restriction>
     </xs:simpleType>
 

@@ -18,7 +18,9 @@
 #ifndef RTPS_BUILTIN_DATA__PARTICIPANTPROXYDATA_HPP
 #define RTPS_BUILTIN_DATA__PARTICIPANTPROXYDATA_HPP
 
+#include <fastdds/rtps/attributes/ReaderAttributes.hpp>
 #include <fastdds/rtps/attributes/RTPSParticipantAllocationAttributes.hpp>
+#include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/rtps/common/CDRMessage_t.hpp>
 #include <fastdds/rtps/common/Guid.hpp>
 #include <fastdds/rtps/common/Locator.hpp>
@@ -33,16 +35,24 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class ParticipantProxyData
+class ReaderProxyData;
+class WriterProxyData;
+
+// proxy specific declarations
+template<class Proxy>
+class ProxyHashTable;
+
+class ParticipantProxyData : public ParticipantBuiltinTopicData
 {
 public:
 
     ParticipantProxyData(
             const RTPSParticipantAllocationAttributes& allocation = c_default_RTPSParticipantAllocationAttributes)
-        : m_availableBuiltinEndpoints(0)
-        , metatraffic_locators(allocation.locators.max_unicast_locators, allocation.locators.max_multicast_locators)
-        , default_locators(allocation.locators.max_unicast_locators, allocation.locators.max_multicast_locators)
-        , m_VendorId(c_VendorId_Unknown)
+        : ParticipantBuiltinTopicData(
+            c_VendorId_Unknown,
+            dds::DOMAIN_ID_UNKNOWN,
+            allocation)
+        , m_available_builtin_endpoints(0)
     {
     }
 
@@ -50,25 +60,28 @@ public:
     {
     }
 
-    bool writeToCDRMessage(
+    bool write_to_cdr_message(
             CDRMessage_t* /*msg*/,
             bool /*write_encapsulation*/)
     {
         return true;
     }
 
-    bool readFromCDRMessage(
+    bool read_from_cdr_message(
             CDRMessage_t* /*msg*/,
             fastdds::rtps::VendorId_t /*source_vendor_id*/)
     {
         return true;
     }
 
-    GUID_t m_guid;
-    uint32_t m_availableBuiltinEndpoints;
-    RemoteLocatorList metatraffic_locators;
-    RemoteLocatorList default_locators;
-    fastdds::rtps::VendorId_t m_VendorId;
+    bool is_from_this_host() const
+    {
+        return true;
+    }
+
+    uint32_t m_available_builtin_endpoints;
+    ProxyHashTable<ReaderProxyData>* m_readers = nullptr;
+    ProxyHashTable<WriterProxyData>* m_writers = nullptr;
 #if HAVE_SECURITY
     IdentityToken identity_token_;
     PermissionsToken permissions_token_;

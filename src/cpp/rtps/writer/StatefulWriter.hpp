@@ -57,6 +57,8 @@ public:
 
     virtual ~StatefulWriter();
 
+    void local_actions_on_writer_removed() override;
+
     //vvvvvvvvvvvvvvvvvvvvv [Exported API] vvvvvvvvvvvvvvvvvvvvv
 
     bool matched_reader_add_edp(
@@ -89,6 +91,15 @@ public:
     {
         return disable_positive_acks_;
     }
+
+    /**
+     * @brief Fills the provided vector with the GUIDs of the matched readers.
+     *
+     * @param[out] guids Vector to be filled with the GUIDs of the matched readers.
+     * @return True if the operation was successful.
+     */
+    bool matched_readers_guids(
+            std::vector<GUID_t>& guids) const final;
 
 #ifdef FASTDDS_STATISTICS
     bool get_connections(
