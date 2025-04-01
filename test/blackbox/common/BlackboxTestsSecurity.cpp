@@ -2238,7 +2238,7 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_user_data)
     pub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
 
     writer.history_depth(100).
-            userData({ 'a', 'b', 'c', 'd', 'e' }).
+            user_data({ 'a', 'b', 'c', 'd', 'e' }).
             property_policy(pub_part_property_policy).
             entity_property_policy(pub_property_policy).init();
 
@@ -2250,7 +2250,7 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_user_data)
     sub_property_policy.properties().emplace_back("rtps.endpoint.submessage_protection_kind", "ENCRYPT");
     sub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
 
-    reader.setOnDiscoveryFunction([&writer](const ParticipantBuiltinTopicData& info,
+    reader.set_on_discovery_function([&writer](const ParticipantBuiltinTopicData& info,
             ParticipantDiscoveryStatus /*status*/) -> bool
             {
                 if (info.guid == writer.participant_guid())

@@ -21,6 +21,8 @@ set(EDPTESTS_SOURCE EdpTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/EndpointSecurityAttributes.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/ThreadSettings.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/PublicationBuiltinTopicData.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/SubscriptionBuiltinTopicData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/discovery/endpoint/EDP.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
@@ -31,6 +33,7 @@ set(EDPTESTS_SOURCE EdpTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -50,25 +53,27 @@ target_compile_definitions(EdpTests PRIVATE
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     )
 target_include_directories(EdpTests PRIVATE
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/PDP
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/external_locators
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/NetworkFactory
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ReaderProxyData
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ParticipantProxyData
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/PDP
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/ReaderHistory
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterProxyData
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulWriter
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterHistory
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/TimedEvent
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ReaderProxyData
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/ResourceEvent
-    ${PROJECT_SOURCE_DIR}/test/mock/rtps/SecurityManager
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSDomainImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/SecurityManager
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/TimedEvent
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterHistory
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterProxyData
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
+    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     ${Asio_INCLUDE_DIR}
     )
 target_link_libraries(EdpTests
@@ -83,6 +88,8 @@ if(QNX)
 endif()
 if(MSVC OR MSVC_IDE)
     target_link_libraries(EdpTests ${PRIVACY} fastcdr iphlpapi Shlwapi ws2_32)
+elseif(APPLE)
+    target_link_libraries(EdpTests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
 else()
     target_link_libraries(EdpTests ${PRIVACY} fastcdr)
 endif()
@@ -122,8 +129,10 @@ set(PDPTESTS_SOURCE PDPTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/xtypes/type_representation/dds_xtypes_typeobjectPubSubTypes.cxx
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/ThreadSettings.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ParticipantBuiltinTopicData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ParticipantProxyData.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ProxyDataConverters.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/PublicationBuiltinTopicData.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/SubscriptionBuiltinTopicData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ReaderProxyData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/WriterProxyData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/discovery/participant/PDP.cpp
@@ -139,6 +148,7 @@ set(PDPTESTS_SOURCE PDPTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -191,6 +201,8 @@ if(QNX)
 endif()
 if(MSVC OR MSVC_IDE)
     target_link_libraries(PDPTests ${PRIVACY} fastcdr iphlpapi Shlwapi ws2_32)
+elseif(APPLE)
+    target_link_libraries(PDPTests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
 else()
     target_link_libraries(PDPTests ${PRIVACY} fastcdr)
 endif()

@@ -47,12 +47,12 @@
 #include <rtps/attributes/ServerAttributes.hpp>
 #include <rtps/builtin/BuiltinProtocols.h>
 #include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ProxyDataConverters.hpp>
 #include <rtps/builtin/discovery/endpoint/EDP.h>
 #include <rtps/builtin/discovery/participant/PDP.h>
 #include <rtps/builtin/discovery/participant/PDPClient.h>
 #include <rtps/builtin/discovery/participant/PDPServer.hpp>
 #include <rtps/builtin/discovery/participant/PDPSimple.h>
+#include <rtps/builtin/discovery/participant/simple/PDPStatelessWriter.hpp>
 #include <rtps/builtin/liveliness/WLP.hpp>
 #include <rtps/DataSharing/WriterPool.hpp>
 #include <rtps/history/BasicPayloadPool.hpp>
@@ -115,7 +115,8 @@ static void set_builtin_transports_from_env_var(
                     "UDPv4", BuiltinTransports::UDPv4,
                     "UDPv6", BuiltinTransports::UDPv6,
                     "LARGE_DATA", BuiltinTransports::LARGE_DATA,
-                    "LARGE_DATAv6", BuiltinTransports::LARGE_DATAv6))
+                    "LARGE_DATAv6", BuiltinTransports::LARGE_DATAv6,
+                    "P2P", BuiltinTransports::P2P))
             {
                 EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "Wrong value '" << env_value << "' for environment variable '" <<
                         env_var_name << "'. Leaving as DEFAULT");
@@ -141,7 +142,8 @@ static void set_builtin_transports_from_env_var(
                         "UDPv4", BuiltinTransports::UDPv4,
                         "UDPv6", BuiltinTransports::UDPv6,
                         "LARGE_DATA", BuiltinTransports::LARGE_DATA,
-                        "LARGE_DATAv6", BuiltinTransports::LARGE_DATAv6))
+                        "LARGE_DATAv6", BuiltinTransports::LARGE_DATAv6,
+                        "P2P", BuiltinTransports::P2P))
                 {
                     EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "Wrong value '" << env_value << "' for environment variable '" <<
                             env_var_name << "'. Leaving as DEFAULT");
@@ -1229,7 +1231,7 @@ bool RTPSParticipantImpl::create_writer(
         return false;
     }
 
-    auto callback = [hist, listen, this]
+    auto callback = [hist, listen, entityId, this]
                 (const GUID_t& guid, WriterAttributes& watt, FlowController* flow_controller,
                     IPersistenceService* persistence, bool is_reliable) -> BaseWriter*
             {
@@ -1249,7 +1251,11 @@ bool RTPSParticipantImpl::create_writer(
                 }
                 else
                 {
-                    if (persistence != nullptr)
+                    if (entityId == c_EntityId_SPDPWriter)
+                    {
+                        writer = new PDPStatelessWriter(this, guid, watt, flow_controller, hist, listen);
+                    }
+                    else if (persistence != nullptr)
                     {
                         writer = new StatelessPersistentWriter(this, guid, watt,
                                         flow_controller, hist, listen, persistence);
@@ -1986,6 +1992,28 @@ void RTPSParticipantImpl::createSenderResources(
     m_network_Factory.build_send_resources(send_resource_list_, locator_selector_entry);
 }
 
+void RTPSParticipantImpl::createSenderResources(
+        const RemoteLocatorList& locator_list,
+        const EndpointAttributes& param)
+{
+    using network::external_locators::filter_remote_locators;
+
+    LocatorSelectorEntry entry(locator_list.unicast.size(), locator_list.multicast.size());
+    entry.multicast = locator_list.multicast;
+    entry.unicast = locator_list.unicast;
+    filter_remote_locators(entry, param.external_unicast_locators, param.ignore_non_matching_locators);
+
+    std::lock_guard<std::timed_mutex> lock(m_send_resources_mutex_);
+    for (const Locator_t& locator : entry.unicast)
+    {
+        m_network_Factory.build_send_resources(send_resource_list_, locator);
+    }
+    for (const Locator_t& locator : entry.multicast)
+    {
+        m_network_Factory.build_send_resources(send_resource_list_, locator);
+    }
+}
+
 bool RTPSParticipantImpl::deleteUserEndpoint(
         const GUID_t& endpoint)
 {
@@ -1997,6 +2025,7 @@ bool RTPSParticipantImpl::deleteUserEndpoint(
     bool found = false, found_in_users = false;
     Endpoint* p_endpoint = nullptr;
     BaseReader* reader = nullptr;
+    BaseWriter* writer {nullptr};
 
     if (endpoint.entityId.is_writer())
     {
@@ -2006,6 +2035,7 @@ bool RTPSParticipantImpl::deleteUserEndpoint(
         {
             if ((*wit)->getGuid().entityId == endpoint.entityId) //Found it
             {
+                writer = *wit;
                 m_userWriterList.erase(wit);
                 found_in_users = true;
                 break;
@@ -2016,6 +2046,7 @@ bool RTPSParticipantImpl::deleteUserEndpoint(
         {
             if ((*wit)->getGuid().entityId == endpoint.entityId) //Found it
             {
+                writer = *wit;
                 p_endpoint = *wit;
                 m_allWriterList.erase(wit);
                 found = true;
@@ -2104,6 +2135,10 @@ bool RTPSParticipantImpl::deleteUserEndpoint(
     if (reader)
     {
         reader->local_actions_on_reader_removed();
+    }
+    else if (writer)
+    {
+        writer->local_actions_on_writer_removed();
     }
     delete(p_endpoint);
     return true;
@@ -2196,6 +2231,10 @@ void RTPSParticipantImpl::deleteAllUserEndpoints()
         {
             static_cast<BaseReader*>(endpoint)->local_actions_on_reader_removed();
         }
+        else if (WRITER == kind)
+        {
+            static_cast<BaseWriter*>(endpoint)->local_actions_on_writer_removed();
+        }
 
         // remove the endpoints
         delete(endpoint);
@@ -2230,7 +2269,7 @@ std::vector<std::string> RTPSParticipantImpl::getParticipantNames() const
     auto pdp = mp_builtinProtocols->mp_PDP;
     for (auto it = pdp->ParticipantProxiesBegin(); it != pdp->ParticipantProxiesEnd(); ++it)
     {
-        participant_names.emplace_back((*it)->m_participantName.to_string());
+        participant_names.emplace_back((*it)->participant_name.to_string());
     }
     return participant_names;
 }
@@ -2845,6 +2884,40 @@ std::vector<TransportNetmaskFilterInfo> RTPSParticipantImpl::get_netmask_filter_
     return m_network_Factory.netmask_filter_info();
 }
 
+bool RTPSParticipantImpl::get_publication_info(
+        PublicationBuiltinTopicData& data,
+        const GUID_t& writer_guid) const
+{
+    bool ret = false;
+    WriterProxyData wproxy_data(m_att.allocation.locators.max_unicast_locators,
+            m_att.allocation.locators.max_multicast_locators);
+
+    if (mp_builtinProtocols->mp_PDP->lookupWriterProxyData(writer_guid, wproxy_data))
+    {
+        data = wproxy_data;
+        ret = true;
+    }
+
+    return ret;
+}
+
+bool RTPSParticipantImpl::get_subscription_info(
+        SubscriptionBuiltinTopicData& data,
+        const GUID_t& reader_guid) const
+{
+    bool ret = false;
+    ReaderProxyData rproxy_data(m_att.allocation.locators.max_unicast_locators,
+            m_att.allocation.locators.max_multicast_locators);
+
+    if (mp_builtinProtocols->mp_PDP->lookupReaderProxyData(reader_guid, rproxy_data))
+    {
+        data = rproxy_data;
+        ret = true;
+    }
+
+    return ret;
+}
+
 #ifdef FASTDDS_STATISTICS
 
 bool RTPSParticipantImpl::register_in_writer(
@@ -3051,7 +3124,7 @@ bool RTPSParticipantImpl::fill_discovery_data_from_cdr_message(
 
     ParticipantProxyData part_prox_data(m_att.allocation);
 
-    ret = part_prox_data.readFromCDRMessage(
+    ret = part_prox_data.read_from_cdr_message(
         &serialized_msg,
         true,
         network_factory(),
@@ -3060,7 +3133,7 @@ bool RTPSParticipantImpl::fill_discovery_data_from_cdr_message(
 
     if (ret)
     {
-        from_proxy_to_builtin(part_prox_data, data);
+        data = part_prox_data;
     }
 
     return ret && (data.guid.entityId == c_EntityId_RTPSParticipant);
@@ -3083,20 +3156,16 @@ bool RTPSParticipantImpl::fill_discovery_data_from_cdr_message(
         alloc_limits.locators.max_multicast_locators,
         alloc_limits.data_limits);
 
-    ret = writer_data.readFromCDRMessage(
-        &serialized_msg,
-        network_factory(),
-        false,
-        c_VendorId_eProsima);
+    ret = writer_data.read_from_cdr_message(&serialized_msg, c_VendorId_eProsima);
 
     if (ret)
     {
-        ret = writer_data.guid().entityId.is_writer();
+        ret = writer_data.guid.entityId.is_writer();
     }
 
     if (ret)
     {
-        from_proxy_to_builtin(writer_data, data);
+        data = writer_data;
     }
 
     return ret;
@@ -3118,20 +3187,16 @@ bool RTPSParticipantImpl::fill_discovery_data_from_cdr_message(
         alloc_limits.locators.max_unicast_locators,
         alloc_limits.locators.max_multicast_locators,
         alloc_limits.data_limits);
-    ret = reader_data.readFromCDRMessage(
-        &serialized_msg,
-        network_factory(),
-        false,
-        c_VendorId_eProsima);
+    ret = reader_data.read_from_cdr_message(&serialized_msg, c_VendorId_eProsima);
 
     if (ret)
     {
-        ret = reader_data.guid().entityId.is_reader();
+        ret = reader_data.guid.entityId.is_reader();
     }
 
     if (ret)
     {
-        from_proxy_to_builtin(reader_data, data);
+        data = reader_data;
     }
 
     return ret;
@@ -3155,7 +3220,7 @@ RTPSParticipantImpl::get_entity_connections(
         for (; pit != pdp()->ParticipantProxiesEnd(); ++pit)
         {
             fastdds::statistics::Connection connection;
-            connection.guid(fastdds::statistics::to_statistics_type((*pit)->m_guid));
+            connection.guid(fastdds::statistics::to_statistics_type((*pit)->guid));
             connection.mode(fastdds::statistics::ConnectionMode::TRANSPORT);
 
             std::vector<fastdds::statistics::detail::Locator_s> statistic_locators;
