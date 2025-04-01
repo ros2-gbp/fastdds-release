@@ -141,3 +141,23 @@ struct BoundedBigSequences
     sequence<short, 41925> var_sequence_big;
     sequence<string, 256> var_unbounded_string_large_bounded_sequence;
 };
+
+// Regression test for issue #21978.
+//{{{
+module Common_Module
+{
+   typedef char My_Char;
+   typedef sequence<My_Char, 20> My_String;
+};
+
+module NoCommon_Module
+{
+   typedef Common_Module::My_String My_AliasString;
+   typedef sequence<My_AliasString> My_SequenceString;
+
+   struct My_Structure
+   {
+       My_SequenceString list;
+   };
+};
+//}}}

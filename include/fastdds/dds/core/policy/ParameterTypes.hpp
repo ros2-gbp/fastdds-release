@@ -168,10 +168,23 @@ enum ParameterId_t : uint16_t
     /* eProsima Fast DDS extensions */
     PID_PRODUCT_VERSION                     = 0x8000,
     PID_PERSISTENCE_GUID                    = 0x8002,
+    PID_MACHINE_ID                          = 0x8003,
     PID_DISABLE_POSITIVE_ACKS               = 0x8005,
     PID_DATASHARING                         = 0x8006,
     PID_NETWORK_CONFIGURATION_SET           = 0x8007,
     PID_CUSTOM_RELATED_SAMPLE_IDENTITY      = 0x800f,
+    PID_RTPS_ENDPOINT                       = 0x8010,
+    /* Writer specific */
+    PID_WRITER_DATA_LIFECYCLE               = 0x8100,
+    PID_PUBLISH_MODE                        = 0x8101,
+    PID_RTPS_RELIABLE_WRITER                = 0x8102,
+    PID_WRITER_RESOURCE_LIMITS              = 0x8103,
+    /* Reader specific */
+    PID_READER_DATA_LIFECYCLE               = 0x8200,
+    PID_RTPS_RELIABLE_READER                = 0x8201,
+    PID_READER_RESOURCE_LIMITS              = 0x8202,
+    /* Participant specific */
+    PID_WIREPROTOCOL_CONFIG                 = 0x8300
 };
 
 /*!

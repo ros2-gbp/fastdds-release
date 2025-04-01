@@ -28,9 +28,9 @@
     <a href="https://eprosima-fast-rtps.readthedocs.io"><img alt="Documentation badge" src="https://img.shields.io/readthedocs/eprosima-fast-rtps.svg"/></a>
     <br>
     <a href=""><img alt="Status" src="https://nexus.lab.fiware.org/static/badges/statuses/incubating.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-3.1.x.yml"><img alt="Fast DDS Ubuntu CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-3.1.x.yml/badge.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-3.1.x.yml"><img alt="Fast DDS Windows CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-3.1.x.yml/badge.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-3.1.x.yml"><img alt="Fast DDS MacOS CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-3.1.x.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-master.yml"><img alt="Fast DDS Ubuntu CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-master.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-master.yml"><img alt="Fast DDS Windows CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-master.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-master.yml"><img alt="Fast DDS MacOS CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-master.yml/badge.svg"/></a>
     <a href="http://jenkins.eprosima.com:8080/job/nightly_fastdds_coverage_linux"><img alt="Coverage" src="https://img.shields.io/jenkins/coverage/cobertura.svg?jobUrl=http%3A%2F%2Fjenkins.eprosima.com%3A8080%2Fjob%2Fnightly_fastdds_coverage_linux"/></a>
 </div>
 
@@ -57,7 +57,7 @@ Some of the main features of this library are:
 This project is part of [FIWARE](https://www.fiware.org/).
 For more information check the FIWARE Catalogue entry for [Robotics](https://github.com/Fiware/catalogue/tree/master/robotics).
 
-## Commercial support
+## <a id="getting-help"></a>Commercial support
 
 Looking for commercial support? Write us to info@eprosima.com
 
@@ -156,45 +156,29 @@ These examples' path can be accessed from a terminal by typing
 
     $ goToExamples
 
-From this folder you can access all examples, both for DDS and RTPS.
-We detail the steps to launch two such examples below.
+From this folder you can access all examples.
+We detail the steps to launch one of these examples below.
 
 To launch the Hello World example (a minimal example that will perform a Publisher/Subscriber match and start sending samples) you could run:
 
     $ goToExamples
-    $ cd dds/HelloWorldExample/bin
-    $ tmux new-session "./HelloWorldExample publisher 0 1000" \; \
-    split-window "./HelloWorldExample subscriber" \; \
+    $ cd hello_world/bin
+    $ tmux new-session "./hello_world publisher" \; \
+    split-window "./hello_world subscriber" \; \
     select-layout even-vertical
 
 This example is not constrained to the current instance.
 It is possible to run several instances of this container to check the communication between them by running the following from each container.
 
     $ goToExamples
-    $ cd dds/HelloWorldExample/bin
-    $ ./HelloWorldExample publisher
+    $ cd hello_world/bin
+    $ ./hello_world publisher
 
 or
 
     $ goToExamples
-    $ cd dds/HelloWorldExample/bin
-    $ ./HelloWorldExample subscriber
-
-Another example you could launch is the Benchmark example.
-This example creates either a Publisher or a Subscriber and on a successful match starts sending samples.
-After a few seconds the process that launched the Publisher will show a report with the number of samples transmitted.
-
-On the subscriber side, run:
-
-    $ goToExamples
-    $ cd dds/Benchmark/bin
-    $ ./Benchmark subscriber udp
-
-On the publisher side, run:
-
-    $ goToExamples
-    $ cd dds/Benchmark/bin
-    $ ./Benchmark publisher udp
+    $ cd hello_world/bin
+    $ ./hello_world subscriber
 
 ---
 

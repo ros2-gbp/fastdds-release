@@ -38,6 +38,10 @@ set(LISTENERTESTS_SOURCE ListenerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/DataWriterQos.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/PublisherQos.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/WriterQos.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ReplierImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/RequesterImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ServiceImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ServiceTypeSupport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/DataReader.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/DataReaderImpl.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/history/DataReaderHistory.cpp
@@ -58,7 +62,8 @@ set(LISTENERTESTS_SOURCE ListenerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/utils/TypePropagation.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/ThreadSettings.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ProxyDataConverters.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/PublicationBuiltinTopicData.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/SubscriptionBuiltinTopicData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/ReaderProxyData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/data/WriterProxyData.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/GuidPrefix_t.cpp
@@ -79,6 +84,7 @@ set(LISTENERTESTS_SOURCE ListenerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/writer/LocatorSelectorSender.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/statistics/fastdds/domain/DomainParticipant.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/statistics/fastdds/publisher/qos/DataWriterQos.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -148,6 +154,7 @@ target_include_directories(ListenerTests PRIVATE
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/DataSharingPayloadPool
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/NetworkFactory
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ParticipantProxyData
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/PDP
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/PDPSimple
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/ReaderHistory
@@ -197,6 +204,9 @@ if(QNX)
 endif()
 if(MSVC OR MSVC_IDE)
     target_link_libraries(ListenerTests iphlpapi Shlwapi ws2_32)
+endif()
+if (APPLE)
+    target_link_libraries(ListenerTests "-framework CoreFoundation" "-framework IOKit")
 endif()
 
 gtest_discover_tests(ListenerTests)

@@ -78,14 +78,17 @@ class FastDDSParser:
         parser.add_argument('command',
                             nargs='?',
                             help='Command to run')
+        parser.add_argument('-v', '--version', action='store_true', help='Print Fast DDS version')
 
         args = parser.parse_args(sys.argv[1:2])
 
         if args.command is not None:
             if not hasattr(self, args.command):
-                print('Invalid command')
+                print(f"Invalid command: '{args.command}'. Use 'fastdds -h' for help.")
             else:
                 getattr(self, args.command)()
+        elif args.version:
+            DiscoveryParser(['-v'])
         else:
             parser.print_help()
 
@@ -121,7 +124,6 @@ class FastDDSParser:
             XMLParser(sys.argv[2:])
         except ImportError:
             sys.exit(1)
-
 
 if __name__ == '__main__':
 

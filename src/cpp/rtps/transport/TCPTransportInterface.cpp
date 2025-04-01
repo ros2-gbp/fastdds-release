@@ -40,7 +40,6 @@
 
 #include <fastdds/config.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/attributes/PropertyPolicy.hpp>
 #include <fastdds/rtps/common/CDRMessage_t.hpp>
 #include <fastdds/rtps/common/LocatorSelector.hpp>
@@ -307,8 +306,15 @@ ResponseCode TCPTransportInterface::bind_socket(
         decltype(channel_resources_)::value_type{channel->locator(), channel});
     if (false == insert_ret.second)
     {
-        // There is an existing channel that can be used. Force the Client to close unnecessary socket
-        ret = RETCODE_SERVER_ERROR;
+        if (insert_ret.first->second->connection_established())
+        {
+            // There is an existing channel that can be used. Force the Client to close unnecessary socket
+            ret = RETCODE_SERVER_ERROR;
+        }
+        else
+        {
+            insert_ret.first->second = channel;
+        }
     }
 
     std::vector<fastdds::rtps::IPFinder::info_IP> local_interfaces;
@@ -320,7 +326,12 @@ ResponseCode TCPTransportInterface::bind_socket(
         for (auto& interface_it : local_interfaces)
         {
             IPLocator::setIPv4(local_locator, interface_it.locator);
-            channel_resources_.insert(decltype(channel_resources_)::value_type{local_locator, channel});
+            const auto insert_ret_local = channel_resources_.insert(
+                decltype(channel_resources_)::value_type{local_locator, channel});
+            if (!insert_ret_local.first->second->connection_established())
+            {
+                insert_ret_local.first->second = channel;
+            }
         }
     }
     return ret;
@@ -541,13 +552,13 @@ bool TCPTransportInterface::init(
 
     if (cfg_send_size > 0 && send_size != cfg_send_size)
     {
-        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "UDPTransport sendBufferSize could not be set to the desired value. "
+        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "TCPTransport sendBufferSize could not be set to the desired value. "
                 << "Using " << send_size << " instead of " << cfg_send_size);
     }
 
     if (cfg_recv_size > 0 && recv_size != cfg_recv_size)
     {
-        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "UDPTransport receiveBufferSize could not be set to the desired value. "
+        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "TCPTransport receiveBufferSize could not be set to the desired value. "
                 << "Using " << recv_size << " instead of " << cfg_recv_size);
     }
 
@@ -706,7 +717,7 @@ void TCPTransportInterface::SenderResourceHasBeenClosed(
     // Socket disconnection should always be done in the listening thread (or in the transport cleanup, when receiver resources have
     // already been destroyed and the listening thread had consequently finished).
     // An assert() clause finding the respective channel resource cannot be made since in LARGE DATA scenario, where the PDP discovery is done
-    // via UDP, a server's send resource can be created with without any associated channel resource until receiving a connection request from
+    // via UDP, a server's send resource can be created without any associated channel resource until receiving a connection request from
     // the client.
     // The send resource locator is invalidated to prevent further use of associated channel.
     LOCATOR_INVALID(locator);
