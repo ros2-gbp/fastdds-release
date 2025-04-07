@@ -291,9 +291,7 @@ ReturnCode_t DomainParticipantImpl::enable()
     utils::set_attributes_from_qos(rtps_attr, qos_);
     rtps_attr.participantID = participant_id_;
 
-    // If DEFAULT_ROS2_MASTER_URI is specified then try to create default client if
-    // that already exists.
-    RTPSParticipant* part = RTPSDomainImpl::clientServerEnvironmentCreationOverride(
+    RTPSParticipant* part = RTPSDomain::createParticipant(
         domain_id_,
         false,
         rtps_attr,
@@ -301,13 +299,8 @@ ReturnCode_t DomainParticipantImpl::enable()
 
     if (part == nullptr)
     {
-        part = RTPSDomain::createParticipant(domain_id_, false, rtps_attr, &rtps_listener_);
-
-        if (part == nullptr)
-        {
-            EPROSIMA_LOG_ERROR(DOMAIN_PARTICIPANT, "Problem creating RTPSParticipant");
-            return RETCODE_ERROR;
-        }
+        EPROSIMA_LOG_ERROR(DOMAIN_PARTICIPANT, "Problem creating RTPSParticipant");
+        return RETCODE_ERROR;
     }
 
     guid_ = part->getGuid();
@@ -1839,7 +1832,7 @@ ReturnCode_t DomainParticipantImpl::unregister_type(
         {
             if (sit.second->type_in_use(type_name))
             {
-                EPROSIMA_LOG_ERROR(PARTICIPANT, "Type '" << type_name << "' is in use");
+                EPROSIMA_LOG_WARNING(PARTICIPANT, "Type '" << type_name << "' is in use");
                 return RETCODE_PRECONDITION_NOT_MET;
             }
         }
@@ -1853,7 +1846,7 @@ ReturnCode_t DomainParticipantImpl::unregister_type(
         {
             if (pit.second->type_in_use(type_name))
             {
-                EPROSIMA_LOG_ERROR(PARTICIPANT, "Type '" << type_name << "' is in use");
+                EPROSIMA_LOG_WARNING(PARTICIPANT, "Type '" << type_name << "' is in use");
                 return RETCODE_PRECONDITION_NOT_MET;
             }
         }
