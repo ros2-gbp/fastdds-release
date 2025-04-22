@@ -280,7 +280,7 @@ tracks:
     last_version: 3.2.1
     name: fastdds
     patches: null
-    release_inc: '1'
+    release_inc: '2'
     release_repo_url: null
     release_tag: v:{version}
     ros_distro: kilted
