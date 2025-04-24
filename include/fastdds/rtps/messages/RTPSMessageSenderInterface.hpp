@@ -17,25 +17,23 @@
  *
  */
 
-#ifndef FASTDDS_RTPS_MESSAGES__RTPSMESSAGESENDERINTERFACE_HPP
-#define FASTDDS_RTPS_MESSAGES__RTPSMESSAGESENDERINTERFACE_HPP
+#ifndef _FASTDDS_RTPS_MESSAGES_RTPSMESSAGESENDERINTERFACE_HPP_
+#define _FASTDDS_RTPS_MESSAGES_RTPSMESSAGESENDERINTERFACE_HPP_
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <chrono>
+#include <fastdds/rtps/messages/CDRMessage.h>
+#include <fastdds/rtps/common/Guid.h>
+
 #include <vector>
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/transport/NetworkBuffer.hpp>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
-struct CDRMessage_t;
-
 /**
- * Interface to handle destinations management and message sending.
+ * An interface used in \ref RTPSMessageGroup to handle destinations management
+ * and message sending.
  */
 class RTPSMessageSenderInterface
 {
@@ -76,13 +74,11 @@ public:
     /**
      * Send a message through this interface.
      *
-     * @param buffers Vector of NetworkBuffers to send with data already serialized.
-     * @param total_bytes Total number of bytes to send. Should be equal to the sum of the @c size field of all buffers.
+     * @param message Pointer to the buffer with the message already serialized.
      * @param max_blocking_time_point Future timepoint where blocking send should end.
      */
     virtual bool send(
-            const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
-            const uint32_t& total_bytes,
+            CDRMessage_t* message,
             std::chrono::steady_clock::time_point max_blocking_time_point) const = 0;
 
     /*!
@@ -98,10 +94,10 @@ public:
 
 };
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastrtps */
+} /* namespace eprosima */
 
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#endif // FASTDDS_RTPS_MESSAGES__RTPSMESSAGESENDERINTERFACE_HPP
+#endif /* _FASTDDS_RTPS_MESSAGES_RTPSMESSAGESENDERINTERFACE_HPP_ */

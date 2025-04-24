@@ -15,27 +15,26 @@
 #ifndef __TEST_UNITTEST_RTPS_SECURITY_SECURITYTESTS_HPP__
 #define __TEST_UNITTEST_RTPS_SECURITY_SECURITYTESTS_HPP__
 
-#include <gtest/gtest.h>
-
-#include <fastdds/rtps/history/ReaderHistory.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
-
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/discovery/participant/PDP.h>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/reader/StatefulReader.hpp>
-#include <rtps/reader/StatelessReader.hpp>
-#include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
-#include <rtps/security/common/Handle.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
+#include <fastrtps/rtps/security/common/Handle.h>
 #include <rtps/security/MockAuthenticationPlugin.h>
 #include <rtps/security/MockCryptographyPlugin.h>
-#include <rtps/security/SecurityManager.h>
+#include <fastrtps/rtps/writer/StatelessWriter.h>
+#include <fastrtps/rtps/writer/StatefulWriter.h>
+#include <fastrtps/rtps/history/WriterHistory.h>
+#include <fastrtps/rtps/reader/StatelessReader.h>
+#include <fastrtps/rtps/reader/StatefulReader.h>
+#include <fastrtps/rtps/history/ReaderHistory.h>
+#include <fastrtps/rtps/builtin/data/ParticipantProxyData.h>
 #include <rtps/security/SecurityPluginFactory.h>
-#include <rtps/writer/StatefulWriter.hpp>
-#include <rtps/writer/StatelessWriter.hpp>
+#include <rtps/security/SecurityManager.h>
+#include <fastrtps/rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
+#include <fastrtps/rtps/builtin/discovery/participant/PDP.h>
 
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds::rtps::security;
+#include <gtest/gtest.h>
+
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 using namespace ::testing;
 
 class SecurityTest;
@@ -68,20 +67,6 @@ public:
 };
 
 typedef HandleImpl<MockParticipantCrypto, SecurityTest> MockParticipantCryptoHandle;
-
-struct SecurityTestsGlobalDefaultValues
-{
-    // Default Values
-    RTPSParticipantAttributes pattr;
-
-    SecurityTestsGlobalDefaultValues()
-    {
-        ::testing::DefaultValue<const RTPSParticipantAttributes&>::Set(pattr);
-    }
-
-};
-
-static SecurityTestsGlobalDefaultValues g_security_default_values_;
 
 class SecurityTest : public ::testing::Test
 {
@@ -156,7 +141,7 @@ public:
         , stateless_reader_(nullptr)
         , volatile_writer_(nullptr)
         , volatile_reader_(nullptr)
-        , manager_(&participant_, plugin_factory_)
+        , manager_(&participant_)
         , participant_data_(c_default_RTPSParticipantAllocationAttributes)
         , default_cdr_message(RTPSMESSAGE_DEFAULT_SIZE)
     {
@@ -181,7 +166,6 @@ public:
     ::testing::StrictMock<StatefulWriter>* volatile_writer_;
     ::testing::NiceMock<StatefulReader>* volatile_reader_;
     PDP pdp_;
-    SecurityPluginFactory plugin_factory_;
     SecurityManager manager_;
 
     // handles
@@ -196,7 +180,7 @@ public:
     bool security_activated_;
 
     // Default Values
-    NetworkFactory network{g_security_default_values_.pattr};
+    NetworkFactory network;
     GUID_t guid;
     CDRMessage_t default_cdr_message;
 
@@ -231,5 +215,19 @@ public:
     }
 
 };
+
+struct SecurityTestsGlobalDefaultValues
+{
+    // Default Values
+    RTPSParticipantAttributes pattr;
+
+    SecurityTestsGlobalDefaultValues()
+    {
+        ::testing::DefaultValue<const RTPSParticipantAttributes&>::Set(pattr);
+    }
+
+};
+
+static SecurityTestsGlobalDefaultValues g_security_default_values_;
 
 #endif // __TEST_UNITTEST_RTPS_SECURITY_SECURITYTESTS_HPP__

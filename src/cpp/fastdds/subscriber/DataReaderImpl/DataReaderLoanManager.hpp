@@ -24,12 +24,12 @@
 
 #include <fastdds/dds/core/LoanableCollection.hpp>
 #include <fastdds/dds/core/LoanableTypedCollection.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 
-#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -39,6 +39,7 @@ namespace detail {
 struct DataReaderLoanManager
 {
     using SampleInfoSeq = LoanableTypedCollection<SampleInfo>;
+    using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
 
     explicit DataReaderLoanManager(
             const DataReaderQos& qos)
@@ -83,7 +84,7 @@ struct DataReaderLoanManager
             result = used_loans_.push_back(tmp);
             if (nullptr == result)
             {
-                return RETCODE_OUT_OF_RESOURCES;
+                return ReturnCode_t::RETCODE_OUT_OF_RESOURCES;
             }
 
             result->data_values = new LoanableCollection::element_type[max_samples_];
@@ -99,7 +100,7 @@ struct DataReaderLoanManager
 
         data_values.loan(result->data_values, max_samples_, 0);
         sample_infos.loan(result->sample_infos, max_samples_, 0);
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t return_loan(
@@ -112,13 +113,13 @@ struct DataReaderLoanManager
 
         if (!used_loans_.remove(tmp))
         {
-            return RETCODE_PRECONDITION_NOT_MET;
+            return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
         }
 
         OutstandingLoanItem* result = free_loans_.push_back(tmp);
         static_cast<void>(result);
         assert(result != nullptr);
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
 private:
@@ -136,7 +137,7 @@ private:
 
     };
 
-    using collection_type = eprosima::fastdds::ResourceLimitedVector<OutstandingLoanItem>;
+    using collection_type = eprosima::fastrtps::ResourceLimitedVector<OutstandingLoanItem>;
 
     int32_t max_samples_ = 0;
     collection_type free_loans_;

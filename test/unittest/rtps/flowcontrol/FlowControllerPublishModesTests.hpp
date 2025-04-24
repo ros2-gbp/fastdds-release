@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 std::ostream& operator <<(
@@ -18,7 +18,7 @@ std::ostream& operator <<(
         const CacheChange_t* change);
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 template<typename T>
@@ -44,7 +44,7 @@ protected:
 
     std::thread::id last_thread_delivering_sample;
 
-    std::vector<eprosima::fastdds::rtps::CacheChange_t*> changes_delivered;
+    std::vector<eprosima::fastrtps::rtps::CacheChange_t*> changes_delivered;
 
     std::mutex changes_delivered_mutex;
 

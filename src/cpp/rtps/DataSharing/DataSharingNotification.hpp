@@ -23,7 +23,7 @@
 #include <rtps/history/PoolConfig.h>
 #include <utils/shared_memory/SharedMemSegment.hpp>
 #include <utils/shared_memory/SharedDir.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Guid.h>
 
 #include <memory>
 #include <vector>
@@ -31,7 +31,7 @@
 #include <atomic>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class DataSharingNotification
@@ -159,8 +159,8 @@ protected:
         }
         catch (const std::exception& e)
         {
-            EPROSIMA_LOG_ERROR(HISTORY_DATASHARING_LISTENER, "Failed to create segment " << segment_name_
-                                                                                         << ": " << e.what());
+            logError(HISTORY_DATASHARING_LISTENER, "Failed to create segment " << segment_name_
+                                                                               << ": " << e.what());
             return false;
         }
 
@@ -174,8 +174,8 @@ protected:
         {
             T::remove(segment_name_);
 
-            EPROSIMA_LOG_ERROR(HISTORY_DATASHARING_LISTENER, "Failed to create listener queue " << segment_name_
-                                                                                                << ": " << e.what());
+            logError(HISTORY_DATASHARING_LISTENER, "Failed to create listener queue " << segment_name_
+                                                                                      << ": " << e.what());
             return false;
         }
 
@@ -202,8 +202,8 @@ protected:
         }
         catch (const std::exception& e)
         {
-            EPROSIMA_LOG_ERROR(HISTORY_DATASHARING_LISTENER, "Failed to open segment " << segment_name_
-                                                                                       << ": " << e.what());
+            logError(HISTORY_DATASHARING_LISTENER, "Failed to open segment " << segment_name_
+                                                                             << ": " << e.what());
             return false;
         }
 
@@ -214,7 +214,7 @@ protected:
         {
             local_segment.reset();
 
-            EPROSIMA_LOG_ERROR(HISTORY_DATASHARING_LISTENER, "Failed to open listener queue " << segment_name_);
+            logError(HISTORY_DATASHARING_LISTENER, "Failed to open listener queue " << segment_name_);
             return false;
         }
 
@@ -231,7 +231,7 @@ protected:
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_DATASHARING_DATASHARINGNOTIFICATION_HPP

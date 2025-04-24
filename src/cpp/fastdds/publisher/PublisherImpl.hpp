@@ -18,38 +18,38 @@
 
 
 
-#ifndef FASTDDS_PUBLISHER_PUBLISHERIMPL_HPP
-#define FASTDDS_PUBLISHER_PUBLISHERIMPL_HPP
+#ifndef _FASTDDS_PUBLISHERIMPL_HPP_
+#define _FASTDDS_PUBLISHERIMPL_HPP_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
+#include <fastrtps/attributes/PublisherAttributes.h>
 
-#include <map>
-#include <mutex>
-
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
-#include <fastdds/dds/core/status/IncompatibleQosStatus.hpp>
-#include <fastdds/dds/core/status/StatusMask.hpp>
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
-#include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/dds/publisher/qos/PublisherQos.hpp>
-#include <fastdds/dds/topic/qos/TopicQos.hpp>
+#include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
+#include <fastdds/dds/core/status/StatusMask.hpp>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/qos/DeadlineMissedStatus.h>
+#include <fastrtps/qos/IncompatibleQosStatus.hpp>
 
-#ifdef FASTDDS_STATISTICS
-#include <statistics/rtps/monitor-service/interfaces/IStatusQueryable.hpp>
-#endif // ifdef FASTDDS_STATISTICS
+#include <mutex>
+#include <map>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSParticipant;
-class IPayloadPool;
 
 } //namespace rtps
 
 class TopicAttributes;
 
+} // namespace fastrtps
+
+namespace fastdds {
 namespace dds {
 
 class PublisherListener;
@@ -62,7 +62,7 @@ class TypeSupport;
 
 /**
  * Class PublisherImpl, contains the actual implementation of the behaviour of the Publisher.
- * @ingroup FASTDDS_MODULE
+ * @ingroup FASTRTPS_MODULE
  */
 class PublisherImpl
 {
@@ -105,15 +105,13 @@ public:
             Topic* topic,
             const DataWriterQos& qos,
             DataWriterListener* listener,
-            const StatusMask& mask = StatusMask::all(),
-            std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool = nullptr);
+            const StatusMask& mask = StatusMask::all());
 
     DataWriter* create_datawriter_with_profile(
             Topic* topic,
             const std::string& profile_name,
             DataWriterListener* listener,
-            const StatusMask& mask = StatusMask::all(),
-            std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool = nullptr);
+            const StatusMask& mask = StatusMask::all());
 
     ReturnCode_t delete_datawriter(
             const DataWriter* writer);
@@ -122,7 +120,7 @@ public:
             const std::string& topic_name) const;
 
     bool contains_entity(
-            const fastdds::rtps::InstanceHandle_t& handle) const;
+            const fastrtps::rtps::InstanceHandle_t& handle) const;
 
     bool get_datawriters(
             std::vector<DataWriter*>& writers) const;
@@ -146,7 +144,7 @@ public:
      */
 
     ReturnCode_t wait_for_acknowledgments(
-            const fastdds::dds::Duration_t& max_wait);
+            const fastrtps::Duration_t& max_wait);
 
     const DomainParticipant* get_participant() const;
 
@@ -165,56 +163,24 @@ public:
 
     const DataWriterQos& get_default_datawriter_qos() const;
 
-    ReturnCode_t get_datawriter_qos_from_profile(
+    const ReturnCode_t get_datawriter_qos_from_profile(
             const std::string& profile_name,
             DataWriterQos& qos) const;
 
-    ReturnCode_t get_datawriter_qos_from_profile(
-            const std::string& profile_name,
-            DataWriterQos& qos,
-            std::string& topic_name) const;
+    /* TODO
+       bool copy_from_topic_qos(
+            WriterQos& writer_qos,
+            const fastrtps::TopicAttributes& topic_qos) const;
+     */
 
-    ReturnCode_t get_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos) const;
-
-    ReturnCode_t get_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos,
-            std::string& topic_name) const;
-
-    ReturnCode_t get_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos,
-            const std::string& profile_name) const;
-
-    ReturnCode_t get_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos,
-            std::string& topic_name,
-            const std::string& profile_name) const;
-
-    ReturnCode_t get_default_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos) const;
-
-    ReturnCode_t get_default_datawriter_qos_from_xml(
-            const std::string& xml,
-            DataWriterQos& qos,
-            std::string& topic_name) const;
-
-    ReturnCode_t static copy_from_topic_qos(
-            DataWriterQos& writer_qos,
-            const TopicQos& topic_qos);
-
-    fastdds::rtps::RTPSParticipant* rtps_participant() const
+    fastrtps::rtps::RTPSParticipant* rtps_participant() const
     {
         return rtps_participant_;
     }
 
     const Publisher* get_publisher() const;
 
-    const fastdds::rtps::InstanceHandle_t& get_instance_handle() const;
+    const fastrtps::rtps::InstanceHandle_t& get_instance_handle() const;
 
     //! Remove all listeners in the hierarchy to allow a quiet destruction
     void disable();
@@ -231,18 +197,6 @@ public:
             const StatusMask& status);
 
     bool can_be_deleted();
-
-    /**
-     * Check if a given DataWriter can be deleted.
-     */
-    bool can_be_deleted(
-            DataWriter* writer) const;
-
-#ifdef FASTDDS_STATISTICS
-    bool get_monitoring_status(
-            statistics::MonitorServiceData& status,
-            const fastdds::rtps::GUID_t& entity_guid);
-#endif //FASTDDS_STATISTICS
 
 protected:
 
@@ -279,7 +233,7 @@ protected:
 
         void on_offered_deadline_missed(
                 DataWriter* writer,
-                const OfferedDeadlineMissedStatus& status) override;
+                const fastrtps::OfferedDeadlineMissedStatus& status) override;
 
         void on_liveliness_lost(
                 DataWriter* writer,
@@ -291,18 +245,17 @@ protected:
 
     Publisher* user_publisher_;
 
-    fastdds::rtps::RTPSParticipant* rtps_participant_;
+    fastrtps::rtps::RTPSParticipant* rtps_participant_;
 
     DataWriterQos default_datawriter_qos_;
 
-    fastdds::rtps::InstanceHandle_t handle_;
+    fastrtps::rtps::InstanceHandle_t handle_;
 
     virtual DataWriterImpl* create_datawriter_impl(
             const TypeSupport& type,
             Topic* topic,
             const DataWriterQos& qos,
-            DataWriterListener* listener,
-            std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool);
+            DataWriterListener* listener);
 
     static void set_qos(
             PublisherQos& to,
@@ -318,8 +271,8 @@ protected:
 
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace dds */
+} /* namespace fastdds */
+} /* namespace eprosima */
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif // FASTDDS_PUBLISHER_PUBLISHERIMPL_HPP
+#endif /* _FASTDDS_PUBLISHER_HPP_ */

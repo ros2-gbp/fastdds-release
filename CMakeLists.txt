@@ -15,7 +15,8 @@
 ###############################################################################
 # CMake build rules for Fast DDS
 ###############################################################################
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.16.3)
+cmake_policy(VERSION 3.16.3...3.20.3)
 
 # Set CMAKE_BUILD_TYPE to Release by default.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -29,9 +30,9 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastdds VERSION "3.2.1" LANGUAGES C CXX)
+project(fastrtps VERSION "2.6.10" LANGUAGES C CXX)
 
-set(PROJECT_NAME_LARGE "Fast DDS")
+set(PROJECT_NAME_LARGE "Fast RTPS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
 
 message(STATUS "Version: ${PROJECT_VERSION}")
@@ -62,16 +63,14 @@ if(MSVC OR MSVC_IDE)
     # C4715: 'Test': not all control paths return a value
     # C5038 data member 'member1' will be initialized after data member 'member2'
     # C4100 'identifier' : unreferenced formal parameter (matches clang -Wunused-lambda-capture)
-    add_compile_options(/w34101 /w34189 /w34555 /w34715 /w35038 /w44100 /bigobj)
+    add_compile_options(/w34101 /w34189 /w34555 /w34715 /w35038 /w44100)
 
     if(EPROSIMA_BUILD)
         string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
     endif()
 else()
-    # Add some generic warnings common to all compilers
     set(CMAKE_CXX_FLAGS
-        "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Wno-unknown-pragmas -Wno-error=deprecated-declarations -Wno-switch-bool")
-    # Add compiler specific options
+        "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wextra -Wno-unknown-pragmas -Wno-error=deprecated-declarations")
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-psabi")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined")
@@ -82,26 +81,9 @@ else()
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl")
     endif()
 
-    if(EPROSIMA_EXTRA_CMAKE_CXX_FLAGS)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EPROSIMA_EXTRA_CMAKE_CXX_FLAGS}")
-    endif()
-
     if(EPROSIMA_BUILD)
         string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
     endif()
-endif()
-
-###############################################################################
-# CCache on Windows on CI
-###############################################################################
-if (MSVC AND CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "ccache")
-    foreach(config DEBUG RELWITHDEBINFO)
-        foreach(lang C CXX)
-            set(flags_var "CMAKE_${lang}_FLAGS_${config}")
-            string(REPLACE "/Zi" "/Z7" ${flags_var} "${${flags_var}}")
-            set(${flags_var} "${${flags_var}}")
-        endforeach()
-    endforeach()
 endif()
 
 ###############################################################################
@@ -116,86 +98,13 @@ endif()
 ###############################################################################
 # Test system configuration
 ###############################################################################
-
 include(${PROJECT_SOURCE_DIR}/cmake/common/check_configuration.cmake)
 
 set(FORCE_CXX "11" CACHE STRING "C++ standard fulfillment selection")
-check_stdcxx(${FORCE_CXX})
+check_stdcxx()
 
+check_compile_feature()
 check_endianness()
-
-###############################################################################
-# Activate Sanitizers
-###############################################################################
-option(SANITIZER "Enable Thread or Address sanitizers" OFF)
-string(TOUPPER ${SANITIZER} SANITIZER)
-
-if (SANITIZER)
-    if(${SANITIZER} STREQUAL "ADDRESS")
-        message(STATUS "Enabling address sanitizer...")
-        # Warning/Error messages
-        if(NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
-            message(WARNING "Address sanitizer results with an optimized (non-Debug) build may be misleading")
-        endif()
-
-        if("${CMAKE_C_COMPILER_ID}" MATCHES "(Apple)?[Cc]lang" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "(Apple)?[Cc]lang")
-            message(STATUS "Building with llvm Address sanitizer Tools")
-
-            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-
-        elseif(CMAKE_COMPILER_IS_GNUCXX)
-            message(STATUS "Building with Address sanitizer Tools")
-
-            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-
-        else()
-            message(FATAL_ERROR "Address sanitizer requires Clang or GCC. Aborting.")
-        endif()
-
-    elseif(${SANITIZER} STREQUAL "THREAD")
-        message(STATUS "Enabling thread sanitizer...")
-        # Warning/Error messages
-        if(NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
-            message(WARNING "Thread sanitizer results with an optimized (non-Debug) build may be misleading")
-        endif()
-
-        if("${CMAKE_C_COMPILER_ID}" MATCHES "(Apple)?[Cc]lang" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "(Apple)?[Cc]lang")
-            message(STATUS "Building with llvm Thread sanitizer Tools")
-
-            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
-
-        elseif(CMAKE_COMPILER_IS_GNUCXX)
-            message(STATUS "Building with Thread sanitizer Tools")
-
-            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fno-omit-frame-pointer")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fno-omit-frame-pointer")
-
-        else()
-            message(FATAL_ERROR "Thread sanitizer requires Clang or GCC. Aborting.")
-        endif()
-
-    else()
-        message(WARNING "Sanitizer option not supported. Continuing without any code instrumentation... ")
-
-    endif()
-endif()
-
-###############################################################################
-# Set warnings as errors if the thread sanitizer is not being used
-###############################################################################
-string(FIND ${CMAKE_CXX_FLAGS} "-fsanitize=thread" SANITIZER_THREAD)
-if (${SANITIZER_THREAD} EQUAL -1)
-    message(STATUS "Setting warnings as errors...")
-    if(MSVC OR MSVC_IDE)
-        add_compile_options(/WX)
-    else()
-        set(CMAKE_CXX_FLAGS
-            "${CMAKE_CXX_FLAGS} -Werror")
-    endif()
-endif()
 
 ###############################################################################
 # Installation paths
@@ -213,7 +122,7 @@ if(APPEND_PROJECT_NAME_TO_INCLUDEDIR)
 endif()
 set(INCLUDE_INSTALL_DIR "${_include_dir}" CACHE PATH "Installation directory for C++ headers")
 unset(_include_dir)
-set(LIB_INSTALL_DIR lib${LIB_SUFFIX}/ CACHE PATH "Installation directory for libraries")
+set(LIB_INSTALL_DIR lib/ CACHE PATH "Installation directory for libraries")
 set(DATA_INSTALL_DIR share/ CACHE PATH "Installation directory for data")
 if(WIN32)
     set(DOC_DIR "doc")
@@ -249,12 +158,12 @@ option(BUILD_SHARED_LIBS "Create shared libraries by default" ON)
 ###############################################################################
 include(${PROJECT_SOURCE_DIR}/cmake/common/eprosima_libraries.cmake)
 
-# if we are building Fast DDS as a static library we must load Fast-CDR as one
+# if we are building Fast-DDS as a static library we must load Fast-CDR as one
 if(NOT BUILD_SHARED_LIBS)
     set(FASTDDS_STATIC ON)
 endif()
 
-eprosima_find_package(fastcdr 2 REQUIRED)
+eprosima_find_package(fastcdr REQUIRED)
 eprosima_find_thirdparty(Asio asio VERSION 1.10.8)
 eprosima_find_thirdparty(TinyXML2 tinyxml2)
 
@@ -276,14 +185,10 @@ include_directories(thirdparty/filewatch)
 ###############################################################################
 option(SECURITY "Activate security" OFF)
 
-if(QNX)
-    set(OPENSSL_FOUND 1)
+if(SECURITY)
+    find_package(OpenSSL REQUIRED)
 else()
-    if(SECURITY)
-        find_package(OpenSSL REQUIRED)
-    else()
-        find_package(OpenSSL)
-    endif()
+    find_package(OpenSSL)
 endif()
 
 if(OPENSSL_FOUND)
@@ -303,20 +208,6 @@ else()
     set(LINK_SSL 0)
 endif()
 
-if(SECURITY AND QNX)
-    add_library(OpenSSL::SSL INTERFACE IMPORTED)
-    add_library(OpenSSL::Crypto INTERFACE IMPORTED)
-
-    set_target_properties(OpenSSL::SSL PROPERTIES
-        INTERFACE_LINK_LIBRARIES ssl
-    )
-    set_target_properties(OpenSSL::Crypto PROPERTIES
-        INTERFACE_LINK_LIBRARIES crypto
-    )
-
-    set(OPENSSL_LIBRARIES ssl crypto)
-endif()
-
 option(SQLITE3_SUPPORT "Activate SQLITE3 support" ON)
 
 ###############################################################################
@@ -330,9 +221,7 @@ option(SHM_TRANSPORT_DEFAULT "Add SHM transport to the default transports" ON)
 set(LOG_CONSUMER_DEFAULT AUTO CACHE STRING "Selects default LogConsumer")
 set_property(CACHE LOG_CONSUMER_DEFAULT PROPERTY STRINGS AUTO STDOUT STDOUTERR)
 
-if(LOG_CONSUMER_DEFAULT STREQUAL "STDOUT")
-    set(STDOUTERR_LOG_CONSUMER OFF)
-else()
+if(LOG_CONSUMER_DEFAULT STREQUAL "STDOUTERR")
     set(STDOUTERR_LOG_CONSUMER ON)
 endif()
 
@@ -358,21 +247,12 @@ option(LOG_NO_WARNING "Do not compile Warning Log level" OFF)
 
 option(LOG_NO_ERROR "Do not compile Error Log level" OFF)
 
-option(ENABLE_OLD_LOG_MACROS "Compile logInfo, logWarning and logError macros" ON)
-
 cmake_dependent_option(
     FASTDDS_ENFORCE_LOG_INFO
     "The LOG_NO_INFO option must be enforced regardless of selected configuration"
     OFF
     "NOT LOG_NO_INFO"
     OFF)
-
-# This name changes are required because ON is not considered as a C++ option, instead 1 is required
-if(ENABLE_OLD_LOG_MACROS)
-    set(ENABLE_OLD_LOG_MACROS_ 1)
-else()
-    set(ENABLE_OLD_LOG_MACROS_ 0)
-endif()
 
 if(LOG_NO_INFO)
     set(HAVE_LOG_NO_INFO 1)
@@ -395,26 +275,7 @@ endif()
 ###############################################################################
 # Tools default setup
 ###############################################################################
-if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    execute_process(
-        COMMAND ${CMAKE_CXX_COMPILER} -dumpmachine
-        OUTPUT_VARIABLE COMPILER_MACHINE
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(COMPILER_MACHINE MATCHES "mingw")
-        message(STATUS "Using MinGW compiler.")
-        option(COMPILE_TOOLS "Build tools" OFF)
-        add_definitions(-DMINGW_COMPILER=1)
-        set(CMAKE_CXX_FLAGS
-            "${CMAKE_CXX_FLAGS} -Wno-attributes -Wno-stringop-overread -Wno-builtin-macro-redefined -Wno-cast-function-type -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers")
-        target_link_libraries(fastdds PUBLIC ws2_32 mswsock)
-    else()
-        message(STATUS "Using a GNU compiler on Windows but not MinGW.")
-    endif()
-else()
-    message(STATUS "Not using a GNU compiler on Windows.")
-    option(COMPILE_TOOLS "Build tools" ON)
-endif()
+option(COMPILE_TOOLS "Build tools" ON)
 
 if(EPROSIMA_BUILD)
     set(COMPILE_TOOLS ON)
@@ -423,7 +284,7 @@ endif()
 ###############################################################################
 # Fast DDS statistics tool default setup
 ###############################################################################
-option(FASTDDS_STATISTICS "Enable Fast DDS Statistics Module" ON)
+option(FASTDDS_STATISTICS "Enable Fast DDS Statistics Module" OFF)
 
 ###############################################################################
 # Compile library.
@@ -518,7 +379,7 @@ if(BUILD_DOCUMENTATION)
         set(USE_DOT YES)
     endif()
     # Configure the template doxyfile for or specific project
-    configure_file(utils/doxygen/doxyfile.in ${PROJECT_BINARY_DIR}/doxyfile @ONLY IMMEDIATE)
+    configure_file(doxyfile.in ${PROJECT_BINARY_DIR}/doxyfile @ONLY IMMEDIATE)
     # Add custom target to run doxygen when ever the project is build
     add_custom_target(fastdds_doxygen
         COMMAND "${DOXYGEN_EXECUTABLE}" "${PROJECT_BINARY_DIR}/doxyfile"
@@ -538,6 +399,7 @@ if(BUILD_DOCUMENTATION)
         set(README_INSTALL_LOCATION "${DOC_INSTALL_DIR}")
     endif()
 
+    configure_file(doc/README.html.in ${README_LOCATION}/README.html @ONLY IMMEDIATE)
 
     ### ReadTheDocs ########################
     if(NOT CHECK_DOCUMENTATION)
@@ -578,12 +440,12 @@ if(BUILD_DOCUMENTATION)
         add_dependencies(readthedocs fastdds_docdirs)
     endif()
 
-    add_custom_target(fastdds_doc ALL
+    add_custom_target(fastdds_docs ALL
         COMMENT "Generated project documentation" VERBATIM)
 
-    add_dependencies(fastdds_doc fastdds_doxygen)
+    add_dependencies(fastdds_docs fastdds_doxygen)
     if(NOT CHECK_DOCUMENTATION)
-        add_dependencies(fastdds_doc readthedocs)
+        add_dependencies(fastdds_docs readthedocs)
     endif()
 endif()
 
@@ -596,24 +458,13 @@ install(FILES ${PROJECT_SOURCE_DIR}/LICENSE
     COMPONENT licenses
     )
 
-# Install xml validators
-install(FILES ${PROJECT_SOURCE_DIR}/resources/xsd/fastdds_profiles.xsd
-    DESTINATION ${DATA_INSTALL_DIR}/fastdds
-    COMPONENT xsd
-    )
-
-install(FILES ${PROJECT_SOURCE_DIR}/resources/xsd/fastdds_static_discovery.xsd
-    DESTINATION ${DATA_INSTALL_DIR}/fastdds
-    COMPONENT xsd
-    )
-
 option(INSTALL_EXAMPLES "Install example" OFF)
 
 if(INSTALL_EXAMPLES)
   # Install examples
-  install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/cpp
-      DESTINATION ${DATA_INSTALL_DIR}/fastdds/examples
-      COMPONENT ${DATA_INSTALL_DIR}/fastdds/examples
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/C++
+      DESTINATION examples/
+      COMPONENT examples
       PATTERN "examples/CMakeLists.txt" EXCLUDE
       )
 endif()
@@ -622,8 +473,8 @@ option(INSTALL_TOOLS "Install tools" OFF)
 
 if(INSTALL_TOOLS)
   # Install tools
-  install(DIRECTORY ${PROJECT_SOURCE_DIR}/tools/
-      DESTINATION tools
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/tools
+      DESTINATION tools/
       COMPONENT tools
       PATTERN "tools/CMakeLists.txt" EXCLUDE
       )
@@ -634,6 +485,11 @@ if(BUILD_DOCUMENTATION)
     # Instalation of doxygen files
     install(DIRECTORY ${PROJECT_BINARY_DIR}/doc/api_reference
         DESTINATION ${DOC_INSTALL_DIR}
+        COMPONENT documentation
+        )
+
+    install(FILES "${README_LOCATION}/README.html"
+        DESTINATION ${README_INSTALL_LOCATION}
         COMPONENT documentation
         )
 

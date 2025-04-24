@@ -1,11 +1,11 @@
 #include <asio/io_service.hpp>
 #include <asio/ip/udp.hpp>
 
-#include <fastdds/rtps/common/CDRMessage_t.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.h>
+#include <fastrtps/utils/IPLocator.h>
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 struct UDPMessageSender
 {

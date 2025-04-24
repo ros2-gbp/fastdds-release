@@ -15,15 +15,15 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/RTPSDomain.hpp>
-#include <fastdds/rtps/participant/RTPSParticipant.hpp>
-#include <fastdds/rtps/writer/RTPSWriter.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/RTPSDomain.h>
+#include <fastdds/rtps/participant/RTPSParticipant.h>
+#include <fastdds/rtps/writer/RTPSWriter.h>
+#include <fastdds/rtps/history/IPayloadPool.h>
+#include <fastdds/rtps/history/WriterHistory.h>
 
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 using namespace testing;
@@ -35,48 +35,49 @@ public:
 
     bool get_payload(
             uint32_t size,
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        bool result = get_payload_delegate(size, payload);
+        bool result = get_payload_delegate(size, cache_change);
         if (result)
         {
-            payload.payload_owner = this;
+            cache_change.payload_owner(this);
         }
         return result;
     }
 
     MOCK_METHOD2(get_payload_delegate,
-            bool(uint32_t size, SerializedPayload_t & payload));
+            bool(uint32_t size, CacheChange_t & cache_change));
 
 
     bool get_payload(
-            const SerializedPayload_t& data,
-            SerializedPayload_t& payload) override
+            SerializedPayload_t& data,
+            IPayloadPool*& data_owner,
+            CacheChange_t& cache_change) override
     {
-        bool result = get_payload_delegate(data, payload);
+        bool result = get_payload_delegate(data, data_owner, cache_change);
         if (result)
         {
-            payload.payload_owner = this;
+            cache_change.payload_owner(this);
         }
         return result;
     }
 
-    MOCK_METHOD2(get_payload_delegate,
-            bool(const SerializedPayload_t& data, SerializedPayload_t & payload));
+    MOCK_METHOD3(get_payload_delegate,
+            bool(SerializedPayload_t & data, IPayloadPool * &data_owner, CacheChange_t & cache_change));
 
     bool release_payload (
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        bool result = release_payload_delegate(payload);
+        bool result = release_payload_delegate(cache_change);
         if (result)
         {
-            payload.payload_owner = nullptr;
+            cache_change.payload_owner(nullptr);
         }
         return result;
     }
 
     MOCK_METHOD1(release_payload_delegate,
-            bool(SerializedPayload_t & payload));
+            bool(CacheChange_t & cache_change));
 };
 
 class TestDataType
@@ -84,6 +85,12 @@ class TestDataType
 public:
 
     constexpr static size_t data_size = 250;
+
+    static size_t getCdrSerializedSize(
+            const TestDataType&)
+    {
+        return TestDataType::data_size;
+    }
 
 };
 
@@ -99,21 +106,19 @@ void pool_initialization_test (
 
     ASSERT_NE(participant, nullptr);
 
-    std::shared_ptr<TestPayloadPool> pool;
-
     HistoryAttributes h_attr;
     h_attr.memoryPolicy = policy;
     h_attr.initialReservedCaches = initial_reserved_caches;
     h_attr.payloadMaxSize = TestDataType::data_size;
-    WriterHistory* history = new WriterHistory(h_attr, pool);
+    WriterHistory* history = new WriterHistory(h_attr);
+
+    std::shared_ptr<TestPayloadPool> pool;
 
     WriterAttributes w_attr;
-    RTPSWriter* writer = RTPSDomain::createRTPSWriter(participant, w_attr, history);
+    RTPSWriter* writer = RTPSDomain::createRTPSWriter(participant, w_attr, pool, history);
     EXPECT_EQ(nullptr, writer);
 
-    delete history;
     pool = std::make_shared<TestPayloadPool>();
-    history = new WriterHistory(h_attr, pool);
 
     // Creating the Writer initializes the PayloadPool with the initial reserved size
     EXPECT_CALL(*pool, get_payload_delegate(TestDataType::data_size, _))
@@ -121,7 +126,7 @@ void pool_initialization_test (
     EXPECT_CALL(*pool, release_payload_delegate(_))
             .Times(0);
 
-    writer = RTPSDomain::createRTPSWriter(participant, w_attr, history);
+    writer = RTPSDomain::createRTPSWriter(participant, w_attr, pool, history);
 
     Mock::VerifyAndClearExpectations(pool.get());
 
@@ -131,10 +136,7 @@ void pool_initialization_test (
             .WillOnce(Return(true));
 
     TestDataType data;
-    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastdds::rtps::DEFAULT_XCDR_VERSION);
-    size_t current_alignment{ 0 };
-    uint32_t payload_size = (uint32_t)calculator.calculate_serialized_size(data, current_alignment);
-    CacheChange_t* ch = history->create_change(payload_size, ALIVE);
+    CacheChange_t* ch = writer->new_change(data, ALIVE);
     ASSERT_NE(ch, nullptr);
 
     // Changes released to the writer have the payload returned to the pool
@@ -142,7 +144,7 @@ void pool_initialization_test (
             .Times(1)
             .WillOnce(Return(true));
 
-    history->release_change(ch);
+    writer->release_change(ch);
 
     RTPSDomain::removeRTPSWriter(writer);
     RTPSDomain::removeRTPSParticipant(participant);
@@ -170,23 +172,7 @@ TEST(RTPSWriterTests, WriterWithCustomPayloadPool_DoesNotInitializePool_WhenDyna
 }
 
 } // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
-
-namespace eprosima {
-namespace fastcdr {
-template<>
-size_t calculate_serialized_size(
-        eprosima::fastcdr::CdrSizeCalculator&,
-        const eprosima::fastdds::rtps::TestDataType&,
-        size_t& current_alignment)
-{
-    size_t calculated_size {eprosima::fastdds::rtps::TestDataType::data_size};
-    current_alignment += calculated_size;
-    return calculated_size;
-}
-
-} // namespace fastcdr
+} // namespace fastrtps
 } // namespace eprosima
 
 int main(

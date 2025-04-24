@@ -17,15 +17,17 @@
  *
  */
 
-#ifndef FASTDDS_DDS_CORE_CONDITION__WAITSET_HPP
-#define FASTDDS_DDS_CORE_CONDITION__WAITSET_HPP
+#ifndef _FASTDDS_WAIT_SET_HPP_
+#define _FASTDDS_WAIT_SET_HPP_
 
 #include <memory>
 
 #include <fastdds/dds/core/condition/Condition.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/rtps/common/Time_t.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastdds/rtps/common/Time_t.h>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/types/TypesBase.h>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -45,9 +47,9 @@ class WaitSet
 {
 public:
 
-    FASTDDS_EXPORTED_API WaitSet();
+    RTPS_DllAPI WaitSet();
 
-    FASTDDS_EXPORTED_API ~WaitSet();
+    RTPS_DllAPI ~WaitSet();
 
     WaitSet(
             const WaitSet&) = delete;
@@ -63,7 +65,7 @@ public:
      * @param cond Condition
      * @return RETCODE_OK if attached correctly, error code otherwise
      */
-    FASTDDS_EXPORTED_API ReturnCode_t attach_condition(
+    RTPS_DllAPI ReturnCode_t attach_condition(
             const Condition& cond);
 
 
@@ -72,7 +74,7 @@ public:
      * @param cond Condition
      * @return RETCODE_OK if detached correctly, PRECONDITION_NOT_MET if condition was not attached
      */
-    FASTDDS_EXPORTED_API ReturnCode_t detach_condition(
+    RTPS_DllAPI ReturnCode_t detach_condition(
             const Condition& cond);
 
     /**
@@ -84,16 +86,16 @@ public:
      * @return RETCODE_OK if everything correct, PRECONDITION_NOT_MET if WaitSet already waiting, TIMEOUT if maximum
      * time expired, error code otherwise
      */
-    FASTDDS_EXPORTED_API ReturnCode_t wait(
+    RTPS_DllAPI ReturnCode_t wait(
             ConditionSeq& active_conditions,
-            const dds::Duration_t timeout) const;
+            const fastrtps::Duration_t timeout) const;
 
     /**
      * @brief Retrieves the list of attached conditions
      * @param attached_conditions Reference to the collection of attached conditions
      * @return RETCODE_OK if everything correct, error code otherwise
      */
-    FASTDDS_EXPORTED_API ReturnCode_t get_conditions(
+    RTPS_DllAPI ReturnCode_t get_conditions(
             ConditionSeq& attached_conditions) const;
 
 private:
@@ -105,4 +107,4 @@ private:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_CORE_CONDITION__WAITSET_HPP
+#endif // _FASTDDS_WAIT_SET_HPP_

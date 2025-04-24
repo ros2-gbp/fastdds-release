@@ -13,16 +13,18 @@
 // limitations under the License.
 
 #include <cstdint>
+#include <fstream>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
 
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
-#include <fastdds/rtps/transport/UDPv6TransportDescriptor.hpp>
-#include <fastdds/utils/IPFinder.hpp>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/UDPv6TransportDescriptor.h>
+#include <fastrtps/log/Log.h>
+#include <fastrtps/utils/IPFinder.h>
 
 #include "BlackboxTests.hpp"
 #include "DatagramInjectionTransport.hpp"
@@ -30,8 +32,8 @@
 #include "PubSubWriter.hpp"
 #include "UDPMessageSender.hpp"
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 enum communication_type
 {
@@ -52,10 +54,6 @@ public:
         }
         else
         {
-#ifdef __APPLE__
-            // TODO: fix IPv6 issues related with zone ID
-            GTEST_SKIP() << "UDPv6 tests are disabled in Mac";
-#endif // ifdef __APPLE__
             test_transport_ = std::make_shared<UDPv6TransportDescriptor>();
         }
     }
@@ -70,11 +68,11 @@ public:
     {
         if (use_udpv4)
         {
-            eprosima::fastdds::rtps::IPFinder::getIP4Address(loc);
+            eprosima::fastrtps::rtps::IPFinder::getIP4Address(loc);
         }
         else
         {
-            eprosima::fastdds::rtps::IPFinder::getIP6Address(loc);
+            eprosima::fastrtps::rtps::IPFinder::getIP6Address(loc);
         }
     }
 
@@ -127,7 +125,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P3)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastdds::rtps::LocatorList_t loc;
+    eprosima::fastrtps::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -158,7 +156,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastdds::rtps::LocatorList_t loc;
+    eprosima::fastrtps::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -189,7 +187,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastdds::rtps::LocatorList_t loc;
+    eprosima::fastrtps::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -219,7 +217,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_6_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastdds::rtps::LocatorList_t loc;
+    eprosima::fastrtps::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -389,7 +387,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipant)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipant)
 {
-    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
+    Log::SetVerbosity(Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -466,7 +464,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipantZeroPort)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipantZeroPort)
 {
-    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
+    Log::SetVerbosity(Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -517,10 +515,29 @@ TEST_P(TransportUDP, whitelisting_udp_localhost_alone)
     }
 }
 
+void deliver_datagram_from_file(
+        const std::set<eprosima::fastdds::rtps::TransportReceiverInterface*>& receivers,
+        const char* filename)
+{
+    std::basic_ifstream<char> file(filename, std::ios::binary | std::ios::in);
+
+    file.seekg(0, file.end);
+    size_t file_size = file.tellg();
+    file.seekg(0, file.beg);
+
+    std::vector<uint8_t> buf(file_size);
+    file.read(reinterpret_cast<char*>(buf.data()), file_size);
+
+    eprosima::fastdds::rtps::Locator loc;
+    for (const auto& rec : receivers)
+    {
+        rec->OnDataReceived(buf.data(), static_cast<uint32_t>(file_size), loc, loc);
+    }
+}
+
 TEST(TransportUDP, DatagramInjection)
 {
     using eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
-    using eprosima::fastdds::rtps::DatagramInjectionTransport;
 
     auto low_level_transport = std::make_shared<UDPv4TransportDescriptor>();
     auto transport = std::make_shared<DatagramInjectionTransportDescriptor>(low_level_transport);
@@ -532,10 +549,10 @@ TEST(TransportUDP, DatagramInjection)
     auto receivers = transport->get_receivers();
     ASSERT_FALSE(receivers.empty());
 
-    DatagramInjectionTransport::deliver_datagram_from_file(receivers, "datagrams/16784.bin");
-    DatagramInjectionTransport::deliver_datagram_from_file(receivers, "datagrams/20140.bin");
-    DatagramInjectionTransport::deliver_datagram_from_file(receivers, "datagrams/20574.bin");
-    DatagramInjectionTransport::deliver_datagram_from_file(receivers, "datagrams/20660.bin");
+    deliver_datagram_from_file(receivers, "datagrams/16784.bin");
+    deliver_datagram_from_file(receivers, "datagrams/20140.bin");
+    deliver_datagram_from_file(receivers, "datagrams/20574.bin");
+    deliver_datagram_from_file(receivers, "datagrams/20660.bin");
 }
 
 TEST(TransportUDP, MaliciousManipulatedDataOctetsToNextHeaderIgnore)
@@ -591,8 +608,8 @@ TEST(TransportUDP, MaliciousManipulatedDataOctetsToNextHeaderIgnore)
 
     // Set common QoS
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
-    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+            .history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
 
     // Set custom reader locator so we can send malicious data to a known location
     Locator_t reader_locator;

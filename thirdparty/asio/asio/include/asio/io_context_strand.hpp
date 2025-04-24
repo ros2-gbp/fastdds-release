@@ -2,7 +2,7 @@
 // io_context_strand.hpp
 // ~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -54,18 +54,19 @@ namespace asio {
  * if any of the following conditions are true:
  *
  * @li @c s.post(a) happens-before @c s.post(b)
- *
+ * 
  * @li @c s.post(a) happens-before @c s.dispatch(b), where the latter is
  * performed outside the strand
- *
+ * 
  * @li @c s.dispatch(a) happens-before @c s.post(b), where the former is
  * performed outside the strand
- *
+ * 
  * @li @c s.dispatch(a) happens-before @c s.dispatch(b), where both are
  * performed outside the strand
- *
- * then @c a() happens-before @c b()
- *
+ *   
+ * then @c asio_handler_invoke(a1, &a1) happens-before
+ * @c asio_handler_invoke(b1, &b1).
+ * 
  * Note that in the following case:
  * @code async_op_1(..., s.wrap(a));
  * async_op_2(..., s.wrap(b)); @endcode
@@ -87,12 +88,6 @@ namespace asio {
  */
 class io_context::strand
 {
-private:
-#if !defined(ASIO_NO_DEPRECATED)
-  struct initiate_dispatch;
-  struct initiate_post;
-#endif // !defined(ASIO_NO_DEPRECATED)
-
 public:
   /// Constructor.
   /**
@@ -108,17 +103,6 @@ public:
     service_.construct(impl_);
   }
 
-  /// Copy constructor.
-  /**
-   * Creates a copy such that both strand objects share the same underlying
-   * state.
-   */
-  strand(const strand& other) noexcept
-    : service_(other.service_),
-      impl_(other.impl_)
-  {
-  }
-
   /// Destructor.
   /**
    * Destroys a strand.
@@ -131,7 +115,7 @@ public:
   }
 
   /// Obtain the underlying execution context.
-  asio::io_context& context() const noexcept
+  asio::io_context& context() const ASIO_NOEXCEPT
   {
     return service_.get_io_context();
   }
@@ -140,7 +124,7 @@ public:
   /**
    * The strand delegates this call to its underlying io_context.
    */
-  void on_work_started() const noexcept
+  void on_work_started() const ASIO_NOEXCEPT
   {
     context().get_executor().on_work_started();
   }
@@ -149,7 +133,7 @@ public:
   /**
    * The strand delegates this call to its underlying io_context.
    */
-  void on_work_finished() const noexcept
+  void on_work_finished() const ASIO_NOEXCEPT
   {
     context().get_executor().on_work_finished();
   }
@@ -170,9 +154,9 @@ public:
    * internal storage needed for function invocation.
    */
   template <typename Function, typename Allocator>
-  void dispatch(Function&& f, const Allocator& a) const
+  void dispatch(ASIO_MOVE_ARG(Function) f, const Allocator& a) const
   {
-    decay_t<Function> tmp(static_cast<Function&&>(f));
+    typename decay<Function>::type tmp(ASIO_MOVE_CAST(Function)(f));
     service_.dispatch(impl_, tmp);
     (void)a;
   }
@@ -199,10 +183,8 @@ public:
    * @code void handler(); @endcode
    */
   template <typename LegacyCompletionHandler>
-  auto dispatch(LegacyCompletionHandler&& handler)
-    -> decltype(
-      async_initiate<LegacyCompletionHandler, void ()>(
-        declval<initiate_dispatch>(), handler, this))
+  ASIO_INITFN_AUTO_RESULT_TYPE(LegacyCompletionHandler, void ())
+  dispatch(ASIO_MOVE_ARG(LegacyCompletionHandler) handler)
   {
     return async_initiate<LegacyCompletionHandler, void ()>(
         initiate_dispatch(), handler, this);
@@ -223,9 +205,9 @@ public:
    * internal storage needed for function invocation.
    */
   template <typename Function, typename Allocator>
-  void post(Function&& f, const Allocator& a) const
+  void post(ASIO_MOVE_ARG(Function) f, const Allocator& a) const
   {
-    decay_t<Function> tmp(static_cast<Function&&>(f));
+    typename decay<Function>::type tmp(ASIO_MOVE_CAST(Function)(f));
     service_.post(impl_, tmp);
     (void)a;
   }
@@ -248,10 +230,8 @@ public:
    * @code void handler(); @endcode
    */
   template <typename LegacyCompletionHandler>
-  auto post(LegacyCompletionHandler&& handler)
-    -> decltype(
-      async_initiate<LegacyCompletionHandler, void ()>(
-        declval<initiate_post>(), handler, this))
+  ASIO_INITFN_AUTO_RESULT_TYPE(LegacyCompletionHandler, void ())
+  post(ASIO_MOVE_ARG(LegacyCompletionHandler) handler)
   {
     return async_initiate<LegacyCompletionHandler, void ()>(
         initiate_post(), handler, this);
@@ -272,9 +252,9 @@ public:
    * internal storage needed for function invocation.
    */
   template <typename Function, typename Allocator>
-  void defer(Function&& f, const Allocator& a) const
+  void defer(ASIO_MOVE_ARG(Function) f, const Allocator& a) const
   {
-    decay_t<Function> tmp(static_cast<Function&&>(f));
+    typename decay<Function>::type tmp(ASIO_MOVE_CAST(Function)(f));
     service_.post(impl_, tmp);
     (void)a;
   }
@@ -320,7 +300,7 @@ public:
    * submitted to the strand using post(), dispatch() or wrap(). Otherwise
    * returns @c false.
    */
-  bool running_in_this_thread() const noexcept
+  bool running_in_this_thread() const ASIO_NOEXCEPT
   {
     return service_.running_in_this_thread(impl_);
   }
@@ -330,7 +310,7 @@ public:
    * Two strands are equal if they refer to the same ordered, non-concurrent
    * state.
    */
-  friend bool operator==(const strand& a, const strand& b) noexcept
+  friend bool operator==(const strand& a, const strand& b) ASIO_NOEXCEPT
   {
     return a.impl_ == b.impl_;
   }
@@ -340,7 +320,7 @@ public:
    * Two strands are equal if they refer to the same ordered, non-concurrent
    * state.
    */
-  friend bool operator!=(const strand& a, const strand& b) noexcept
+  friend bool operator!=(const strand& a, const strand& b) ASIO_NOEXCEPT
   {
     return a.impl_ != b.impl_;
   }
@@ -350,7 +330,7 @@ private:
   struct initiate_dispatch
   {
     template <typename LegacyCompletionHandler>
-    void operator()(LegacyCompletionHandler&& handler,
+    void operator()(ASIO_MOVE_ARG(LegacyCompletionHandler) handler,
         strand* self) const
     {
       // If you get an error on the following line it means that your
@@ -367,7 +347,7 @@ private:
   struct initiate_post
   {
     template <typename LegacyCompletionHandler>
-    void operator()(LegacyCompletionHandler&& handler,
+    void operator()(ASIO_MOVE_ARG(LegacyCompletionHandler) handler,
         strand* self) const
     {
       // If you get an error on the following line it means that your

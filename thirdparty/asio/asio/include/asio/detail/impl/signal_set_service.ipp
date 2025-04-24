@@ -2,7 +2,7 @@
 // detail/impl/signal_set_service.ipp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,16 +19,11 @@
 
 #include <cstring>
 #include <stdexcept>
+#include "asio/detail/reactor.hpp"
 #include "asio/detail/signal_blocker.hpp"
 #include "asio/detail/signal_set_service.hpp"
 #include "asio/detail/static_mutex.hpp"
 #include "asio/detail/throw_exception.hpp"
-
-#if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-# include "asio/detail/io_uring_service.hpp"
-#else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-# include "asio/detail/reactor.hpp"
-#endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 
 #include "asio/detail/push_options.hpp"
 
@@ -54,16 +49,12 @@ struct signal_state
 
   // A count of the number of objects that are registered for each signal.
   std::size_t registration_count_[max_signal_number];
-
-  // The flags used for each registered signal.
-  signal_set_base::flags_t flags_[max_signal_number];
 };
 
 signal_state* get_signal_state()
 {
   static signal_state state = {
-    ASIO_STATIC_MUTEX_INIT, -1, -1, false, 0,
-    { 0 }, { signal_set_base::flags_t() } };
+    ASIO_STATIC_MUTEX_INIT, -1, -1, false, 0, { 0 } };
   return &state;
 }
 
@@ -94,42 +85,9 @@ void asio_signal_handler(int signal_number)
 #if !defined(ASIO_WINDOWS) \
   && !defined(ASIO_WINDOWS_RUNTIME) \
   && !defined(__CYGWIN__)
-class signal_set_service::pipe_read_op :
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  public io_uring_operation
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  public reactor_op
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
+class signal_set_service::pipe_read_op : public reactor_op
 {
 public:
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  pipe_read_op()
-    : io_uring_operation(asio::error_code(), &pipe_read_op::do_prepare,
-        &pipe_read_op::do_perform, pipe_read_op::do_complete)
-  {
-  }
-
-  static void do_prepare(io_uring_operation*, ::io_uring_sqe* sqe)
-  {
-    signal_state* state = get_signal_state();
-
-    int fd = state->read_descriptor_;
-    ::io_uring_prep_poll_add(sqe, fd, POLLIN);
-  }
-
-  static bool do_perform(io_uring_operation*, bool)
-  {
-    signal_state* state = get_signal_state();
-
-    int fd = state->read_descriptor_;
-    int signal_number = 0;
-    while (::read(fd, &signal_number, sizeof(int)) == sizeof(int))
-      if (signal_number >= 0 && signal_number < max_signal_number)
-        signal_set_service::deliver_signal(signal_number);
-
-    return false;
-  }
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
   pipe_read_op()
     : reactor_op(asio::error_code(),
         &pipe_read_op::do_perform, pipe_read_op::do_complete)
@@ -148,7 +106,6 @@ public:
 
     return not_done;
   }
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 
   static void do_complete(void* /*owner*/, operation* base,
       const asio::error_code& /*ec*/,
@@ -168,11 +125,7 @@ signal_set_service::signal_set_service(execution_context& context)
 #if !defined(ASIO_WINDOWS) \
   && !defined(ASIO_WINDOWS_RUNTIME) \
   && !defined(__CYGWIN__)
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-    io_uring_service_(asio::use_service<io_uring_service>(context)),
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     reactor_(asio::use_service<reactor>(context)),
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 #endif // !defined(ASIO_WINDOWS)
        //   && !defined(ASIO_WINDOWS_RUNTIME)
        //   && !defined(__CYGWIN__)
@@ -184,11 +137,7 @@ signal_set_service::signal_set_service(execution_context& context)
 #if !defined(ASIO_WINDOWS) \
   && !defined(ASIO_WINDOWS_RUNTIME) \
   && !defined(__CYGWIN__)
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  io_uring_service_.init_task();
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
   reactor_.init_task();
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 #endif // !defined(ASIO_WINDOWS)
        //   && !defined(ASIO_WINDOWS_RUNTIME)
        //   && !defined(__CYGWIN__)
@@ -238,14 +187,8 @@ void signal_set_service::notify_fork(execution_context::fork_event fork_ev)
       int read_descriptor = state->read_descriptor_;
       state->fork_prepared_ = true;
       lock.unlock();
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-      (void)read_descriptor;
-      io_uring_service_.deregister_io_object(io_object_data_);
-      io_uring_service_.cleanup_io_object(io_object_data_);
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
       reactor_.deregister_internal_descriptor(read_descriptor, reactor_data_);
       reactor_.cleanup_descriptor_data(reactor_data_);
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     }
     break;
   case execution_context::fork_parent:
@@ -254,14 +197,8 @@ void signal_set_service::notify_fork(execution_context::fork_event fork_ev)
       int read_descriptor = state->read_descriptor_;
       state->fork_prepared_ = false;
       lock.unlock();
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-      (void)read_descriptor;
-      io_uring_service_.register_internal_io_object(io_object_data_,
-          io_uring_service::read_op, new pipe_read_op);
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
       reactor_.register_internal_descriptor(reactor::read_op,
           read_descriptor, reactor_data_, new pipe_read_op);
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     }
     break;
   case execution_context::fork_child:
@@ -273,14 +210,8 @@ void signal_set_service::notify_fork(execution_context::fork_event fork_ev)
       int read_descriptor = state->read_descriptor_;
       state->fork_prepared_ = false;
       lock.unlock();
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-      (void)read_descriptor;
-      io_uring_service_.register_internal_io_object(io_object_data_,
-          io_uring_service::read_op, new pipe_read_op);
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
       reactor_.register_internal_descriptor(reactor::read_op,
           read_descriptor, reactor_data_, new pipe_read_op);
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     }
     break;
   default:
@@ -310,8 +241,8 @@ void signal_set_service::destroy(
 }
 
 asio::error_code signal_set_service::add(
-    signal_set_service::implementation_type& impl, int signal_number,
-    signal_set_base::flags_t f, asio::error_code& ec)
+    signal_set_service::implementation_type& impl,
+    int signal_number, asio::error_code& ec)
 {
   // Check that the signal number is valid.
   if (signal_number < 0 || signal_number >= max_signal_number)
@@ -319,15 +250,6 @@ asio::error_code signal_set_service::add(
     ec = asio::error::invalid_argument;
     return ec;
   }
-
-  // Check that the specified flags are supported.
-#if !defined(ASIO_HAS_SIGACTION)
-  if (f != signal_set_base::flags::dont_care)
-  {
-    ec = asio::error::operation_not_supported;
-    return ec;
-  }
-#endif // !defined(ASIO_HAS_SIGACTION)
 
   signal_state* state = get_signal_state();
   static_mutex::scoped_lock lock(state->mutex_);
@@ -356,8 +278,6 @@ asio::error_code signal_set_service::add(
       memset(&sa, 0, sizeof(sa));
       sa.sa_handler = asio_signal_handler;
       sigfillset(&sa.sa_mask);
-      if (f != signal_set_base::flags::dont_care)
-        sa.sa_flags = static_cast<int>(f);
       if (::sigaction(signal_number, &sa, 0) == -1)
 # else // defined(ASIO_HAS_SIGACTION)
       if (::signal(signal_number, asio_signal_handler) == SIG_ERR)
@@ -372,39 +292,7 @@ asio::error_code signal_set_service::add(
         delete new_registration;
         return ec;
       }
-# if defined(ASIO_HAS_SIGACTION)
-      state->flags_[signal_number] = f;
-# endif // defined(ASIO_HAS_SIGACTION)
     }
-# if defined(ASIO_HAS_SIGACTION)
-    // Otherwise check to see if the flags have changed.
-    else if (f != signal_set_base::flags::dont_care)
-    {
-      if (f != state->flags_[signal_number])
-      {
-        using namespace std; // For memset.
-        if (state->flags_[signal_number] != signal_set_base::flags::dont_care)
-        {
-          ec = asio::error::invalid_argument;
-          delete new_registration;
-          return ec;
-        }
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = asio_signal_handler;
-        sigfillset(&sa.sa_mask);
-        sa.sa_flags = static_cast<int>(f);
-        if (::sigaction(signal_number, &sa, 0) == -1)
-        {
-          ec = asio::error_code(errno,
-              asio::error::get_system_category());
-          delete new_registration;
-          return ec;
-        }
-        state->flags_[signal_number] = f;
-      }
-    }
-# endif // defined(ASIO_HAS_SIGACTION)
 #endif // defined(ASIO_HAS_SIGNAL) || defined(ASIO_HAS_SIGACTION)
 
     // Record the new registration in the set.
@@ -473,9 +361,6 @@ asio::error_code signal_set_service::remove(
 # endif // defined(ASIO_WINDOWS) || defined(__CYGWIN__)
         return ec;
       }
-# if defined(ASIO_HAS_SIGACTION)
-      state->flags_[signal_number] = signal_set_base::flags_t();
-# endif // defined(ASIO_HAS_SIGACTION)
     }
 #endif // defined(ASIO_HAS_SIGNAL) || defined(ASIO_HAS_SIGACTION)
 
@@ -530,9 +415,6 @@ asio::error_code signal_set_service::clear(
 # endif // defined(ASIO_WINDOWS) || defined(__CYGWIN__)
         return ec;
       }
-# if defined(ASIO_HAS_SIGACTION)
-      state->flags_[reg->signal_number_] = signal_set_base::flags_t();
-# endif // defined(ASIO_HAS_SIGACTION)
     }
 #endif // defined(ASIO_HAS_SIGNAL) || defined(ASIO_HAS_SIGACTION)
 
@@ -578,33 +460,6 @@ asio::error_code signal_set_service::cancel(
 
   ec = asio::error_code();
   return ec;
-}
-
-void signal_set_service::cancel_ops_by_key(
-    signal_set_service::implementation_type& impl, void* cancellation_key)
-{
-  op_queue<operation> ops;
-  {
-    op_queue<signal_op> other_ops;
-    signal_state* state = get_signal_state();
-    static_mutex::scoped_lock lock(state->mutex_);
-
-    while (signal_op* op = impl.queue_.front())
-    {
-      impl.queue_.pop();
-      if (op->cancellation_key_ == cancellation_key)
-      {
-        op->ec_ = asio::error::operation_aborted;
-        ops.push(op);
-      }
-      else
-        other_ops.push(op);
-    }
-
-    impl.queue_.push(other_ops);
-  }
-
-  scheduler_.post_deferred_completions(ops);
 }
 
 void signal_set_service::deliver_signal(int signal_number)
@@ -683,14 +538,8 @@ void signal_set_service::add_service(signal_set_service* service)
   // Register for pipe readiness notifications.
   int read_descriptor = state->read_descriptor_;
   lock.unlock();
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  (void)read_descriptor;
-  service->io_uring_service_.register_internal_io_object(
-      service->io_object_data_, io_uring_service::read_op, new pipe_read_op);
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
   service->reactor_.register_internal_descriptor(reactor::read_op,
       read_descriptor, service->reactor_data_, new pipe_read_op);
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 #endif // !defined(ASIO_WINDOWS)
        //   && !defined(ASIO_WINDOWS_RUNTIME)
        //   && !defined(__CYGWIN__)
@@ -709,17 +558,10 @@ void signal_set_service::remove_service(signal_set_service* service)
     // Disable the pipe readiness notifications.
     int read_descriptor = state->read_descriptor_;
     lock.unlock();
-# if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-    (void)read_descriptor;
-    service->io_uring_service_.deregister_io_object(service->io_object_data_);
-    service->io_uring_service_.cleanup_io_object(service->io_object_data_);
-    lock.lock();
-# else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     service->reactor_.deregister_internal_descriptor(
         read_descriptor, service->reactor_data_);
     service->reactor_.cleanup_descriptor_data(service->reactor_data_);
     lock.lock();
-# endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 #endif // !defined(ASIO_WINDOWS)
        //   && !defined(ASIO_WINDOWS_RUNTIME)
        //   && !defined(__CYGWIN__)

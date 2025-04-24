@@ -35,13 +35,13 @@ bool change_is_relevant_for_filter(
     // This is only allowed for UNREGISTERED and DISPOSED changes, where the instanceHandle is used to identify the
     // instance to unregister or dispose.
     if ((nullptr == change.serializedPayload.data) &&
-            ((fastdds::rtps::ALIVE == change.kind) || !change.instanceHandle.isDefined()))
+            ((fastrtps::rtps::ALIVE == change.kind) || !change.instanceHandle.isDefined()))
     {
         ret = false;
     }
 
     // Only evaluate filter on ALIVE changes, as UNREGISTERED and DISPOSED are always relevant
-    if ((nullptr != filter) && (fastdds::rtps::ALIVE == change.kind) && (!filter->is_relevant(change, reader_guid)))
+    if ((nullptr != filter) && (fastrtps::rtps::ALIVE == change.kind) && (!filter->is_relevant(change, reader_guid)))
     {
         ret = false;
     }

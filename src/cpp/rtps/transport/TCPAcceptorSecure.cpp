@@ -14,14 +14,14 @@
 
 #include <rtps/transport/TCPAcceptorSecure.h>
 
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using Locator_t = fastdds::rtps::Locator_t;
+using Locator_t = fastrtps::rtps::Locator_t;
 using Log = fastdds::dds::Log;
 
 using namespace asio;
@@ -36,9 +36,9 @@ TCPAcceptorSecure::TCPAcceptorSecure(
 
 TCPAcceptorSecure::TCPAcceptorSecure(
         io_service& io_service,
-        const std::string& iface,
+        const std::string& interface,
         const Locator_t& locator)
-    : TCPAcceptor(io_service, iface, locator)
+    : TCPAcceptor(io_service, interface, locator)
 {
 }
 
@@ -46,8 +46,8 @@ void TCPAcceptorSecure::accept(
         TCPTransportInterface* parent,
         ssl::context& ssl_context)
 {
-    EPROSIMA_LOG_INFO(ACEPTOR, "Listening at: " << acceptor_.local_endpoint().address()
-                                                << ":" << acceptor_.local_endpoint().port());
+    logInfo(ACEPTOR, "Listening at: " << acceptor_.local_endpoint().address()
+                                      << ":" << acceptor_.local_endpoint().port());
 
     using asio::ip::tcp;
     using TLSHSRole = TCPTransportDescriptor::TLSConfig::TLSHandShakeRole;
@@ -73,7 +73,7 @@ void TCPAcceptorSecure::accept(
                     secure_socket->async_handshake(role,
                     [secure_socket, locator, parent](const std::error_code& error)
                     {
-                        //EPROSIMA_LOG_ERROR(RTCP_TLS, "Handshake: " << error.message());
+                        //logError(RTCP_TLS, "Handshake: " << error.message());
                         parent->SecureSocketAccepted(secure_socket, locator, error);
                     });
                 }
@@ -99,7 +99,7 @@ void TCPAcceptorSecure::accept(
                         secure_socket->async_handshake(role,
                         [secure_socket, locator, parent](const std::error_code& error)
                         {
-                            //EPROSIMA_LOG_ERROR(RTCP_TLS, "Handshake: " << error.message());
+                            //logError(RTCP_TLS, "Handshake: " << error.message());
                             parent->SecureSocketAccepted(secure_socket, locator, error);
                         });
                     }
@@ -112,10 +112,10 @@ void TCPAcceptorSecure::accept(
     }
     catch (std::error_code& error)
     {
-        EPROSIMA_LOG_ERROR(RTCP_TLS, "Exception accepting: " << error.message());
+        logError(RTCP_TLS, "Exception accepting: " << error.message());
     }
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

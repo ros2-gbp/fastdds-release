@@ -54,15 +54,15 @@ public:
     void disconnect() override;
 
     uint32_t read(
-            octet* buffer,
+            fastrtps::rtps::octet* buffer,
             std::size_t size,
             asio::error_code& ec) override;
 
     size_t send(
-            const octet* header,
+            const fastrtps::rtps::octet* header,
             size_t header_size,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* data,
+            size_t size,
             asio::error_code& ec) override;
 
     // Throwing asio calls

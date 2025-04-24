@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef FASTDDS_STATISTICS__ILISTENERS_HPP
-#define FASTDDS_STATISTICS__ILISTENERS_HPP
+#ifndef _FASTDDS_STATISTICS_ILISTENERS_HPP_
+#define _FASTDDS_STATISTICS_ILISTENERS_HPP_
 
 #include <cstdint>
 
@@ -27,6 +27,7 @@ namespace fastdds {
 namespace statistics {
 
 class Data;
+enum EventKind : uint32_t;
 
 struct IListener
 {
@@ -40,4 +41,4 @@ struct IListener
 } // fastdds
 } // eprosima
 
-#endif // FASTDDS_STATISTICS__ILISTENERS_HPP
+#endif // _FASTDDS_STATISTICS_ILISTENERS_HPP_

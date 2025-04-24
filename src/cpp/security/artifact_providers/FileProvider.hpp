@@ -25,11 +25,11 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
-#include <rtps/security/exceptions/SecurityException.h>
+#include <fastdds/rtps/security/exceptions/SecurityException.h>
 
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -66,7 +66,7 @@ public:
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif  // _SECURITY_ARTIFACTPROVIDERS_FILEPROVIDER_HPP_

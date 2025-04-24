@@ -1,19 +1,18 @@
-AC_INIT([asio],[1.31.0])
+AC_INIT(asio, [1.18.1])
 AC_CONFIG_SRCDIR(include/asio.hpp)
 AM_MAINTAINER_MODE
-AM_INIT_AUTOMAKE([tar-pax])
+AM_INIT_AUTOMAKE([tar-ustar])
 
 AC_CANONICAL_HOST
 AM_PROG_CC_C_O
 AC_PROG_CXX
 AC_LANG(C++)
 AC_PROG_RANLIB
-PKG_INSTALLDIR
 
 AC_DEFINE(_REENTRANT, [1], [Define this])
 
 AC_ARG_WITH(boost,
-  AS_HELP_STRING([--with-boost=DIR],[location of boost distribution]),
+  AC_HELP_STRING([--with-boost=DIR],[location of boost distribution]),
 [
   if test "${withval}" = no; then
     STANDALONE="yes"
@@ -52,7 +51,7 @@ if test "$STANDALONE" != yes; then
 fi
 
 AC_ARG_WITH(openssl,
-  AS_HELP_STRING([--with-openssl=DIR],[location of openssl]),
+  AC_HELP_STRING([--with-openssl=DIR],[location of openssl]),
 [
   CPPFLAGS="$CPPFLAGS -I${withval}/include"
   LIBS="$LIBS -L${withval}/lib"
@@ -170,36 +169,13 @@ AC_COMPILE_IFELSE(
   [AC_MSG_RESULT([no])
     HAVE_CXX17=no;])
 
-AC_MSG_CHECKING([whether C++20 is enabled])
-AC_COMPILE_IFELSE(
-  [AC_LANG_PROGRAM(
-    [[#if __cplusplus < 202002L]]
-    [[#error C++20 not available]]
-    [[#endif]])],
-  [AC_MSG_RESULT([yes])
-    HAVE_CXX20=yes;],
-  [AC_MSG_RESULT([no])
-    HAVE_CXX20=no;])
-
 AC_MSG_CHECKING([whether coroutines are enabled])
 AC_COMPILE_IFELSE(
   [AC_LANG_PROGRAM(
     [[#if defined(__clang__)]]
-    [[# if (__clang_major__ >= 14)]]
-    [[#  if (__cplusplus >= 202002) && (__cpp_impl_coroutine >= 201902)]]
-    [[#   if __has_include(<coroutine>)]]
-    [[#    define ASIO_HAS_CO_AWAIT 1]]
-    [[#   endif]]
-    [[#  elif (__cplusplus >= 201703) && (__cpp_coroutines >= 201703)]]
-    [[#   if __has_include(<experimental/coroutine>)]]
-    [[#    define ASIO_HAS_CO_AWAIT 1]]
-    [[#   endif]]
-    [[#  endif]]
-    [[# else]]
-    [[#  if (__cplusplus >= 201703) && (__cpp_coroutines >= 201703)]]
-    [[#   if __has_include(<experimental/coroutine>)]]
-    [[#    define ASIO_HAS_CO_AWAIT 1]]
-    [[#   endif]]
+    [[# if (__cplusplus >= 201703) && (__cpp_coroutines >= 201703)]]
+    [[#  if __has_include(<experimental/coroutine>)]]
+    [[#   define ASIO_HAS_CO_AWAIT 1]]
     [[#  endif]]
     [[# endif]]
     [[#elif defined(__GNUC__)]]
@@ -240,20 +216,15 @@ AM_CONDITIONAL(HAVE_CXX14,test x$HAVE_CXX14 = xyes)
 
 AM_CONDITIONAL(HAVE_CXX17,test x$HAVE_CXX17 = xyes)
 
-AM_CONDITIONAL(HAVE_CXX20,test x$HAVE_CXX20 = xyes)
-
 AM_CONDITIONAL(HAVE_COROUTINES,test x$HAVE_COROUTINES = xyes)
 
-AC_CONFIG_FILES([asio.pc])
-
-AC_CONFIG_FILES([
+AC_OUTPUT([
   Makefile
   include/Makefile
   src/Makefile
   src/tests/Makefile
   src/tests/properties/Makefile
+  src/examples/cpp03/Makefile
   src/examples/cpp11/Makefile
   src/examples/cpp14/Makefile
-  src/examples/cpp17/Makefile
-  src/examples/cpp20/Makefile])
-AC_OUTPUT
+  src/examples/cpp17/Makefile])

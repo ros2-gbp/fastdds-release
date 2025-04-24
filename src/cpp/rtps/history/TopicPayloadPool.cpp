@@ -27,90 +27,101 @@
 #include <memory>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 bool TopicPayloadPool::get_payload(
         uint32_t size,
-        SerializedPayload_t& payload)
+        CacheChange_t& cache_change)
 {
-    return do_get_payload(size, payload, false);
+    return do_get_payload(size, cache_change, false);
 }
 
 bool TopicPayloadPool::do_get_payload(
         uint32_t size,
-        SerializedPayload_t& payload,
+        CacheChange_t& cache_change,
         bool resizeable)
 {
-    PayloadNode* payload_node = nullptr;
+    PayloadNode* payload = nullptr;
 
     std::unique_lock<std::mutex> lock(mutex_);
     if (free_payloads_.empty())
     {
-        payload_node = allocate(size); //Allocates a single payload
-        if (payload_node == nullptr)
+        payload = allocate(size); //Allocates a single payload
+        if (payload == nullptr)
         {
             lock.unlock();
-            payload.data = nullptr;
-            payload.max_size = 0;
-            payload.payload_owner = nullptr;
+            cache_change.serializedPayload.data = nullptr;
+            cache_change.serializedPayload.max_size = 0;
+            cache_change.payload_owner(nullptr);
             return false;
         }
     }
     else
     {
-        payload_node = free_payloads_.back();
+        payload = free_payloads_.back();
         free_payloads_.pop_back();
     }
 
     // Resize if needed
-    if (resizeable && size > payload_node->data_size())
+    if (resizeable && size > payload->data_size())
     {
-        if (!payload_node->resize(size))
+        if (!payload->resize(size))
         {
             // Failed to resize, but we can still keep it for later.
-            free_payloads_.push_back(payload_node);
+            free_payloads_.push_back(payload);
             lock.unlock();
-            EPROSIMA_LOG_ERROR(RTPS_HISTORY, "Failed to resize the payload");
+            logError(RTPS_HISTORY, "Failed to resize the payload");
 
-            payload.data = nullptr;
-            payload.max_size = 0;
-            payload.payload_owner = nullptr;
+            cache_change.serializedPayload.data = nullptr;
+            cache_change.serializedPayload.max_size = 0;
+            cache_change.payload_owner(nullptr);
             return false;
         }
     }
 
     lock.unlock();
-    payload_node->reference();
-    payload.data = payload_node->data();
-    payload.max_size = payload_node->data_size();
-    payload.payload_owner = this;
+    payload->reference();
+    cache_change.serializedPayload.data = payload->data();
+    cache_change.serializedPayload.max_size = payload->data_size();
+    cache_change.payload_owner(this);
 
     return true;
 }
 
 bool TopicPayloadPool::get_payload(
-        const SerializedPayload_t& data,
-        SerializedPayload_t& payload)
+        SerializedPayload_t& data,
+        IPayloadPool*& data_owner,
+        CacheChange_t& cache_change)
 {
-    if (data.payload_owner == this)
+    assert(cache_change.writerGUID != GUID_t::unknown());
+    assert(cache_change.sequenceNumber != SequenceNumber_t::unknown());
+
+    if (data_owner == this)
     {
         PayloadNode::reference(data.data);
 
-        payload.data = data.data;
-        payload.length = data.length;
-        payload.max_size = PayloadNode::data_size(data.data);
-        payload.payload_owner = this;
+        cache_change.serializedPayload.data = data.data;
+        cache_change.serializedPayload.length = data.length;
+        cache_change.serializedPayload.max_size = PayloadNode::data_size(data.data);
+        cache_change.payload_owner(this);
         return true;
     }
     else
     {
-        if (get_payload(data.length, payload))
+        if (get_payload(data.length, cache_change))
         {
-            if (!payload.copy(&data, true))
+            if (!cache_change.serializedPayload.copy(&data, true))
             {
-                release_payload(payload);
+                release_payload(cache_change);
                 return false;
+            }
+
+            if (data_owner == nullptr)
+            {
+                data_owner = this;
+                data.data = cache_change.serializedPayload.data;
+                PayloadNode::reference(data.data);
             }
 
             return true;
@@ -121,22 +132,22 @@ bool TopicPayloadPool::get_payload(
 }
 
 bool TopicPayloadPool::release_payload(
-        SerializedPayload_t& payload)
+        CacheChange_t& cache_change)
 {
-    assert(payload.payload_owner == this);
+    assert(cache_change.payload_owner() == this);
 
-    if (PayloadNode::dereference(payload.data))
+    if (PayloadNode::dereference(cache_change.serializedPayload.data))
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        PayloadNode* payload_node = all_payloads_.at(PayloadNode::data_index(payload.data));
-        free_payloads_.push_back(payload_node);
+        PayloadNode* payload = all_payloads_.at(PayloadNode::data_index(cache_change.serializedPayload.data));
+        free_payloads_.push_back(payload);
     }
 
-    payload.length = 0;
-    payload.pos = 0;
-    payload.max_size = 0;
-    payload.data = nullptr;
-    payload.payload_owner = nullptr;
+    cache_change.serializedPayload.length = 0;
+    cache_change.serializedPayload.pos = 0;
+    cache_change.serializedPayload.max_size = 0;
+    cache_change.serializedPayload.data = nullptr;
+    cache_change.payload_owner(nullptr);
     return true;
 }
 
@@ -168,7 +179,7 @@ TopicPayloadPool::PayloadNode* TopicPayloadPool::allocate(
 {
     if (all_payloads_.size() >= max_pool_size_)
     {
-        EPROSIMA_LOG_WARNING(RTPS_HISTORY, "Maximum number of allowed reserved payloads reached");
+        logWarning(RTPS_HISTORY, "Maximum number of allowed reserved payloads reached");
         return nullptr;
     }
 
@@ -187,7 +198,7 @@ TopicPayloadPool::PayloadNode* TopicPayloadPool::do_allocate(
     }
     else
     {
-        EPROSIMA_LOG_WARNING(RTPS_HISTORY, "Failure to create a new payload ");
+        logWarning(RTPS_HISTORY, "Failure to create a new payload ");
     }
 
     return payload;
@@ -298,5 +309,5 @@ std::unique_ptr<ITopicPayloadPool> TopicPayloadPool::get(
 }
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima

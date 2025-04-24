@@ -12,23 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
-#define FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
+#ifndef _RTPS_RTPSDOMAINIMPL_HPP_
+#define _RTPS_RTPSDOMAINIMPL_HPP_
 
-#include <memory>
-
-#include <fastdds/LibrarySettings.hpp>
-#include <fastdds/rtps/RTPSDomain.hpp>
-#include <fastdds/xtypes/type_representation/TypeObjectRegistry.hpp>
+#include <fastdds/rtps/RTPSDomain.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
-class BaseWriter;
-class IChangePool;
-class RTPSReader;
 class RTPSWriter;
+class IChangePool;
 
 /**
  * @brief Class RTPSDomainImpl, contains the private implementation of the RTPSDomain
@@ -37,12 +31,6 @@ class RTPSWriter;
 class RTPSDomainImpl
 {
 public:
-
-    static std::shared_ptr<RTPSDomainImpl> get_instance()
-    {
-        static std::shared_ptr<RTPSDomainImpl> instance = std::make_shared<RTPSDomainImpl>();
-        return instance;
-    }
 
     /**
      * Check whether intraprocess delivery should be used between two GUIDs.
@@ -59,18 +47,16 @@ public:
         return false;
     }
 
-    static BaseWriter* find_local_writer(
+    static RTPSWriter* find_local_writer(
             const GUID_t& /* writer_guid */ )
     {
         return nullptr;
     }
 
-    static bool create_participant_guid(
+    static void create_participant_guid(
             int32_t& /*participant_id*/,
-            GUID_t& guid)
+            GUID_t& /*guid*/)
     {
-        guid.guidPrefix.value[11] = 1;
-        return true;
     }
 
     /**
@@ -90,56 +76,19 @@ public:
             RTPSParticipant* p,
             const EntityId_t& entity_id,
             WriterAttributes& watt,
+            const std::shared_ptr<IPayloadPool>& payload_pool,
+            const std::shared_ptr<IChangePool>& change_pool,
             WriterHistory* hist,
-            WriterListener* listen)
+            WriterListener* listen = nullptr)
     {
-        return RTPSDomain::createRTPSWriter(p, entity_id, watt, hist, listen);
+        static_cast<void>(change_pool);
+        return RTPSDomain::createRTPSWriter(p, entity_id, watt, payload_pool, hist, listen);
     }
-
-    static RTPSParticipant* clientServerEnvironmentCreationOverride(
-            uint32_t domain_id,
-            bool enabled,
-            const RTPSParticipantAttributes& att,
-            RTPSParticipantListener* listen)
-    {
-        return RTPSDomain::createParticipant(domain_id, enabled, att, listen);
-    }
-
-    static bool get_library_settings(
-            fastdds::LibrarySettings&)
-    {
-        return true;
-    }
-
-    static bool set_library_settings(
-            const fastdds::LibrarySettings&)
-    {
-        return true;
-    }
-
-    static fastdds::dds::xtypes::ITypeObjectRegistry& type_object_registry()
-    {
-        return get_instance()->type_object_registry_;
-    }
-
-    static fastdds::dds::xtypes::TypeObjectRegistry& type_object_registry_observer()
-    {
-        return get_instance()->type_object_registry_;
-    }
-
-    static RTPSReader* find_local_reader(
-            const GUID_t& reader_guid)
-    {
-        static_cast<void>(reader_guid);
-        return nullptr;
-    }
-
-    eprosima::fastdds::dds::xtypes::TypeObjectRegistry type_object_registry_;
 
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
-#endif  // FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
+#endif  // _RTPS_RTPSDOMAINIMPL_HPP_

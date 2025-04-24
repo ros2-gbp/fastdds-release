@@ -15,16 +15,9 @@
 #ifndef _FASTDDS_SHAREDMEM_LOG_H_
 #define _FASTDDS_SHAREDMEM_LOG_H_
 
-#include <thread>
-
-#include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-
+#include <fastdds/rtps/common/Locator.h>
+#include <fastrtps/utils/DBQueue.h>
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
-#include <utils/DBQueue.hpp>
-#include <utils/SystemInfo.hpp>
-#include <utils/thread.hpp>
-#include <utils/threading.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -36,7 +29,7 @@ private:
 
     uint16_t dump_id_ = 0;
     FILE* f_;
-    deleted_unique_ptr<SharedMemSegment::named_mutex> f_mutex_;
+    std::unique_ptr<SharedMemSegment::named_mutex> f_mutex_;
 
 public:
 
@@ -69,7 +62,7 @@ public:
             }
             catch (const std::exception& e)
             {
-                EPROSIMA_LOG_ERROR(RTPS_TRANSPORT_SHM, "Failed to open/create interprocess mutex for packet_file_log: "
+                logError(RTPS_TRANSPORT_SHM, "Failed to open/create interprocess mutex for packet_file_log: "
                         << filename << " named: " << mutex_name << " with err: " << e.what());
 
                 fclose(f_);
@@ -78,7 +71,7 @@ public:
         }
         else
         {
-            EPROSIMA_LOG_ERROR(RTPS_TRANSPORT_SHM, "Failed to open packet_file_log: " << filename);
+            logError(RTPS_TRANSPORT_SHM, "Failed to open packet_file_log: " << filename);
         }
     }
 
@@ -91,10 +84,10 @@ public:
     }
 
     void dump_packet(
-            const std::string& timestamp,
+            const std::string timestamp,
             const Locator& from,
             const Locator& to,
-            const octet* buf,
+            const fastrtps::rtps::octet* buf,
             const uint32_t len)
     {
         try
@@ -113,7 +106,7 @@ public:
                 fprintf(f_, "000000 45 00 %02x %02x %02x %02x 00 00 11 11 00 00\n", (ipSize >> 8) & 0xFF, ipSize & 0xFF,
                         (dump_id_ >> 8) & 0xFF, dump_id_ & 0xFF);
 
-                if (from.kind == 1 && IsAddressDefined(from))
+                if (from.kind == 1 && fastrtps::rtps::IsAddressDefined(from))
                 {
                     fprintf(f_, "00000c %02x %02x %02x %02x\n", from.address[12], from.address[13], from.address[14],
                             from.address[15]);
@@ -127,7 +120,7 @@ public:
                     fprintf(f_, "00000c %02x %02x %02x %02x\n", addr[0], addr[1], addr[2], addr[3]);
                 }
 
-                if (to.kind == 1 && IsAddressDefined(to))
+                if (to.kind == 1 && fastrtps::rtps::IsAddressDefined(to))
                 {
                     fprintf(f_, "000010 %02x %02x %02x %02x\n", to.address[12], to.address[13], to.address[14],
                             to.address[15]);
@@ -159,7 +152,7 @@ public:
         }
         catch (const std::exception&)
         {
-            EPROSIMA_LOG_ERROR(RTPS_TRANSPORT_SHM, "Failed to lock interprocess mutex packet_file_log");
+            logError(RTPS_TRANSPORT_SHM, "Failed to lock interprocess mutex packet_file_log");
             return;
         }
     }
@@ -205,14 +198,6 @@ class PacketsLog
 {
 public:
 
-    PacketsLog(
-            uint32_t thread_id,
-            const ThreadSettings& thread_config)
-        : thread_id_(thread_id)
-        , thread_config_(thread_config)
-    {
-    }
-
     ~PacketsLog()
     {
         Flush();
@@ -250,7 +235,7 @@ public:
     {
         std::unique_lock<std::mutex> guard(resources_.cv_mutex);
 
-        if (!resources_.logging && !resources_.logging_thread.joinable())
+        if (!resources_.logging && !resources_.logging_thread)
         {
             // already killed
             return;
@@ -294,26 +279,31 @@ public:
             resources_.work = false;
         }
 
-        if (resources_.logging_thread.joinable())
+        if (resources_.logging_thread)
         {
             resources_.cv.notify_all();
-            resources_.logging_thread.join();
+            // The #ifdef workaround here is due to an unsolved MSVC bug, which Microsoft has announced
+            // they have no intention of solving: https://connect.microsoft.com/VisualStudio/feedback/details/747145
+            // Each VS version deals with post-main deallocation of threads in a very different way.
+    #if !defined(_WIN32) || defined(FASTRTPS_STATIC_LINK) || _MSC_VER >= 1800
+            resources_.logging_thread->join();
+    #endif // if !defined(_WIN32) || defined(FASTRTPS_STATIC_LINK) || _MSC_VER >= 1800
+            resources_.logging_thread.reset();
         }
     }
+
+    // Note: In VS2013, if you're linking this class statically, you will have to call KillThread before leaving
+    // main, due to an unsolved MSVC bug.
 
     void QueueLog(
             const typename TPacketConsumer::Pkt& packet)
     {
         {
             std::unique_lock<std::mutex> guard(resources_.cv_mutex);
-            if (!resources_.logging && !resources_.logging_thread.joinable())
+            if (!resources_.logging && !resources_.logging_thread)
             {
                 resources_.logging = true;
-                auto fn = [this]()
-                        {
-                            run();
-                        };
-                resources_.logging_thread = create_thread(fn, thread_config_, "dds.shmd.%u", thread_id_);
+                resources_.logging_thread.reset(new std::thread(&PacketsLog<TPacketConsumer>::run, this));
             }
         }
 
@@ -327,16 +317,33 @@ public:
 
     std::string now()
     {
-        return SystemInfo::get_timestamp("%T");
+        std::stringstream stream;
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+        std::chrono::system_clock::duration tp = now.time_since_epoch();
+        tp -= std::chrono::duration_cast<std::chrono::seconds>(tp);
+        auto ms = static_cast<unsigned>(tp / std::chrono::milliseconds(1));
+
+    #if defined(_WIN32)
+        struct tm timeinfo;
+        localtime_s(&timeinfo, &now_c);
+        stream << std::put_time(&timeinfo, "%T") << "." << std::setw(3) << std::setfill('0') << ms << " ";
+        //#elif defined(__clang__) && !defined(std::put_time) // TODO arm64 doesn't seem to support std::put_time
+        //    (void)now_c;
+        //    (void)ms;
+    #else
+        stream << std::put_time(localtime(&now_c), "%T") << "." << std::setw(3) << std::setfill('0') << ms << " ";
+    #endif // if defined(_WIN32)
+        return stream.str();
     }
 
 private:
 
     struct Resources
     {
-        DBQueue<typename TPacketConsumer::Pkt> logs;
+        eprosima::fastrtps::DBQueue<typename TPacketConsumer::Pkt> logs;
         std::vector<std::unique_ptr<SHMPacketFileConsumer>> consumers;
-        eprosima::thread logging_thread;
+        std::unique_ptr<std::thread> logging_thread;
 
         // Condition variable segment.
         std::condition_variable cv;
@@ -358,8 +365,6 @@ private:
     };
 
     Resources resources_;
-    uint32_t thread_id_;
-    ThreadSettings thread_config_;
 
     void run()
     {
@@ -381,13 +386,12 @@ private:
                 while (!resources_.logs.Empty())
                 {
                     std::unique_lock<std::mutex> configGuard(resources_.config_mutex);
-
-                    // This value is moved and not copied
-                    auto value_dequeue = resources_.logs.FrontAndPop();
                     for (auto& consumer : resources_.consumers)
                     {
-                        consumer->Consume(value_dequeue);
+                        consumer->Consume(resources_.logs.Front());
                     }
+
+                    resources_.logs.Pop();
                 }
             }
             guard.lock();

@@ -15,71 +15,74 @@
 /*!
  * @file SecurityPluginFactory.h
  */
-#ifndef FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
-#define FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
+#ifndef _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
+#define _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/accesscontrol/AccessControl.h>
-#include <rtps/security/authentication/Authentication.h>
-#include <rtps/security/cryptography/Cryptography.h>
-#include <rtps/security/ISecurityPluginFactory.h>
-#include <rtps/security/logging/Logging.h>
+#include <fastrtps/rtps/security/authentication/Authentication.h>
+#include <fastrtps/rtps/security/accesscontrol/AccessControl.h>
+#include <fastrtps/rtps/security/cryptography/Cryptography.h>
+#include <fastdds/rtps/security/logging/Logging.h>
+#include <fastrtps/rtps/attributes/PropertyPolicy.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
-class SecurityPluginFactory : public ISecurityPluginFactory
+class SecurityPluginFactory
 {
-public:
+    public:
 
-    Authentication* create_authentication_plugin(
-            const PropertyPolicy& property_policy) override;
+        /*!
+         * @brief Create an Authentication plugin  described in the PropertyPolicy.
+         * @param property_policy PropertyPolicy containing the definition of the Authentication
+         * plugin that has to be created.
+         * @param Pointer to the new Authentication plugin. In case of error nullptr will be returned.
+         */
+        Authentication* create_authentication_plugin(const PropertyPolicy& property_policy);
 
-    AccessControl* create_access_control_plugin(
-            const PropertyPolicy& property_policy) override;
+        AccessControl* create_access_control_plugin(const PropertyPolicy& property_policy);
 
-    Cryptography* create_cryptography_plugin(
-            const PropertyPolicy& property_policy) override;
+        /*!
+         * @brief Create an Cryptography plugin  described in the PropertyPolicy.
+         * @param property_policy PropertyPolicy containing the definition of the Cryptography
+         * plugin that has to be created.
+         * @param Pointer to the new Cryptography plugin. In case of error nullptr will be returned.
+         */
+        Cryptography* create_cryptography_plugin(const PropertyPolicy& property_policy);
 
-    Logging* create_logging_plugin(
-            const PropertyPolicy& property_policy) override;
+        Logging* create_logging_plugin(const PropertyPolicy& property_policy);
 
-    static void set_auth_plugin(
-            Authentication* plugin);
+        static void set_auth_plugin(Authentication* plugin);
 
-    static void release_auth_plugin();
+        static void release_auth_plugin();
 
-    static void set_access_control_plugin(
-            AccessControl* plugin);
+        static void set_access_control_plugin(AccessControl* plugin);
 
-    static void release_access_control_plugin();
+        static void release_access_control_plugin();
 
-    static void set_crypto_plugin(
-            Cryptography* plugin);
+        static void set_crypto_plugin(Cryptography* plugin);
 
-    static void release_crypto_plugin();
+        static void release_crypto_plugin();
 
-    static void set_logging_plugin(
-            Logging* plugin);
+        static void set_logging_plugin(Logging* plugin);
 
-    static void release_logging_plugin();
+        static void release_logging_plugin();
 
-private:
+    private:
 
-    static Authentication* auth_plugin_;
+        static Authentication* auth_plugin_;
 
-    static AccessControl* access_plugin_;
+        static AccessControl* access_plugin_;
 
-    static Cryptography* crypto_plugin_;
+        static Cryptography* crypto_plugin_;
 
-    static Logging* logging_plugin_;
+        static Logging* logging_plugin_;
 };
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
-#endif // FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
+#endif // _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_

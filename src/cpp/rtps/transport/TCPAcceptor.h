@@ -16,7 +16,7 @@
 #define _FASTDDS_TCP_ACCEPTOR_BASE_
 
 #include <asio.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/Locator.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -46,7 +46,7 @@ public:
 
     TCPAcceptor(
             asio::io_service& io_service,
-            const std::string& iface,
+            const std::string& interface,
             const Locator& locator);
 
     const Locator& locator() const

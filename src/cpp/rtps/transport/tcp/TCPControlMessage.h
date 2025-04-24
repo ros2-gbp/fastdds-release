@@ -22,9 +22,8 @@
 #ifndef _FASTDDS_TCP_CONTROL_MESSAGE_H_
 #define _FASTDDS_TCP_CONTROL_MESSAGE_H_
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/SerializedPayload.hpp>
-#include <fastdds/rtps/common/VendorId_t.hpp>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/SerializedPayload.h>
 
 namespace eprosima {
 namespace fastcdr {
@@ -73,7 +72,7 @@ public:
      * @param _protocolVersion New value for member protocolVersion
      */
     inline void protocolVersion(
-            const ProtocolVersion_t& _protocolVersion)
+            const fastrtps::rtps::ProtocolVersion_t& _protocolVersion)
     {
         m_protocolVersion = _protocolVersion;
     }
@@ -82,7 +81,7 @@ public:
      * @brief This function returns the value of member protocolVersion
      * @return Value of member protocolVersion
      */
-    inline ProtocolVersion_t protocolVersion() const
+    inline fastrtps::rtps::ProtocolVersion_t protocolVersion() const
     {
         return m_protocolVersion;
     }
@@ -91,7 +90,7 @@ public:
      * @brief This function returns a reference to member protocolVersion
      * @return Reference to member protocolVersion
      */
-    inline ProtocolVersion_t& protocolVersion()
+    inline fastrtps::rtps::ProtocolVersion_t& protocolVersion()
     {
         return m_protocolVersion;
     }
@@ -101,7 +100,7 @@ public:
      * @param _vendorId New value for member vendorId
      */
     inline void vendorId(
-            const VendorId_t& _vendorId)
+            const fastrtps::rtps::VendorId_t& _vendorId)
     {
         m_vendorId = _vendorId;
     }
@@ -110,7 +109,7 @@ public:
      * @brief This function returns the value of member vendorId
      * @return Value of member vendorId
      */
-    inline VendorId_t vendorId() const
+    inline fastrtps::rtps::VendorId_t vendorId() const
     {
         return m_vendorId;
     }
@@ -119,7 +118,7 @@ public:
      * @brief This function returns a reference to member vendorId
      * @return Reference to member vendorId
      */
-    inline VendorId_t& vendorId()
+    inline fastrtps::rtps::VendorId_t& vendorId()
     {
         return m_vendorId;
     }
@@ -180,14 +179,14 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
-    ProtocolVersion_t m_protocolVersion;
-    VendorId_t m_vendorId;
+    fastrtps::rtps::ProtocolVersion_t m_protocolVersion;
+    fastrtps::rtps::VendorId_t m_vendorId;
     Locator m_transportLocator;
 };
 /*!
@@ -264,9 +263,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
@@ -365,9 +364,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
@@ -447,9 +446,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
@@ -530,9 +529,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
@@ -628,9 +627,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 
@@ -729,9 +728,9 @@ public:
             eprosima::fastcdr::Cdr& cdr);
 
     bool serialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
     bool deserialize(
-            SerializedPayload_t* payload);
+            fastrtps::rtps::SerializedPayload_t* payload);
 
 private:
 

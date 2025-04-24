@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/**
- * @file StdoutConsumer.hpp
- *
- */
-
-#ifndef FASTDDS_DDS_LOG__STDOUTCONSUMER_HPP
-#define FASTDDS_DDS_LOG__STDOUTCONSUMER_HPP
+#ifndef _FASTDDS_DDS_LOG_STDOUTCONSUMER_HPP_
+#define _FASTDDS_DDS_LOG_STDOUTCONSUMER_HPP_
 
 #include <fastdds/dds/log/Log.hpp>
 
@@ -37,4 +32,4 @@ public:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_LOG__STDOUTCONSUMER_HPP
+#endif // ifndef _FASTDDS_DDS_LOG_STDOUTCONSUMER_HPP_

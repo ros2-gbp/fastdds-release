@@ -19,8 +19,6 @@
 
 #include "ThroughputSubscriber.hpp"
 
-#include <chrono>
-#include <thread>
 #include <vector>
 
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -30,16 +28,14 @@
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/dds/subscriber/DataReader.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicPubSubType.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilder.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilderFactory.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/MemberDescriptor.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/TypeDescriptor.hpp>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastrtps/utils/TimeConversion.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::types;
 
 // *******************************************************************************************
 // ************************************ DATA SUB LISTENER ************************************
@@ -49,7 +45,6 @@ void ThroughputSubscriber::DataReaderListener::reset()
 {
     last_seq_num_ = 0;
     lost_samples_ = 0;
-    received_samples_ = 0;
     matched_ = 0;
     enable_ = true;
 }
@@ -100,9 +95,9 @@ void ThroughputSubscriber::DataReaderListener::on_data_available(
         SampleInfoSeq infos;
         LoanableSequence<ThroughputType> data_seq;
 
-        if (RETCODE_OK != reader->take(data_seq, infos))
+        if (ReturnCode_t::RETCODE_OK != reader->take(data_seq, infos))
         {
-            EPROSIMA_LOG_INFO(ThroughputTest, "Problem reading Subscriber echoed loaned test data");
+            logInfo(ThroughputTest, "Problem reading Subscriber echoed loaned test data");
             return;
         }
 
@@ -124,7 +119,6 @@ void ThroughputSubscriber::DataReaderListener::on_data_available(
                 }
             }
             last_seq_num = seq_num;
-            received_samples_ += 1;
         }
 
         if ((last_seq_num_ + size) < last_seq_num)
@@ -134,9 +128,9 @@ void ThroughputSubscriber::DataReaderListener::on_data_available(
         last_seq_num_ = last_seq_num;
 
         // release the reader loan
-        if (RETCODE_OK != reader->return_loan(data_seq, infos))
+        if (ReturnCode_t::RETCODE_OK != reader->return_loan(data_seq, infos))
         {
-            EPROSIMA_LOG_INFO(ThroughputTest, "Problem returning loaned test data");
+            logInfo(ThroughputTest, "Problem returning loaned test data");
             return;
         }
     }
@@ -145,27 +139,19 @@ void ThroughputSubscriber::DataReaderListener::on_data_available(
         void* data = sub.dynamic_types_ ? (void*)sub.dynamic_data_ : (void*)sub.throughput_data_;
         assert(nullptr != data);
 
-        while (RETCODE_OK == reader->take_next_sample(data, &info_))
+        while (ReturnCode_t::RETCODE_OK == reader->take_next_sample(data, &info_))
         {
             if (info_.valid_data)
             {
-                uint32_t seq_num {0};
-
-                if (sub.dynamic_types_)
-                {
-                    (*sub.dynamic_data_)->get_uint32_value(seq_num, 0);
-                }
-                else
-                {
-                    seq_num = sub.throughput_data_->seqnum;
-                }
+                uint32_t seq_num = sub.dynamic_types_
+                    ? sub.dynamic_data_->get_uint32_value(0)
+                    : sub.throughput_data_->seqnum;
 
                 if ((last_seq_num_ + 1) < seq_num)
                 {
                     lost_samples_ += seq_num - last_seq_num_ - 1;
                 }
                 last_seq_num_ = seq_num;
-                received_samples_ += 1;
             }
             else
             {
@@ -179,7 +165,6 @@ void ThroughputSubscriber::DataReaderListener::save_numbers()
 {
     saved_last_seq_num_ = last_seq_num_;
     saved_lost_samples_ = lost_samples_;
-    saved_received_samples_ = received_samples_;
 }
 
 // *******************************************************************************************
@@ -250,7 +235,7 @@ ThroughputSubscriber::~ThroughputSubscriber()
             || nullptr != data_sub_topic_
             || throughput_data_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR unregistering the DATA type");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR unregistering the DATA type");
         return;
     }
 
@@ -266,15 +251,15 @@ ThroughputSubscriber::~ThroughputSubscriber()
 
     // Remove the participant
     DomainParticipantFactory::get_instance()->delete_participant(participant_);
-    EPROSIMA_LOG_INFO(THROUGHPUTSUBSCRIBER, "Sub: Participant removed");
+    logInfo(THROUGHPUTSUBSCRIBER, "Sub: Participant removed");
 }
 
 bool ThroughputSubscriber::init(
         bool reliable,
         uint32_t pid,
         bool hostname,
-        const eprosima::fastdds::rtps::PropertyPolicy& part_property_policy,
-        const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& part_property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
         const std::string& xml_config_file,
         bool dynamic_types,
         Arg::EnablerValue data_sharing,
@@ -305,7 +290,7 @@ bool ThroughputSubscriber::init(
     // Load XML configuration
     if (xml_config_file_.length() > 0)
     {
-        if ( RETCODE_OK !=
+        if ( ReturnCode_t::RETCODE_OK !=
                 DomainParticipantFactory::get_instance()->
                         get_participant_qos_from_profile(
                     participant_profile_name,
@@ -361,10 +346,10 @@ bool ThroughputSubscriber::init(
     throughput_command_type_.reset(new ThroughputCommandDataType());
 
     // Register the command data type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != throughput_command_type_.register_type(participant_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR registering command type");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR registering command type");
         return false;
     }
 
@@ -372,7 +357,7 @@ bool ThroughputSubscriber::init(
     publisher_ = participant_->create_publisher(PUBLISHER_QOS_DEFAULT, nullptr);
     if (publisher_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the Publisher");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR creating the Publisher");
         return false;
     }
 
@@ -380,7 +365,7 @@ bool ThroughputSubscriber::init(
     subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT, nullptr);
     if (subscriber_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the Subscriber");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR creating the Subscriber");
         return false;
     }
 
@@ -388,9 +373,9 @@ bool ThroughputSubscriber::init(
     std::string profile_name = "subscriber_profile";
 
     if (xml_config_file_.length() > 0
-            && RETCODE_OK != subscriber_->get_datareader_qos_from_profile(profile_name, dr_qos_))
+            && ReturnCode_t::RETCODE_OK != subscriber_->get_datareader_qos_from_profile(profile_name, dr_qos_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR unable to retrieve the " << profile_name);
+        logError(THROUGHPUTSUBSCRIBER, "ERROR unable to retrieve the " << profile_name);
         return false;
     }
 
@@ -399,9 +384,7 @@ bool ThroughputSubscriber::init(
 
     // Reliability
     ReliabilityQosPolicy rp;
-    rp.kind =
-            reliable_ ? eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS: eprosima::fastdds::dds::
-                    BEST_EFFORT_RELIABILITY_QOS;
+    rp.kind = reliable_ ? eprosima::fastrtps::RELIABLE_RELIABILITY_QOS: eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS;
     dr_qos_.reliability(rp);
 
     // Set data sharing according with cli. Is disabled by default in all xml profiles
@@ -435,7 +418,7 @@ bool ThroughputSubscriber::init(
 
         if (nullptr == command_sub_topic_)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND Sub topic");
+            logError(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND Sub topic");
             return false;
         }
 
@@ -455,7 +438,7 @@ bool ThroughputSubscriber::init(
 
         if (nullptr == command_pub_topic_)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND Pub topic");
+            logError(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND Pub topic");
             return false;
         }
     }
@@ -481,7 +464,7 @@ bool ThroughputSubscriber::init(
 
         if (command_reader_ == nullptr)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND DataWriter");
+            logError(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND DataWriter");
             return false;
         }
     }
@@ -508,7 +491,7 @@ bool ThroughputSubscriber::init(
 
         if (command_writer_ == nullptr)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND DataReader");
+            logError(THROUGHPUTSUBSCRIBER, "ERROR creating the COMMAND DataReader");
             return false;
         }
     }
@@ -534,7 +517,7 @@ int ThroughputSubscriber::process_message()
 
     if (command_reader_->wait_for_unread_message({100, 0}))
     {
-        if (RETCODE_OK == command_reader_->take_next_sample(
+        if (ReturnCode_t::RETCODE_OK == command_reader_->take_next_sample(
                     (void*)&command,
                     &info))
         {
@@ -557,25 +540,25 @@ int ThroughputSubscriber::process_message()
                         assert(nullptr == dynamic_data_);
 
                         // Create the data sample
-                        dynamic_data_ =
-                                static_cast<DynamicData::_ref_type*>(dynamic_pub_sub_type_->create_data());
+                        MemberId id;
+                        dynamic_data_ = static_cast<DynamicData*>(dynamic_pub_sub_type_->createData());
 
                         if (nullptr == dynamic_data_)
                         {
-                            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER,
-                                    "Iteration failed: Failed to create Dynamic Data");
+                            logError(THROUGHPUTSUBSCRIBER, "Iteration failed: Failed to create Dynamic Data");
                             return 2;
                         }
 
                         // Modify the data Sample
-                        DynamicData::_ref_type member_data = (*dynamic_data_)->loan_value(
-                            (*dynamic_data_)->get_member_id_at_index(1));
+                        DynamicData* member_data = dynamic_data_->loan_value(
+                            dynamic_data_->get_member_id_at_index(1));
 
                         for (uint32_t i = 0; i < command.m_size; ++i)
                         {
-                            member_data->set_byte_value(i, 0);
+                            member_data->insert_sequence_data(id);
+                            member_data->set_byte_value(0, id);
                         }
-                        (*dynamic_data_)->return_loaned_value(member_data);
+                        dynamic_data_->return_loaned_value(member_data);
                     }
                     else
                     {
@@ -587,7 +570,7 @@ int ThroughputSubscriber::process_message()
                             if (dr_qos.history().depth < 0 ||
                                     static_cast<uint32_t>(dr_qos.history().depth) < max_demand)
                             {
-                                EPROSIMA_LOG_WARNING(THROUGHPUTSUBSCRIBER, "Setting history depth to " << max_demand);
+                                logWarning(THROUGHPUTSUBSCRIBER, "Setting history depth to " << max_demand);
                                 dr_qos.resource_limits().max_samples = max_demand;
                                 dr_qos.history().depth = max_demand;
                             }
@@ -596,10 +579,10 @@ int ThroughputSubscriber::process_message()
                         else
                         {
                             // Ensure that the max samples is at least the demand
-                            if (dr_qos.resource_limits().max_samples <= 0 ||
+                            if (dr_qos.resource_limits().max_samples < 0 ||
                                     static_cast<uint32_t>(dr_qos.resource_limits().max_samples) < max_demand)
                             {
-                                EPROSIMA_LOG_WARNING(THROUGHPUTSUBSCRIBER,
+                                logWarning(THROUGHPUTSUBSCRIBER,
                                         "Setting resource limit max samples to " << max_demand);
                                 dr_qos.resource_limits().max_samples = max_demand;
                             }
@@ -630,8 +613,7 @@ int ThroughputSubscriber::process_message()
                         }
                         else
                         {
-                            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER,
-                                    "Error preparing static types and endpoints for testing");
+                            logError(THROUGHPUTSUBSCRIBER, "Error preparing static types and endpoints for testing");
                             return 2;
                         }
                     }
@@ -651,11 +633,11 @@ int ThroughputSubscriber::process_message()
                     // Consume history
                     while (data_reader_->wait_for_unread_message({0, 1000000}))
                     {
-                        while (RETCODE_OK == data_reader_->take(data_seq, infos))
+                        while (ReturnCode_t::RETCODE_OK == data_reader_->take(data_seq, infos))
                         {
-                            if (RETCODE_OK != data_reader_->return_loan(data_seq, infos))
+                            if (ReturnCode_t::RETCODE_OK != data_reader_->return_loan(data_seq, infos))
                             {
-                                EPROSIMA_LOG_INFO(ThroughputTest, "Problem returning loan");
+                                logInfo(ThroughputTest, "Problem returning loan");
                             }
                         }
                     }
@@ -684,7 +666,7 @@ int ThroughputSubscriber::process_message()
                     // Remove the dynamic_data_ object, protect form ongoing callbacks
                     if (dynamic_types_)
                     {
-                        dynamic_pub_sub_type_.delete_data(dynamic_data_);
+                        DynamicDataFactory::get_instance()->delete_data(dynamic_data_);
                         dynamic_data_ = nullptr;
                     }
                     else
@@ -699,8 +681,7 @@ int ThroughputSubscriber::process_message()
                         // remove the data endpoints on static case
                         if (!destroy_data_endpoints())
                         {
-                            EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER,
-                                    "Iteration failed: Failed to remove static data endpoints");
+                            logError(THROUGHPUTSUBSCRIBER, "Iteration failed: Failed to remove static data endpoints");
                             return 2;
                         }
 
@@ -772,7 +753,6 @@ void ThroughputSubscriber::run()
             command_sample.m_size = data_size_ + (uint32_t)ThroughputType::overhead;
             command_sample.m_lastrecsample = data_reader_listener_.saved_last_seq_num_;
             command_sample.m_lostsamples = data_reader_listener_.saved_lost_samples_;
-            command_sample.m_receivedsamples = data_reader_listener_.saved_received_samples_;
 
             double total_time_count =
                     (std::chrono::duration<double, std::micro>(t_end_ - t_start_) - t_overhead_).count();
@@ -792,9 +772,8 @@ void ThroughputSubscriber::run()
 
             std::cout << "Last Received Sample: " << command_sample.m_lastrecsample << std::endl;
             std::cout << "Lost Samples: " << command_sample.m_lostsamples << std::endl;
-            std::cout << "Received Samples: " << command_sample.m_receivedsamples << std::endl;
             std::cout << "Samples per second: "
-                      << (double)(command_sample.m_receivedsamples) * 1000000 /
+                      << (double)(command_sample.m_lastrecsample - command_sample.m_lostsamples) * 1000000 /
                 command_sample.m_totaltime
                       << std::endl;
             std::cout << "Test of size " << command_sample.m_size << " and demand " << command_sample.m_demand <<
@@ -816,40 +795,31 @@ bool ThroughputSubscriber::init_dynamic_types()
     // Check if it has been initialized before
     if (dynamic_pub_sub_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR DYNAMIC DATA type already initialized");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR DYNAMIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR DYNAMIC DATA type already registered");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR DYNAMIC DATA type already registered");
         return false;
     }
 
     // Dummy type registration
-    DynamicTypeBuilderFactory::_ref_type factory {DynamicTypeBuilderFactory::get_instance()};
     // Create basic builders
-    TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
-    type_descriptor->kind(TK_STRUCTURE);
-    type_descriptor->name(ThroughputDataType::type_name_);
-
-    DynamicTypeBuilder::_ref_type struct_type_builder {factory->create_type(type_descriptor)};
+    DynamicTypeBuilder_ptr struct_type_builder(DynamicTypeBuilderFactory::get_instance()->create_struct_builder());
 
     // Add members to the struct.
-    MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
-    member_descriptor->name("seqnum");
-    member_descriptor->type(factory->get_primitive_type(TK_UINT32));
-    struct_type_builder->add_member(member_descriptor);
-    member_descriptor->name("data");
-    member_descriptor->type(factory->create_sequence_type(
-                factory->get_primitive_type(TK_BYTE), static_cast<uint32_t>(LENGTH_UNLIMITED))->build());
-    struct_type_builder->add_member(member_descriptor);
+    struct_type_builder->add_member(0, "seqnum", DynamicTypeBuilderFactory::get_instance()->create_uint32_type());
+    struct_type_builder->add_member(1, "data", DynamicTypeBuilderFactory::get_instance()->create_sequence_builder(
+                DynamicTypeBuilderFactory::get_instance()->create_byte_type(), BOUND_UNLIMITED));
+    struct_type_builder->set_name(ThroughputDataType::type_name_);
     dynamic_pub_sub_type_.reset(new DynamicPubSubType(struct_type_builder->build()));
 
     // Register the data type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != dynamic_pub_sub_type_.register_type(participant_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR registering the DYNAMIC DATA topic");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR registering the DYNAMIC DATA topic");
         return false;
     }
 
@@ -864,19 +834,19 @@ bool ThroughputSubscriber::init_static_types(
     // Check if it has been initialized before
     if (throughput_data_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR STATIC DATA type already initialized");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR STATIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR STATIC DATA type already registered");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR STATIC DATA type already registered");
         return false;
     }
 
     // Create the static type
     throughput_data_type_.reset(new ThroughputDataType(payload));
     // Register the static type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != throughput_data_type_.register_type(participant_))
     {
         return false;
@@ -890,13 +860,13 @@ bool ThroughputSubscriber::create_data_endpoints(
 {
     if (nullptr != data_sub_topic_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR topic already initialized");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR topic already initialized");
         return false;
     }
 
     if (nullptr != data_reader_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR data_writer_ already initialized");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR data_writer_ already initialized");
         return false;
     }
 
@@ -916,7 +886,7 @@ bool ThroughputSubscriber::create_data_endpoints(
 
     if (nullptr == data_sub_topic_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR creating the DATA topic");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR creating the DATA topic");
         return false;
     }
 
@@ -940,9 +910,9 @@ bool ThroughputSubscriber::destroy_data_endpoints()
 
     // Delete the endpoint
     if (nullptr == data_reader_
-            || RETCODE_OK != subscriber_->delete_datareader(data_reader_))
+            || ReturnCode_t::RETCODE_OK != subscriber_->delete_datareader(data_reader_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR destroying the DataWriter");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR destroying the DataWriter");
         return false;
     }
     data_reader_ = nullptr;
@@ -950,18 +920,18 @@ bool ThroughputSubscriber::destroy_data_endpoints()
 
     // Delete the Topic
     if (nullptr == data_sub_topic_
-            || RETCODE_OK != participant_->delete_topic(data_sub_topic_))
+            || ReturnCode_t::RETCODE_OK != participant_->delete_topic(data_sub_topic_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR destroying the DATA topic");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR destroying the DATA topic");
         return false;
     }
     data_sub_topic_ = nullptr;
 
     // Delete the Type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != participant_->unregister_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTSUBSCRIBER, "ERROR unregistering the DATA type");
+        logError(THROUGHPUTSUBSCRIBER, "ERROR unregistering the DATA type");
         return false;
     }
 

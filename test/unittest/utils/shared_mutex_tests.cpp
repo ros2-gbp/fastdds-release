@@ -8,9 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include <fastrtps/utils/shared_mutex.hpp>
 #include <gtest/gtest.h>
-
-#include <utils/shared_mutex.hpp>
 
 using namespace std;
 using namespace std::chrono;

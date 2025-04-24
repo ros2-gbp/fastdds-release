@@ -12,36 +12,27 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-/**
- * @file Log.hpp
- *
- */
-
-#ifndef FASTDDS_DDS_LOG__LOG_HPP
-#define FASTDDS_DDS_LOG__LOG_HPP
+//
+#ifndef _FASTDDS_DDS_LOG_LOG_HPP_
+#define _FASTDDS_DDS_LOG_LOG_HPP_
 
 #include <functional>
 #include <memory>
-
 #include <gmock/gmock.h>
-
-#include <fastdds/rtps/attributes/ThreadSettings.hpp>
 
 /**
  * eProsima log mock.
  */
 
-#define MOCK_EPROSIMA_LOG_COMMON(cat, msg)                                                              \
+#define logInfo(cat, msg)                                                                                \
     {                                                                                                   \
         NulStreambuf null_buffer;                                                                       \
         std::ostream null_stream(&null_buffer);                                                         \
         null_stream << msg;                                                                             \
     }
 
-#define EPROSIMA_LOG_INFO(cat, msg) MOCK_EPROSIMA_LOG_COMMON(cat, msg)
-#define EPROSIMA_LOG_WARNING(cat, msg) MOCK_EPROSIMA_LOG_COMMON(cat, msg)
-#define EPROSIMA_LOG_ERROR(cat, msg) MOCK_EPROSIMA_LOG_COMMON(cat, msg)
+#define logWarning(cat, msg) logInfo(cat, msg)
+#define logError(cat, msg) logInfo(cat, msg)
 
 class NulStreambuf : public std::streambuf
 {
@@ -90,13 +81,6 @@ public:
         ClearConsumersFunc();
     }
 
-    static std::function<void()> SetThreadConfigFunc;
-    static void SetThreadConfig(
-            rtps::ThreadSettings&)
-    {
-        SetThreadConfigFunc();
-    }
-
 };
 
 using ::testing::_;
@@ -115,12 +99,10 @@ public:
     MOCK_METHOD1(RegisterConsumer, void(std::unique_ptr<LogConsumer>&));
 
     MOCK_METHOD0(ClearConsumers, void());
-
-    MOCK_METHOD(void, SetThreadConfig, ());
 };
 
 } // namespace dds
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_LOG__LOG_HPP
+#endif // _FASTDDS_DDS_LOG_LOG_HPP_

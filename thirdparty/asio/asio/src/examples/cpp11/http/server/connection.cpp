@@ -2,7 +2,7 @@
 // connection.cpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,6 +10,7 @@
 
 #include "connection.hpp"
 #include <utility>
+#include <vector>
 #include "connection_manager.hpp"
 #include "request_handler.hpp"
 
@@ -77,7 +78,7 @@ void connection::do_write()
         if (!ec)
         {
           // Initiate graceful connection closure.
-          std::error_code ignored_ec;
+          asio::error_code ignored_ec;
           socket_.shutdown(asio::ip::tcp::socket::shutdown_both,
             ignored_ec);
         }

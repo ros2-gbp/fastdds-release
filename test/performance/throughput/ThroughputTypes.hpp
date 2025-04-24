@@ -20,11 +20,11 @@
 #ifndef THROUGHPUTTYPES_H_
 #define THROUGHPUTTYPES_H_
 
-#include <chrono>
-
-#include <fastdds/dds/log/Colors.hpp>
+#include <fastrtps/TopicDataType.h>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/topic/TopicDataType.hpp>
+#include <fastdds/dds/log/Colors.hpp>
+
+#include <chrono>
 
 struct TroughputResults
 {
@@ -113,7 +113,7 @@ typedef struct alignas(4) ThroughputType
 
 } ThroughputType;
 
-class ThroughputDataType : public eprosima::fastdds::dds::TopicDataType
+class ThroughputDataType : public eprosima::fastrtps::TopicDataType
 {
     // Buffer size for the manage type
     const uint32_t buffer_size_;
@@ -125,11 +125,11 @@ public:
             const uint32_t& size)
         : buffer_size_(size)
     {
-        set_name(type_name_.c_str());
-        max_serialized_type_size = sizeof(decltype(ThroughputType::seqnum)) +
+        setName(type_name_.c_str());
+        m_typeSize = sizeof(decltype(ThroughputType::seqnum)) +
                 ((size + 3) & ~3) +
-                eprosima::fastdds::rtps::SerializedPayload_t::representation_header_size;
-        is_compute_key_provided = false;
+                eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
+        m_isGetKeyDefined = false;
     }
 
     ~ThroughputDataType()
@@ -137,35 +137,24 @@ public:
     }
 
     bool serialize(
-            const void* const data,
-            eprosima::fastdds::rtps::SerializedPayload_t& payload,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
+            void* data,
+            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override;
 
     bool deserialize(
-            eprosima::fastdds::rtps::SerializedPayload_t& payload,
+            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
             void* data) override;
 
-    uint32_t calculate_serialized_size(
-            const void* const data,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
-
-    void* create_data() override;
-
-    void delete_data(
+    std::function<uint32_t()> getSerializedSizeProvider(
             void* data) override;
 
-    bool compute_key(
-            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool force_md5 = false) override
-    {
-        (void)force_md5;
-        return false;
-    }
+    void* createData() override;
 
-    bool compute_key(
-            const void* const /*data*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    void deleteData(
+            void* data) override;
+
+    bool getKey(
+            void* /*data*/,
+            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;
@@ -178,11 +167,11 @@ public:
 
     bool is_bounded() const override
     {
-        return true;
+        // All plain types are bounded
+        return is_plain();
     }
 
-    bool is_plain(
-            eprosima::fastdds::dds::DataRepresentationId_t /*data_representation*/) const override
+    bool is_plain() const override
     {
         // It is plain because the type has a fixed sized
         return true;
@@ -190,10 +179,6 @@ public:
 
     // Name
     static const std::string type_name_;
-
-private:
-
-    using eprosima::fastdds::dds::TopicDataType::is_plain;
 };
 
 enum e_Command : uint32_t
@@ -215,7 +200,6 @@ typedef struct ThroughputCommandType
     e_Command m_command;
     uint32_t m_size = 0;
     uint32_t m_demand = 0;
-    uint64_t m_receivedsamples = 0;
     uint32_t m_lostsamples = 0;
     uint64_t m_lastrecsample = 0;
     uint64_t m_totaltime = 0;
@@ -247,15 +231,15 @@ inline std::ostream& operator <<(
     return output;
 }
 
-class ThroughputCommandDataType : public eprosima::fastdds::dds::TopicDataType
+class ThroughputCommandDataType : public eprosima::fastrtps::TopicDataType
 {
 public:
 
     ThroughputCommandDataType()
     {
-        set_name("ThroughputCommand");
-        max_serialized_type_size = 4 * sizeof(uint32_t) + 3 * sizeof(uint64_t) + sizeof(double);
-        is_compute_key_provided = false;
+        setName("ThroughputCommand");
+        m_typeSize = 4 * sizeof(uint32_t) + 2 * sizeof(uint64_t) + sizeof(double);
+        m_isGetKeyDefined = false;
     }
 
     ~ThroughputCommandDataType()
@@ -263,35 +247,24 @@ public:
     }
 
     bool serialize(
-            const void* const data,
-            eprosima::fastdds::rtps::SerializedPayload_t& payload,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
+            void* data,
+            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override;
 
     bool deserialize(
-            eprosima::fastdds::rtps::SerializedPayload_t& payload,
+            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
             void* data) override;
 
-    uint32_t calculate_serialized_size(
-            const void* const data,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
-
-    void* create_data() override;
-
-    void delete_data(
+    std::function<uint32_t()> getSerializedSizeProvider(
             void* data) override;
 
-    bool compute_key(
-            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool force_md5 = false) override
-    {
-        (void)force_md5;
-        return false;
-    }
+    void* createData() override;
 
-    bool compute_key(
-            const void* const /*data*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    void deleteData(
+            void* data) override;
+
+    bool getKey(
+            void* /*data*/,
+            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;

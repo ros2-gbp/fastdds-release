@@ -14,20 +14,15 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
-#ifdef OPENSSL_API_COMPAT
-#undef OPENSSL_API_COMPAT
-#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
-#include <iostream>
-#include <openssl/opensslv.h>
-#include <openssl/pem.h>
-
-#include <rtps/messages/CDRMessage.hpp>
-
 #include "AuthenticationPluginTests.hpp"
-#include <security/authentication/PKIHandshakeHandle.h>
+
 #include <security/authentication/PKIIdentityHandle.h>
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <fastrtps/rtps/messages/CDRMessage.h>
+
+#include <openssl/opensslv.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -35,8 +30,11 @@
 #define IS_OPENSSL_1_1 0
 #endif // if OPENSSL_VERSION_NUMBER >= 0x10100000L
 
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds::rtps::security;
+#include <iostream>
+#include <openssl/pem.h>
+
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 static const char* certs_path = nullptr;
 
@@ -405,75 +403,6 @@ void AuthenticationPluginTest::check_shared_secrets(
     ASSERT_TRUE(*sharedsecret_1 == *sharedsecret_2);
 }
 
-TEST_F(AuthenticationPluginTest, validate_local_identity_kagree_algo)
-{
-    const std::string correct_values[] =
-    {
-        "DH",
-        "ECDH",
-        "DH+MODP-2048-256",
-        "ECDH+prime256v1-CEUM"
-    };
-
-    const std::string wrong_values[] =
-    {
-        "RSA+MODP-2048-256",
-        "ECDH+MODP-2048-256",
-        "RSA",
-        "ECDH+prime256v1",
-        "unknown",
-        ""
-    };
-
-    auto test_fn = [this](
-        const std::string& alg,
-        ValidationResult_t expected_result) -> void
-            {
-                IdentityHandle* local_identity_handle = nullptr;
-                GUID_t adjusted_participant_key;
-                uint32_t domain_id = 0;
-                RTPSParticipantAttributes participant_attr;
-                GUID_t candidate_participant_key;
-                SecurityException exception;
-                ValidationResult_t result = ValidationResult_t::VALIDATION_FAILED;
-
-                fill_candidate_participant_key(candidate_participant_key);
-                participant_attr.properties = get_valid_policy();
-                participant_attr.properties.properties().emplace_back(
-                    Property("dds.sec.auth.builtin.PKI-DH.preferred_key_agreement", alg));
-                result = plugin.validate_local_identity(&local_identity_handle,
-                                adjusted_participant_key,
-                                domain_id,
-                                participant_attr,
-                                candidate_participant_key,
-                                exception);
-
-                ASSERT_TRUE(result == expected_result);
-                if (ValidationResult_t::VALIDATION_OK == result)
-                {
-                    ASSERT_TRUE(local_identity_handle != nullptr);
-                    check_local_identity_handle(*local_identity_handle);
-                    ASSERT_TRUE(adjusted_participant_key != GUID_t::unknown());
-                    ASSERT_TRUE(plugin.return_identity_handle(local_identity_handle, exception));
-                }
-                else
-                {
-                    ASSERT_TRUE(local_identity_handle == nullptr);
-                    ASSERT_TRUE(adjusted_participant_key == GUID_t::unknown());
-                }
-            };
-
-    for (const std::string& value : correct_values)
-    {
-        test_fn(value, ValidationResult_t::VALIDATION_OK);
-    }
-
-    for (const std::string& value : wrong_values)
-    {
-        test_fn(value, ValidationResult_t::VALIDATION_FAILED);
-    }
-}
-
 TEST_F(AuthenticationPluginTest, validate_local_identity_validation_ok_with_pwd)
 {
     IdentityHandle* local_identity_handle = nullptr;
@@ -753,15 +682,12 @@ int main(
 {
     testing::InitGoogleTest(&argc, argv);
 
-    if (!::testing::GTEST_FLAG(list_tests))
-    {
-        certs_path = std::getenv("CERTS_PATH");
+    certs_path = std::getenv("CERTS_PATH");
 
-        if (certs_path == nullptr)
-        {
-            std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
-            exit(-1);
-        }
+    if (certs_path == nullptr)
+    {
+        std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
+        exit(-1);
     }
 
     return RUN_ALL_TESTS();

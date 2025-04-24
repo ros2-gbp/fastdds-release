@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <chrono>
-#include <thread>
-
-#include <fastdds/LibrarySettings.hpp>
-#include <fastdds/rtps/RTPSDomain.hpp>
-#include <gtest/gtest.h>
-
 #include "BlackboxTests.hpp"
+
 #include "RTPSAsSocketReader.hpp"
 #include "RTPSAsSocketWriter.hpp"
 
-using namespace eprosima::fastdds;
+#include <gtest/gtest.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
+
+using namespace eprosima::fastrtps;
 
 enum communication_type
 {
@@ -37,12 +34,12 @@ public:
 
     void SetUp() override
     {
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -52,12 +49,12 @@ public:
 
     void TearDown() override
     {
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -74,13 +71,13 @@ TEST_P(Volatile, AsyncPubSubAsNonReliableVolatileKeepAllHelloworld)
     RTPSAsSocketWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string ip("239.255.1.4");
 
-    reader.reliability(eprosima::fastdds::rtps::ReliabilityKind_t::BEST_EFFORT).
+    reader.reliability(eprosima::fastrtps::rtps::ReliabilityKind_t::BEST_EFFORT).
             add_to_multicast_locator_list(ip, global_port).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
-    writer.reliability(eprosima::fastdds::rtps::ReliabilityKind_t::BEST_EFFORT).
-            durability(eprosima::fastdds::rtps::DurabilityKind_t::VOLATILE).
+    writer.reliability(eprosima::fastrtps::rtps::ReliabilityKind_t::BEST_EFFORT).
+            durability(eprosima::fastrtps::rtps::DurabilityKind_t::VOLATILE).
             add_to_multicast_locator_list(ip, global_port).
             auto_remove_on_volatile().init();
 

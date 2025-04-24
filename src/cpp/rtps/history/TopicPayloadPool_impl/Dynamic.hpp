@@ -22,7 +22,7 @@
 #include <rtps/history/TopicPayloadPool.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class DynamicTopicPayloadPool : public TopicPayloadPool
@@ -31,38 +31,38 @@ public:
 
     bool get_payload(
             uint32_t size,
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        return do_get_payload(size, payload, true);
+        return (size > 0u) && do_get_payload(size, cache_change, true);
     }
 
     bool release_payload(
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        assert(payload.payload_owner == this);
+        assert(cache_change.payload_owner() == this);
 
         {
-            if (PayloadNode::dereference(payload.data))
+            if (PayloadNode::dereference(cache_change.serializedPayload.data))
             {
                 //First remove it from all_payloads
                 std::unique_lock<std::mutex> lock(mutex_);
-                uint32_t data_index = PayloadNode::data_index(payload.data);
-                PayloadNode* payload_node = all_payloads_.at(data_index);
+                uint32_t data_index = PayloadNode::data_index(cache_change.serializedPayload.data);
+                PayloadNode* payload = all_payloads_.at(data_index);
                 all_payloads_.at(data_index) = all_payloads_.back();
                 all_payloads_.back()->data_index(data_index);
                 all_payloads_.pop_back();
                 lock.unlock();
 
                 // Now delete the data
-                delete(payload_node);
+                delete(payload);
             }
         }
 
-        payload.length = 0;
-        payload.pos = 0;
-        payload.max_size = 0;
-        payload.data = nullptr;
-        payload.payload_owner = nullptr;
+        cache_change.serializedPayload.length = 0;
+        cache_change.serializedPayload.pos = 0;
+        cache_change.serializedPayload.max_size = 0;
+        cache_change.serializedPayload.data = nullptr;
+        cache_change.payload_owner(nullptr);
 
         return true;
     }
@@ -93,7 +93,7 @@ private:
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_HISTORY_TOPICPAYLOADPOOLIMPL_DYNAMIC_HPP

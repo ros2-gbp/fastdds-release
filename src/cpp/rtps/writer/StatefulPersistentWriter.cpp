@@ -17,14 +17,13 @@
  *
  */
 
-#include "StatefulPersistentWriter.hpp"
-
-#include <fastdds/rtps/history/WriterHistory.hpp>
-
+#include <fastdds/rtps/writer/StatefulPersistentWriter.h>
+#include <fastdds/rtps/history/WriterHistory.h>
 #include <rtps/persistence/PersistenceService.h>
+#include <fastrtps_deprecated/participant/ParticipantImpl.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 
@@ -37,13 +36,43 @@ StatefulPersistentWriter::StatefulPersistentWriter(
         WriterListener* listen,
         IPersistenceService* persistence)
     : StatefulWriter(pimpl, guid, att, flow_controller, hist, listen)
-    , PersistentWriter(guid, att, hist, persistence)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
 {
     rebuild_status_after_load();
 }
 
+StatefulPersistentWriter::StatefulPersistentWriter(
+        RTPSParticipantImpl* pimpl,
+        const GUID_t& guid,
+        const WriterAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        fastdds::rtps::FlowController* flow_controller,
+        WriterHistory* hist,
+        WriterListener* listen,
+        IPersistenceService* persistence)
+    : StatefulWriter(pimpl, guid, att, payload_pool, flow_controller, hist, listen)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
+{
+}
+
+StatefulPersistentWriter::StatefulPersistentWriter(
+        RTPSParticipantImpl* pimpl,
+        const GUID_t& guid,
+        const WriterAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        const std::shared_ptr<IChangePool>& change_pool,
+        fastdds::rtps::FlowController* flow_controller,
+        WriterHistory* hist,
+        WriterListener* listen,
+        IPersistenceService* persistence)
+    : StatefulWriter(pimpl, guid, att, payload_pool, change_pool, flow_controller, hist, listen)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
+{
+}
+
 StatefulPersistentWriter::~StatefulPersistentWriter()
 {
+    deinit();
 }
 
 /*
@@ -59,11 +88,10 @@ void StatefulPersistentWriter::unsent_change_added_to_history(
 }
 
 bool StatefulPersistentWriter::change_removed_by_history(
-        CacheChange_t* change,
-        const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time)
+        CacheChange_t* change)
 {
     remove_persistent_change(change);
-    return StatefulWriter::change_removed_by_history(change, max_blocking_time);
+    return StatefulWriter::change_removed_by_history(change);
 }
 
 void StatefulPersistentWriter::print_inconsistent_acknack(
@@ -76,7 +104,7 @@ void StatefulPersistentWriter::print_inconsistent_acknack(
     if (!log_error_printed_)
     {
         log_error_printed_ = true;
-        EPROSIMA_LOG_ERROR(RTPS_WRITER, "Inconsistent acknack received in Local Writer "
+        logError(RTPS_WRITER, "Inconsistent acknack received in Local Writer "
                 << writer_guid << ". Maybe the persistent database has been erased locally.");
     }
     StatefulWriter::print_inconsistent_acknack(writer_guid, reader_guid, min_requested_sequence_number,
@@ -84,5 +112,5 @@ void StatefulPersistentWriter::print_inconsistent_acknack(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

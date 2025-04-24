@@ -25,14 +25,13 @@
 #include <vector>
 
 #include <fastdds/dds/topic/IContentFilter.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicType.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicDataFactory.hpp>
+#include <fastrtps/types/DynamicData.h>
+#include <fastrtps/types/DynamicDataFactory.h>
+#include <fastrtps/types/DynamicTypePtr.h>
 
 #include "DDSFilterCondition.hpp"
 #include "DDSFilterField.hpp"
 #include "DDSFilterParameter.hpp"
-
-#include "../../xtypes/dynamic_types/DynamicDataImpl.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -63,7 +62,7 @@ public:
      * @param [in] type  The DynamicType to assign.
      */
     void set_type(
-            DynamicType::_ref_type type);
+            const eprosima::fastrtps::types::DynamicType_ptr& type);
 
     /// The root condition of the expression tree.
     std::unique_ptr<DDSFilterCondition> root;
@@ -74,10 +73,23 @@ public:
 
 private:
 
+    class DynDataDeleter
+    {
+
+    public:
+
+        void operator ()(
+                eprosima::fastrtps::types::DynamicData* ptr)
+        {
+            eprosima::fastrtps::types::DynamicDataFactory::get_instance()->delete_data(ptr);
+        }
+
+    };
+
     /// The Dynamic type used to deserialize the payloads
-    DynamicType::_ref_type dyn_type_;
+    eprosima::fastrtps::types::DynamicType_ptr dyn_type_;
     /// The Dynamic data used to deserialize the payloads
-    traits<DynamicData>::ref_type dyn_data_;
+    std::unique_ptr<eprosima::fastrtps::types::DynamicData, DynDataDeleter> dyn_data_;
 };
 
 }  // namespace DDSSQLFilter

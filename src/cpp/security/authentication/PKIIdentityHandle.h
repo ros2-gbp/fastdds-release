@@ -18,23 +18,20 @@
 #ifndef _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_
 #define _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/Token.hpp>
-#include <rtps/security/common/Handle.h>
+#include <fastdds/rtps/security/common/Handle.h>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Token.h>
 
 #include <openssl/x509.h>
 #include <string>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
 static const char* const RSA_SHA256 = "RSASSA-PSS-SHA256";
 static const char* const ECDSA_SHA256 = "ECDSA-SHA256";
-
-static const char* const RSA_SHA256_FOR_TOKENS = "RSA-2048";
-static const char* const ECDSA_SHA256_FOR_TOKENS = "EC-prime256v1";
 
 static const char* const DH_2048_256 = "DH+MODP-2048-256";
 static const char* const ECDH_prime256v1 = "ECDH+prime256v1-CEUM";
@@ -100,7 +97,7 @@ typedef HandleImpl<PKIIdentity, PKIDH> PKIIdentityHandle;
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_

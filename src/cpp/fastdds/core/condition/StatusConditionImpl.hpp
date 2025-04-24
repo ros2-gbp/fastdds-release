@@ -21,10 +21,12 @@
 
 #include <mutex>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/status/StatusMask.hpp>
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/core/condition/ConditionNotifier.hpp>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
