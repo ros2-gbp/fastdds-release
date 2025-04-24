@@ -1,3 +1,26 @@
+## fastrtps (humble) - 2.6.10-1
+
+The packages in the `fastrtps` repository were released into the `humble` distro by running `/usr/bin/bloom-release -r humble fastrtps` on `Thu, 24 Apr 2025 07:38:37 -0000`
+
+The `fastrtps` package was released.
+
+Version of package(s) in repository `fastrtps`:
+
+- upstream repository: https://github.com/eProsima/Fast-DDS.git
+- release repository: https://github.com/ros2-gbp/fastdds-release.git
+- rosdistro version: `2.6.9-1`
+- old version: `2.6.9-1`
+- new version: `2.6.10-1`
+
+Versions of tools used:
+
+- bloom version: `0.12.0`
+- catkin_pkg version: `1.0.0`
+- rosdep version: `0.25.1`
+- rosdistro version: `1.0.1`
+- vcstools version: `0.1.42`
+
+
 ## fastdds (rolling) - 3.2.1-1
 
 The packages in the `fastdds` repository were released into the `rolling` distro by running `/usr/bin/bloom-release -r rolling fastdds` on `Mon, 07 Apr 2025 15:43:34 -0000`
