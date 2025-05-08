@@ -17,27 +17,27 @@
  *
  */
 
-
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/history/WriterHistory.h>
-#include <fastdds/rtps/writer/ReaderProxy.h>
-#include <fastdds/rtps/writer/StatefulWriter.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-#include <fastrtps/utils/TimeConversion.h>
-#include <fastdds/rtps/common/LocatorListComparisons.hpp>
-
-#include <rtps/participant/RTPSParticipantImpl.h>
-#include <rtps/history/HistoryAttributesExtension.hpp>
-
-#include "rtps/messages/RTPSGapBuilder.hpp"
-#include <rtps/DataSharing/DataSharingNotifier.hpp>
+#include <rtps/writer/ReaderProxy.hpp>
 
 #include <mutex>
 #include <cassert>
 #include <algorithm>
 
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/common/LocatorListComparisons.hpp>
+
+#include <rtps/DataSharing/DataSharingNotifier.hpp>
+#include <rtps/history/HistoryAttributesExtension.hpp>
+#include <rtps/messages/RTPSGapBuilder.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/writer/StatefulWriter.hpp>
+#include <utils/TimeConversion.hpp>
+
+
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 ReaderProxy::ReaderProxy(
@@ -53,14 +53,14 @@ ReaderProxy::ReaderProxy(
     , is_reliable_(false)
     , disable_positive_acks_(false)
     , writer_(writer)
-    , changes_for_reader_(resource_limits_from_history(writer->mp_history->m_att, 0))
+    , changes_for_reader_(resource_limits_from_history(writer->get_history()->m_att, 0))
     , nack_supression_event_(nullptr)
     , initial_heartbeat_event_(nullptr)
     , timers_enabled_(false)
     , next_expected_acknack_count_(0)
     , last_nackfrag_count_(0)
 {
-    auto participant = writer_->getRTPSParticipant();
+    auto participant = writer_->get_participant_impl();
     if (nullptr != participant)
     {
         nack_supression_event_ = new TimedEvent(participant->getEventResource(),
@@ -69,7 +69,7 @@ ReaderProxy::ReaderProxy(
                             writer_->perform_nack_supression(guid());
                             return false;
                         },
-                        TimeConv::Time_t2MilliSecondsDouble(times.nackSupressionDuration));
+                        fastdds::rtps::TimeConv::Time_t2MilliSecondsDouble(times.nack_supression_duration));
 
         initial_heartbeat_event_ = new TimedEvent(participant->getEventResource(),
                         [&]() -> bool
@@ -89,7 +89,7 @@ bool ReaderProxy::rtps_is_relevant(
     if (nullptr != filter)
     {
         bool ret = filter->is_relevant(*change, guid());
-        logInfo(RTPS_READER_PROXY,
+        EPROSIMA_LOG_INFO(RTPS_READER_PROXY,
                 "Change " << change->instanceHandle << " is relevant for reader " << guid() << "? " << ret);
         return ret;
     }
@@ -116,17 +116,17 @@ void ReaderProxy::start(
         bool is_datasharing)
 {
     locator_info_.start(
-        reader_attributes.guid(),
-        reader_attributes.remote_locators().unicast,
-        reader_attributes.remote_locators().multicast,
-        reader_attributes.m_expectsInlineQos,
+        reader_attributes.guid,
+        reader_attributes.remote_locators.unicast,
+        reader_attributes.remote_locators.multicast,
+        reader_attributes.expects_inline_qos,
         is_datasharing);
 
     is_active_ = true;
-    durability_kind_ = reader_attributes.m_qos.m_durability.durabilityKind();
-    expects_inline_qos_ = reader_attributes.m_expectsInlineQos;
-    is_reliable_ = reader_attributes.m_qos.m_reliability.kind != BEST_EFFORT_RELIABILITY_QOS;
-    disable_positive_acks_ = reader_attributes.disable_positive_acks();
+    durability_kind_ = reader_attributes.durability.durabilityKind();
+    expects_inline_qos_ = reader_attributes.expects_inline_qos;
+    is_reliable_ = reader_attributes.reliability.kind != dds::BEST_EFFORT_RELIABILITY_QOS;
+    disable_positive_acks_ = reader_attributes.disable_positive_acks_enabled();
     if (durability_kind_ == DurabilityKind_t::VOLATILE)
     {
         SequenceNumber_t min_sequence = writer_->get_seq_num_min();
@@ -144,21 +144,21 @@ void ReaderProxy::start(
         initial_heartbeat_event_->restart_timer();
     }
 
-    logInfo(RTPS_READER_PROXY, "Reader Proxy started");
+    EPROSIMA_LOG_INFO(RTPS_READER_PROXY, "Reader Proxy started");
 }
 
 bool ReaderProxy::update(
         const ReaderProxyData& reader_attributes)
 {
-    durability_kind_ = reader_attributes.m_qos.m_durability.durabilityKind();
-    expects_inline_qos_ = reader_attributes.m_expectsInlineQos;
-    is_reliable_ = reader_attributes.m_qos.m_reliability.kind != BEST_EFFORT_RELIABILITY_QOS;
-    disable_positive_acks_ = reader_attributes.disable_positive_acks();
+    durability_kind_ = reader_attributes.durability.durabilityKind();
+    expects_inline_qos_ = reader_attributes.expects_inline_qos;
+    is_reliable_ = reader_attributes.reliability.kind != dds::BEST_EFFORT_RELIABILITY_QOS;
+    disable_positive_acks_ = reader_attributes.disable_positive_acks_enabled();
 
     locator_info_.update(
-        reader_attributes.remote_locators().unicast,
-        reader_attributes.remote_locators().multicast,
-        reader_attributes.m_expectsInlineQos);
+        reader_attributes.remote_locators.unicast,
+        reader_attributes.remote_locators.multicast,
+        reader_attributes.expects_inline_qos);
 
     return true;
 }
@@ -188,7 +188,7 @@ void ReaderProxy::disable_timers()
 }
 
 void ReaderProxy::update_nack_supression_interval(
-        const Duration_t& interval)
+        const dds::Duration_t& interval)
 {
     if (nack_supression_event_)
     {
@@ -245,8 +245,8 @@ void ReaderProxy::add_change(
     if (changes_for_reader_.push_back(change) == nullptr)
     {
         // This should never happen
-        logError(RTPS_READER_PROXY, "Error adding change " << change.getSequenceNumber()
-                                                           << " to reader proxy " << guid());
+        EPROSIMA_LOG_ERROR(RTPS_READER_PROXY, "Error adding change " << change.getSequenceNumber()
+                                                                     << " to reader proxy " << guid());
         eprosima::fastdds::dds::Log::Flush();
         assert(false);
     }
@@ -388,7 +388,7 @@ void ReaderProxy::acked_changes_set(
                     if (current_sequence <= changes_low_mark_)
                     {
                         CacheChange_t* change = nullptr;
-                        if (writer_->mp_history->get_change(current_sequence, writer_->getGuid(), &change))
+                        if (writer_->get_history()->get_change(current_sequence, writer_->getGuid(), &change))
                         {
                             should_sort = true;
                             ChangeForReader_t cr(change);
@@ -442,7 +442,7 @@ bool ReaderProxy::requested_changes_set(
 
     if (isSomeoneWasSetRequested)
     {
-        logInfo(RTPS_READER_PROXY, "Requested Changes: " << seq_num_set);
+        EPROSIMA_LOG_INFO(RTPS_READER_PROXY, "Requested Changes: " << seq_num_set);
     }
 
     return isSomeoneWasSetRequested;
@@ -691,6 +691,26 @@ ReaderProxy::ChangeConstIterator ReaderProxy::find_change(
            : it->getSequenceNumber() == seq_num ? it : end;
 }
 
+bool ReaderProxy::has_been_delivered(
+        const SequenceNumber_t& seq_number,
+        bool& found) const
+{
+    if (seq_number <= changes_low_mark_)
+    {
+        // Change has already been acknowledged, so it has been delivered
+        return true;
+    }
+
+    ChangeConstIterator it = find_change(seq_number);
+    if (it != changes_for_reader_.end())
+    {
+        found = true;
+        return it->has_been_delivered();
+    }
+
+    return false;
+}
+
 }   // namespace rtps
-}   // namespace fastrtps
+}   // namespace fastdds
 }   // namespace eprosima

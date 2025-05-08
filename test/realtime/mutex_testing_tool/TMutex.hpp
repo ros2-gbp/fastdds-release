@@ -36,14 +36,15 @@ using pid_t = int;
 #define GET_TID() syscall(SYS_gettid)
 #else
 #error "SYS_gettid unavailable on this system"
-#endif
+#endif // ifdef SYS_gettid
 
 #endif //_WIN32
 
 #include <bits/pthreadtypes.h>
+#include <bits/types/clockid_t.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 enum LockType : int32_t
 {
@@ -55,10 +56,19 @@ enum LockType : int32_t
 extern std::atomic<pid_t> g_tmutex_thread_pid;
 
 //! Store the original pthread_mutex_lock function
-extern int (*g_origin_lock_func)(pthread_mutex_t*);
+extern int (* g_origin_lock_func)(
+        pthread_mutex_t*);
 
 //! Store the original pthread_mutex_timedlock function
-extern int (*g_origin_timedlock_func)(pthread_mutex_t*, const struct timespec*);
+extern int (* g_origin_timedlock_func)(
+        pthread_mutex_t*,
+        const struct timespec*);
+
+//! Store the original pthread_mutex_clocklock function
+extern int (* g_origin_clocklock_func)(
+        pthread_mutex_t*,
+        clockid_t,
+        const struct timespec*);
 
 /*!
  * @brief Records all mutexes used by the thread that calls this function.
@@ -72,29 +82,35 @@ void tmutex_stop_recording();
 
 /*!
  * @brief If recording process is active then the mutex will be recorded.
- * @param[in] type Type of the lock used by the mutex.
- * @param[in] mutex Pointer of the mutex to be recorded.
+ * @param [in] type Type of the lock used by the mutex.
+ * @param [in] mutex Pointer of the mutex to be recorded.
  */
-void tmutex_record_mutex_(LockType type, pthread_mutex_t* mutex);
+void tmutex_record_mutex_(
+        LockType type,
+        pthread_mutex_t* mutex);
 
 /*!
  * @brief Gets the pointer of the selected recorded mutex.
- * @param[in] index Position of the recorded mutex.
+ * @param [in] index Position of the recorded mutex.
  * @return Pointer to the selected mutex.
  */
-pthread_mutex_t* tmutex_get_mutex(size_t index);
+pthread_mutex_t* tmutex_get_mutex(
+        size_t index);
 
 /*!
  * @brief Locks the selected recorded mutex.
- * @param[in] index Position of the recorded mutex.
+ * @param [in] index Position of the recorded mutex.
+ * @return true if locking a timed mutex. false otherwise
  */
-void tmutex_lock_mutex(size_t index);
+bool tmutex_lock_mutex(
+        size_t index);
 
 /*!
  * @brief Unlocks the selected recorded mutex.
- * @param[in] index Position of the recorded mutex.
+ * @param [in] index Position of the recorded mutex.
  */
-void tmutex_unlock_mutex(size_t index);
+void tmutex_unlock_mutex(
+        size_t index);
 
 /*!
  * @brief Returns the number of mutex recorded.
@@ -114,7 +130,7 @@ size_t tmutex_get_num_lock_type();
  */
 size_t tmutex_get_num_timedlock_type();
 
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif // __TEST_REALTIME_TMUTEX_HPP__

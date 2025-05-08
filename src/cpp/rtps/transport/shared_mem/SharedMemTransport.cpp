@@ -12,27 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <utility>
-#include <cstring>
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <thread>
+#include <utility>
+
+#ifdef ANDROID
+#include <boostconfig.hpp>
+#include <unistd.h>
+#endif // ifdef ANDROID
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/Locator.h>
-#include <fastdds/rtps/network/ReceiverResource.h>
-#include <fastdds/rtps/network/SenderResource.h>
-#include <fastdds/rtps/transport/TransportInterface.h>
+#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/transport/SenderResource.hpp>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
 
-#include <fastrtps/rtps/messages/CDRMessage.h>
-#include <fastrtps/rtps/messages/MessageReceiver.h>
-
-#include <rtps/transport/shared_mem/SHMLocator.hpp>
-#include <rtps/transport/shared_mem/SharedMemTransport.h>
-#include <rtps/transport/shared_mem/SharedMemSenderResource.hpp>
+#include <rtps/messages/CDRMessage.hpp>
+#include <rtps/messages/MessageReceiver.h>
+#include <rtps/network/ReceiverResource.h>
 #include <rtps/transport/shared_mem/SharedMemChannelResource.hpp>
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
+#include <rtps/transport/shared_mem/SharedMemSenderResource.hpp>
+#include <rtps/transport/shared_mem/SharedMemTransport.h>
+#include <rtps/transport/shared_mem/SHMLocator.hpp>
 #include <statistics/rtps/messages/RTPSStatisticsMessages.hpp>
 
-#define SHM_MANAGER_DOMAIN ("fastrtps")
+#define SHM_MANAGER_DOMAIN ("fastdds")
 
 using namespace std;
 
@@ -40,11 +47,8 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using octet = fastrtps::rtps::octet;
-using SenderResource = fastrtps::rtps::SenderResource;
-using LocatorSelectorEntry = fastrtps::rtps::LocatorSelectorEntry;
-using LocatorSelector = fastrtps::rtps::LocatorSelector;
-using PortParameters = fastrtps::rtps::PortParameters;
+// TODO(Adolfo): Calculate this value from UDP sockets buffers size.
+static constexpr uint32_t shm_default_segment_size = SharedMemTransportDescriptor::shm_implicit_segment_size;
 
 TransportInterface* SharedMemTransportDescriptor::create_transport() const
 {
@@ -138,7 +142,7 @@ bool SharedMemTransport::OpenInputChannel(
         {
             (void)e;
 
-            logInfo(RTPS_MSG_OUT, std::string("CreateInputChannelResource failed for port ")
+            EPROSIMA_LOG_INFO(RTPS_MSG_OUT, std::string("CreateInputChannelResource failed for port ")
                     << locator.port << " msg: " << e.what());
             return false;
         }
@@ -151,6 +155,31 @@ bool SharedMemTransport::is_locator_allowed(
         const Locator& locator) const
 {
     return IsLocatorSupported(locator);
+}
+
+bool SharedMemTransport::is_locator_reachable(
+        const Locator_t& locator)
+{
+    bool is_reachable = SHMLocator::is_shm_and_from_this_host(locator);
+
+    if (is_reachable)
+    {
+        try
+        {
+            is_reachable = (nullptr != find_port(locator.port));
+        }
+        catch (const std::exception& e)
+        {
+            (void)e;
+
+            EPROSIMA_LOG_INFO(RTPS_MSG_OUT,
+                    "Local SHM locator '" << locator <<
+                    "' is not reachable; discarding. Reason: " << e.what());
+            is_reachable = false;
+        }
+    }
+
+    return is_reachable;
 }
 
 LocatorList SharedMemTransport::NormalizeLocator(
@@ -169,6 +198,11 @@ bool SharedMemTransport::is_local_locator(
     assert(locator.kind == LOCATOR_KIND_SHM);
     (void)locator;
 
+    return true;
+}
+
+bool SharedMemTransport::is_localhost_allowed() const
+{
     return true;
 }
 
@@ -205,7 +239,10 @@ void SharedMemTransport::clean_up()
     try
     {
         // Delete send ports
-        opened_ports_.clear();
+        {
+            std::lock_guard<std::mutex> lock(opened_ports_mutex_);
+            opened_ports_.clear();
+        }
 
         // Delete input channels
         {
@@ -223,7 +260,7 @@ void SharedMemTransport::clean_up()
     }
     catch (const std::exception& e)
     {
-        logWarning(RTPS_MSG_OUT, e.what());
+        EPROSIMA_LOG_WARNING(RTPS_MSG_OUT, e.what());
     }
 }
 
@@ -235,10 +272,10 @@ bool SharedMemTransport::DoInputLocatorsMatch(
 }
 
 bool SharedMemTransport::init(
-        const fastrtps::rtps::PropertyPolicy*)
+        const fastdds::rtps::PropertyPolicy*,
+        const uint32_t& max_msg_size_no_frag)
 {
-    // TODO(Adolfo): Calculate this value from UDP sockets buffers size.
-    static constexpr uint32_t shm_default_segment_size = 512 * 1024;
+    (void) max_msg_size_no_frag;
 
     if (configuration_.segment_size() == 0)
     {
@@ -247,9 +284,18 @@ bool SharedMemTransport::init(
 
     if (configuration_.segment_size() < configuration_.max_message_size())
     {
-        logError(RTPS_MSG_OUT, "max_message_size cannot be greater than segment_size");
+        EPROSIMA_LOG_ERROR(RTPS_MSG_OUT, "max_message_size cannot be greater than segment_size");
         return false;
     }
+
+#ifdef ANDROID
+    if (access(BOOST_INTERPROCESS_SHARED_DIR_PATH, W_OK) != F_OK)
+    {
+        EPROSIMA_LOG_WARNING(RTPS_MSG_OUT,
+                "Unable to write on " << BOOST_INTERPROCESS_SHARED_DIR_PATH << ". SHM Transport not enabled");
+        return false;
+    }
+#endif // ifdef ANDROID
 
     try
     {
@@ -258,8 +304,14 @@ bool SharedMemTransport::init(
         {
             return false;
         }
-        shared_mem_segment_ = shared_mem_manager_->create_segment(configuration_.segment_size(),
-                        configuration_.port_queue_capacity());
+        constexpr uint32_t mean_message_size =
+                shm_default_segment_size / SharedMemTransportDescriptor::shm_default_port_queue_capacity;
+        uint32_t max_allocations = configuration_.segment_size() / mean_message_size;
+        if (configuration_.port_queue_capacity() > max_allocations)
+        {
+            max_allocations = configuration_.port_queue_capacity();
+        }
+        shared_mem_segment_ = shared_mem_manager_->create_segment(configuration_.segment_size(), max_allocations);
 
         // Memset the whole segment to zero in order to force physical map of the buffer
         auto buffer = shared_mem_segment_->alloc_buffer(configuration_.segment_size(),
@@ -272,13 +324,13 @@ bool SharedMemTransport::init(
             auto packets_file_consumer = std::unique_ptr<SHMPacketFileConsumer>(
                 new SHMPacketFileConsumer(configuration_.rtps_dump_file()));
 
-            packet_logger_ = std::make_shared<PacketsLog<SHMPacketFileConsumer>>();
+            packet_logger_ = std::make_shared<PacketsLog<SHMPacketFileConsumer>>(0, configuration_.dump_thread());
             packet_logger_->RegisterConsumer(std::move(packets_file_consumer));
         }
     }
     catch (std::exception& e)
     {
-        logError(RTPS_MSG_OUT, e.what());
+        EPROSIMA_LOG_ERROR(RTPS_MSG_OUT, e.what());
         return false;
     }
 
@@ -323,7 +375,10 @@ SharedMemChannelResource* SharedMemTransport::CreateInputChannelResource(
             open_mode)->create_listener(),
         locator,
         receiver,
-        configuration_.rtps_dump_file());
+        configuration_.rtps_dump_file(),
+        configuration_.dump_thread(),
+        true,
+        configuration_.get_thread_config_for_port(locator.port));
 }
 
 bool SharedMemTransport::OpenOutputChannel(
@@ -355,13 +410,26 @@ bool SharedMemTransport::OpenOutputChannel(
     }
     catch (std::exception& e)
     {
-        logError(RTPS_MSG_OUT, "SharedMemTransport error opening port " << std::to_string(locator.port)
-                                                                        << " with msg: " << e.what());
+        EPROSIMA_LOG_ERROR(RTPS_MSG_OUT, "SharedMemTransport error opening port " << std::to_string(locator.port)
+                                                                                  << " with msg: " << e.what());
 
         return false;
     }
 
     return true;
+}
+
+bool SharedMemTransport::OpenOutputChannels(
+        SendResourceList& send_resource_list,
+        const LocatorSelectorEntry& locator_selector_entry)
+{
+    bool success = false;
+    for (size_t i = 0; i < locator_selector_entry.state.unicast.size(); ++i)
+    {
+        size_t index = locator_selector_entry.state.unicast[i];
+        success |= OpenOutputChannel(send_resource_list, locator_selector_entry.unicast[index]);
+    }
+    return success;
 }
 
 Locator SharedMemTransport::RemoteToMainLocal(
@@ -379,7 +447,9 @@ Locator SharedMemTransport::RemoteToMainLocal(
 
 bool SharedMemTransport::transform_remote_locator(
         const Locator& remote_locator,
-        Locator& result_locator) const
+        Locator& result_locator,
+        bool,
+        bool) const
 {
     if (IsLocatorSupported(remote_locator))
     {
@@ -392,25 +462,37 @@ bool SharedMemTransport::transform_remote_locator(
 }
 
 std::shared_ptr<SharedMemManager::Buffer> SharedMemTransport::copy_to_shared_buffer(
-        const octet* send_buffer,
-        uint32_t send_buffer_size,
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
         const std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
+    using namespace eprosima::fastdds::statistics::rtps;
+
     assert(shared_mem_segment_);
 
-    std::shared_ptr<SharedMemManager::Buffer> shared_buffer =
-            shared_mem_segment_->alloc_buffer(send_buffer_size, max_blocking_time_point);
+    // Statistics submessage is always the last buffer to be added
+    // If statistics message is present, skip last buffer
+    auto it_end = remove_statistics_buffer(buffers.back(), total_bytes) ? std::prev(buffers.end()) : buffers.end();
 
-    memcpy(shared_buffer->data(), send_buffer, send_buffer_size);
+    std::shared_ptr<SharedMemManager::Buffer> shared_buffer =
+            shared_mem_segment_->alloc_buffer(total_bytes, max_blocking_time_point);
+    uint8_t* pos = static_cast<uint8_t*>(shared_buffer->data());
+
+    for (auto it = buffers.begin(); it != it_end; ++it)
+    {
+        // Direct copy from the const_buffer to the mutable shared_buffer
+        memcpy(pos, (it->buffer), it->size);
+        pos += it->size;
+    }
 
     return shared_buffer;
 }
 
 bool SharedMemTransport::send(
-        const octet* send_buffer,
-        uint32_t send_buffer_size,
-        fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-        fastrtps::rtps::LocatorsIterator* destination_locators_end,
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
+        fastdds::rtps::LocatorsIterator* destination_locators_begin,
+        fastdds::rtps::LocatorsIterator* destination_locators_end,
         const std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
     using namespace eprosima::fastdds::statistics::rtps;
@@ -419,7 +501,7 @@ bool SharedMemTransport::send(
     cleanup_output_ports();
 #endif // if !defined(_WIN32)
 
-    fastrtps::rtps::LocatorsIterator& it = *destination_locators_begin;
+    fastdds::rtps::LocatorsIterator& it = *destination_locators_begin;
 
     bool ret = true;
 
@@ -434,8 +516,7 @@ bool SharedMemTransport::send(
                 // Only copy the first time
                 if (shared_buffer == nullptr)
                 {
-                    remove_statistics_submessage(send_buffer, send_buffer_size);
-                    shared_buffer = copy_to_shared_buffer(send_buffer, send_buffer_size, max_blocking_time_point);
+                    shared_buffer = copy_to_shared_buffer(buffers, total_bytes, max_blocking_time_point);
                 }
 
                 ret &= send(shared_buffer, *it);
@@ -451,7 +532,7 @@ bool SharedMemTransport::send(
     }
     catch (const std::exception& e)
     {
-        logInfo(RTPS_TRANSPORT_SHM, e.what());
+        EPROSIMA_LOG_INFO(RTPS_TRANSPORT_SHM, e.what());
         (void)e;
 
         // Segment overflow with discard policy doesn't return error.
@@ -471,6 +552,7 @@ bool SharedMemTransport::send(
 
 void SharedMemTransport::cleanup_output_ports()
 {
+    std::lock_guard<std::mutex> lock(opened_ports_mutex_);
     auto it = opened_ports_.begin();
     while (it != opened_ports_.end())
     {
@@ -488,12 +570,17 @@ void SharedMemTransport::cleanup_output_ports()
 std::shared_ptr<SharedMemManager::Port> SharedMemTransport::find_port(
         uint32_t port_id)
 {
-    auto ports_it = opened_ports_.find(port_id);
 
-    // The port is already opened
-    if (ports_it != opened_ports_.end())
     {
-        return (*ports_it).second;
+        std::lock_guard<std::mutex> lock(opened_ports_mutex_);
+
+        auto ports_it = opened_ports_.find(port_id);
+
+        // The port is already opened
+        if (ports_it != opened_ports_.end())
+        {
+            return (*ports_it).second;
+        }
     }
 
     // The port is not opened
@@ -501,7 +588,10 @@ std::shared_ptr<SharedMemManager::Port> SharedMemTransport::find_port(
                     open_port(port_id, configuration_.port_queue_capacity(), configuration_.healthy_check_timeout_ms(),
                     SharedMemGlobal::Port::OpenMode::Write);
 
-    opened_ports_[port_id] = port;
+    {
+        std::lock_guard<std::mutex> lock(opened_ports_mutex_);
+        opened_ports_[port_id] = port;
+    }
 
     return port;
 }
@@ -520,11 +610,12 @@ bool SharedMemTransport::push_discard(
             {
                 if (is_port_ok)
                 {
-                    logInfo(RTPS_MSG_OUT, "Port " << remote_locator.port << " full. Buffer dropped");
+                    EPROSIMA_LOG_INFO(RTPS_MSG_OUT, "Port " << remote_locator.port << " full. Buffer dropped");
                 }
                 else
                 {
-                    logWarning(RTPS_MSG_OUT, "Port " << remote_locator.port << " inconsistent. Port dropped");
+                    std::lock_guard<std::mutex> lock(opened_ports_mutex_);
+                    EPROSIMA_LOG_WARNING(RTPS_MSG_OUT, "Port " << remote_locator.port << " inconsistent. Port dropped");
                     opened_ports_.erase(remote_locator.port);
                 }
             }
@@ -532,7 +623,7 @@ bool SharedMemTransport::push_discard(
     }
     catch (const std::exception& error)
     {
-        logWarning(RTPS_MSG_OUT, error.what());
+        EPROSIMA_LOG_WARNING(RTPS_MSG_OUT, error.what());
         return false;
     }
 
@@ -548,7 +639,7 @@ bool SharedMemTransport::send(
         return false;
     }
 
-    logInfo(RTPS_MSG_OUT,
+    EPROSIMA_LOG_INFO(RTPS_MSG_OUT,
             "(ID:" << std::this_thread::get_id() << ") " << "SharedMemTransport: " << buffer->size() << " bytes to port " <<
             remote_locator.port);
 
@@ -573,7 +664,7 @@ bool SharedMemTransport::send(
 void SharedMemTransport::select_locators(
         LocatorSelector& selector) const
 {
-    fastrtps::ResourceLimitedVector<LocatorSelectorEntry*>& entries = selector.transport_starts();
+    fastdds::ResourceLimitedVector<LocatorSelectorEntry*>& entries = selector.transport_starts();
 
     for (size_t i = 0; i < entries.size(); ++i)
     {

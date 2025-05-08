@@ -21,33 +21,33 @@
 #include <algorithm>
 
 #include <fastdds/core/policy/ParameterList.hpp>
+#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/policy/ParameterTypes.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
 #include <fastdds/subscriber/DataReaderImpl.hpp>
 #include <fastdds/topic/ContentFilterUtils.hpp>
-
-#include <fastrtps/types/TypesBase.h>
-#include <fastrtps/utils/md5.h>
+#include <fastdds/topic/TopicProxy.hpp>
+#include <fastdds/utils/md5.hpp>
+#include <rtps/messages/CDRMessage.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 
 bool ContentFilteredTopicImpl::is_relevant(
-        const fastrtps::rtps::CacheChange_t& change,
-        const fastrtps::rtps::GUID_t& reader_guid) const
+        const fastdds::rtps::CacheChange_t& change,
+        const fastdds::rtps::GUID_t& reader_guid) const
 {
     bool ret_val = true;
 
     if (!check_filter_signature(change, ret_val))
     {
-        IContentFilter::FilterSampleInfo filter_info
-        {
-            change.write_params.sample_identity(),
-            change.write_params.related_sample_identity()
-        };
+        IContentFilter::FilterSampleInfo filter_info;
+        filter_info.sample_identity.writer_guid(change.writerGUID);
+        filter_info.sample_identity.sequence_number(change.sequenceNumber);
+        FASTDDS_TODO_BEFORE(4, 0, "Use change.write_params.related_sample_identity()");
+        filter_info.related_sample_identity = change.write_params.sample_identity();
         ret_val = filter_instance->evaluate(change.serializedPayload, filter_info, reader_guid);
     }
 
@@ -58,7 +58,7 @@ ReturnCode_t ContentFilteredTopicImpl::set_expression_parameters(
         const char* new_expression,
         const std::vector<std::string>& new_expression_parameters)
 {
-    TopicImpl* topic_impl = dynamic_cast<TopicImpl*>(related_topic->get_impl());
+    TopicProxy* topic_impl = dynamic_cast<TopicProxy*>(related_topic->get_impl());
     assert(nullptr != topic_impl);
     const TypeSupport& type = topic_impl->get_type();
 
@@ -66,10 +66,10 @@ ReturnCode_t ContentFilteredTopicImpl::set_expression_parameters(
     related_topic->get_participant()->get_qos(pqos);
     if (new_expression_parameters.size() > pqos.allocation().content_filter.expression_parameters.maximum )
     {
-        logError(CONTENT_FILTERED_TOPIC, "Number of expression parameters exceeds maximum allocation limit: "
+        EPROSIMA_LOG_ERROR(CONTENT_FILTERED_TOPIC, "Number of expression parameters exceeds maximum allocation limit: "
                 << new_expression_parameters.size() << " > "
                 << pqos.allocation().content_filter.expression_parameters.maximum);
-        return ReturnCode_t::RETCODE_BAD_PARAMETER;
+        return RETCODE_BAD_PARAMETER;
     }
 
     LoanableSequence<const char*>::size_type n_params;
@@ -87,7 +87,7 @@ ReturnCode_t ContentFilteredTopicImpl::set_expression_parameters(
         related_topic->get_type_name().c_str(),
         type.get(), new_expression, filter_parameters, filter_instance);
 
-    if (ReturnCode_t::RETCODE_OK == ret)
+    if (RETCODE_OK == ret)
     {
         filter_property.expression_parameters.assign(new_expression_parameters.begin(),
                 new_expression_parameters.end());
@@ -115,7 +115,7 @@ void ContentFilteredTopicImpl::update_signature()
 }
 
 bool ContentFilteredTopicImpl::check_filter_signature(
-        const fastrtps::rtps::CacheChange_t& change,
+        const fastdds::rtps::CacheChange_t& change,
         bool& filter_result) const
 {
     // Empty expressions always pass the filter
@@ -138,7 +138,7 @@ bool ContentFilteredTopicImpl::check_filter_signature(
     // matches our own signature, in which case found is set to true, and filter_result is set to the result present
     // on the ContentFilterInfo parameter for that signature.
     auto parameter_process = [&](
-        fastrtps::rtps::CDRMessage_t* msg,
+        fastdds::rtps::CDRMessage_t* msg,
         const ParameterId_t pid,
         uint16_t plength)
             {
@@ -157,7 +157,7 @@ bool ContentFilteredTopicImpl::check_filter_signature(
                     plength -= 8;
 
                     // Read and validate numBitmaps
-                    valid &= fastrtps::rtps::CDRMessage::readUInt32(msg, &num_bitmaps);
+                    valid &= fastdds::rtps::CDRMessage::readUInt32(msg, &num_bitmaps);
                     valid &= num_bitmaps * 4 <= plength;
                     if (!valid || 0 == num_bitmaps)
                     {
@@ -170,7 +170,7 @@ bool ContentFilteredTopicImpl::check_filter_signature(
                     plength -= static_cast<uint16_t>(num_bitmaps * 4);
 
                     // Read and validate numSignatures
-                    valid &= fastrtps::rtps::CDRMessage::readUInt32(msg, &num_signatures);
+                    valid &= fastdds::rtps::CDRMessage::readUInt32(msg, &num_signatures);
                     valid &= num_signatures * 16 <= plength;
                     if (!valid || 0 == num_signatures || ((num_signatures + 31) / 32) != num_bitmaps)
                     {
@@ -205,7 +205,7 @@ bool ContentFilteredTopicImpl::check_filter_signature(
                         uint32_t bitmap = 0;
 
                         msg->pos = bitmap_pos + bitmap_idx * 4;
-                        fastrtps::rtps::CDRMessage::readUInt32(msg, &bitmap);
+                        fastdds::rtps::CDRMessage::readUInt32(msg, &bitmap);
                         filter_result = 0 != (bitmap & bitmask);
                     }
                 }
@@ -214,7 +214,7 @@ bool ContentFilteredTopicImpl::check_filter_signature(
             };
 
     uint32_t qos_size = 0;
-    fastrtps::rtps::CDRMessage_t msg(change.inline_qos);
+    fastdds::rtps::CDRMessage_t msg(change.inline_qos);
     ParameterList::readParameterListfromCDRMsg(msg, parameter_process, false, qos_size);
 
     return found;

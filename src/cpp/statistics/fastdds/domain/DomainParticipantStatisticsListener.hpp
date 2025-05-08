@@ -19,17 +19,19 @@
 #ifndef _STATISTICS_FASTDDS_DOMAIN_DOMAINPARTICIPANTSTATISTICSLISTENER_HPP
 #define _STATISTICS_FASTDDS_DOMAIN_DOMAINPARTICIPANTSTATISTICSLISTENER_HPP
 
-#include <fastrtps/config.h>
+#include <fastdds/config.hpp>
 
 #ifdef FASTDDS_STATISTICS
 
+#include <atomic>
+#include <cstdint>
 #include <map>
 #include <mutex>
 
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/statistics/IListeners.hpp>
 
-#include <statistics/types/types.h>
+#include <statistics/types/types.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -41,16 +43,19 @@ struct DomainParticipantStatisticsListener : public IListener
     using DataWriter = eprosima::fastdds::dds::DataWriter;
 
     void set_datawriter(
-            EventKind kind,
+            uint32_t kind,
             DataWriter* writer);
 
     void on_statistics_data(
             const Data& statistics_data) override;
 
+    uint32_t enabled_writers_mask();
+
 private:
 
     std::mutex mtx_;
-    std::map<EventKind, DataWriter*> writers_;
+    std::map<uint32_t, DataWriter*> writers_;
+    std::atomic<uint32_t> enabled_writers_mask_{0};
 };
 
 } // dds

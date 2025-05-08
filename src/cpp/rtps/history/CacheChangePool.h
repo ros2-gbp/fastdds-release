@@ -19,9 +19,9 @@
 #ifndef RTPS_HISTORY_CACHECHANGEPOOL_H_
 #define RTPS_HISTORY_CACHECHANGEPOOL_H_
 
-#include <fastdds/rtps/common/CacheChange.h>
-#include <fastdds/rtps/history/IChangePool.h>
-#include <fastdds/rtps/resources/ResourceManagement.h>
+#include <fastdds/rtps/attributes/ResourceManagement.hpp>
+#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/history/IChangePool.hpp>
 
 #include <rtps/history/PoolConfig.h>
 
@@ -31,7 +31,7 @@
 #include <cstddef>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 /**
@@ -114,7 +114,7 @@ private:
 
     uint32_t current_pool_size_ = 0;
     uint32_t max_pool_size_ = 0;
-    MemoryManagementPolicy_t memory_mode_ = MemoryManagementPolicy_t::DYNAMIC_RESERVE_MEMORY_MODE;
+    MemoryManagementPolicy_t memory_mode_ = MemoryManagementPolicy_t::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 
     std::vector<CacheChange_t*> free_caches_;
     std::vector<CacheChange_t*> all_caches_;
@@ -131,7 +131,7 @@ private:
 };
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif /* RTPS_HISTORY_CACHECHANGEPOOL_H_ */

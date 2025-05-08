@@ -102,8 +102,11 @@ static bool create_kx_key(
     return true;
 }
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using namespace security;
 
 ParticipantCryptoHandleDeleter::ParticipantCryptoHandleDeleter(
         AESGCMGMAC_KeyFactory& factory)
@@ -238,7 +241,7 @@ std::shared_ptr<ParticipantCryptoHandle> AESGCMGMAC_KeyFactory::register_matched
     const std::vector<uint8_t>* challenge_2 = SharedSecretHelper::find_data_value(shared_secret, "Challenge2");
     if ((challenge_1 == nullptr) || (shared_secret_ss == nullptr) || (challenge_2 == nullptr))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed SharedSecretHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed SharedSecretHandle");
         exception = SecurityException("Unable to read SharedSecret and Challenges");
         return nullptr;
     }
@@ -299,14 +302,14 @@ std::shared_ptr<ParticipantCryptoHandle> AESGCMGMAC_KeyFactory::register_matched
 
         if (!create_kx_key(buffer.master_salt, challenge_1, "keyexchange salt", challenge_2, shared_secret_ss))
         {
-            logWarning(SECURITY_CRYPTO, "Error generating the keys to perform token transaction");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Error generating the keys to perform token transaction");
             exception = SecurityException("Encountered an error while creating KxKeyMaterials");
             return std::shared_ptr<ParticipantCryptoHandle>();
         }
 
         if (!create_kx_key(buffer.master_sender_key, challenge_2, "key exchange key", challenge_1, shared_secret_ss))
         {
-            logWarning(SECURITY_CRYPTO, "Error generating the keys to perform token transaction");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Error generating the keys to perform token transaction");
             exception = SecurityException("Encountered an error while creating KxKeyMaterials");
             return std::shared_ptr<ParticipantCryptoHandle>();
         }
@@ -364,7 +367,7 @@ DatawriterCryptoHandle* AESGCMGMAC_KeyFactory::register_local_datawriter(
 
     if (participant_handle.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid ParticipantCryptoHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid ParticipantCryptoHandle");
         return nullptr;
     }
 
@@ -475,7 +478,7 @@ DatareaderCryptoHandle* AESGCMGMAC_KeyFactory::register_matched_remote_datareade
 
     if (local_writer_handle.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Malformed DataWriterCryptoHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed DataWriterCryptoHandle");
         return nullptr;
     }
 
@@ -587,7 +590,7 @@ DatareaderCryptoHandle* AESGCMGMAC_KeyFactory::register_local_datareader(
 
     if (participant_handle.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid ParticipantCryptoHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid ParticipantCryptoHandle");
         return nullptr;
     }
 
@@ -678,7 +681,7 @@ DatawriterCryptoHandle* AESGCMGMAC_KeyFactory::register_matched_remote_datawrite
 
     if (local_reader_handle.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid DataReaderCryptoHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid DataReaderCryptoHandle");
         return nullptr;
     }
 
@@ -995,3 +998,7 @@ void AESGCMGMAC_KeyFactory::release_key_id(
         m_CryptoTransformKeyIds.erase(it);
     }
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

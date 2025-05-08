@@ -19,9 +19,9 @@
 #ifndef RTPS_HISTORY_TOPICPAYLOADPOOL_HPP
 #define RTPS_HISTORY_TOPICPAYLOADPOOL_HPP
 
-#include <fastdds/rtps/common/CacheChange.h>
-#include <fastdds/rtps/history/IPayloadPool.h>
-#include <fastdds/rtps/resources/ResourceManagement.h>
+#include <fastdds/rtps/attributes/ResourceManagement.hpp>
+#include <fastdds/rtps/common/SerializedPayload.hpp>
+#include <fastdds/rtps/history/IPayloadPool.hpp>
 #include <fastdds/dds/log/Log.hpp>
 #include <rtps/history/PoolConfig.h>
 #include <rtps/history/ITopicPayloadPool.h>
@@ -31,9 +31,10 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+#include <cassert>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 class TopicPayloadPool : public ITopicPayloadPool
@@ -45,7 +46,7 @@ public:
 
     virtual ~TopicPayloadPool()
     {
-        logInfo(RTPS_UTILS, "PayloadPool destructor");
+        EPROSIMA_LOG_INFO(RTPS_UTILS, "PayloadPool destructor");
 
         for (PayloadNode* payload : all_payloads_)
         {
@@ -55,15 +56,14 @@ public:
 
     bool get_payload(
             uint32_t size,
-            CacheChange_t& cache_change) override;
+            SerializedPayload_t& payload) override;
 
     bool get_payload(
-            SerializedPayload_t& data,
-            IPayloadPool*& data_owner,
-            CacheChange_t& cache_change) override;
+            const SerializedPayload_t& data,
+            SerializedPayload_t& payload) override;
 
     bool release_payload(
-            CacheChange_t& cache_change) override;
+            SerializedPayload_t& payload) override;
 
     /**
      * @brief Ensures the pool has capacity to fullfill the requirements of a new history.
@@ -139,9 +139,17 @@ protected:
         explicit PayloadNode(
                 uint32_t size)
         {
-            assert(size > 0);
+            if (!size)
+            {
+                //! At least, we need this to allocate space for a NodeInfo.
+                //! In order to be able to place-construct later
+                buffer = (octet*)calloc(sizeof(NodeInfo), sizeof(octet));
+            }
+            else
+            {
+                buffer = (octet*)calloc(size + sizeof(NodeInfo) - 1, sizeof(octet));
+            }
 
-            buffer = (octet*)calloc(size + offsetof(NodeInfo, data), sizeof(octet));
             if (buffer == nullptr)
             {
                 throw std::bad_alloc();
@@ -338,7 +346,7 @@ protected:
      */
     virtual bool do_get_payload(
             uint32_t size,
-            CacheChange_t& cache_change,
+            SerializedPayload_t& payload,
             bool resizeable);
 
     virtual MemoryManagementPolicy_t memory_policy() const = 0;
@@ -356,7 +364,7 @@ protected:
 
 
 }  // namespace rtps
-}  // namespace fastrtps
+}  // namespace fastdds
 }  // namespace eprosima
 
 #endif  // RTPS_HISTORY_TOPICPAYLOADPOOL_HPP

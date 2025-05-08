@@ -26,8 +26,7 @@
 
 namespace eprosima {
 
-using namespace fastrtps;
-using namespace fastrtps::rtps;
+using namespace fastdds::rtps;
 
 namespace fastdds {
 namespace dds {
@@ -59,21 +58,21 @@ ReturnCode_t DataReader::enable()
 {
     if (enable_)
     {
-        return ReturnCode_t::RETCODE_OK;
+        return RETCODE_OK;
     }
 
     if (false == impl_->get_subscriber()->is_enabled())
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
     ReturnCode_t ret_code = impl_->enable();
-    enable_ = ReturnCode_t::RETCODE_OK == ret_code;
+    enable_ = RETCODE_OK == ret_code;
     return ret_code;
 }
 
 bool DataReader::wait_for_unread_message(
-        const fastrtps::Duration_t& timeout)
+        const fastdds::dds::Duration_t& timeout)
 {
     return impl_->wait_for_unread_message(timeout);
 }
@@ -95,11 +94,18 @@ ReturnCode_t DataReader::read_w_condition(
         int32_t max_samples,
         ReadCondition* a_condition)
 {
-    static_cast<void> (data_values);
-    static_cast<void> (sample_infos);
-    static_cast<void> (max_samples);
-    static_cast<void> (a_condition);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    if ( nullptr == a_condition )
+    {
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return read(
+        data_values,
+        sample_infos,
+        max_samples,
+        a_condition->get_sample_state_mask(),
+        a_condition->get_view_state_mask(),
+        a_condition->get_instance_state_mask());
 }
 
 ReturnCode_t DataReader::read_instance(
@@ -135,12 +141,19 @@ ReturnCode_t DataReader::read_next_instance_w_condition(
         const InstanceHandle_t& previous_handle,
         ReadCondition* a_condition)
 {
-    static_cast<void> (data_values);
-    static_cast<void> (sample_infos);
-    static_cast<void> (max_samples);
-    static_cast<void> (previous_handle);
-    static_cast<void> (a_condition);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    if ( nullptr == a_condition )
+    {
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return read_next_instance(
+        data_values,
+        sample_infos,
+        max_samples,
+        previous_handle,
+        a_condition->get_sample_state_mask(),
+        a_condition->get_view_state_mask(),
+        a_condition->get_instance_state_mask());
 }
 
 ReturnCode_t DataReader::take(
@@ -160,11 +173,18 @@ ReturnCode_t DataReader::take_w_condition(
         int32_t max_samples,
         ReadCondition* a_condition)
 {
-    static_cast<void> (data_values);
-    static_cast<void> (sample_infos);
-    static_cast<void> (max_samples);
-    static_cast<void> (a_condition);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    if ( nullptr == a_condition )
+    {
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return take(
+        data_values,
+        sample_infos,
+        max_samples,
+        a_condition->get_sample_state_mask(),
+        a_condition->get_view_state_mask(),
+        a_condition->get_instance_state_mask());
 }
 
 ReturnCode_t DataReader::take_instance(
@@ -200,12 +220,19 @@ ReturnCode_t DataReader::take_next_instance_w_condition(
         const InstanceHandle_t& previous_handle,
         ReadCondition* a_condition)
 {
-    static_cast<void> (data_values);
-    static_cast<void> (sample_infos);
-    static_cast<void> (max_samples);
-    static_cast<void> (previous_handle);
-    static_cast<void> (a_condition);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    if ( nullptr == a_condition )
+    {
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return take_next_instance(
+        data_values,
+        sample_infos,
+        max_samples,
+        previous_handle,
+        a_condition->get_sample_state_mask(),
+        a_condition->get_view_state_mask(),
+        a_condition->get_instance_state_mask());
 }
 
 ReturnCode_t DataReader::return_loan(
@@ -221,7 +248,7 @@ ReturnCode_t DataReader::get_key_value(
 {
     static_cast<void> (key_holder);
     static_cast<void> (handle);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    return RETCODE_UNSUPPORTED;
 }
 
 InstanceHandle_t DataReader::lookup_instance(
@@ -291,7 +318,7 @@ ReturnCode_t DataReader::get_qos(
         DataReaderQos& qos) const
 {
     qos = impl_->get_qos();
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReader::get_requested_deadline_missed_status(
@@ -317,7 +344,7 @@ ReturnCode_t DataReader::set_listener(
         const StatusMask& mask)
 {
     ReturnCode_t ret_val = impl_->set_listener(listener);
-    if (ret_val == ReturnCode_t::RETCODE_OK)
+    if (ret_val == RETCODE_OK)
     {
         status_mask_ = mask;
     }
@@ -354,11 +381,7 @@ ReturnCode_t DataReader::get_sample_lost_status(
 ReturnCode_t DataReader::get_sample_rejected_status(
         SampleRejectedStatus& status) const
 {
-    static_cast<void> (status);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
-    /*
-       return impl_->get_sample_rejected_status(status);
-     */
+    return impl_->get_sample_rejected_status(status);
 }
 
 ReturnCode_t DataReader::get_subscription_matched_status(
@@ -368,50 +391,34 @@ ReturnCode_t DataReader::get_subscription_matched_status(
 }
 
 ReturnCode_t DataReader::get_matched_publication_data(
-        builtin::PublicationBuiltinTopicData& publication_data,
-        const fastrtps::rtps::InstanceHandle_t& publication_handle) const
+        PublicationBuiltinTopicData& publication_data,
+        const fastdds::rtps::InstanceHandle_t& publication_handle) const
 {
-    static_cast<void> (publication_data);
-    static_cast<void> (publication_handle);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
-    /*
-       return impl_->get_matched_publication_data(publication_data, publication_handle);
-     */
+    return impl_->get_matched_publication_data(publication_data, publication_handle);
 }
 
 ReturnCode_t DataReader::get_matched_publications(
         std::vector<InstanceHandle_t>& publication_handles) const
 {
-    static_cast<void> (publication_handles);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
-    /*
-       return impl_->get_matched_publication_data(publication_handles);
-     */
+    return impl_->get_matched_publications(publication_handles);
 }
 
 ReadCondition* DataReader::create_readcondition(
-        const std::vector<SampleStateKind>& sample_states,
-        const std::vector<ViewStateKind>& view_states,
-        const std::vector<InstanceStateKind>& instance_states)
+        SampleStateMask sample_states,
+        ViewStateMask view_states,
+        InstanceStateMask instance_states)
 {
-    logWarning(DATA_READER, "create_readcondition method not implemented");
-    static_cast<void> (sample_states);
-    static_cast<void> (view_states);
-    static_cast<void> (instance_states);
-    return nullptr;
-    /*
-       return impl_->create_readcondition(sample_states, view_states, instance_states);
-     */
+    return impl_->create_readcondition(sample_states, view_states, instance_states);
 }
 
 QueryCondition* DataReader::create_querycondition(
-        const std::vector<SampleStateKind>& sample_states,
-        const std::vector<ViewStateKind>& view_states,
-        const std::vector<InstanceStateKind>& instance_states,
+        SampleStateMask sample_states,
+        ViewStateMask view_states,
+        InstanceStateMask instance_states,
         const std::string& query_expression,
         const std::vector<std::string>& query_parameters)
 {
-    logWarning(DATA_READER, "create_querycondition method not implemented");
+    EPROSIMA_LOG_WARNING(DATA_READER, "create_querycondition method not implemented");
     static_cast<void> (sample_states);
     static_cast<void> (view_states);
     static_cast<void> (instance_states);
@@ -424,13 +431,9 @@ QueryCondition* DataReader::create_querycondition(
 }
 
 ReturnCode_t DataReader::delete_readcondition(
-        const ReadCondition* a_condition)
+        ReadCondition* a_condition)
 {
-    static_cast<void> (a_condition);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
-    /*
-       return impl_->delete_readcondition(a_condition);
-     */
+    return impl_->delete_readcondition(a_condition);
 }
 
 ReturnCode_t DataReader::delete_contained_entities()
@@ -444,16 +447,16 @@ const Subscriber* DataReader::get_subscriber() const
 }
 
 ReturnCode_t DataReader::wait_for_historical_data(
-        const Duration_t& max_wait) const
+        const dds::Duration_t& max_wait) const
 {
     static_cast<void> (max_wait);
-    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    return RETCODE_UNSUPPORTED;
     /*
        return impl_->wait_for_historical_data(a_condition);
      */
 }
 
-TypeSupport DataReader::type()
+TypeSupport DataReader::type() const
 {
     return impl_->type();
 }
@@ -474,6 +477,12 @@ ReturnCode_t DataReader::get_listening_locators(
         rtps::LocatorList& locators) const
 {
     return impl_->get_listening_locators(locators);
+}
+
+ReturnCode_t DataReader::get_subscription_builtin_topic_data(
+        SubscriptionBuiltinTopicData& subscription_data) const
+{
+    return impl_->get_subscription_builtin_topic_data(subscription_data);
 }
 
 } /* namespace dds */

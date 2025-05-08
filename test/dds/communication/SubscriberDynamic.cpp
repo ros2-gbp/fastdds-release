@@ -17,39 +17,33 @@
  *
  */
 
+#include <atomic>
+#include <future>
+#include <string>
+#include <utility>
+
 #include <asio.hpp>
 
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 #include <fastdds/dds/subscriber/SubscriberListener.hpp>
-#include <fastdds/dds/subscriber/DataReader.hpp>
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
-#include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
-#include <fastrtps/attributes/ParticipantAttributes.h>
-#include <fastrtps/attributes/SubscriberAttributes.h>
-#include <fastrtps/subscriber/SampleInfo.h>
-#include <fastrtps/types/DynamicData.h>
-#include <fastrtps/types/TypeObjectFactory.h>
-
-#include <mutex>
-#include <condition_variable>
-#include <fstream>
-#include <string>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilder.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilderFactory.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicData.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicType.hpp>
+#include <fastdds/dds/xtypes/type_representation/ITypeObjectRegistry.hpp>
+#include <fastdds/dds/xtypes/type_representation/TypeObject.hpp>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-
-static bool g_run = true;
-static types::DynamicType_ptr g_type;
-static Topic* g_topic = nullptr;
-static DataReaderQos g_qos;
-static Subscriber* g_subscriber = nullptr;
-static DataReader* g_reader = nullptr;
-static DomainParticipant* g_participant = nullptr;
-
+using namespace eprosima::fastdds::dds::xtypes;
+using namespace eprosima::fastdds::rtps;
 
 class ParListener : public DomainParticipantListener
 {
@@ -57,10 +51,7 @@ public:
 
     ParListener()
     {
-    }
-
-    virtual ~ParListener() override
-    {
+        remote_names_ = is_worth_a_type_.get_future();
     }
 
     /**
@@ -70,115 +61,38 @@ public:
      */
     void on_participant_discovery(
             DomainParticipant* /*participant*/,
-            rtps::ParticipantDiscoveryInfo&& info) override
+            ParticipantDiscoveryStatus status,
+            const ParticipantBuiltinTopicData& info,
+            bool& /*should_be_ignored*/) override
     {
-        if (info.status == rtps::ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
+        if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
         {
             std::cout << "Subscriber participant " << //participant->getGuid() <<
-                " discovered participant " << info.info.m_guid << std::endl;
+                " discovered participant " << info.guid << std::endl;
         }
-        else if (info.status == rtps::ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT)
+        else if (status == ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT)
         {
             std::cout << "Subscriber participant " << //participant->getGuid() <<
-                " detected changes on participant " << info.info.m_guid << std::endl;
+                " detected changes on participant " << info.guid << std::endl;
         }
-        else if (info.status == rtps::ParticipantDiscoveryInfo::REMOVED_PARTICIPANT)
+        else if (status == ParticipantDiscoveryStatus::REMOVED_PARTICIPANT)
         {
             std::cout << "Subscriber participant " << //participant->getGuid() <<
-                " removed participant " << info.info.m_guid << std::endl;
+                " removed participant " << info.guid << std::endl;
         }
-        else if (info.status == rtps::ParticipantDiscoveryInfo::DROPPED_PARTICIPANT)
+        else if (status == ParticipantDiscoveryStatus::DROPPED_PARTICIPANT)
         {
             std::cout << "Subscriber participant " << //participant->getGuid() <<
-                " dropped participant " << info.info.m_guid << std::endl;
+                " dropped participant " << info.guid << std::endl;
         }
-    }
-
-    void on_type_information_received(
-            eprosima::fastdds::dds::DomainParticipant* participant,
-            const eprosima::fastrtps::string_255 topic_name,
-            const eprosima::fastrtps::string_255 type_name,
-            const eprosima::fastrtps::types::TypeInformation& type_information) override
-    {
-        std::function<void(const std::string&, const types::DynamicType_ptr)> callback =
-                [topic_name, type_name](const std::string& name, const types::DynamicType_ptr type)
-                {
-                    if (nullptr != g_subscriber)
-                    {
-                        if (g_participant->lookup_topicdescription(topic_name.to_string()) != nullptr)
-                        {
-                            std::cout << "ERROR: Cannot create Topic with name " << topic_name
-                                      << " - Topic already exists" << std::endl;
-                            return;
-                        }
-                        std::cout << "Discovered type: " << name << " from topic " << topic_name << std::endl;
-                        g_topic = g_participant->create_topic(
-                            topic_name.to_string(),
-                            type_name.to_string(),
-                            TOPIC_QOS_DEFAULT);
-                        if (g_topic == nullptr)
-                        {
-                            std::cout << "ERROR: Could not create topic " << topic_name << std::endl;
-                            return;
-                        }
-
-                        g_reader = g_subscriber->create_datareader(
-                            g_topic,
-                            g_qos,
-                            nullptr);
-                        if (g_reader == nullptr)
-                        {
-                            std::cout << "ERROR: Could not create reader for topic " << topic_name << std::endl;
-                            return;
-                        }
-
-                        if (type == nullptr)
-                        {
-                            const types::TypeIdentifier* ident =
-                                    types::TypeObjectFactory::get_instance()->get_type_identifier_trying_complete(name);
-
-                            if (nullptr != ident)
-                            {
-                                const types::TypeObject* obj =
-                                        types::TypeObjectFactory::get_instance()->get_type_object(ident);
-
-                                types::DynamicType_ptr dyn_type =
-                                        types::TypeObjectFactory::get_instance()->build_dynamic_type(name, ident, obj);
-
-                                if (nullptr != dyn_type)
-                                {
-                                    g_type = dyn_type;
-                                }
-                                else
-                                {
-                                    std::cout << "ERROR: DynamicType cannot be created for type: " << name << std::endl;
-                                }
-                            }
-                            else
-                            {
-                                std::cout << "ERROR: TypeIdentifier cannot be retrieved for type: "
-                                          << name << std::endl;
-                            }
-                        }
-                        else
-                        {
-                            g_type = type;
-                        }
-                    }
-                };
-
-        participant->register_remote_type(
-            type_information,
-            type_name.to_string(),
-            callback);
     }
 
 #if HAVE_SECURITY
     void onParticipantAuthentication(
             DomainParticipant* /*participant*/,
-            rtps::ParticipantAuthenticationInfo&& info) override
+            ParticipantAuthenticationInfo&& info) override
     {
-        if (rtps::ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT == info.status)
+        if (ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT == info.status)
         {
             std::cout << "Subscriber participant " << //participant->guid() <<
                 " authorized participant " << info.guid << std::endl;
@@ -192,23 +106,20 @@ public:
 
 #endif // if HAVE_SECURITY
 
+    using topic_type_names = std::pair<std::string, std::string>;
+
+    std::future<topic_type_names> remote_names_;
+
 private:
 
     using DomainParticipantListener::on_participant_discovery;
+
+    std::promise<topic_type_names> is_worth_a_type_;
 };
 
 class SubListener : public SubscriberListener
 {
 public:
-
-    SubListener()
-        : number_samples_(0)
-    {
-    }
-
-    ~SubListener() override
-    {
-    }
 
     void on_subscription_matched(
             DataReader* /*reader*/,
@@ -229,37 +140,6 @@ public:
         }
     }
 
-    void on_data_available(
-            DataReader* reader) override
-    {
-        if (nullptr != g_type)
-        {
-            types::DynamicPubSubType pst(g_type);
-            types::DynamicData_ptr sample(static_cast<types::DynamicData*>(pst.createData()));
-            eprosima::fastdds::dds::SampleInfo info;
-
-            if (nullptr != reader && !!reader->take_next_sample(sample.get(), &info))
-            {
-                if (info.valid_data)
-                {
-                    std::unique_lock<std::mutex> lock(mutex_);
-                    ++number_samples_;
-                    std::string message;
-                    uint32_t index;
-                    octet count;
-                    sample->get_string_value(message, 0);
-                    sample->get_uint32_value(index, 1);
-                    types::DynamicData* inner = sample->loan_value(2);
-                    inner->get_byte_value(count, 0);
-                    sample->return_loaned_value(inner);
-                    std::cout << "Received sample: index(" << index << "), message("
-                              << message << "), inner_count(" << std::hex << (uint32_t)count << ")" << std::endl;
-                    cv_.notify_all();
-                }
-            }
-        }
-    }
-
     void on_liveliness_changed(
             DataReader* /*reader*/,
             const eprosima::fastdds::dds::LivelinessChangedStatus& status) override
@@ -271,24 +151,22 @@ public:
         else if (status.not_alive_count_change == 1)
         {
             std::cout << "Publisher lost liveliness" << std::endl;
-            g_run = false;
+            run_ = false;
         }
     }
 
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    unsigned int number_samples_;
+    std::atomic_bool run_ = { true };
 };
 
 int main(
         int argc,
         char** argv)
 {
+    int result = 0;
     int arg_count = 1;
     bool notexit = false;
     uint32_t seed = 7800;
     uint32_t samples = 4;
-    //char* xml_file = nullptr;
     std::string magic;
 
     while (arg_count < argc)
@@ -336,87 +214,149 @@ int main(
                 return -1;
             }
 
-            //xml_file = argv[arg_count];
         }
 
         ++arg_count;
     }
 
-    /* TODO - XMLProfileManager doesn't support DDS yet
-       if(xml_file)
-       {
-        DomainParticipantFactory::get_instance()->load_XML_profiles_file(xml_file);
-       }
-     */
-
-    //Do not enable entities on creation
-    DomainParticipantFactoryQos factory_qos;
-    factory_qos.entity_factory().autoenable_created_entities = false;
-    DomainParticipantFactory::get_instance()->set_qos(factory_qos);
-
-    DomainParticipantQos participant_qos;
-    participant_qos.wire_protocol().builtin.typelookup_config.use_client = true;
     ParListener participant_listener;
-    StatusMask participant_mask = StatusMask::none();
-    g_participant =
-            DomainParticipantFactory::get_instance()->create_participant(seed % 230, participant_qos,
-                    &participant_listener, participant_mask);
-
-    if (g_participant == nullptr)
-    {
-        std::cout << "Error creating subscriber participant" << std::endl;
-        return 1;
-    }
-
-    // Generate topic name
-    std::ostringstream topic;
-    topic << "HelloWorldTopic_" << ((magic.empty()) ? asio::ip::host_name() : magic) << "_" << seed;
+    DomainParticipant* participant = nullptr;
 
     SubListener listener;
-    StatusMask mask = StatusMask::subscription_matched()
-            << StatusMask::data_available()
-            << StatusMask::liveliness_changed();
+    Subscriber* subscriber = nullptr;
 
-    //CREATE THE SUBSCRIBER
-    g_subscriber = g_participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT, &listener, mask);
+    Topic* topic = nullptr;
+    DataReader* reader = nullptr;
 
-    if (g_subscriber == nullptr)
+    try
     {
-        std::cout << "Error creating subscriber" << std::endl;
-        DomainParticipantFactory::get_instance()->delete_participant(g_participant);
-        return 1;
-    }
 
-    //Now that everything is created we can enable the protocols
-    g_participant->enable();
+        DomainParticipantQos participant_qos;
+        StatusMask participant_mask = StatusMask::none();
+        participant =
+                DomainParticipantFactory::get_instance()->create_participant(seed % 230, participant_qos,
+                        &participant_listener, participant_mask);
 
-    while (notexit && g_run)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
+        if (participant == nullptr)
+        {
+            std::cout << "Error creating subscriber participant" << std::endl;
+            throw 1;
+        }
 
-    if (g_run)
-    {
-        std::unique_lock<std::mutex> lock(listener.mutex_);
-        listener.cv_.wait(lock, [&]
+        StatusMask mask = StatusMask::subscription_matched()
+                << StatusMask::liveliness_changed();
+
+        // Create the Subscriber
+        subscriber = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT, &listener, mask);
+
+        if (subscriber == nullptr)
+        {
+            std::cout << "Error creating subscriber" << std::endl;
+            throw 1;
+        }
+
+        // Get the dynamic type factory
+        auto remote_names = participant_listener.remote_names_.get();
+        auto& topic_name = remote_names.first;
+        auto& type_name = remote_names.second;
+
+        DynamicType::_ref_type type;
+
+        {
+            TypeObjectPair type_objects;
+            if (RETCODE_OK != DomainParticipantFactory::get_instance()->type_object_registry().get_type_objects(
+                        type_name, type_objects))
+
+            {
+                std::cout << "ERROR: TypeObject cannot be retrieved for type: "
+                          << type_name << std::endl;
+                throw 1;
+            }
+
+            type = DynamicTypeBuilderFactory::get_instance()->create_type_w_type_object(
+                type_objects.complete_type_object)->build();
+
+            if (!type)
+            {
+                std::cout << "ERROR: DynamicType cannot be created for type: " << type_name << std::endl;
+                throw 1;
+            }
+        }
+
+        // Create the Topic & DataReader
+        TopicDescription* desc = participant->lookup_topicdescription(topic_name);
+        if (desc != nullptr)
+        {
+            std::cout << "ERROR: Cannot create Topic with name " << topic_name
+                      << " - Topic already exists" << std::endl;
+            topic = static_cast<Topic*>(desc);
+        }
+        else
+        {
+            topic = participant->create_topic( topic_name, type_name, TOPIC_QOS_DEFAULT);
+            if (topic == nullptr)
+            {
+                std::cout << "ERROR: Could not create topic " << topic_name << std::endl;
+                throw 1;
+            }
+        }
+
+        DataReaderQos qos;
+        reader = subscriber->create_datareader(topic, qos, nullptr);
+        if (reader == nullptr)
+        {
+            std::cout << "ERROR: Could not create reader for topic " << topic_name << std::endl;
+            throw 1;
+        }
+
+        // samples received
+        uint32_t number_samples = 0;
+
+        while ((notexit || number_samples < samples ) && listener.run_)
+        {
+            // loop taking samples
+            DynamicPubSubType pst(type);
+            DynamicData* sample {static_cast<DynamicData*>(pst.createData())};
+            eprosima::fastdds::dds::SampleInfo info;
+
+            if (RETCODE_OK == reader->take_next_sample(sample, &info))
+            {
+                if (info.valid_data)
                 {
-                    return listener.number_samples_ >= samples;
-                });
+                    std::string message;
+                    uint32_t index;
+                    octet count;
+
+                    ++number_samples;
+
+                    sample->get_string_value(message, 0);
+                    sample->get_uint32_value(index, 1);
+
+                    DynamicData::_ref_type inner {sample->loan_value(2)};
+                    inner->get_byte_value(count, 0);
+                    sample->return_loaned_value(inner);
+
+                    std::cout << "Received sample: index(" << index << "), message("
+                              << message << "), inner_count(" << std::hex << (uint32_t)count << ")" << std::endl;
+                }
+            }
+        }
+    }
+    catch (int res)
+    {
+        result = res;
     }
 
-    if (g_reader != nullptr)
+    if (participant != nullptr)
     {
-        g_subscriber->delete_datareader(g_reader);
-    }
-    if (g_subscriber != nullptr)
-    {
-        g_participant->delete_subscriber(g_subscriber);
-    }
-    if (g_topic != nullptr)
-    {
-        g_participant->delete_topic(g_topic);
-    }
-    DomainParticipantFactory::get_instance()->delete_participant(g_participant);
+        if (RETCODE_OK != participant->delete_contained_entities() && !result)
+        {
+            std::cout << "ERROR: precondition not met on participant entities removal" << std::endl;
+            result = 1;
+        }
 
-    return 0;
+        DomainParticipantFactory::get_instance()->delete_participant(participant);
+    }
+
+    return result;
 }

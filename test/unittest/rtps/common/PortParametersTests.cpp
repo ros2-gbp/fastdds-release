@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastrtps/rtps/common/PortParameters.h>
-
 #include <climits>
+
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
+#include <fastdds/rtps/common/PortParameters.hpp>
+
+using namespace eprosima::fastdds::rtps;
 
 /*!
  * @fn TEST(PortParameters, Limit_Unicast_Domain_OK)
@@ -88,7 +89,32 @@ TEST(PortParametersDeathTest, Limit_Multicast_Domain_FAIL)
     ASSERT_EXIT( { params.getMulticastPort(233); }, ::testing::ExitedWithCode(EXIT_FAILURE), "");
 }
 
-int main(int argc, char **argv)
+/*!
+ * @fn TEST(PortParameters, Limit_Unicast_Domain_OK)
+ * @brief This test checks the maximum valid domain with default parameters.
+ */
+TEST(PortParameters, Limit_DiscoveryServer_Domain_OK)
+{
+    PortParameters params;
+    uint32_t port = params.get_discovery_server_port(232);
+
+    ASSERT_TRUE(port > 0);
+}
+
+/*!
+ * @fn TEST(PortParametersDeathTest, Limit_DiscoveryServer_Domain_FAIL)
+ * @brief This test checks the minimum invalid domain with default parameters.
+ */
+TEST(PortParametersDeathTest, Limit_DiscoveryServer_Domain_FAIL)
+{
+    PortParameters params;
+    ASSERT_EXIT( { params.get_discovery_server_port(233); }, ::testing::ExitedWithCode(EXIT_FAILURE), "");
+}
+
+
+int main(
+        int argc,
+        char** argv)
 {
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

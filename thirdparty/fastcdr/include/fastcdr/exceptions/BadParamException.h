@@ -21,19 +21,19 @@ namespace eprosima {
 namespace fastcdr {
 namespace exception {
 /*!
- * @brief This class is thrown as an exception when a invalid parameter was being serialized.
+ * @brief This class is thrown as an exception when an invalid parameter is being serialized.
  * @ingroup EXCEPTIONMODULE
  */
-class BadParamException : public Exception
+class Cdr_DllAPI BadParamException : public Exception
 {
 public:
 
     /*!
      * @brief Default constructor.
      *
-     * @param message A error message. This message pointer is copied.
+     * @param message An error message. This message pointer is copied.
      */
-    Cdr_DllAPI BadParamException(
+    BadParamException(
             const char* const& message) noexcept;
 
     /*!
@@ -41,28 +41,25 @@ public:
      *
      * @param ex BadParamException that will be copied.
      */
-    Cdr_DllAPI BadParamException(
+    BadParamException(
             const BadParamException& ex) noexcept;
 
-#if HAVE_CXX0X
     /*!
      * @brief Default move constructor.
      *
      * @param ex BadParamException that will be moved.
      */
-    Cdr_DllAPI BadParamException(
+    BadParamException(
             BadParamException&& ex) noexcept;
-#endif // if HAVE_CXX0X
 
     /*!
      * @brief Assigment operation.
      *
      * @param ex BadParamException that will be copied.
      */
-    Cdr_DllAPI BadParamException& operator =(
+    BadParamException& operator =(
             const BadParamException& ex) noexcept;
 
-#if HAVE_CXX0X
     /*!
      * @brief Assigment operation.
      *
@@ -70,16 +67,15 @@ public:
      */
     BadParamException& operator =(
             BadParamException&& ex) noexcept;
-#endif // if HAVE_CXX0X
 
-    //! @brief Default constructor
-    virtual Cdr_DllAPI ~BadParamException() noexcept;
+    //! @brief Default destructor
+    virtual ~BadParamException() noexcept;
 
     //! @brief This function throws the object as exception.
-    virtual Cdr_DllAPI void raise() const;
+    void raise() const override;
 
     //! @brief Default message used in the library.
-    static Cdr_DllAPI const char* const BAD_PARAM_MESSAGE_DEFAULT;
+    static const char* const BAD_PARAM_MESSAGE_DEFAULT;
 };
 }         //namespace exception
 }     //namespace fastcdr

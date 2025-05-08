@@ -16,13 +16,13 @@
  * @file SubscriptionMatchedStatus.hpp
  */
 
-#ifndef _SUBSCRIPTION_MATCHED_STATUS_HPP_
-#define _SUBSCRIPTION_MATCHED_STATUS_HPP_
+#ifndef FASTDDS_DDS_CORE_STATUS__SUBSCRIPTIONMATCHEDSTATUS_HPP
+#define FASTDDS_DDS_CORE_STATUS__SUBSCRIPTIONMATCHEDSTATUS_HPP
 
 #include <cstdint>
 
 #include <fastdds/dds/core/status/MatchedStatus.hpp>
-#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/dds/common/InstanceHandle.hpp>
 
 namespace eprosima {
 namespace fastdds {

@@ -26,7 +26,7 @@
 #include <gtest/gtest.h>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds::rtps;
 
 class PersistenceNonIntraprocess : public ::testing::Test
 {
@@ -78,7 +78,7 @@ public:
         // Wait for undiscovery
         reader.wait_undiscovery();
 
-        writer.make_persistent(db_file_name_writer(), guid_prefix())
+        writer.make_transient(db_file_name_writer(), guid_prefix())
                 .reliability(ReliabilityKind_t::RELIABLE).init();
 
         // Wait for discovery
@@ -160,7 +160,7 @@ protected:
         const int32_t pid = GET_PID();
         memcpy(guid_prefix_.value + 4, &pid, sizeof(pid));
         guid_prefix_.value[8] = HAVE_SECURITY;
-        guid_prefix_.value[9] = 3; // PREALLOCATED_MEMORY_MODE
+        guid_prefix_.value[9] = 3;
         LocatorList_t loc;
         IPFinder::getIP4Address(&loc);
         if (loc.size() > 0)
@@ -196,11 +196,11 @@ TEST_F(PersistenceNonIntraprocess, InconsistentAcknackReceived)
     RTPSWithRegistrationWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string ip("239.255.1.4");
 
-    reader.make_persistent(db_file_name_reader(), guid_prefix()).add_to_multicast_locator_list(ip, global_port).
+    reader.make_transient(db_file_name_reader(), guid_prefix()).add_to_multicast_locator_list(ip, global_port).
             reliability(ReliabilityKind_t::RELIABLE).init();
     EXPECT_TRUE(reader.isInitialized());
 
-    writer.make_persistent(db_file_name_writer(), guid_prefix()).
+    writer.make_transient(db_file_name_writer(), guid_prefix()).
             reliability(ReliabilityKind_t::RELIABLE).init();
 
     EXPECT_TRUE(writer.isInitialized());
