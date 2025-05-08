@@ -1,0 +1,28 @@
+From 95766045599c33eeb03fc3638bb86bb1519948f0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Steven!=20Ragnar=C3=B6k?=
+ <nuclearsandwich@users.noreply.github.com>
+Date: Sat, 12 Feb 2022 10:38:44 -0500
+Subject: [PATCH] Set CMake flags for Fast-DDS
+
+Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
+---
+ debian/rules.em | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/debian/rules.em b/debian/rules.em
+index 284a07142d7a..a96478593ffc 100755
+--- a/debian/rules.em
++++ b/debian/rules.em
+@@ -37,6 +37,9 @@ override_dh_auto_configure:
+ 	dh_auto_configure -- \
+ 		-DCMAKE_INSTALL_PREFIX="@(InstallationPrefix)" \
+ 		-DCMAKE_PREFIX_PATH="@(InstallationPrefix)" \
++		-DINSTALL_EXAMPLES=OFF \
++		-DSECURITY=ON \
++		-DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON \
+ 		$(BUILD_TESTING_ARG)
+ 
+ override_dh_auto_build:
+-- 
+2.49.0
+
