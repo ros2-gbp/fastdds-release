@@ -66,6 +66,9 @@ set(RTPS_BLACKBOXTESTS_SOURCE ${RTPS_BLACKBOXTESTS_TEST_SOURCE}
     types/Data1mb.cxx
     types/Data1mbPubSubTypes.cxx
     types/Data1mbv1.cxx
+    types/Data100kb.cxx
+    types/Data100kbPubSubTypes.cxx
+    types/Data100kbv1.cxx
     types/Data64kb.cxx
     types/Data64kbPubSubTypes.cxx
     types/Data64kbv1.cxx
@@ -113,9 +116,15 @@ gtest_discover_tests(BlackboxTests_RTPS
 
 file(GLOB BLACKBOXTESTS_TEST_SOURCE "common/BlackboxTests*.cpp")
 set(BLACKBOXTESTS_SOURCE ${BLACKBOXTESTS_TEST_SOURCE}
+    types/core/core_types.cxx
+    types/core/core_typesPubSubTypes.cxx
+    types/core/core_typesv1.cxx
     types/Data1mb.cxx
     types/Data1mbPubSubTypes.cxx
     types/Data1mbv1.cxx
+    types/Data100kb.cxx
+    types/Data100kbPubSubTypes.cxx
+    types/Data100kbv1.cxx
     types/Data64kb.cxx
     types/Data64kbPubSubTypes.cxx
     types/Data64kbv1.cxx
@@ -195,6 +204,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/builtin_transports_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/builtin_transports_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/auth_handshake_props_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/auth_handshake_props_profile.xml COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/security_bug_participant_generic_message.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/security_bug_participant_generic_message.xml COPYONLY)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/datagrams" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 if(FASTRTPS_API_TESTS)

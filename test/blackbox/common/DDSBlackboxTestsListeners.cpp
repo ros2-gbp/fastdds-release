@@ -428,7 +428,7 @@ TEST_P(DDSStatus, IncompatibleQosGetters)
             .deactivate_status_listener(eprosima::fastdds::dds::StatusMask::requested_incompatible_qos()).init();
     ASSERT_TRUE(compatible_reader.isInitialized());
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::this_thread::sleep_for(std::chrono::seconds(3));
 
     EXPECT_FALSE(writer.is_matched());
     EXPECT_FALSE(incompatible_reliability_reader.is_matched());
@@ -776,6 +776,7 @@ void sample_lost_test_dr_init(
         PubSubReader<T>& reader,
         std::function<void(const eprosima::fastdds::dds::SampleLostStatus& status)> functor)
 {
+    reader.socket_buffer_size(SAMPLE_LOST_TEST_BUFFER_SIZE);
     reader.sample_lost_status_functor(functor)
             .init();
 
@@ -788,9 +789,6 @@ void sample_lost_test_init(
         PubSubWriter<T>& writer,
         std::function<void(const eprosima::fastdds::dds::SampleLostStatus& status)> functor)
 {
-    reader.socket_buffer_size(SAMPLE_LOST_TEST_BUFFER_SIZE);
-    writer.socket_buffer_size(SAMPLE_LOST_TEST_BUFFER_SIZE);
-
     sample_lost_test_dw_init(writer);
     sample_lost_test_dr_init(reader, functor);
 
@@ -2942,7 +2940,7 @@ TEST(DDSStatus, sample_rejected_waitset)
             .disable_heartbeat_piggyback(true)
             .asynchronously(eprosima::fastdds::dds::PublishModeQosPolicyKind::ASYNCHRONOUS_PUBLISH_MODE)
             .add_throughput_controller_descriptor_to_pparams( // Be sure are sent in separate submessage each DATA.
-        eprosima::fastdds::rtps::FlowControllerSchedulerPolicy::FIFO, 100, 50)
+        eprosima::fastdds::rtps::FlowControllerSchedulerPolicy::FIFO, 300, 300)
             .init();
 
     reader.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
@@ -3389,6 +3387,136 @@ TEST(DDSStatus, keyed_reliable_positive_acks_disabled_on_unack_sample_removed)
 }
 
 /*!
+ * Regression Test for 22658: when the entire history is acked in volatile, given that the entries are deleted from the
+ * history, check_acked_status satisfies min_low_mark >= get_seq_num_min() because seq_num_min is unknown. This makes
+ * try_remove to fail, because it tries to remove changes but there were none. This causes prepare_change to not
+ * perform the changes, since the history was full and could not delete any changes.
+ */
+
+TEST(DDSStatus, entire_history_acked_volatile_unknown_pointer)
+{
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS, eprosima::fastrtps::Duration_t (200, 0))
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+            .resource_limits_max_instances(1)
+            .resource_limits_max_samples(1)
+            .resource_limits_max_samples_per_instance(1)
+            .init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    // Wait for discovery
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    auto data = default_helloworld_data_generator(2);
+    for (auto sample : data)
+    {
+        // A value of true means that the sample was sent successfully.
+        // This aligns with the expected behaviour of having the history
+        // acknowledged and emptied before the next message.
+        EXPECT_TRUE(writer.send_sample(sample));
+    }
+}
+
+/*¡
+ * Regression Test for 22648: on_unacknowledged_sample_removed callback is called when writer with keep all
+ * history is used, when the history was full but before max_blocking_time a sample was acknowledged, as is_acked was
+ * checked before the waiting time, and is not re-checked. This should not happen.
+ */
+TEST(DDSStatus, reliable_keep_all_unack_sample_removed_call)
+{
+    auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+    test_transport->drop_data_messages_filter_ = [](eprosima::fastrtps::rtps::CDRMessage_t& msg) -> bool
+            {
+                static std::vector<std::pair<SequenceNumber_t,
+                        std::chrono::steady_clock::time_point>> delayed_messages;
+
+                uint32_t old_pos = msg.pos;
+
+                // see RTPS DDS 9.4.5.3 Data Submessage
+                EntityId_t writerID;
+                SequenceNumber_t sn;
+
+                msg.pos += 2; // flags
+                msg.pos += 2; // inline QoS
+                msg.pos += 4; // reader ID
+                msg.pos += 4;
+                CDRMessage::readEntityId(&msg, &writerID);
+                CDRMessage::readSequenceNumber(&msg, &sn);
+
+                // Restore buffer position
+                msg.pos = old_pos;
+
+                // Delay logic for user endpoints only
+                if ((writerID.value[3] & 0xC0) == 0) // only user endpoints
+                {
+                    auto now = std::chrono::steady_clock::now();
+                    auto it = std::find_if(delayed_messages.begin(), delayed_messages.end(),
+                                    [&sn](const auto& pair)
+                                    {
+                                        return pair.first == sn;
+                                    });
+
+                    if (it == delayed_messages.end())
+                    {
+                        // If the sequence number is encountered for the first time, start the delay
+                        delayed_messages.emplace_back(sn, now + std::chrono::milliseconds(750)); // Add delay
+                        return true; // Start dropping this message
+                    }
+                    else if (now < it->second)
+                    {
+                        // If the delay period has not elapsed, keep dropping the message
+                        return true;
+                    }
+                    else
+                    {
+                        // Once the delay has elapsed, allow the message to proceed
+                        delayed_messages.erase(it);
+                    }
+                }
+                return false; // Allow message to proceed
+            };
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS, eprosima::fastrtps::Duration_t (200, 0))
+            .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+            .resource_limits_max_instances(1)
+            .resource_limits_max_samples(1)
+            .resource_limits_max_samples_per_instance(1)
+            .disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    // Wait for discovery
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    auto data = default_helloworld_data_generator(2);
+
+    for (auto sample : data)
+    {
+        writer.send_sample(sample);
+    }
+
+    EXPECT_EQ(writer.times_unack_sample_removed(), 0u);
+}
+
+/*!
  * Test that checks with a writer of each type that having the same listener attached, the notified writer in the
  * callback is the corresponding writer that has removed a sample unacknowledged.
  */
@@ -3425,11 +3553,12 @@ TEST(DDSStatus, several_writers_on_unack_sample_removed)
             .init();
     ASSERT_TRUE(ack_disabled_writer.isInitialized());
 
-    best_effort_writer.wait_discovery();
-    reliable_writer.wait_discovery();
-    ack_disabled_writer.wait_discovery();
-    best_effort_reader.wait_discovery();
-    reliable_reader.wait_discovery();
+    // The only non matching case is the best effort writer with the reliable reader
+    best_effort_writer.wait_discovery(1u, std::chrono::seconds::zero());
+    reliable_writer.wait_discovery(2u, std::chrono::seconds::zero());
+    ack_disabled_writer.wait_discovery(2u, std::chrono::seconds::zero());
+    best_effort_reader.wait_discovery(std::chrono::seconds::zero(), 3u);
+    reliable_reader.wait_discovery(std::chrono::seconds::zero(), 2u);
 
     auto best_effort_data = default_helloworld_data_generator();
     auto reliable_data = best_effort_data;

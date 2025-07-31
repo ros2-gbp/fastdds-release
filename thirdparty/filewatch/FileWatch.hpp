@@ -30,7 +30,9 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#define stat _stat
+#ifndef MINGW_COMPILER
+    #define stat _stat  // do not use stat in windows
+#endif  // ifndef MINGW_COMPILER
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -126,7 +128,7 @@ namespace filewatch {
         FileWatch<T>& operator=(const FileWatch<T>& other) = delete;
 
         // Const memeber varibles don't let me implent moves nicely, if moves are really wanted std::unique_ptr should be used and move that.
-        FileWatch<T>(FileWatch<T>&&) = delete;
+        FileWatch(FileWatch<T>&&) = delete;
         FileWatch<T>& operator=(FileWatch<T>&&) & = delete;
 
     private:
@@ -404,7 +406,7 @@ namespace filewatch {
                                 std::ratio_multiply<std::hecto, typename std::chrono::nanoseconds::period>>(
                                     reinterpret_cast<ULARGE_INTEGER*>(&att.ftLastWriteTime)->QuadPart - base_.first.QuadPart);
 
-                    if (bytes_returned == 0 || (current_time == last_write_time_) && current_size == last_size_ ) {
+                    if (bytes_returned == 0 || ((current_time == last_write_time_) && current_size == last_size_ )) {
                         break;
                     }
 

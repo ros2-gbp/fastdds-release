@@ -981,6 +981,83 @@ TEST(DDSBasic, successful_destruction_among_intraprocess_participants)
     // Restore library settings
     fastrtps::xmlparser::XMLProfileManager::library_settings(old_library_settings);
 }
+TEST(DDSBasic, reliable_volatile_writer_secure_builtin_no_potential_deadlock)
+{
+    // Create
+    PubSubWriter<HelloWorldPubSubType> writer("HelloWorldTopic_no_potential_deadlock");
+    PubSubReader<HelloWorldPubSubType> reader("HelloWorldTopic_no_potential_deadlock");
+
+    writer.asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE)
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(20)
+            .init();
+
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(20)
+            .durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+
+    auto data = default_helloworld_data_generator(30);
+
+    std::thread th([&]()
+            {
+                reader.startReception(data);
+                reader.block_for_at_least(5);
+            });
+
+    writer.wait_discovery();
+    writer.send(data);
+
+    th.join();
+    reader.destroy();
+    writer.destroy();
+}
+
+TEST(DDSBasic, participant_factory_output_log_error_no_macro_collision)
+{
+    using Log = eprosima::fastdds::dds::Log;
+    using LogConsumer = eprosima::fastdds::dds::LogConsumer;
+
+    // A LogConsumer that just counts the number of entries consumed
+    struct TestConsumer : public LogConsumer
+    {
+        TestConsumer(
+                std::atomic_size_t& n_logs_ref)
+            : n_logs_(n_logs_ref)
+        {
+        }
+
+        void Consume(
+                const Log::Entry&) override
+        {
+            ++n_logs_;
+        }
+
+    private:
+
+        std::atomic_size_t& n_logs_;
+    };
+
+    // Counter for log entries
+    std::atomic<size_t>n_logs{};
+
+    // Prepare Log module to check that no SECURITY errors are produced
+    Log::SetCategoryFilter(std::regex("DOMAIN"));
+    Log::SetVerbosity(Log::Kind::Error);
+    Log::RegisterConsumer(std::unique_ptr<LogConsumer>(new TestConsumer(n_logs)));
+
+    auto dpf = DomainParticipantFactory::get_shared_instance();
+    DomainParticipantQos qos;
+    dpf->load_XML_profiles_file("");
+    Log::Flush();
+    ASSERT_GE(n_logs.load(), 1u);
+}
 
 } // namespace dds
 } // namespace fastdds

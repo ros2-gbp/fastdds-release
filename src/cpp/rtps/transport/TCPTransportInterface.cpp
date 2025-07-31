@@ -39,7 +39,6 @@
 #endif // if TLS_FOUND
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/attributes/PropertyPolicy.h>
 #include <fastdds/rtps/common/CDRMessage_t.h>
 #include <fastdds/rtps/common/LocatorSelector.hpp>
@@ -181,7 +180,7 @@ TCPTransportInterface::TCPTransportInterface(
 #if TLS_FOUND
     , ssl_context_(asio::ssl::context::sslv23)
 #endif // if TLS_FOUND
-    , keep_alive_event_(io_service_timers_)
+    , keep_alive_event_(io_context_timers_)
 {
 }
 
@@ -195,14 +194,15 @@ void TCPTransportInterface::clean()
     alive_.store(false);
 
     keep_alive_event_.cancel();
-    if (io_service_timers_thread_.joinable())
+    if (io_context_timers_thread_.joinable())
     {
-        io_service_timers_.stop();
-        io_service_timers_thread_.join();
+        io_context_timers_.stop();
+        io_context_timers_thread_.join();
     }
 
     {
         std::vector<std::shared_ptr<TCPChannelResource>> channels;
+        std::vector<eprosima::fastdds::rtps::Locator> delete_channels;
 
         {
             std::unique_lock<std::mutex> scopedLock(sockets_map_mutex_);
@@ -212,8 +212,20 @@ void TCPTransportInterface::clean()
 
             for (auto& channel : channel_resources_)
             {
-                channels.push_back(channel.second);
+                if (std::find(channels.begin(), channels.end(), channel.second) == channels.end())
+                {
+                    channels.push_back(channel.second);
+                }
+                else
+                {
+                    delete_channels.push_back(channel.first);
+                }
             }
+        }
+
+        for (auto& delete_channel : delete_channels)
+        {
+            channel_resources_.erase(delete_channel);
         }
 
         for (auto& channel : channels)
@@ -250,10 +262,10 @@ void TCPTransportInterface::clean()
         initial_peer_local_locator_socket_.reset();
     }
 
-    if (io_service_thread_.joinable())
+    if (io_context_thread_.joinable())
     {
-        io_service_.stop();
-        io_service_thread_.join();
+        io_context_.stop();
+        io_context_thread_.join();
     }
 }
 
@@ -291,7 +303,7 @@ Locator TCPTransportInterface::local_endpoint_to_locator(
     return locator;
 }
 
-void TCPTransportInterface::bind_socket(
+ResponseCode TCPTransportInterface::bind_socket(
         std::shared_ptr<TCPChannelResource>& channel)
 {
     std::unique_lock<std::mutex> scopedLock(sockets_map_mutex_);
@@ -300,7 +312,33 @@ void TCPTransportInterface::bind_socket(
     auto it_remove = std::find(unbound_channel_resources_.begin(), unbound_channel_resources_.end(), channel);
     assert(it_remove != unbound_channel_resources_.end());
     unbound_channel_resources_.erase(it_remove);
-    channel_resources_[channel->locator()] = channel;
+
+    ResponseCode ret = RETCODE_OK;
+    const auto insert_ret = channel_resources_.insert(
+        decltype(channel_resources_)::value_type{channel->locator(), channel});
+    if (false == insert_ret.second)
+    {
+        // There is an existing channel that can be used. Force the Client to close unnecessary socket
+        ret = RETCODE_SERVER_ERROR;
+    }
+
+    std::vector<fastrtps::rtps::IPFinder::info_IP> local_interfaces;
+    // Check if the locator is from an owned interface to link all local interfaces to the channel
+    // Note: Only applicable for TCPv4 until TCPv6 scope selection is implemented
+    if (channel->locator().kind != LOCATOR_KIND_TCPv6)
+    {
+        is_own_interface(channel->locator(), local_interfaces);
+        if (!local_interfaces.empty())
+        {
+            Locator local_locator(channel->locator());
+            for (auto& interface_it : local_interfaces)
+            {
+                IPLocator::copy_address(interface_it.locator, local_locator);
+                channel_resources_.insert(decltype(channel_resources_)::value_type{local_locator, channel});
+            }
+        }
+    }
+    return ret;
 }
 
 bool TCPTransportInterface::check_crc(
@@ -341,7 +379,7 @@ uint16_t TCPTransportInterface::create_acceptor_socket(
             if (configuration()->apply_security)
             {
                 std::shared_ptr<TCPAcceptorSecure> acceptor =
-                        std::make_shared<TCPAcceptorSecure>(io_service_, this, locator);
+                        std::make_shared<TCPAcceptorSecure>(io_context_, this, locator);
                 acceptors_[acceptor->locator()] = acceptor;
                 acceptor->accept(this, ssl_context_);
                 final_port = static_cast<uint16_t>(acceptor->locator().port);
@@ -350,7 +388,7 @@ uint16_t TCPTransportInterface::create_acceptor_socket(
 #endif // if TLS_FOUND
             {
                 std::shared_ptr<TCPAcceptorBasic> acceptor =
-                        std::make_shared<TCPAcceptorBasic>(io_service_, this, locator);
+                        std::make_shared<TCPAcceptorBasic>(io_context_, this, locator);
                 acceptors_[acceptor->locator()] = acceptor;
                 acceptor->accept(this);
                 final_port = static_cast<uint16_t>(acceptor->locator().port);
@@ -379,7 +417,7 @@ uint16_t TCPTransportInterface::create_acceptor_socket(
                 if (configuration()->apply_security)
                 {
                     std::shared_ptr<TCPAcceptorSecure> acceptor =
-                            std::make_shared<TCPAcceptorSecure>(io_service_, sInterface, loc);
+                            std::make_shared<TCPAcceptorSecure>(io_context_, sInterface, loc);
                     acceptors_[acceptor->locator()] = acceptor;
                     acceptor->accept(this, ssl_context_);
                     final_port = static_cast<uint16_t>(acceptor->locator().port);
@@ -388,7 +426,7 @@ uint16_t TCPTransportInterface::create_acceptor_socket(
 #endif // if TLS_FOUND
                 {
                     std::shared_ptr<TCPAcceptorBasic> acceptor =
-                            std::make_shared<TCPAcceptorBasic>(io_service_, sInterface, loc);
+                            std::make_shared<TCPAcceptorBasic>(io_context_, sInterface, loc);
                     acceptors_[acceptor->locator()] = acceptor;
                     acceptor->accept(this);
                     final_port = static_cast<uint16_t>(acceptor->locator().port);
@@ -493,7 +531,7 @@ bool TCPTransportInterface::init(
        This process ensures uniqueness in the server's channel resources mapping, which uses client locators as keys.
        Although differing from the real client socket local port, provides a reliable mapping mechanism.
      */
-    initial_peer_local_locator_socket_ = std::unique_ptr<asio::ip::tcp::socket>(new asio::ip::tcp::socket(io_service_));
+    initial_peer_local_locator_socket_ = std::unique_ptr<asio::ip::tcp::socket>(new asio::ip::tcp::socket(io_context_));
     initial_peer_local_locator_socket_->open(generate_protocol());
 
     // Binding to port 0 delegates the port selection to the system.
@@ -514,13 +552,13 @@ bool TCPTransportInterface::init(
 
     if (cfg_send_size > 0 && send_size != cfg_send_size)
     {
-        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "UDPTransport sendBufferSize could not be set to the desired value. "
+        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "TCPTransport sendBufferSize could not be set to the desired value. "
                 << "Using " << send_size << " instead of " << cfg_send_size);
     }
 
     if (cfg_recv_size > 0 && recv_size != cfg_recv_size)
     {
-        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "UDPTransport receiveBufferSize could not be set to the desired value. "
+        EPROSIMA_LOG_WARNING(TRANSPORT_TCP, "TCPTransport receiveBufferSize could not be set to the desired value. "
                 << "Using " << recv_size << " instead of " << cfg_recv_size);
     }
 
@@ -532,30 +570,22 @@ bool TCPTransportInterface::init(
         rtcp_message_manager_ = std::make_shared<RTCPMessageManager>(this);
     }
 
-    auto ioServiceFunction = [&]()
+    auto ioContextFunction = [&]()
             {
-#if ASIO_VERSION >= 101200
-                asio::executor_work_guard<asio::io_service::executor_type> work(io_service_.get_executor());
-#else
-                io_service::work work(io_service_);
-#endif // if ASIO_VERSION >= 101200
-                io_service_.run();
+                asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context_);
+                io_context_.run();
             };
-    io_service_thread_ = create_thread(ioServiceFunction, configuration()->accept_thread, "dds.tcp_accept");
+    io_context_thread_ = create_thread(ioContextFunction, configuration()->accept_thread, "dds.tcp_accept");
 
     if (0 < configuration()->keep_alive_frequency_ms)
     {
-        auto ioServiceTimersFunction = [&]()
+        auto ioContextTimersFunction = [&]()
                 {
-#if ASIO_VERSION >= 101200
-                    asio::executor_work_guard<asio::io_service::executor_type> work(io_service_timers_.
-                                    get_executor());
-#else
-                    io_service::work work(io_service_timers_);
-#endif // if ASIO_VERSION >= 101200
-                    io_service_timers_.run();
+                    asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context_timers_.
+                                            get_executor());
+                    io_context_timers_.run();
                 };
-        io_service_timers_thread_ = create_thread(ioServiceTimersFunction,
+        io_context_timers_thread_ = create_thread(ioContextTimersFunction,
                         configuration()->keep_alive_thread, "dds.tcp_keep");
     }
 
@@ -679,7 +709,7 @@ void TCPTransportInterface::SenderResourceHasBeenClosed(
     // Socket disconnection should always be done in the listening thread (or in the transport cleanup, when receiver resources have
     // already been destroyed and the listening thread had consequently finished).
     // An assert() clause finding the respective channel resource cannot be made since in LARGE DATA scenario, where the PDP discovery is done
-    // via UDP, a server's send resource can be created with without any associated channel resource until receiving a connection request from
+    // via UDP, a server's send resource can be created without any associated channel resource until receiving a connection request from
     // the client.
     // The send resource locator is invalidated to prevent further use of associated channel.
     LOCATOR_INVALID(locator);
@@ -856,11 +886,11 @@ bool TCPTransportInterface::OpenOutputChannel(
 #if TLS_FOUND
                 (configuration()->apply_security) ?
                 static_cast<TCPChannelResource*>(
-                    new TCPChannelResourceSecure(this, io_service_, ssl_context_,
+                    new TCPChannelResourceSecure(this, io_context_, ssl_context_,
                     physical_locator, configuration()->maxMessageSize)) :
 #endif // if TLS_FOUND
                 static_cast<TCPChannelResource*>(
-                    new TCPChannelResourceBasic(this, io_service_, physical_locator,
+                    new TCPChannelResourceBasic(this, io_context_, physical_locator,
                     configuration()->maxMessageSize))
                 );
 
@@ -931,7 +961,7 @@ bool TCPTransportInterface::CreateInitialConnect(
     std::lock_guard<std::mutex> socketsLock(sockets_map_mutex_);
 
     // We try to find a SenderResource that has this locator.
-    // Note: This is done in this level because if we do in NetworkFactory level, we have to mantain what transport
+    // Note: This is done in this level because if we do it at NetworkFactory level, we have to mantain what transport
     // already reuses a SenderResource.
     for (auto& sender_resource : send_resource_list)
     {
@@ -978,11 +1008,11 @@ bool TCPTransportInterface::CreateInitialConnect(
 #if TLS_FOUND
         (configuration()->apply_security) ?
         static_cast<TCPChannelResource*>(
-            new TCPChannelResourceSecure(this, io_service_, ssl_context_,
+            new TCPChannelResourceSecure(this, io_context_, ssl_context_,
             physical_locator, configuration()->maxMessageSize)) :
 #endif // if TLS_FOUND
         static_cast<TCPChannelResource*>(
-            new TCPChannelResourceBasic(this, io_service_, physical_locator,
+            new TCPChannelResourceBasic(this, io_context_, physical_locator,
             configuration()->maxMessageSize))
         );
 
@@ -994,6 +1024,23 @@ bool TCPTransportInterface::CreateInitialConnect(
     statistics_info_.add_entry(locator);
     send_resource_list.emplace_back(
         static_cast<SenderResource*>(new TCPSenderResource(*this, physical_locator)));
+
+    std::vector<fastrtps::rtps::IPFinder::info_IP> local_interfaces;
+    // Check if the locator is from an owned interface to link all local interfaces to the channel
+    // Note: Only applicable for TCPv4 until TCPv6 scope selection is implemented
+    if (physical_locator.kind != LOCATOR_KIND_TCPv6)
+    {
+        is_own_interface(physical_locator, local_interfaces);
+        if (!local_interfaces.empty())
+        {
+            Locator local_locator(physical_locator);
+            for (auto& interface_it : local_interfaces)
+            {
+                IPLocator::copy_address(interface_it.locator, local_locator);
+                channel_resources_[local_locator] = channel;
+            }
+        }
+    }
 
     return true;
 }
@@ -1298,7 +1345,8 @@ bool TCPTransportInterface::Receive(
         do
         {
             header_found = receive_header(channel, tcp_header, ec);
-        } while (!header_found && !ec && channel->connection_status());
+        }
+        while (!header_found && !ec && channel->connection_status());
 
         if (ec)
         {
@@ -1604,7 +1652,7 @@ void TCPTransportInterface::SocketAccepted(
         {
             // Always create a new channel, it might be replaced later in bind_socket()
             std::shared_ptr<TCPChannelResource> channel(new TCPChannelResourceBasic(this,
-                    io_service_, socket, configuration()->maxMessageSize));
+                    io_context_, socket, configuration()->maxMessageSize));
 
             {
                 std::unique_lock<std::mutex> unbound_lock(unbound_map_mutex_);
@@ -1647,7 +1695,7 @@ void TCPTransportInterface::SecureSocketAccepted(
         {
             // Always create a new secure_channel, it might be replaced later in bind_socket()
             std::shared_ptr<TCPChannelResource> secure_channel(new TCPChannelResourceSecure(this,
-                    io_service_, ssl_context_, socket, configuration()->maxMessageSize));
+                    io_context_, ssl_context_, socket, configuration()->maxMessageSize));
 
             {
                 std::unique_lock<std::mutex> unbound_lock(unbound_map_mutex_);
@@ -2083,6 +2131,28 @@ void TCPTransportInterface::send_channel_pending_logical_ports(
             channel->add_logical_port(logical_port, rtcp_message_manager_.get());
         }
         channel_pending_logical_ports_.erase(channel->locator());
+    }
+}
+
+void TCPTransportInterface::is_own_interface(
+        const Locator& locator,
+        std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames) const
+{
+    std::vector<fastrtps::rtps::IPFinder::info_IP> local_interfaces;
+    get_ips(local_interfaces, true, false);
+    for (const auto& interface_it : local_interfaces)
+    {
+        if (IPLocator::compareAddress(locator, interface_it.locator) && is_interface_allowed(interface_it.name))
+        {
+            locNames = local_interfaces;
+            // Remove interface of original locator from the list
+            locNames.erase(std::remove_if(locNames.begin(), locNames.end(),
+                    [&interface_it](const fastrtps::rtps::IPFinder::info_IP& locInterface)
+                    {
+                        return locInterface.locator == interface_it.locator;
+                    }), locNames.end());
+            break;
+        }
     }
 }
 

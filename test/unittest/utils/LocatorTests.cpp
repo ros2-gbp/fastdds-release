@@ -75,6 +75,7 @@ public:
 
     const std::string ipv4_any = "0.0.0.0";
     const std::string ipv4_invalid = "0.0.0.0";
+    const std::string ipv4_invalid_format = "192.168.1.256.1";
     const std::string ipv6_any = "::";
     const std::string ipv6_invalid = "0:0:0:0:0:0:0:0";
 
@@ -160,7 +161,6 @@ TEST_F(IPLocatorTests, setIPv4_from_string)
     {
         // Error cases
         ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1.256")); // Too high number
-        ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1"));     // Too few args
         ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1.1.1")); // Too much args
 
         // Change to IPv6
@@ -767,6 +767,37 @@ TEST_F(IPLocatorTests, copyIPv6)
 }
 
 /*
+ * Check to copy an address
+ */
+TEST_F(IPLocatorTests, copy_address)
+{
+    // Copy IPv4
+    Locator_t locator1(LOCATOR_KIND_UDPv4);
+    Locator_t locator2(LOCATOR_KIND_UDPv4);
+    IPLocator::setIPv4(locator1, ipv4_lo_address);
+    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator2));
+    ASSERT_TRUE(IPLocator::copy_address(locator1, locator2));
+    ASSERT_TRUE(IPLocator::compareAddress(locator1, locator2));
+
+    // Check cannot copy between different kinds
+    locator1.kind = LOCATOR_KIND_UDPv6;
+    ASSERT_FALSE(IPLocator::copy_address(locator1, locator2));
+
+    // Copy IPv6
+    locator2.kind = LOCATOR_KIND_UDPv6;
+    IPLocator::setIPv6(locator1, ipv6_lo_address);
+    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator2));
+    ASSERT_TRUE(IPLocator::copy_address(locator1, locator2));
+    ASSERT_TRUE(IPLocator::compareAddress(locator1, locator2));
+
+    // Check cannot copy between SHM locators
+    locator1.kind = LOCATOR_KIND_SHM;
+    Locator_t locator3(LOCATOR_KIND_SHM);
+    ASSERT_FALSE(IPLocator::copy_address(locator1, locator3));
+    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator3));
+}
+
+/*
  * Check to set ip of any kind
  */
 TEST_F(IPLocatorTests, ip)
@@ -1317,8 +1348,8 @@ TEST_F(IPLocatorTests, setIPv4address)
     }
 
     ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7", "9.10.11.12", "13.14.15.16"));
-    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11", "13.14.15.16"));
-    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", "13.14.15"));
+    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", ipv4_invalid_format, "13.14.15.16"));
+    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", ipv4_invalid_format));
 
     locator.kind = LOCATOR_KIND_TCPv6;
     ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", "13.14.15.16"));
