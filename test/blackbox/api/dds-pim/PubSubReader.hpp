@@ -37,6 +37,7 @@
 #include <Windows.h>
 #endif // _MSC_VER
 
+#include <fastdds/dds/common/InstanceHandle.hpp>
 #include <fastdds/dds/core/condition/GuardCondition.hpp>
 #include <fastdds/dds/core/condition/StatusCondition.hpp>
 #include <fastdds/dds/core/condition/WaitSet.hpp>
@@ -71,6 +72,8 @@ using eprosima::fastrtps::rtps::IPLocator;
 using eprosima::fastdds::rtps::UDPTransportDescriptor;
 using eprosima::fastdds::rtps::UDPv4TransportDescriptor;
 using eprosima::fastdds::rtps::UDPv6TransportDescriptor;
+using eprosima::fastdds::rtps::BuiltinTransports;
+using eprosima::fastdds::rtps::BuiltinTransportsOptions;
 
 using SampleLostStatusFunctor = std::function<void (const eprosima::fastdds::dds::SampleLostStatus&)>;
 using SampleRejectedStatusFunctor = std::function<void (const eprosima::fastdds::dds::SampleRejectedStatus&)>;
@@ -195,7 +198,8 @@ protected:
                 do
                 {
                     reader_.receive(datareader, ret);
-                } while (ret);
+                }
+                while (ret);
             }
         }
 
@@ -373,7 +377,11 @@ public:
             bool take = true,
             bool statistics = false,
             bool read = true)
-        : PubSubReader(topic_name, take, statistics, read)
+        : PubSubReader(
+            topic_name,
+            take,
+            statistics,
+            read)
     {
         filter_expression_ = filter_expression;
         expression_parameters_ = expression_parameters;
@@ -1029,15 +1037,15 @@ public:
     }
 
     PubSubReader& setup_transports(
-            eprosima::fastdds::rtps::BuiltinTransports transports)
+            BuiltinTransports transports)
     {
         participant_qos_.setup_transports(transports);
         return *this;
     }
 
     PubSubReader& setup_transports(
-            eprosima::fastdds::rtps::BuiltinTransports transports,
-            const eprosima::fastdds::rtps::BuiltinTransportsOptions& options)
+            BuiltinTransports transports,
+            const BuiltinTransportsOptions& options)
     {
         participant_qos_.setup_transports(transports, options);
         return *this;
@@ -1046,9 +1054,10 @@ public:
     PubSubReader& setup_large_data_tcp(
             bool v6 = false,
             const uint16_t& port = 0,
-            const uint32_t& tcp_negotiation_timeout = 0)
+            const BuiltinTransportsOptions& options = BuiltinTransportsOptions())
     {
         participant_qos_.transport().use_builtin_transports = false;
+        participant_qos_.transport().max_msg_size_no_frag = options.maxMessageSize;
 
         /* Transports configuration */
         // UDP transport for PDP over multicast
@@ -1066,7 +1075,10 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_qos_.transport().user_transports.push_back(data_transport);
         }
         else
@@ -1080,7 +1092,10 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_qos_.transport().user_transports.push_back(data_transport);
         }
 
@@ -1381,10 +1396,10 @@ public:
     }
 
     PubSubReader& socket_buffer_size(
-            uint32_t sockerBufferSize)
+            uint32_t socketBufferSize)
     {
-        participant_qos_.transport().listen_socket_buffer_size = sockerBufferSize;
-        participant_qos_.transport().send_socket_buffer_size = sockerBufferSize;
+        participant_qos_.transport().listen_socket_buffer_size = socketBufferSize;
+        participant_qos_.transport().send_socket_buffer_size = socketBufferSize;
         return *this;
     }
 
@@ -1723,7 +1738,10 @@ public:
 
         if (ReturnCode_t::RETCODE_OK == datareader_->take(data_seq, info_seq))
         {
-            current_processed_count_++;
+            if (info_seq[0].publication_handle != eprosima::fastdds::dds::HANDLE_NIL)
+            {
+                current_processed_count_++;
+            }
             return true;
         }
         return false;
@@ -1735,7 +1753,10 @@ public:
         eprosima::fastdds::dds::SampleInfo dds_info;
         if (datareader_->take_next_sample(data, &dds_info) == ReturnCode_t::RETCODE_OK)
         {
-            current_processed_count_++;
+            if (dds_info.publication_handle != eprosima::fastdds::dds::HANDLE_NIL)
+            {
+                current_processed_count_++;
+            }
             return true;
         }
         return false;
@@ -1945,7 +1966,8 @@ protected:
         ReturnCode_t success = take_ ?
                 datareader->take_next_sample(data, &info) :
                 datareader->read_next_sample(data, &info);
-        if (ReturnCode_t::RETCODE_OK == success)
+        if ((ReturnCode_t::RETCODE_OK == success) &&
+                (info.publication_handle != eprosima::fastdds::dds::HANDLE_NIL))
         {
             returnedValue = true;
 
@@ -2006,6 +2028,12 @@ protected:
         {
             type& data = datas[i];
             eprosima::fastdds::dds::SampleInfo& info = infos[i];
+
+            // Skip unknown samples
+            if (info.publication_handle == eprosima::fastdds::dds::HANDLE_NIL)
+            {
+                continue;
+            }
 
             // Check order of changes.
             LastSeqInfo seq_info{ info.instance_handle, info.sample_identity.writer_guid() };
@@ -2354,7 +2382,8 @@ protected:
                     do
                     {
                         reader_.receive(reader_.datareader_, ret);
-                    } while (ret);
+                    }
+                    while (ret);
                 }
             }
 
@@ -2390,7 +2419,8 @@ protected:
                     do
                     {
                         reader_.receive(reader_.datareader_, ret);
-                    } while (ret);
+                    }
+                    while (ret);
                 }
             }
         }

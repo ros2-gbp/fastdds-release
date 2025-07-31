@@ -78,6 +78,7 @@ set(${PROJECT_NAME}_source_files
     rtps/messages/submessages/DataMsg.hpp
     rtps/messages/submessages/GapMsg.hpp
     rtps/messages/submessages/HeartbeatMsg.hpp
+    rtps/network/NetworkConfiguration.cpp
     rtps/network/NetworkFactory.cpp
     rtps/network/ReceiverResource.cpp
     rtps/network/utils/external_locators.cpp
@@ -195,6 +196,7 @@ set(${PROJECT_NAME}_source_files
     rtps/builtin/discovery/participant/PDP.cpp
     rtps/builtin/discovery/participant/ServerAttributes.cpp
     rtps/builtin/discovery/participant/PDPSimple.cpp
+    rtps/builtin/discovery/participant/simple/PDPStatelessWriter.cpp
     rtps/builtin/discovery/participant/PDPListener.cpp
     rtps/builtin/discovery/endpoint/EDP.cpp
     rtps/builtin/discovery/endpoint/EDPSimple.cpp
@@ -486,7 +488,7 @@ target_compile_definitions(${PROJECT_NAME}
     INTERFACE
     $<$<BOOL:${WIN32}>:${PROJECT_NAME_UPPER}_NO_LIB>
     PUBLIC
-    $<$<STREQUAL:$<TARGET_PROPERTY:${PROJECT_NAME},TYPE>,SHARED_LIBRARY>:${PROJECT_NAME_UPPER}_DYN_LINK>
+    $<$<TARGET_EXISTS:${PROJECT_NAME}>:$<$<STREQUAL:$<TARGET_PROPERTY:${PROJECT_NAME},TYPE>,SHARED_LIBRARY>:${PROJECT_NAME_UPPER}_DYN_LINK>>
     )
 
 # Define public headers
