@@ -543,7 +543,7 @@ RTPSParticipant* RTPSDomainImpl::clientServerEnvironmentCreationOverride(
     // Check the specified discovery protocol: if other than simple it has priority over ros environment variable
     if (att.builtin.discovery_config.discoveryProtocol != DiscoveryProtocol_t::SIMPLE)
     {
-        EPROSIMA_LOG_INFO(DOMAIN, "Detected non simple discovery protocol attributes."
+        EPROSIMA_LOG_INFO(RTPS_DOMAIN, "Detected non simple discovery protocol attributes."
                 << " Ignoring auto default client-server setup.");
         return nullptr;
     }
@@ -664,13 +664,13 @@ RTPSParticipant* RTPSDomainImpl::clientServerEnvironmentCreationOverride(
     if (nullptr != part)
     {
         // Client successfully created
-        EPROSIMA_LOG_INFO(DOMAIN, "Auto default server-client setup. Default client created.");
+        EPROSIMA_LOG_INFO(RTPS_DOMAIN, "Auto default server-client setup. Default client created.");
         part->mp_impl->client_override(true);
         return part;
     }
 
     // Unable to create auto server-client default participants
-    EPROSIMA_LOG_ERROR(DOMAIN, "Auto default server-client setup. Unable to create the client.");
+    EPROSIMA_LOG_ERROR(RTPS_DOMAIN, "Auto default server-client setup. Unable to create the client.");
     return nullptr;
 }
 
@@ -778,21 +778,25 @@ RTPSParticipantImpl* RTPSDomainImpl::find_local_participant(
     return nullptr;
 }
 
-std::shared_ptr<LocalReaderPointer> RTPSDomainImpl::find_local_reader(
+void RTPSDomainImpl::find_local_reader(
+        std::shared_ptr<LocalReaderPointer>& local_reader,
         const GUID_t& reader_guid)
 {
     auto instance = get_instance();
     std::lock_guard<std::mutex> guard(instance->m_mutex);
-    for (const t_p_RTPSParticipant& participant : instance->m_RTPSParticipants)
+    if (!local_reader)
     {
-        if (participant.second->getGuid().guidPrefix == reader_guid.guidPrefix)
+        for (const t_p_RTPSParticipant& participant : instance->m_RTPSParticipants)
         {
-            // Participant found, forward the query
-            return participant.second->find_local_reader(reader_guid);
+            if (participant.second->getGuid().guidPrefix == reader_guid.guidPrefix)
+            {
+                // Participant found, forward the query
+                local_reader = participant.second->find_local_reader(reader_guid);
+                break;
+            }
         }
+        // If the reader was not found, local_reader will remain nullptr
     }
-
-    return std::shared_ptr<LocalReaderPointer>(nullptr);
 }
 
 RTPSWriter* RTPSDomainImpl::find_local_writer(

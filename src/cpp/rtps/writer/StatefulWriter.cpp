@@ -1042,6 +1042,7 @@ bool StatefulWriter::matched_reader_add(
                         m_att.external_unicast_locators, m_att.ignore_non_matching_locators);
                         filter_remote_locators(*reader->async_locator_selector_entry(),
                         m_att.external_unicast_locators, m_att.ignore_non_matching_locators);
+                        mp_RTPSParticipant->createSenderResources(rdata.remote_locators(), m_att);
                         update_reader_info(locator_selector_general_, true);
                         update_reader_info(locator_selector_async_, true);
                     }
@@ -1126,6 +1127,7 @@ bool StatefulWriter::matched_reader_add(
         }
     }
 
+    mp_RTPSParticipant->createSenderResources(rdata.remote_locators(), m_att);
     update_reader_info(locator_selector_general_, true);
     update_reader_info(locator_selector_async_, true);
 
@@ -1266,55 +1268,58 @@ bool StatefulWriter::matched_reader_remove(
 {
     ReaderProxy* rproxy = nullptr;
     std::unique_lock<RecursiveTimedMutex> lock(mp_mutex);
-    std::unique_lock<LocatorSelectorSender> guard_locator_selector_general(locator_selector_general_);
-    std::unique_lock<LocatorSelectorSender> guard_locator_selector_async(locator_selector_async_);
 
-    for (ReaderProxyIterator it = matched_local_readers_.begin();
-            it != matched_local_readers_.end(); ++it)
     {
-        if ((*it)->guid() == reader_guid)
-        {
-            EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
-            rproxy = std::move(*it);
-            it = matched_local_readers_.erase(it);
-            break;
-        }
-    }
+        std::lock_guard<LocatorSelectorSender> guard_locator_selector_general(locator_selector_general_);
+        std::lock_guard<LocatorSelectorSender> guard_locator_selector_async(locator_selector_async_);
 
-    if (rproxy == nullptr)
-    {
-        for (ReaderProxyIterator it = matched_datasharing_readers_.begin();
-                it != matched_datasharing_readers_.end(); ++it)
+        for (ReaderProxyIterator it = matched_local_readers_.begin();
+                it != matched_local_readers_.end(); ++it)
         {
             if ((*it)->guid() == reader_guid)
             {
                 EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
                 rproxy = std::move(*it);
-                it = matched_datasharing_readers_.erase(it);
+                it = matched_local_readers_.erase(it);
                 break;
             }
         }
-    }
 
-    if (rproxy == nullptr)
-    {
-        for (ReaderProxyIterator it = matched_remote_readers_.begin();
-                it != matched_remote_readers_.end(); ++it)
+        if (rproxy == nullptr)
         {
-            if ((*it)->guid() == reader_guid)
+            for (ReaderProxyIterator it = matched_datasharing_readers_.begin();
+                    it != matched_datasharing_readers_.end(); ++it)
             {
-                EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
-                rproxy = std::move(*it);
-                it = matched_remote_readers_.erase(it);
-                break;
+                if ((*it)->guid() == reader_guid)
+                {
+                    EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
+                    rproxy = std::move(*it);
+                    it = matched_datasharing_readers_.erase(it);
+                    break;
+                }
             }
         }
-    }
 
-    locator_selector_general_.locator_selector.remove_entry(reader_guid);
-    locator_selector_async_.locator_selector.remove_entry(reader_guid);
-    update_reader_info(locator_selector_general_, false);
-    update_reader_info(locator_selector_async_, false);
+        if (rproxy == nullptr)
+        {
+            for (ReaderProxyIterator it = matched_remote_readers_.begin();
+                    it != matched_remote_readers_.end(); ++it)
+            {
+                if ((*it)->guid() == reader_guid)
+                {
+                    EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
+                    rproxy = std::move(*it);
+                    it = matched_remote_readers_.erase(it);
+                    break;
+                }
+            }
+        }
+
+        locator_selector_general_.locator_selector.remove_entry(reader_guid);
+        locator_selector_async_.locator_selector.remove_entry(reader_guid);
+        update_reader_info(locator_selector_general_, false);
+        update_reader_info(locator_selector_async_, false);
+    }
 
     if (getMatchedReadersSize() == 0)
     {
@@ -1330,11 +1335,8 @@ bool StatefulWriter::matched_reader_remove(
 
         if (nullptr != mp_listener)
         {
-            // call the listener without locks taken
-            guard_locator_selector_async.unlock();
-            guard_locator_selector_general.unlock();
+            // listener is called without locks taken
             lock.unlock();
-
             mp_listener->on_reader_discovery(this, ReaderDiscoveryInfo::REMOVED_READER, reader_guid, nullptr);
         }
 
@@ -1568,7 +1570,8 @@ void StatefulWriter::check_acked_status()
                     mp_listener->onWriterChangeReceivedByAll(this, change);
 
                     // Stop if we got to either next_all_acked_notify_sequence_ or the first change
-                } while (seq > end_seq);
+                }
+                while (seq > end_seq);
             }
 
             next_all_acked_notify_sequence_ = min_low_mark + 1;
@@ -1576,7 +1579,9 @@ void StatefulWriter::check_acked_status()
 
         if (min_low_mark >= get_seq_num_min())
         {
-            may_remove_change_ = 1;
+            // get_seq_num_min() returns SequenceNumber_t::unknown() when the history is empty.
+            // Thus, it is set to 2 to indicate that all samples have been removed.
+            may_remove_change_ = (get_seq_num_min() == SequenceNumber_t::unknown()) ? 2 : 1;
         }
 
         min_readers_low_mark_ = min_low_mark;
@@ -2121,7 +2126,8 @@ bool StatefulWriter::ack_timer_expired()
         do
         {
             last_sequence_number_++;
-        } while (!mp_history->get_change(
+        }
+        while (!mp_history->get_change(
             last_sequence_number_,
             getGuid(),
             &change) && last_sequence_number_ < next_sequence_number());
