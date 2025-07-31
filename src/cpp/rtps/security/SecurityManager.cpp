@@ -105,9 +105,9 @@ bool SecurityManager::init(
         ParticipantSecurityAttributes& attributes,
         const PropertyPolicy& participant_properties)
 {
+    SecurityException exception;
     try
     {
-        SecurityException exception;
         domain_id_ = participant_->get_domain_id();
         const PropertyPolicy log_properties = PropertyPolicyHelper::get_properties_with_prefix(
             participant_->getRTPSParticipantAttributes().properties,
@@ -222,7 +222,8 @@ bool SecurityManager::init(
                                 participant_->getRTPSParticipantAttributes(),
                                 participant_->getGuid(),
                                 exception);
-            } while (ret == VALIDATION_PENDING_RETRY && usleep_bool());
+            }
+            while (ret == VALIDATION_PENDING_RETRY && usleep_bool());
 
             if (ret == VALIDATION_OK)
             {
@@ -383,6 +384,13 @@ bool SecurityManager::init(
     {
         if (!e)
         {
+            // Unexpected code path. Let's log any errors
+            EPROSIMA_LOG_ERROR(SECURITY, "Error while configuring security plugin.");
+            if (0 != strlen(exception.what()))
+            {
+                EPROSIMA_LOG_ERROR(SECURITY, exception.what());
+            }
+
             cancel_init();
             return false;
         }
@@ -897,8 +905,11 @@ bool SecurityManager::on_process_handshake(
 
         CacheChange_t* change = participant_stateless_message_writer_->new_change([&message]() -> uint32_t
                         {
-                            return static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message)
-                            + 4 /*encapsulation*/);
+                            uint32_t cdr_size =
+                            static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message));
+                            cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
+                            cdr_size += 4; // Encapsulation
+                            return cdr_size;
                         }
                         , ALIVE, c_InstanceHandle_Unknown);
 
@@ -1162,7 +1173,6 @@ bool SecurityManager::create_participant_stateless_message_reader()
         ratt.endpoint.multicastLocatorList = pattr.builtin.metatrafficMulticastLocatorList;
     }
     ratt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
-    ratt.endpoint.remoteLocatorList = pattr.builtin.initialPeersList;
     ratt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
     ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
     ratt.matched_writers_allocation = pattr.allocation.participants;
@@ -1263,7 +1273,6 @@ bool SecurityManager::create_participant_volatile_message_secure_writer()
     watt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
     watt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
     watt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
-    watt.endpoint.remoteLocatorList = pattr.builtin.initialPeersList;
     watt.endpoint.security_attributes().is_submessage_protected = true;
     watt.endpoint.security_attributes().plugin_endpoint_attributes =
             PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
@@ -1316,7 +1325,6 @@ bool SecurityManager::create_participant_volatile_message_secure_reader()
     ratt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
     ratt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
     ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
-    ratt.endpoint.remoteLocatorList = pattr.builtin.initialPeersList;
     ratt.endpoint.security_attributes().is_submessage_protected = true;
     ratt.endpoint.security_attributes().plugin_endpoint_attributes =
             PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
@@ -2239,8 +2247,10 @@ void SecurityManager::exchange_participant_crypto(
         CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
             [&message]() -> uint32_t
             {
-                return static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message)
-                + 4 /*encapsulation*/);
+                uint32_t cdr_size = static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message));
+                cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
+                cdr_size += 4; // Encapsulation
+                return cdr_size;
             }
             , ALIVE, c_InstanceHandle_Unknown);
 
@@ -3058,9 +3068,12 @@ bool SecurityManager::discovered_reader(
                                 CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
                                     [&message]() -> uint32_t
                                     {
-                                        return static_cast<uint32_t>(
-                                            ParticipantGenericMessageHelper::serialized_size(message)
-                                            + 4 /*encapsulation*/);
+                                        uint32_t cdr_size =
+                                        static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(
+                                            message));
+                                        cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
+                                        cdr_size += 4; // Encapsulation
+                                        return cdr_size;
                                     }
                                     , ALIVE, c_InstanceHandle_Unknown);
 
@@ -3422,9 +3435,12 @@ bool SecurityManager::discovered_writer(
                                 CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
                                     [&message]() -> uint32_t
                                     {
-                                        return static_cast<uint32_t>(
-                                            ParticipantGenericMessageHelper::serialized_size(message)
-                                            + 4 /*encapsulation*/);
+                                        uint32_t cdr_size =
+                                        static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(
+                                            message));
+                                        cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
+                                        cdr_size += 4; // Encapsulation
+                                        return cdr_size;
                                     }
                                     , ALIVE, c_InstanceHandle_Unknown);
 

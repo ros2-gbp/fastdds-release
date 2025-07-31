@@ -1,6 +1,11 @@
 Forthcoming
 -----------
 
+Version 2.14.5
+--------------
+
+* New property to configure the preferred key agreement algorithm.
+
 Version 2.14.3
 --------------
 
