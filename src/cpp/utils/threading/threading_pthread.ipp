@@ -19,20 +19,23 @@
 
 #include <pthread.h>
 #include <sys/resource.h>
+#if !defined(__QNX__)
 #include <sys/sysinfo.h>
+#endif  //!defined(__QNX__)
 #include <sys/time.h>
 #include <sys/types.h>
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
+#include <utils/threading/thread_logging.hpp>
 
 #if defined(__GLIBC__) && ((__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ <= 30)))
 #include <sys/syscall.h>
 #ifndef SYS_gettid
     #error "SYS_gettid unavailable on this system"
-#endif
+#endif // ifndef SYS_gettid
 #define gettid() ((pid_t)syscall(SYS_gettid))
-#endif
+#endif // if defined(__GLIBC__) && ((__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ <= 30)))
 
 namespace eprosima {
 
@@ -95,9 +98,12 @@ static void configure_current_thread_scheduler(
     // Set Scheduler Class and Priority
     //
 
-    if ((sched_class == SCHED_OTHER) ||
-            (sched_class == SCHED_BATCH) ||
-            (sched_class == SCHED_IDLE))
+    if ((sched_class == SCHED_OTHER)
+#if !defined(__QNX__)
+            || (sched_class == SCHED_BATCH)
+            || (sched_class == SCHED_IDLE)
+#endif  // !defined(__QNX__)
+            )
     {
         //
         // BATCH and IDLE do not have explicit priority values.
@@ -114,13 +120,13 @@ static void configure_current_thread_scheduler(
             result = setpriority(PRIO_PROCESS, gettid(), sched_priority);
             if (0 != result)
             {
-                EPROSIMA_LOG_ERROR(SYSTEM, "Problem to set priority of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_priority << ". Error '" << strerror(
+                THREAD_EPROSIMA_LOG_ERROR(thread_name, "Problem to set priority of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_priority << ". Error '" << strerror(
                             result) << "'");
             }
         }
         else if (0 != result)
         {
-            EPROSIMA_LOG_ERROR(SYSTEM, "Problem to set scheduler of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_class << ". Error '" << strerror(
+            THREAD_EPROSIMA_LOG_ERROR(thread_name, "Problem to set scheduler of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_class << ". Error '" << strerror(
                         result) << "'");
         }
     }
@@ -135,7 +141,7 @@ static void configure_current_thread_scheduler(
         result = pthread_setschedparam(self_tid, sched_class, &param);
         if (0 != result)
         {
-            EPROSIMA_LOG_ERROR(SYSTEM, "Problem to set scheduler of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_class << " with priority " << param.sched_priority << ". Error '" << strerror(
+            THREAD_EPROSIMA_LOG_ERROR(thread_name, "Problem to set scheduler of thread with id [" << self_tid << "," << thread_name << "] to value " << sched_class << " with priority " << param.sched_priority << ". Error '" << strerror(
                         result) << "'");
         }
     }
@@ -145,6 +151,12 @@ static void configure_current_thread_affinity(
         const char* thread_name,
         uint64_t affinity_mask)
 {
+#if defined(__QNX__)
+    if (affinity_mask > 0)
+    {
+        THREAD_EPROSIMA_LOG_ERROR(thread_name, "Setting thread affinity not supported on QNX");
+    }
+#else
     int a;
     int result;
     int cpu_count;
@@ -178,7 +190,7 @@ static void configure_current_thread_affinity(
 
     if (affinity_mask > 0)
     {
-        EPROSIMA_LOG_ERROR(SYSTEM, "Affinity mask has more processors than the ones present in the system");
+        THREAD_EPROSIMA_LOG_ERROR(thread_name, "Affinity mask has more processors than the ones present in the system");
     }
 
     if (result > 0)
@@ -192,9 +204,10 @@ static void configure_current_thread_affinity(
 
     if (0 != result)
     {
-        EPROSIMA_LOG_ERROR(SYSTEM, "Problem to set affinity of thread with id [" << self_tid << "," << thread_name << "] to value " << affinity_mask << ". Error '" << strerror(
+        THREAD_EPROSIMA_LOG_ERROR(thread_name, "Problem to set affinity of thread with id [" << self_tid << "," << thread_name << "] to value " << affinity_mask << ". Error '" << strerror(
                     result) << "'");
     }
+#endif  // defined(__QNX__)
 }
 
 void apply_thread_settings_to_current_thread(

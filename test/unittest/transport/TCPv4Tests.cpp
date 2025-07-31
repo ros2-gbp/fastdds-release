@@ -667,7 +667,7 @@ TEST_F(TCPv4Tests, check_TCPv4_interface_whitelist_initialization)
     auto check_whitelist = transportUnderTest.get_interface_whitelist();
     for (auto& ip : mock_interfaces)
     {
-        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::address_v4::from_string(
+        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::make_address_v4(
                     ip)), check_whitelist.end());
     }
 
@@ -1452,25 +1452,21 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     options |= asio::ssl::context::no_compression;
     ssl_context.set_options(options);
 
-    asio::io_service io_service;
-    auto ioServiceFunction = [&]()
+    asio::io_context io_context;
+    auto ioContextFunction = [&]()
             {
-#if ASIO_VERSION >= 101200
-                asio::executor_work_guard<asio::io_service::executor_type> work(io_service.get_executor());
-#else
-                io_service::work work(io_service_);
-#endif // if ASIO_VERSION >= 101200
-                io_service.run();
+                asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context);
+                io_context.run();
             };
-    std::thread ioServiceThread(ioServiceFunction);
+    std::thread ioContextThread(ioContextFunction);
 
     // TCPChannelResourceSecure::connect() like connection
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_service, ssl_context);
+    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_context, ssl_context);
     asio::ssl::verify_mode vm = 0x00;
     vm |= asio::ssl::verify_peer;
     secure_socket->set_verify_mode(vm);
@@ -1533,8 +1529,8 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     ASSERT_EQ(bytes_sent, 0u);
 
     secure_socket->lowest_layer().close(ec);
-    io_service.stop();
-    ioServiceThread.join();
+    io_context.stop();
+    ioContextThread.join();
 }
 #endif // ifndef _WIN32
 
@@ -1788,7 +1784,7 @@ TEST_F(TCPv4Tests, receive_unordered_data)
     asio::ip::tcp::socket sender(ctx);
     asio::ip::tcp::endpoint destination;
     destination.port(g_default_port);
-    destination.address(asio::ip::address::from_string("127.0.0.1"));
+    destination.address(asio::ip::make_address("127.0.0.1"));
     sender.connect(destination, ec);
     ASSERT_TRUE(!ec) << ec;
 
@@ -1921,6 +1917,9 @@ TEST_F(TCPv4Tests, autofill_port)
 // This test verifies server's channel resources mapping keys uniqueness, where keys are clients locators.
 // Clients typically communicated its PID as its locator port. When having several clients in the same
 // process this lead to overwriting server's channel resources map elements.
+// In order to ensure communication in TCP Discovery Server, a different entry is created in the server's
+// channel resources map for each IP interface found, all of them using the same TCP channel. Thus, two
+// clients will generate at least two entries in the server's channel resources map.
 TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 {
     TCPv4TransportDescriptor recvDescriptor;
@@ -1952,7 +1951,13 @@ TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    ASSERT_EQ(receiveTransportUnderTest.get_channel_resources().size(), 2u);
+    EXPECT_GT(receiveTransportUnderTest.get_channel_resources().size(), 2u);
+    std::set<std::shared_ptr<TCPChannelResource>> channels_created;
+    for (const auto& channel_resource : receiveTransportUnderTest.get_channel_resources())
+    {
+        channels_created.insert(channel_resource.second);
+    }
+    ASSERT_EQ(channels_created.size(), 2u);
 }
 
 #ifndef _WIN32
@@ -1985,13 +1990,13 @@ TEST_F(TCPv4Tests, non_blocking_send)
     IPLocator::setLogicalPort(serverLoc, 7410);
 
     // TCPChannelResourceBasic::connect() like connection
-    asio::io_service io_service;
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::io_context io_context;
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_service);
+    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_context);
     asio::async_connect(
         socket,
         endpoints,

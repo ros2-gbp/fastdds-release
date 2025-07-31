@@ -81,16 +81,16 @@ class TCPTransportInterface : public TransportInterface
 
 protected:
 
-    asio::io_service io_service_;
-    asio::io_service io_service_timers_;
+    asio::io_context io_context_;
+    asio::io_context io_context_timers_;
     std::unique_ptr<asio::ip::tcp::socket> initial_peer_local_locator_socket_;
     uint16_t initial_peer_local_locator_port_;
 
 #if TLS_FOUND
     asio::ssl::context ssl_context_;
 #endif // if TLS_FOUND
-    eprosima::thread io_service_thread_;
-    eprosima::thread io_service_timers_thread_;
+    eprosima::thread io_context_thread_;
+    eprosima::thread io_context_timers_thread_;
     std::shared_ptr<RTCPMessageManager> rtcp_message_manager_;
     std::mutex rtcp_message_manager_mutex_;
     std::condition_variable rtcp_message_manager_cv_;
@@ -240,7 +240,7 @@ public:
     virtual ~TCPTransportInterface();
 
     //! Stores the binding between the given locator and the given TCP socket. Server side.
-    void bind_socket(
+    ResponseCode bind_socket(
             std::shared_ptr<TCPChannelResource>&);
 
     //! Removes the listening socket for the specified port.
@@ -525,6 +525,16 @@ public:
      */
     void send_channel_pending_logical_ports(
             std::shared_ptr<TCPChannelResource>& channel);
+
+    /**
+     * Method to check if a locator contains an interface that belongs to the same host.
+     * If it occurs, @c locNames will be updated with the list of interfaces of the host.
+     * @param [in]     locator Locator to check.
+     * @param [in,out] locNames Vector of interfaces to be updated.
+     */
+    void is_own_interface(
+            const Locator& locator,
+            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames) const;
 };
 
 } // namespace rtps

@@ -46,6 +46,7 @@ test_UDPv4Transport::test_UDPv4Transport(
         const test_UDPv4TransportDescriptor& descriptor)
     : drop_data_messages_percentage_(descriptor.dropDataMessagesPercentage)
     , drop_data_messages_filter_(descriptor.drop_data_messages_filter_)
+    , drop_builtin_data_messages_filter_(descriptor.drop_builtin_data_messages_filter_)
     , drop_participant_builtin_topic_data_(descriptor.dropParticipantBuiltinTopicData)
     , drop_publication_builtin_topic_data_(descriptor.dropPublicationBuiltinTopicData)
     , drop_subscription_builtin_topic_data_(descriptor.dropSubscriptionBuiltinTopicData)
@@ -65,11 +66,12 @@ test_UDPv4Transport::test_UDPv4Transport(
 {
     test_UDPv4Transport_DropLogLength = 0;
     test_UDPv4Transport_ShutdownAllNetwork = false;
-    UDPv4Transport::mSendBufferSize = descriptor.sendBufferSize;
-    UDPv4Transport::mReceiveBufferSize = descriptor.receiveBufferSize;
+    UDPv4Transport::configuration_.sendBufferSize = descriptor.sendBufferSize;
+    UDPv4Transport::configuration_.receiveBufferSize = descriptor.receiveBufferSize;
+    UDPv4Transport::configuration_.maxMessageSize = descriptor.maxMessageSize;
     for (auto interf : descriptor.interfaceWhiteList)
     {
-        UDPv4Transport::interface_whitelist_.emplace_back(asio::ip::address_v4::from_string(interf));
+        UDPv4Transport::interface_whitelist_.emplace_back(asio::ip::make_address_v4(interf));
     }
     test_UDPv4Transport_DropLog.clear();
     test_UDPv4Transport_DropLogLength = descriptor.dropLogLength;
@@ -79,6 +81,10 @@ test_UDPv4TransportDescriptor::test_UDPv4TransportDescriptor()
     : SocketTransportDescriptor(s_maximumMessageSize, s_maximumInitialPeersRange)
     , dropDataMessagesPercentage(0)
     , drop_data_messages_filter_([](CDRMessage_t&)
+            {
+                return false;
+            })
+    , drop_builtin_data_messages_filter_([](CDRMessage_t&)
             {
                 return false;
             })
@@ -376,6 +382,10 @@ bool test_UDPv4Transport::packet_should_drop(
                     {
                         return true;
                     }
+                    else if (drop_builtin_data_messages_filter_(cdrMessage))
+                    {
+                        return true;
+                    }
                 }
                 else if (writer_id == fastrtps::rtps::c_EntityId_SEDPPubWriter)
                 {
@@ -383,10 +393,18 @@ bool test_UDPv4Transport::packet_should_drop(
                     {
                         return true;
                     }
+                    else if (drop_builtin_data_messages_filter_(cdrMessage))
+                    {
+                        return true;
+                    }
                 }
                 else if (writer_id == fastrtps::rtps::c_EntityId_SEDPSubWriter)
                 {
                     if (drop_subscription_builtin_topic_data_)
+                    {
+                        return true;
+                    }
+                    else if (drop_builtin_data_messages_filter_(cdrMessage))
                     {
                         return true;
                     }

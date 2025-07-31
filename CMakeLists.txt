@@ -29,7 +29,7 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastrtps VERSION "2.14.4" LANGUAGES C CXX)
+project(fastrtps VERSION "2.14.5" LANGUAGES C CXX)
 
 set(PROJECT_NAME_LARGE "Fast RTPS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
@@ -234,8 +234,8 @@ if(NOT BUILD_SHARED_LIBS)
     set(FASTDDS_STATIC ON)
 endif()
 
-eprosima_find_package(fastcdr REQUIRED)
-eprosima_find_thirdparty(Asio asio VERSION 1.10.8)
+eprosima_find_package(fastcdr 2 REQUIRED)
+eprosima_find_thirdparty(Asio asio VERSION 1.13.0)
 eprosima_find_thirdparty(TinyXML2 tinyxml2)
 
 find_package(foonathan_memory REQUIRED)
@@ -373,7 +373,26 @@ endif()
 ###############################################################################
 # Tools default setup
 ###############################################################################
-option(COMPILE_TOOLS "Build tools" ON)
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} -dumpmachine
+        OUTPUT_VARIABLE COMPILER_MACHINE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(COMPILER_MACHINE MATCHES "mingw")
+        message(STATUS "Using MinGW compiler.")
+        option(COMPILE_TOOLS "Build tools" OFF)
+        add_definitions(-DMINGW_COMPILER=1)
+        set(CMAKE_CXX_FLAGS
+            "${CMAKE_CXX_FLAGS} -Wno-attributes -Wno-stringop-overread -Wno-builtin-macro-redefined -Wno-cast-function-type -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers")
+        target_link_libraries(fastdds PUBLIC ws2_32 mswsock)
+    else()
+        message(STATUS "Using a GNU compiler on Windows but not MinGW.")
+    endif()
+else()
+    message(STATUS "Not using a GNU compiler on Windows.")
+    option(COMPILE_TOOLS "Build tools" ON)
+endif()
 
 if(EPROSIMA_BUILD)
     set(COMPILE_TOOLS ON)
