@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -31,6 +32,7 @@
 #include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
 #include <fastdds/rtps/builtin/discovery/participant/PDP.h>
 #include <fastdds/rtps/builtin/discovery/participant/PDPSimple.h>
+#include <rtps/builtin/discovery/participant/simple/PDPStatelessWriter.hpp>
 #include <fastdds/rtps/builtin/liveliness/WLP.h>
 #include <fastdds/rtps/common/EntityId_t.hpp>
 #include <fastdds/rtps/history/WriterHistory.h>
@@ -145,7 +147,8 @@ static void set_builtin_transports_from_env_var(
                         "LARGE_DATA", BuiltinTransports::LARGE_DATA,
                         "LARGE_DATAv6", BuiltinTransports::LARGE_DATAv6))
                 {
-                    EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "Wrong value '" << env_value << "' for environment variable '" <<
+                    EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT,
+                            "Wrong value '" << env_value << "' for environment variable '" <<
                             env_var_name << "'. Leaving as DEFAULT");
                 }
                 // Max_msg_size parser
@@ -484,7 +487,8 @@ RTPSParticipantImpl::RTPSParticipantImpl(
                     {
                         EPROSIMA_LOG_INFO(RTPS_PARTICIPANT,
                                 "Participant " << m_att.getName() << " with GUID " << m_guid <<
-                                " tries to create a TCP client for discovery server without providing a proper listening port." <<
+                                " tries to create a TCP client for discovery server without providing a proper listening port."
+                                               <<
                                 " No TCP participants will be able to connect to this participant, but it will be able make connections.");
                     }
                     for (fastdds::rtps::RemoteServerAttributes& it : m_att.builtin.discovery_config.m_DiscoveryServers)
@@ -1404,7 +1408,7 @@ bool RTPSParticipantImpl::createWriter(
         return false;
     }
 
-    auto callback = [hist, listen, &payload_pool, this]
+    auto callback = [hist, listen, entityId, &payload_pool, this]
                 (const GUID_t& guid, WriterAttributes& param, fastdds::rtps::FlowController* flow_controller,
                     IPersistenceService* persistence, bool is_reliable) -> RTPSWriter*
             {
@@ -1423,7 +1427,12 @@ bool RTPSParticipantImpl::createWriter(
                 }
                 else
                 {
-                    if (persistence != nullptr)
+                    if (entityId == c_EntityId_SPDPWriter)
+                    {
+                        return new PDPStatelessWriter(this, guid, param, flow_controller,
+                                       hist, listen);
+                    }
+                    else if (persistence != nullptr)
                     {
                         return new StatelessPersistentWriter(this, guid, param, payload_pool, flow_controller,
                                        hist, listen, persistence);
@@ -1992,34 +2001,69 @@ bool RTPSParticipantImpl::createAndAssociateReceiverswithEndpoint(
     if (unique_flows)
     {
         attributes.multicastLocatorList.clear();
-        attributes.unicastLocatorList = m_att.defaultUnicastLocatorList;
+        attributes.unicastLocatorList.clear();
         attributes.external_unicast_locators.clear();
 
-        uint16_t port = initial_unique_port;
-        while (port < final_unique_port)
+        // Register created resources to distinguish the case where a receiver was created in this same function call
+        // (and can be reused for other locators of the same kind in this reader), and that in which it was already
+        // created before for other reader in this same participant.
+        std::map<int32_t, int16_t> created_resources;
+
+        // Create unique flows for unicast locators
+        LocatorList_t input_locator_list = m_att.defaultUnicastLocatorList;
+        for (Locator_t& loc : input_locator_list)
         {
-            // Set port on unicast locators
-            for (Locator_t& loc : attributes.unicastLocatorList)
+            uint16_t port = created_resources.count(loc.kind) ? created_resources[loc.kind] : initial_unique_port;
+            while (port < final_unique_port)
             {
-                loc.port = port;
+                // Set logical port only TCP locators
+                if (LOCATOR_KIND_TCPv4 == loc.kind || LOCATOR_KIND_TCPv6 == loc.kind)
+                {
+                    // Due to current implementation limitations only one physical port (actual socket receiver)
+                    // is allowed when using TCP tranport. All we can do for now is to create a unique "logical" flow.
+                    // TODO(juanlofer): create a unique dedicated TCP communication channel once this limitation is removed.
+                    IPLocator::setLogicalPort(loc, port);
+                }
+                else
+                {
+                    loc.port = port;
+                }
+
+                // Try creating receiver for this locator
+                LocatorList_t aux_locator_list;
+                aux_locator_list.push_back(loc);
+                if (createReceiverResources(aux_locator_list, false, true, false))
+                {
+                    created_resources[loc.kind] = port;
+                }
+
+                // Locator will be present in the list if receiver was created, or was already created
+                // Continue if receiver not created for this reader (might exist but created for other reader in this same participant)
+                if (!aux_locator_list.empty() &&
+                        created_resources.count(loc.kind) && (created_resources[loc.kind] == port))
+                {
+                    break;
+                }
+
+                // Try with next port
+                ++port;
             }
 
-            // Try creating receiver resources
-            LocatorList_t aux_locator_list = attributes.unicastLocatorList;
-            if (createReceiverResources(aux_locator_list, false, true, false))
+            // Fail when unique ports are exhausted
+            if (port >= final_unique_port)
             {
-                break;
+                EPROSIMA_LOG_WARNING(RTPS_PARTICIPANT, "Unique flows requested but exhausted. Port range: "
+                        << initial_unique_port << "-" << final_unique_port << ". Discarding locator: " << loc);
             }
-
-            // Try with next port
-            ++port;
+            else
+            {
+                attributes.unicastLocatorList.push_back(loc);
+            }
         }
 
-        // Fail when unique ports are exhausted
-        if (port >= final_unique_port)
+        if (attributes.unicastLocatorList.empty())
         {
-            EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "Unique flows requested but exhausted. Port range: "
-                    << initial_unique_port << "-" << final_unique_port);
+            EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "No unicast locators to create unique flows");
             return false;
         }
     }
@@ -2130,7 +2174,7 @@ bool RTPSParticipantImpl::createReceiverResources(
     bool ret_val = input_list.empty();
 
 #if HAVE_SECURITY
-    // An auxilary buffer is needed in the ReceiverResource to to decrypt the message,
+    // An auxilary buffer is needed in the ReceiverResource to decrypt the message,
     // that imposes a limit in the received messages size even if the transport allows (uint32_t) messages size.
     uint32_t max_receiver_buffer_size =
             is_secure() ? std::numeric_limits<uint16_t>::max() : (std::numeric_limits<uint32_t>::max)();
@@ -2212,6 +2256,28 @@ void RTPSParticipantImpl::createSenderResources(
     std::lock_guard<std::timed_mutex> lock(m_send_resources_mutex_);
 
     m_network_Factory.build_send_resources(send_resource_list_, locator_selector_entry);
+}
+
+void RTPSParticipantImpl::createSenderResources(
+        const RemoteLocatorList& locator_list,
+        const EndpointAttributes& param)
+{
+    using fastdds::rtps::network::external_locators::filter_remote_locators;
+
+    LocatorSelectorEntry entry(locator_list.unicast.size(), locator_list.multicast.size());
+    entry.multicast = locator_list.multicast;
+    entry.unicast = locator_list.unicast;
+    filter_remote_locators(entry, param.external_unicast_locators, param.ignore_non_matching_locators);
+
+    std::lock_guard<std::timed_mutex> lock(m_send_resources_mutex_);
+    for (const Locator_t& locator : entry.unicast)
+    {
+        m_network_Factory.build_send_resources(send_resource_list_, locator);
+    }
+    for (const Locator_t& locator : entry.multicast)
+    {
+        m_network_Factory.build_send_resources(send_resource_list_, locator);
+    }
 }
 
 bool RTPSParticipantImpl::deleteUserEndpoint(
@@ -2565,20 +2631,22 @@ uint32_t RTPSParticipantImpl::getMaxDataSize()
 uint32_t RTPSParticipantImpl::calculateMaxDataSize(
         uint32_t length)
 {
-    uint32_t maxDataSize = length;
-
+    // RTPS header
+    uint32_t overhead = RTPSMESSAGE_HEADER_SIZE;
 #if HAVE_SECURITY
     // If there is rtps messsage protection, reduce max size for messages,
     // because extra data is added on encryption.
     if (security_attributes_.is_rtps_protected)
     {
-        maxDataSize -= m_security_manager.calculate_extra_size_for_rtps_message();
+        overhead += m_security_manager.calculate_extra_size_for_rtps_message();
     }
 #endif // if HAVE_SECURITY
 
-    // RTPS header
-    maxDataSize -= RTPSMESSAGE_HEADER_SIZE;
-    return maxDataSize;
+    if (length <= overhead)
+    {
+        return 0;
+    }
+    return length - overhead;
 }
 
 bool RTPSParticipantImpl::networkFactoryHasRegisteredTransports() const
@@ -2820,6 +2888,13 @@ bool RTPSParticipantImpl::did_mutation_took_place_on_meta(
             if (locals.empty())
             {
                 IPFinder::getIP4Address(&locals);
+                // If no local interfaces found, use localhost
+                if (locals.empty())
+                {
+                    Locator_t loc_lo;
+                    IPLocator::setIPv4(loc_lo, "127.0.0.1");
+                    locals.push_back(loc_lo);
+                }
             }
 
             // add a locator for each local
@@ -2837,7 +2912,8 @@ bool RTPSParticipantImpl::did_mutation_took_place_on_meta(
             // search for the next if any
             ++it;
         }
-    } while (it != UnicastLocatorList.end());
+    }
+    while (it != UnicastLocatorList.end());
 
     // TCP is a special case because physical ports are taken from the TransportDescriptors
     // besides WAN address may be added by the transport
@@ -2983,7 +3059,8 @@ void RTPSParticipantImpl::environment_file_has_changed()
     }
     else
     {
-        EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK, "Trying to add Discovery Servers to a participant which is not a SERVER, BACKUP " <<
+        EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
+                "Trying to add Discovery Servers to a participant which is not a SERVER, BACKUP " <<
                 "or an overriden CLIENT (SIMPLE participant transformed into CLIENT with the environment variable)");
     }
 }
@@ -2998,9 +3075,13 @@ void RTPSParticipantImpl::get_default_metatraffic_locators(
 {
     uint32_t metatraffic_multicast_port = att.port.getMulticastPort(domain_id_);
 
-    m_network_Factory.getDefaultMetatrafficMulticastLocators(att.builtin.metatrafficMulticastLocatorList,
-            metatraffic_multicast_port);
-    m_network_Factory.NormalizeLocators(att.builtin.metatrafficMulticastLocatorList);
+    if (m_att.builtin.discovery_config.discoveryProtocol != DiscoveryProtocol::CLIENT &&
+            m_att.builtin.discovery_config.discoveryProtocol != DiscoveryProtocol::SUPER_CLIENT)
+    {
+        m_network_Factory.getDefaultMetatrafficMulticastLocators(att.builtin.metatrafficMulticastLocatorList,
+                metatraffic_multicast_port);
+        m_network_Factory.NormalizeLocators(att.builtin.metatrafficMulticastLocatorList);
+    }
 
     m_network_Factory.getDefaultMetatrafficUnicastLocators(att.builtin.metatrafficUnicastLocatorList,
             metatraffic_unicast_port_);

@@ -648,6 +648,13 @@ public:
         return *this;
     }
 
+    PubSubParticipant& setup_transports(
+            eprosima::fastdds::rtps::BuiltinTransports transports)
+    {
+        participant_qos_.setup_transports(transports);
+        return *this;
+    }
+
     PubSubParticipant& user_data(
             const std::vector<eprosima::fastrtps::rtps::octet>& user_data)
     {
@@ -671,6 +678,13 @@ public:
         return *this;
     }
 
+    PubSubParticipant& wire_protocol_builtin(
+            const eprosima::fastrtps::rtps::BuiltinAttributes& wire_protocol_builtin)
+    {
+        participant_qos_.wire_protocol().builtin = wire_protocol_builtin;
+        return *this;
+    }
+
     bool update_wire_protocol(
             const eprosima::fastdds::dds::WireProtocolConfigQos& wire_protocol)
     {
@@ -682,6 +696,13 @@ public:
             return true;
         }
         return false;
+    }
+
+    PubSubParticipant& initial_peers(
+            const eprosima::fastrtps::rtps::LocatorList_t& initial_peers)
+    {
+        participant_qos_.wire_protocol().builtin.initialPeersList = initial_peers;
+        return *this;
     }
 
     PubSubParticipant& pub_property_policy(

@@ -22,6 +22,7 @@
 #include "PubSubParticipant.hpp"
 
 #include <fastrtps/rtps/common/Locator.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 #include <fastrtps/utils/IPFinder.h>
 
 using namespace eprosima::fastrtps;
@@ -171,6 +172,107 @@ TEST_P(NetworkConfig, sub_unique_network_flows)
     }
 }
 
+// Regression test for redmine issue #22519 to check that readers using unique network flows cannot share locators
+// with other readers. The mentioned issue referred to the case where TCP + builtin transports are present.
+// In that concrete scenario, the problem was that while the TCP (and UDP) transports rightly were able
+// to create a receiver in the dedicated "unique flow" port, shared memory failed for that same port as the other
+// process (or participant) is already listening on it. However this was not being handled properly, so once matched,
+// the publisher attempts to send data to the wrongfully announced shared memory locator.
+// Note that the underlying problem is that, when creating unique network flows, all transports are requested to
+// create a receiver for a specific port all together. This is, the creation of unique flow receivers is only
+// considered to fail when it fails for all transports, instead of decoupling them and keep trying for alternative
+// ports when the creation of a specific transport receiver fails.
+// In this test a similar scenario is presented, but using instead UDP and shared memory transports. In the first
+// participant, only shared memory is used (which should create a SHM receiver in the first "unique" port attempted).
+// In the second participant both UDP and shared memory are used (which should create a UDP receiver in the first
+// "unique" port attempted, and a shared memory receiver in the second "unique" port attempted, as the first one is
+// already being used by the first participant). As a result, the listening shared memory locators of each data
+// reader should be different. Finally, a third data reader is created in the second participant, and it is verified
+// that its listening locators are different from those of the other reader created in the same participant, as well as
+// from the (SHM) one of the reader created in the first participant.
+TEST_P(NetworkConfig, sub_unique_network_flows_multiple_locators)
+{
+    // Enable unique network flows feature
+    PropertyPolicy properties;
+    properties.properties().emplace_back("fastdds.unique_network_flows", "");
+
+    // First participant
+    PubSubParticipant<HelloWorldPubSubType> participant(0, 1, 0, 0);
+
+    participant.sub_topic_name(TEST_TOPIC_NAME).sub_property_policy(properties);
+
+    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> shm_descriptor =
+            std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+    // Use only SHM transport in the first participant
+    participant.disable_builtin_transport().add_user_transport_to_pparams(shm_descriptor);
+
+    ASSERT_TRUE(participant.init_participant());
+    ASSERT_TRUE(participant.init_subscriber(0));
+
+    LocatorList_t locators;
+
+    participant.get_native_reader(0).get_listening_locators(locators);
+    ASSERT_EQ(locators.size(), 1u);
+    ASSERT_EQ((*locators.begin()).kind, LOCATOR_KIND_SHM);
+
+    // Second participant
+    PubSubParticipant<HelloWorldPubSubType> participant2(0, 2, 0, 0);
+
+    participant2.sub_topic_name(TEST_TOPIC_NAME).sub_property_policy(properties);
+
+    // Use both UDP and SHM in the second participant
+    if (!use_udpv4)
+    {
+        participant2.disable_builtin_transport().add_user_transport_to_pparams(descriptor_).
+                add_user_transport_to_pparams(shm_descriptor);
+    }
+
+    ASSERT_TRUE(participant2.init_participant());
+    ASSERT_TRUE(participant2.init_subscriber(0));
+
+    LocatorList_t locators2_1;
+
+    participant2.get_native_reader(0).get_listening_locators(locators2_1);
+    ASSERT_TRUE(locators2_1.size() >= 2u); // There should be at least two locators, one for SHM and N(#interfaces) for UDP
+
+    // Check SHM locator is different from the one in the first participant
+    for (const Locator_t& loc : locators2_1)
+    {
+        if (LOCATOR_KIND_SHM == loc.kind)
+        {
+            // Ports should be different (expected second and first values of the unique network flows port range)
+            ASSERT_FALSE(loc == *locators.begin());
+        }
+    }
+
+    // Now create a second reader in the second participant
+    ASSERT_TRUE(participant2.init_subscriber(1));
+
+    LocatorList_t locators2_2;
+
+    participant2.get_native_reader(1).get_listening_locators(locators2_2);
+    ASSERT_TRUE(locators2_2.size() >= 2u); // There should be at least two locators, one for SHM and N(#interfaces) for UDP
+
+    // Check SHM locator is different from the one in the first participant
+    for (const Locator_t& loc : locators2_2)
+    {
+        if (LOCATOR_KIND_SHM == loc.kind)
+        {
+            // Ports should be different (expected third and first values of the unique network flows port range)
+            ASSERT_FALSE(loc == *locators.begin());
+        }
+    }
+
+    // Now check no locators are shared between the two readers in the second participant
+    for (const Locator_t& loc_1 : locators2_1)
+    {
+        for (const Locator_t& loc_2 : locators2_2)
+        {
+            ASSERT_FALSE(loc_1 == loc_2);
+        }
+    }
+}
+
 //Verify that outLocatorList is used to select the desired output channel
 TEST_P(NetworkConfig, PubSubOutLocatorSelection)
 {
@@ -260,7 +362,8 @@ TEST_P(NetworkConfig, PubSubInterfaceWhitelistLocalhost)
 void interface_whitelist_test(
         const std::vector<IPFinder::info_IP>& pub_interfaces,
         const std::vector<IPFinder::info_IP>& sub_interfaces,
-        bool interface_name = false)
+        bool interface_name = false,
+        bool add_shm_descriptor = false)
 {
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
@@ -277,23 +380,39 @@ void interface_whitelist_test(
         pub_udp_descriptor = std::make_shared<UDPv6TransportDescriptor>();
     }
 
-    // include the interfaces in the transport descriptor
-    for (const auto& interface : pub_interfaces)
+    // include the interfaces in the UDP transport descriptor
+    for (const auto& network_interface : pub_interfaces)
     {
         if (!interface_name)
         {
-            pub_udp_descriptor->interfaceWhiteList.push_back(interface.name);
+            pub_udp_descriptor->interfaceWhiteList.push_back(network_interface.name);
         }
         else
         {
-            pub_udp_descriptor->interfaceWhiteList.push_back(interface.dev);
+            pub_udp_descriptor->interfaceWhiteList.push_back(network_interface.dev);
         }
     }
 
-    // Set the transport descriptor WITH interfaces in the writer
+    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> pub_shm_descriptor;
+
+    if (add_shm_descriptor)
+    {
+        pub_shm_descriptor = std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+    }
+
+    // Set the UDP transport descriptor WITH interfaces in the writer
     writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_builtin_transport().
-            add_user_transport_to_pparams(pub_udp_descriptor).init();
+            add_user_transport_to_pparams(pub_udp_descriptor);
+
+    // If shared memory is requested, add it as well
+    if (add_shm_descriptor)
+    {
+        writer.add_user_transport_to_pparams(pub_shm_descriptor);
+    }
+
+    // Initialize the writer
+    writer.init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -308,23 +427,39 @@ void interface_whitelist_test(
         sub_udp_descriptor = std::make_shared<UDPv6TransportDescriptor>();
     }
 
-    // include the interfaces in the transport descriptor
-    for (const auto& interface : sub_interfaces)
+    // include the interfaces in the UDP transport descriptor
+    for (const auto& network_interface : sub_interfaces)
     {
         if (!interface_name)
         {
-            sub_udp_descriptor->interfaceWhiteList.push_back(interface.name);
+            sub_udp_descriptor->interfaceWhiteList.push_back(network_interface.name);
         }
         else
         {
-            sub_udp_descriptor->interfaceWhiteList.push_back(interface.dev);
+            sub_udp_descriptor->interfaceWhiteList.push_back(network_interface.dev);
         }
     }
 
-    // Set the transport descriptor WITH interfaces in the reader
+    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> sub_shm_descriptor;
+
+    if (add_shm_descriptor)
+    {
+        sub_shm_descriptor = std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+    }
+
+    // Set the UDP transport descriptor WITH interfaces in the reader
     reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_builtin_transport().
-            add_user_transport_to_pparams(sub_udp_descriptor).init();
+            add_user_transport_to_pparams(sub_udp_descriptor);
+
+    // If shared memory is requested, add it as well
+    if (add_shm_descriptor)
+    {
+        reader.add_user_transport_to_pparams(sub_shm_descriptor);
+    }
+
+    // Initialize the reader
+    reader.init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -517,6 +652,44 @@ TEST_P(NetworkConfig, PubSubAsymmetricInterfaceWhitelistAllExceptLocalhost)
         {
             // Whitelist only in subscriber
             interface_whitelist_test(no_interfaces, all_interfaces_except_localhost, true);
+        }
+    }
+}
+
+// Regression test for redmine issue #23213 to check in UDP that setting the interface whitelist in one
+// of the endpoints, but not in the other, connection is established anyways.
+// All available interfaces except loopback case.
+// This test verifies that adding a SHM transport descriptor does not affect the communication in this concrete case.
+TEST_P(NetworkConfig, PubSubAsymmetricInterfaceWhitelistAllExceptLocalhostSHM)
+{
+    std::vector<IPFinder::info_IP> no_interfaces;
+
+    std::vector<IPFinder::info_IP> all_interfaces_except_localhost;
+    use_udpv4 ? GetIP4s(all_interfaces_except_localhost, false) : GetIP6s(all_interfaces_except_localhost, false);
+
+    {
+        // IP address
+        {
+            // Whitelist only in publisher
+            interface_whitelist_test(all_interfaces_except_localhost, no_interfaces, false, true);
+        }
+
+        {
+            // Whitelist only in subscriber
+            interface_whitelist_test(no_interfaces, all_interfaces_except_localhost, false, true);
+        }
+    }
+
+    {
+        // Interface name
+        {
+            // Whitelist only in publisher
+            interface_whitelist_test(all_interfaces_except_localhost, no_interfaces, true, true);
+        }
+
+        {
+            // Whitelist only in subscriber
+            interface_whitelist_test(no_interfaces, all_interfaces_except_localhost, true, true);
         }
     }
 }
