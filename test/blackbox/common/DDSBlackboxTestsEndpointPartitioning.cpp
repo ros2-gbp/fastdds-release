@@ -18,7 +18,7 @@
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps;
 
 /**
  * This test checks that DataWriter/DataReaders match with each other one to one when the partition

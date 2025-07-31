@@ -16,14 +16,14 @@
  * @file NetworkInterfaceWithFilter.hpp
  */
 
-#ifndef FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACEWITHFILTER_HPP
-#define FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACEWITHFILTER_HPP
+#ifndef _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACEWITHFILTER_HPP_
+#define _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACEWITHFILTER_HPP_
 
 #include <string>
 
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
 #include <fastdds/rtps/transport/network/NetworkInterface.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -38,12 +38,12 @@ namespace rtps {
 struct NetworkInterfaceWithFilter : public NetworkInterface
 {
     //! Constructor by name and netmask filter
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter(
+    RTPS_DllAPI NetworkInterfaceWithFilter(
             const std::string& name,
             NetmaskFilterKind netmask_filter);
 
     //! Constructor by name
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter(
+    RTPS_DllAPI NetworkInterfaceWithFilter(
             const std::string& name);
 
     //! Constructor by device name, IP address string, locator with mask and netmask filter
@@ -54,32 +54,32 @@ struct NetworkInterfaceWithFilter : public NetworkInterface
             NetmaskFilterKind netmask_filter);
 
     //! Constructor by device name, IP address string and locator with mask
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter(
+    RTPS_DllAPI NetworkInterfaceWithFilter(
             const std::string& device,
             const std::string& ip,
             const LocatorWithMask& locator);
 
     //! Destructor
-    virtual FASTDDS_EXPORTED_API ~NetworkInterfaceWithFilter() = default;
+    virtual RTPS_DllAPI ~NetworkInterfaceWithFilter() = default;
 
     //! Copy constructor
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter(
+    RTPS_DllAPI NetworkInterfaceWithFilter(
             const NetworkInterfaceWithFilter& iface) = default;
 
     //! Copy assignment
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter& operator =(
+    RTPS_DllAPI NetworkInterfaceWithFilter& operator =(
             const NetworkInterfaceWithFilter& iface) = default;
 
     //! Move constructor
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter(
+    RTPS_DllAPI NetworkInterfaceWithFilter(
             NetworkInterfaceWithFilter&& iface) = default;
 
     //! Move assignment
-    FASTDDS_EXPORTED_API NetworkInterfaceWithFilter& operator =(
+    RTPS_DllAPI NetworkInterfaceWithFilter& operator =(
             NetworkInterfaceWithFilter&& iface) = default;
 
     //! Comparison operator
-    FASTDDS_EXPORTED_API bool operator ==(
+    RTPS_DllAPI bool operator ==(
             const NetworkInterfaceWithFilter& iface) const;
 
     //! Netmask filter configuration
@@ -90,4 +90,4 @@ struct NetworkInterfaceWithFilter : public NetworkInterface
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACEWITHFILTER_HPP
+#endif // _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACEWITHFILTER_HPP_

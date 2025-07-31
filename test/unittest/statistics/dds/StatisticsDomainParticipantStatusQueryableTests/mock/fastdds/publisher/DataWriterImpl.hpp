@@ -16,36 +16,43 @@
  * @file DataWriterImpl.hpp
  */
 
-#ifndef _FASTDDS_DATAWRITERIMPL_HPP_
-#define _FASTDDS_DATAWRITERIMPL_HPP_
+#ifndef _FASTRTPS_DATAWRITERIMPL_HPP_
+#define _FASTRTPS_DATAWRITERIMPL_HPP_
 
 #include <memory>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/status/BaseStatus.hpp>
-#include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
 #include <fastdds/dds/core/status/IncompatibleQosStatus.hpp>
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
 #include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
+
+#include <fastdds/rtps/attributes/WriterAttributes.h>
+#include <fastdds/rtps/common/LocatorList.hpp>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/WriteParams.h>
+#include <fastdds/rtps/history/IChangePool.h>
+#include <fastdds/rtps/history/IPayloadPool.h>
+#include <fastdds/rtps/interfaces/IReaderDataFilter.hpp>
+#include <fastdds/rtps/writer/WriterListener.h>
+
+#include <fastrtps/qos/DeadlineMissedStatus.h>
+#include <fastrtps/qos/LivelinessLostStatus.h>
+
+#include <fastrtps/types/TypesBase.h>
+
 #include <fastdds/publisher/DataWriterHistory.hpp>
 #include <fastdds/publisher/filtering/ReaderFilterCollection.hpp>
-#include <fastdds/rtps/attributes/WriterAttributes.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/rtps/common/WriteParams.hpp>
-#include <fastdds/rtps/history/IChangePool.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
-#include <fastdds/rtps/interfaces/IReaderDataFilter.hpp>
-#include <fastdds/rtps/writer/WriterListener.hpp>
 
-#include <rtps/DataSharing/DataSharingPayloadPool.hpp>
+#include <rtps/common/PayloadInfo_t.hpp>
 #include <rtps/history/ITopicPayloadPool.h>
+#include <rtps/DataSharing/DataSharingPayloadPool.hpp>
+
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSWriter;
@@ -53,6 +60,10 @@ class RTPSParticipant;
 class TimedEvent;
 
 } // namespace rtps
+
+} // namespace fastrtps
+
+namespace fastdds {
 
 #ifdef FASTDDS_STATISTICS
 namespace statistics {
@@ -71,7 +82,8 @@ class Publisher;
 class DataWriterImpl : protected rtps::IReaderDataFilter
 {
     using LoanInitializationKind = DataWriter::LoanInitializationKind;
-    using CacheChange_t = eprosima::fastdds::rtps::CacheChange_t;
+    using PayloadInfo_t = eprosima::fastrtps::rtps::detail::PayloadInfo_t;
+    using CacheChange_t = eprosima::fastrtps::rtps::CacheChange_t;
     class LoanCollection;
 
 protected:
@@ -83,7 +95,12 @@ protected:
 #endif // FASTDDS_STATISTICS
 
     DataWriterImpl()
-        : history_()
+        : history_(atts_,
+                500,
+                fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
+                [](const InstanceHandle_t&)
+                {
+                })
     {
         gen_guid();
     }
@@ -94,8 +111,13 @@ protected:
             Topic*,
             const DataWriterQos&,
             DataWriterListener* listener = nullptr,
-            std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool = nullptr)
-        : history_()
+            std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool = nullptr)
+        : history_(atts_,
+                500,
+                fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
+                [](const InstanceHandle_t&)
+                {
+                })
     {
         gen_guid();
         static_cast<void>(listener);
@@ -107,9 +129,14 @@ protected:
             TypeSupport,
             Topic*,
             const DataWriterQos&,
-            const fastdds::rtps::EntityId_t&,
+            const fastrtps::rtps::EntityId_t&,
             DataWriterListener* listener = nullptr)
-        : history_()
+        : history_(atts_,
+                500,
+                fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
+                [](const InstanceHandle_t&)
+                {
+                })
     {
         gen_guid();
         static_cast<void>(listener);
@@ -124,108 +151,94 @@ public:
 
     virtual ReturnCode_t enable()
     {
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool;
-        std::shared_ptr<fastdds::rtps::IChangePool> change_pool;
-
-        history_.reset(new DataWriterHistory(
-                    payload_pool,
-                    change_pool,
-                    qos_.history(),
-                    qos_.resource_limits(),
-                    topic_kind_,
-                    500,
-                    fastdds::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
-                    [](const InstanceHandle_t&)
-                    {
-                    }));
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t check_delete_preconditions()
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t loan_sample(
             void*&,
             LoanInitializationKind )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t discard_loan(
             void*& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
-    ReturnCode_t write(
-            const void* const )
+    bool write(
+            void* )
     {
-        return RETCODE_OK;
+        return true;
     }
 
-    ReturnCode_t write(
-            const void* const,
-            fastdds::rtps::WriteParams& )
+    bool write(
+            void*,
+            fastrtps::rtps::WriteParams& )
     {
-        return RETCODE_OK;
+        return true;
     }
 
     ReturnCode_t write(
-            const void* const,
+            void*,
             const InstanceHandle_t& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t write_w_timestamp(
-            const void* const,
+            void*,
             const InstanceHandle_t&,
-            const fastdds::dds::Time_t& )
+            const fastrtps::Time_t& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     InstanceHandle_t register_instance(
-            const void* const )
+            void* )
     {
         return InstanceHandle_t();
     }
 
     InstanceHandle_t register_instance_w_timestamp(
-            const void* const,
-            const fastdds::dds::Time_t& )
+            void*,
+            const fastrtps::Time_t& )
     {
         return InstanceHandle_t();
     }
 
     ReturnCode_t unregister_instance(
-            const void* const,
+            void*,
             const InstanceHandle_t&,
             bool = false)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t unregister_instance_w_timestamp(
-            const void* const,
+            void*,
             const InstanceHandle_t&,
-            const fastdds::dds::Time_t&,
+            const fastrtps::Time_t&,
             bool  = false)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     void gen_guid()
     {
         static uint16_t entitiy_id_counter;
         entitiy_id_counter += 1;
-        guid_.entityId.value[2] = (fastdds::rtps::octet)entitiy_id_counter;
+        guid_.entityId.value[2] = (fastrtps::rtps::octet)entitiy_id_counter;
         guid_.entityId.value[3] = 0x2;
     }
 
-    const fastdds::rtps::GUID_t& guid() const
+    const fastrtps::rtps::GUID_t& guid() const
     {
 
         return guid_;
@@ -233,7 +246,7 @@ public:
 
     InstanceHandle_t get_instance_handle() const
     {
-        return fastdds::rtps::InstanceHandle_t();
+        return fastrtps::rtps::InstanceHandle_t();
     }
 
     TypeSupport get_type() const
@@ -242,43 +255,43 @@ public:
     }
 
     ReturnCode_t wait_for_acknowledgments(
-            const fastdds::dds::Duration_t& )
+            const fastrtps::Duration_t& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t wait_for_acknowledgments(
-            const void* const,
+            void*,
             const InstanceHandle_t&,
-            const fastdds::dds::Duration_t& )
+            const fastrtps::Duration_t& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_publication_matched_status(
             PublicationMatchedStatus&)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_offered_deadline_missed_status(
-            OfferedDeadlineMissedStatus& status)
+            fastrtps::OfferedDeadlineMissedStatus& status)
     {
         status = deadline_missed_status_;
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_offered_incompatible_qos_status(
             OfferedIncompatibleQosStatus& status)
     {
         status = offered_incompatible_qos_status_;
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t set_qos(
             const DataWriterQos&)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     const DataWriterQos& get_qos() const
@@ -299,21 +312,21 @@ public:
     ReturnCode_t set_listener(
             DataWriterListener*)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_key_value(
             void*,
             const InstanceHandle_t& )
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_liveliness_lost_status(
             LivelinessLostStatus& status)
     {
         status = liveliness_lost_status_;
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     const Publisher* get_publisher() const
@@ -329,7 +342,7 @@ public:
 
     ReturnCode_t assert_liveliness()
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     virtual void disable()
@@ -340,13 +353,13 @@ public:
     ReturnCode_t clear_history(
             size_t*)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t get_sending_locators(
             rtps::LocatorList&) const
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     void filter_is_being_removed(
@@ -356,8 +369,8 @@ public:
     }
 
     bool is_relevant(
-            const fastdds::rtps::CacheChange_t&,
-            const fastdds::rtps::GUID_t&) const override
+            const fastrtps::rtps::CacheChange_t&,
+            const fastrtps::rtps::GUID_t&) const override
     {
         return true;
     }
@@ -395,24 +408,17 @@ public:
         }
     }
 
-    inline ReturnCode_t get_publication_builtin_topic_data(
-            PublicationBuiltinTopicData& publication_data) const
-    {
-        publication_data = PublicationBuiltinTopicData{};
-        return RETCODE_OK;
-    }
-
     static ReturnCode_t check_qos(
             const ::eprosima::fastdds::dds::DataWriterQos&)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     static ReturnCode_t check_qos_including_resource_limits(
             const DataWriterQos&,
             const TypeSupport& )
     {
-        return RETCODE_OK;
+        return fastrtps::types::ReturnCode_t::RETCODE_OK;
     }
 
     static void set_qos(
@@ -423,30 +429,11 @@ public:
 
     }
 
-    ReturnCode_t get_matched_subscription_data(
-            SubscriptionBuiltinTopicData&,
-            const InstanceHandle_t& ) const
-    {
-        return RETCODE_ERROR;
-    }
-
-    ReturnCode_t get_matched_subscriptions(
-            std::vector<InstanceHandle_t>&) const
-    {
-        return RETCODE_ERROR;
-    }
-
-    ReturnCode_t get_matched_subscriptions(
-            std::vector<InstanceHandle_t*>&) const
-    {
-        return RETCODE_ERROR;
-    }
-
     //! Pointer to the associated Data Writer.
-    fastdds::rtps::RTPSWriter* writer_ = nullptr;
+    fastrtps::rtps::RTPSWriter* writer_ = nullptr;
     Topic* topic_ = nullptr;
     Publisher* pub_ = nullptr;
-    fastdds::rtps::GUID_t guid_;
+    fastrtps::rtps::GUID_t guid_;
     DataWriterQos qos_;
 
     DataWriter* user_datawriter_ = nullptr;
@@ -455,9 +442,8 @@ public:
     LivelinessLostStatus liveliness_lost_status_;
     OfferedIncompatibleQosStatus offered_incompatible_qos_status_;
     std::chrono::duration<double, std::ratio<1, 1000000>> lifespan_duration_us_;
-    std::unique_ptr<DataWriterHistory> history_;
-
-    rtps::TopicKind_t topic_kind_;
+    DataWriterHistory history_;
+    fastrtps::TopicAttributes atts_;
 
 };
 
@@ -465,4 +451,4 @@ public:
 } /* namespace fastdds */
 } /* namespace eprosima */
 
-#endif //_FASTDDS_DATAWRITERIMPL_HPP_
+#endif //_FASTRTPS_DATAWRITERIMPL_HPP_

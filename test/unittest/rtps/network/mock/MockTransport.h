@@ -15,16 +15,13 @@
 #ifndef MOCK_TRANSPORT_H
 #define MOCK_TRANSPORT_H
 
+#include <fastrtps/transport/TransportInterface.h>
+#include <fastrtps/transport/SocketTransportDescriptor.h>
 #include <utility>
 #include <vector>
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/rtps/transport/SocketTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/TransportInterface.hpp>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class MockTransportDescriptor;
@@ -50,7 +47,7 @@ private:
     Locator_t locator_;
 };
 
-class MockTransport : public fastdds::rtps::TransportInterface
+class MockTransport : public TransportInterface
 {
 public:
 
@@ -62,7 +59,7 @@ public:
     ~MockTransport();
 
     bool init(
-            const fastdds::rtps::PropertyPolicy* properties = nullptr,
+            const PropertyPolicy* properties = nullptr,
             const uint32_t& max_msg_size_no_frag = 0) override;
 
     //API implementation
@@ -70,12 +67,12 @@ public:
             const Locator_t&)  const override;
 
     bool OpenOutputChannel(
-            fastdds::rtps::SendResourceList& sender_resource_list,
+            SendResourceList& sender_resource_list,
             const Locator_t&) override;
 
     bool OpenInputChannel(
             const Locator_t&,
-            fastdds::rtps::TransportReceiverInterface*,
+            TransportReceiverInterface*,
             uint32_t) override;
 
     bool CloseInputChannel(
@@ -86,13 +83,8 @@ public:
 
     bool IsLocatorSupported(
             const Locator_t&)  const override;
-
     bool is_locator_allowed(
             const Locator_t& locator) const override;
-
-    bool is_locator_reachable(
-            const Locator_t&) override;
-
     bool DoInputLocatorsMatch(
             const Locator_t&,
             const Locator_t&) const override;
@@ -113,7 +105,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            fastdds::rtps::LocatorSelector& selector) const override;
+            LocatorSelector& selector) const override;
 
     bool is_local_locator(
             const Locator_t&) const override
@@ -126,7 +118,7 @@ public:
         return false;
     }
 
-    fastdds::rtps::TransportDescriptorInterface* get_configuration() override
+    TransportDescriptorInterface* get_configuration() override
     {
         return nullptr;
     }
@@ -173,7 +165,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator_t&,
-            const fastdds::rtps::PortParameters&,
+            const PortParameters&,
             uint32_t,
             LocatorList_t& ) const override
     {
@@ -193,15 +185,15 @@ public:
     }
 
     bool transform_remote_locator(
-            const fastdds::rtps::Locator_t&,
-            fastdds::rtps::Locator_t&) const override
+            const fastrtps::rtps::Locator_t&,
+            fastrtps::rtps::Locator_t&) const override
     {
         return true;
     }
 
     bool transform_remote_locator(
-            const fastdds::rtps::Locator_t&,
-            fastdds::rtps::Locator_t&,
+            const fastrtps::rtps::Locator_t&,
+            fastrtps::rtps::Locator_t&,
             bool,
             bool) const override
     {
@@ -213,7 +205,7 @@ public:
     {
         Locator_t destination;
         Locator_t origin;
-        std::vector<fastdds::rtps::octet> data;
+        std::vector<octet> data;
     } MockMessage;
 
     std::vector<MockMessage> mockMessagesToReceive;
@@ -232,7 +224,7 @@ public:
     static std::vector<MockTransport*> mockTransportInstances;
 };
 
-class MockTransportDescriptor : public fastdds::rtps::SocketTransportDescriptor
+class MockTransportDescriptor : public SocketTransportDescriptor
 {
 public:
 
@@ -243,7 +235,7 @@ public:
 
     int maximumChannels;
     int supportedKind;
-    fastdds::rtps::TransportInterface* create_transport() const override
+    TransportInterface* create_transport() const override
     {
         return new MockTransport(*this);
     }
@@ -251,7 +243,7 @@ public:
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif // ifndef MOCK_TRANSPORT_H

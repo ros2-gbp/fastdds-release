@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fastrtps/rtps/common/CacheChange.h>
+
 #include <climits>
 #include <vector>
-
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 struct FragmentTestStep
 {
@@ -29,14 +28,12 @@ struct FragmentTestStep
     {
         uint32_t initial_fragment;
         uint16_t num_fragments;
-    }
-    input;
+    } input;
 
     struct __Check
     {
         bool missing_fragments[10];
-    }
-    check;
+    } check;
 
     void do_test(
             CacheChange_t& uut) const
@@ -137,7 +134,7 @@ TEST(CacheChange, FragmentManagement)
 
 int main(
         int argc,
-        char** argv)
+        char **argv)
 {
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

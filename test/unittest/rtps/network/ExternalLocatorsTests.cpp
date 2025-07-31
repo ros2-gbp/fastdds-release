@@ -15,18 +15,18 @@
 #include <gtest/gtest.h>
 
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
 #include <rtps/network/utils/external_locators.hpp>
 
 using namespace eprosima::fastdds::rtps;
 using namespace eprosima::fastdds::rtps::network;
+using namespace eprosima::fastrtps::rtps;
 
 // -------------------- Auxiliary methods to compare locator lists --------------------
 
 static bool operator == (
-        const eprosima::fastdds::ResourceLimitedVector<Locator>& lhs,
+        const eprosima::fastrtps::ResourceLimitedVector<Locator>& lhs,
         const eprosima::fastdds::rtps::LocatorList& rhs)
 {
     LocatorList left_list;
@@ -40,8 +40,8 @@ static bool operator == (
 }
 
 static bool operator == (
-        const eprosima::fastdds::ResourceLimitedVector<Locator>& lhs,
-        const eprosima::fastdds::ResourceLimitedVector<Locator>& rhs)
+        const eprosima::fastrtps::ResourceLimitedVector<Locator>& lhs,
+        const eprosima::fastrtps::ResourceLimitedVector<Locator>& rhs)
 {
     LocatorList right_list;
 
@@ -54,8 +54,8 @@ static bool operator == (
 }
 
 static bool operator == (
-        const eprosima::fastdds::rtps::RemoteLocatorList& lhs,
-        const eprosima::fastdds::rtps::RemoteLocatorList& rhs)
+        const eprosima::fastrtps::rtps::RemoteLocatorList& lhs,
+        const eprosima::fastrtps::rtps::RemoteLocatorList& rhs)
 {
     return lhs.multicast == rhs.multicast && lhs.unicast == rhs.unicast;
 }
@@ -242,7 +242,7 @@ void single_endpoint_check(
         const RemoteLocatorList& check_locators)
 {
     external_locators::add_external_locators(rdata, ext_locators);
-    ASSERT_TRUE(rdata.remote_locators == check_locators);
+    ASSERT_TRUE(rdata.remote_locators() == check_locators);
 }
 
 template<typename ProxyData>
@@ -250,8 +250,8 @@ void test_add_external_locators_endpoint(
         ProxyData& working_data)
 {
     ExternalLocators empty_locators;
-    RemoteLocatorList empty_test_list(working_data.remote_locators);
-    RemoteLocatorList test_list(working_data.remote_locators);
+    RemoteLocatorList empty_test_list(working_data.remote_locators());
+    RemoteLocatorList test_list(working_data.remote_locators());
     LocatorWithMask test_locator;
     std::stringstream stream("UDPv4:[1.1.1.1]:9999");
     stream >> test_locator;
@@ -259,7 +259,7 @@ void test_add_external_locators_endpoint(
 
     ProxyData initial_data(working_data);
 
-    ASSERT_TRUE(working_data.remote_locators == empty_test_list);
+    ASSERT_TRUE(working_data.remote_locators() == empty_test_list);
 
     // Adding empty external locators should leave working_data untouched
     single_endpoint_check(working_data, empty_locators, empty_test_list);

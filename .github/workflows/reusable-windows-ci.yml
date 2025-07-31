@@ -1,4 +1,4 @@
-name: Fast DDS Windows CI reusable workflow
+name: Fast-DDS Windows CI reusable workflow
 
 on:
   workflow_call:
@@ -27,7 +27,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: 'master'
+        default: '2.2.x'
       cmake-config:
         description: 'CMake configuration to use'
         required: false
@@ -44,13 +44,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        cmake-config:
+          - 'RelWithDebInfo'
         vs-toolset:
           - 'v142'
+          - 'v143'
     steps:
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
-          path: src/fastdds
+          path: src/fastrtps
           submodules: true
           ref: ${{ inputs.fastdds_branch }}
 
@@ -96,7 +99,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/windows/install_python_packages@v0
         with:
-          packages: vcstool xmlschema psutil
+          packages: vcstool xmlschema
 
       - name: Update known hosts file for DNS resolver testing
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') }}
@@ -143,14 +146,14 @@ jobs:
       - name: Fetch Fast DDS dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}\src\fastdds\fastdds.repos
+          vcs_repos_file: ${{ github.workspace }}\src\fastrtps\fastrtps.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}\src\fastdds\.github\workflows\config\fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}\src\fastrtps\.github\workflows\config\fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -159,12 +162,12 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/windows/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}\src\fastdds\.github\workflows\config\fastdds_build.meta ${{ github.workspace }}\src\fastdds\.github\workflows\config\fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}\src\fastrtps\.github\workflows\config\fastdds_build.meta ${{ github.workspace }}\src\fastrtps\.github\workflows\config\fastdds_test.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           # The following Fast DDS CMake options need to be specified here instead of in the meta files
           # because they vary from platform to platform
-          cmake_args_default: ${{ inputs.cmake-args }} -T ${{ matrix.vs-toolset }} -DTHIRDPARTY_Asio=FORCE -DTHIRDPARTY_TinyXML2=FORCE -DTHIRDPARTY_fastcdr=OFF -DTHIRDPARTY_UPDATE=ON -DFASTDDS_EXAMPLE_TESTS=ON -DEPROSIMA_EXTRA_CMAKE_CXX_FLAGS="/MP /WX"
-          cmake_build_type: ${{ inputs.cmake-config }}
+          cmake_args_default: ${{ inputs.cmake-args }} -T ${{ matrix.vs-toolset }} -DTHIRDPARTY_Asio=FORCE -DTHIRDPARTY_TinyXML2=FORCE -DTHIRDPARTY_fastcdr=OFF -DTHIRDPARTY_UPDATE=ON -DEPROSIMA_EXTRA_CMAKE_CXX_FLAGS="/MP /WX"
+          cmake_build_type: ${{ matrix.cmake-config }}
           workspace: ${{ github.workspace }}
 
       - name: Test
@@ -172,11 +175,11 @@ jobs:
         id: test
         uses: eProsima/eProsima-CI/windows/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}\src\fastdds\.github\workflows\config\fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}\src\fastrtps\.github\workflows\config\fastdds_test.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
-          packages_names: fastdds
+          packages_names: fastrtps
           workspace: ${{ github.workspace }}
           test_report_artifact: ${{ format('test_report_{0}_{1}_{2}', inputs.label, github.job, join(matrix.*, '_')) }}
 

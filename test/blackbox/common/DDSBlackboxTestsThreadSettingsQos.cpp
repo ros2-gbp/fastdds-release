@@ -15,13 +15,15 @@
 #include <gtest/gtest.h>
 
 #include <fastdds/dds/log/Log.hpp>
+#include <fastrtps/utils/TimeConversion.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 using namespace eprosima::fastdds::dds;
 
 class CustomLogConsumer : public LogConsumer

@@ -24,14 +24,13 @@
 #include <condition_variable>
 #include <mutex>
 
-#include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/publisher/PublisherListener.hpp>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
 
-#include "types/FixedSizedPubSubTypes.hpp"
-#include "types/HelloWorldPubSubTypes.hpp"
+#include "types/FixedSizedPubSubTypes.h"
+#include "types/HelloWorldPubSubTypes.h"
 
 namespace eprosima {
 namespace fastdds {
@@ -66,14 +65,12 @@ public:
      */
     void on_participant_discovery(
             DomainParticipant* /*participant*/,
-            fastdds::rtps::ParticipantDiscoveryStatus status,
-            const ParticipantBuiltinTopicData& info,
-            bool& should_be_ignored) override;
+            fastrtps::rtps::ParticipantDiscoveryInfo&& info) override;
 
 #if HAVE_SECURITY
     void onParticipantAuthentication(
             DomainParticipant* participant,
-            fastdds::rtps::ParticipantAuthenticationInfo&& info) override;
+            fastrtps::rtps::ParticipantAuthenticationInfo&& info) override;
 #endif // if HAVE_SECURITY
 
     bool init(

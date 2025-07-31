@@ -16,8 +16,8 @@
  * @file BaseStatus.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE_STATUS__BASESTATUS_HPP
-#define FASTDDS_DDS_CORE_STATUS__BASESTATUS_HPP
+#ifndef _FASTDDS_BASE_STATUS_HPP_
+#define _FASTDDS_BASE_STATUS_HPP_
 
 #include <cstdint>
 
@@ -43,10 +43,14 @@ using LivelinessLostStatus = BaseStatus;
 using InconsistentTopicStatus = BaseStatus;
 
 } //namespace dds
+} //namespace fastdds
+
+namespace fastrtps {
 
 using LivelinessLostStatus = fastdds::dds::BaseStatus;
 
-} //namespace fastdds
+}
+
 } //namespace eprosima
 
-#endif // FASTDDS_DDS_CORE_STATUS__BASESTATUS_HPP
+#endif // _FASTDDS_BASE_STATUS_HPP_

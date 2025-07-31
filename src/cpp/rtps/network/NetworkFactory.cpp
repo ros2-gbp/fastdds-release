@@ -12,24 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <rtps/network/NetworkFactory.hpp>
+#include <rtps/network/NetworkFactory.h>
 
 #include <limits>
 #include <utility>
 
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Guid.h>
 #include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/rtps/participant/RTPSParticipant.hpp>
-#include <fastdds/rtps/transport/TransportDescriptorInterface.hpp>
-#include <fastdds/utils/IPFinder.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastdds/rtps/participant/RTPSParticipant.h>
+#include <fastdds/rtps/transport/TransportDescriptorInterface.h>
+#include <fastrtps/utils/IPFinder.h>
+#include <fastrtps/utils/IPLocator.h>
 
+#include <rtps/network/NetworkConfiguration.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 
 using namespace std;
+using namespace eprosima::fastdds::rtps;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 using SendResourceList = fastdds::rtps::SendResourceList;
@@ -131,7 +133,7 @@ bool NetworkFactory::BuildReceiverResources(
 
 bool NetworkFactory::RegisterTransport(
         const TransportDescriptorInterface* descriptor,
-        const fastdds::rtps::PropertyPolicy* properties,
+        const fastrtps::rtps::PropertyPolicy* properties,
         const uint32_t& max_msg_size_no_frag)
 {
     bool wasRegistered = false;
@@ -166,7 +168,9 @@ bool NetworkFactory::RegisterTransport(
 
             if (is_localhost_allowed)
             {
-                network_configuration_ |= kind;
+                network::add_localhost_capability(
+                    kind,
+                    network_configuration_);
             }
         }
     }
@@ -282,20 +286,6 @@ bool NetworkFactory::is_locator_remote_or_allowed(
         bool is_fastdds_local) const
 {
     return (is_locator_supported(locator) && !is_fastdds_local) || is_locator_allowed(locator);
-}
-
-bool NetworkFactory::is_locator_reachable(
-        const Locator_t& locator)
-{
-    for (auto& transport : mRegisteredTransports)
-    {
-        if (transport->is_locator_reachable(locator))
-        {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 void NetworkFactory::select_locators(
@@ -543,7 +533,7 @@ void NetworkFactory::update_network_interfaces()
 void NetworkFactory::remove_participant_associated_send_resources(
         SendResourceList& send_resource_list,
         const LocatorList_t& remote_participant_locators,
-        const LocatorList_t& participant_initial_peers_and_ds) const
+        const LocatorList_t& participant_initial_peers) const
 {
     // TODO(eduponz): Call the overload of CloseOutputChannel that takes a LocatorSelectorEntry for
     // all transports and let them decide what to do.
@@ -555,7 +545,7 @@ void NetworkFactory::remove_participant_associated_send_resources(
             tcp_transport->cleanup_sender_resources(
                 send_resource_list,
                 remote_participant_locators,
-                participant_initial_peers_and_ds);
+                participant_initial_peers);
         }
     }
 }
@@ -571,5 +561,5 @@ std::vector<TransportNetmaskFilterInfo> NetworkFactory::netmask_filter_info() co
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

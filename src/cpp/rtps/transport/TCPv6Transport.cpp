@@ -20,9 +20,8 @@
 
 #include <asio.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
-#include <fastdds/utils/IPLocator.hpp>
-
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/network/utils/netmask_filter.hpp>
 #include <utils/SystemInfo.hpp>
 
@@ -33,6 +32,10 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
+using IPFinder = fastrtps::rtps::IPFinder;
+using octet = fastrtps::rtps::octet;
+using IPLocator = fastrtps::rtps::IPLocator;
+using octet = fastrtps::rtps::octet;
 using Log = fastdds::dds::Log;
 
 static bool get_ipv6s(
@@ -139,7 +142,7 @@ TCPv6Transport::TCPv6Transport(
             }
             else if (descriptor.interfaceWhiteList.empty() && descriptor.interface_allowlist.empty())
             {
-                interface_whitelist_.emplace_back(ip::address_v6::from_string(infoIP.name));
+                interface_whitelist_.emplace_back(ip::make_address_v6(infoIP.name));
                 allowed_interfaces_.emplace_back(infoIP.dev, infoIP.name, infoIP.masked_locator,
                         descriptor.netmask_filter);
             }
@@ -159,7 +162,7 @@ TCPv6Transport::TCPv6Transport(
                     if (network::netmask_filter::validate_and_transform(netmask_filter,
                             descriptor.netmask_filter))
                     {
-                        interface_whitelist_.emplace_back(ip::address_v6::from_string(infoIP.name));
+                        interface_whitelist_.emplace_back(ip::make_address_v6(infoIP.name));
                         allowed_interfaces_.emplace_back(infoIP.dev, infoIP.name, infoIP.masked_locator,
                                 netmask_filter);
                     }
@@ -180,7 +183,7 @@ TCPv6Transport::TCPv6Transport(
                             return whitelist_element == infoIP.dev || compare_ips(whitelist_element, infoIP.name);
                         }) != white_end )
                 {
-                    interface_whitelist_.emplace_back(ip::address_v6::from_string(infoIP.name));
+                    interface_whitelist_.emplace_back(ip::make_address_v6(infoIP.name));
                     allowed_interfaces_.emplace_back(infoIP.dev, infoIP.name, infoIP.masked_locator,
                             descriptor.netmask_filter);
                 }
@@ -190,7 +193,7 @@ TCPv6Transport::TCPv6Transport(
         if (interface_whitelist_.empty())
         {
             EPROSIMA_LOG_ERROR(TRANSPORT_TCPV6, "All whitelist interfaces were filtered out");
-            interface_whitelist_.emplace_back(ip::address_v6::from_string("2001:db8::"));
+            interface_whitelist_.emplace_back(ip::make_address_v6("2001:db8::"));
         }
     }
 
@@ -317,12 +320,6 @@ bool TCPv6Transport::is_locator_allowed(
     return is_interface_allowed(IPLocator::toIPv6string(locator));
 }
 
-bool TCPv6Transport::is_locator_reachable(
-        const Locator_t& locator)
-{
-    return IsLocatorSupported(locator);
-}
-
 bool TCPv6Transport::is_interface_whitelist_empty() const
 {
     return interface_whitelist_.empty();
@@ -331,7 +328,7 @@ bool TCPv6Transport::is_interface_whitelist_empty() const
 bool TCPv6Transport::is_interface_allowed(
         const std::string& iface) const
 {
-    return is_interface_allowed(asio::ip::address_v6::from_string(iface));
+    return is_interface_allowed(asio::ip::make_address_v6(iface));
 }
 
 bool TCPv6Transport::is_interface_allowed(
@@ -470,7 +467,7 @@ asio::ip::tcp TCPv6Transport::generate_protocol() const
 bool TCPv6Transport::is_interface_allowed(
         const Locator& loc) const
 {
-    asio::ip::address_v6 ip = asio::ip::address_v6::from_string(IPLocator::toIPv6string(loc));
+    asio::ip::address_v6 ip = asio::ip::make_address_v6(IPLocator::toIPv6string(loc));
     return is_interface_allowed(ip);
 }
 
@@ -513,5 +510,5 @@ bool TCPv6Transport::compare_ips(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

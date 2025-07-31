@@ -21,20 +21,20 @@
 
 #include <chrono>
 
-#include <fastdds/rtps/common/LocatorList.hpp>
+// #include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastdds/rtps/interfaces/IReaderDataFilter.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
-#include <rtps/writer/StatelessWriter.hpp>
+#include <fastdds/rtps/writer/StatelessWriter.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
  * Class PDPStatelessWriter, specialization of StatelessWriter with specific behavior for PDP.
  */
-class PDPStatelessWriter : public StatelessWriter, private IReaderDataFilter
+class PDPStatelessWriter : public StatelessWriter, private fastdds::rtps::IReaderDataFilter
 {
 
 public:
@@ -43,29 +43,25 @@ public:
             RTPSParticipantImpl* participant,
             const GUID_t& guid,
             const WriterAttributes& attributes,
-            FlowController* flow_controller,
+            fastdds::rtps::FlowController* flow_controller,
             WriterHistory* history,
             WriterListener* listener);
 
     virtual ~PDPStatelessWriter() = default;
 
-    //vvvvvvvvvvvvvvvvvvvvv [Exported API] vvvvvvvvvvvvvvvvvvvvv
+    //vvvvvvvvvvvvvvvvvvvvv [RTPSWriter API] vvvvvvvvvvvvvvvvvvvvv
 
-    bool matched_reader_add_edp(
+    bool matched_reader_add(
             const ReaderProxyData& data) final;
 
     bool matched_reader_remove(
             const GUID_t& reader_guid) final;
 
-    //^^^^^^^^^^^^^^^^^^^^^^ [Exported API] ^^^^^^^^^^^^^^^^^^^^^^^
-
-    //vvvvvvvvvvvvvvvvvvvvv [BaseWriter API] vvvvvvvvvvvvvvvvvvvvvv
-
     void unsent_change_added_to_history(
             CacheChange_t* change,
             const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time) final;
 
-    //^^^^^^^^^^^^^^^^^^^^^^ [BaseWriter API] ^^^^^^^^^^^^^^^^^^^^^^^
+    //^^^^^^^^^^^^^^^^^^^^^^ [RTPSWriter API] ^^^^^^^^^^^^^^^^^^^^^^^
 
     /**
      * @brief Set the locators to which the writer should send periodic announcements.
@@ -77,7 +73,7 @@ public:
      * @return true if the locators were set successfully.
      */
     void set_initial_peers(
-            const LocatorList& locator_list);
+            const fastdds::rtps::LocatorList& locator_list);
 
     /**
      * Reset the unsent changes.
@@ -87,8 +83,7 @@ public:
 protected:
 
     bool send_to_fixed_locators(
-            const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
-            const uint32_t& total_bytes,
+            CDRMessage_t* message,
             std::chrono::steady_clock::time_point& max_blocking_time_point) const override;
 
 private:
@@ -101,8 +96,8 @@ private:
      * @return true if relevant, false otherwise.
      */
     bool is_relevant(
-            const fastdds::rtps::CacheChange_t& change,
-            const fastdds::rtps::GUID_t& reader_guid) const final;
+            const CacheChange_t& change,
+            const GUID_t& reader_guid) const final;
 
     /**
      * @brief Mark all readers as interested.
@@ -139,7 +134,8 @@ private:
     void reschedule_all_samples();
 
     //! Configured initial peers
-    LocatorList initial_peers_{};
+    fastdds::rtps::LocatorList initial_peers_{};
+
     //! The set of readers interested
     mutable ResourceLimitedVector<GUID_t> interested_readers_;
     //! Whether we have set that all destinations are interested

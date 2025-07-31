@@ -16,24 +16,24 @@
  * @file LocatorSelectorEntry.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__LOCATORSELECTORENTRY_HPP
-#define FASTDDS_RTPS_COMMON__LOCATORSELECTORENTRY_HPP
+#ifndef _FASTDDS_RTPS_COMMON_LOCATORSELECTORENTRY_HPP_
+#define _FASTDDS_RTPS_COMMON_LOCATORSELECTORENTRY_HPP_
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
  * An entry for the @ref LocatorSelector.
  *
  * This class holds the locators of a remote endpoint along with data required for the locator selection algorithm.
+ * Can be easily integrated inside other classes, such as @ref ReaderProxyData and @ref WriterProxyData.
  */
 struct LocatorSelectorEntry
 {
@@ -122,14 +122,6 @@ struct LocatorSelectorEntry
         return entry;
     }
 
-    static LocatorSelectorEntry create_fully_selected_entry(
-            const LocatorList_t& unicast_locators)
-    {
-        // Use previous overload with an empty multicast list
-        LocatorList_t empty_list {};
-        return create_fully_selected_entry(unicast_locators, empty_list);
-    }
-
     //! GUID of the remote entity.
     GUID_t remote_guid;
     //! List of unicast locators to send data to the remote entity.
@@ -144,9 +136,9 @@ struct LocatorSelectorEntry
     bool transport_should_process;
 };
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastrtps */
+} /* namespace eprosima */
 
-#endif // DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif // FASTDDS_RTPS_COMMON__LOCATORSELECTORENTRY_HPP
+#endif /* DOXYGEN_SHOULD_SKIP_THIS_PUBLIC */
+#endif /* _FASTDDS_RTPS_COMMON_LOCATORSELECTORENTRY_HPP_ */

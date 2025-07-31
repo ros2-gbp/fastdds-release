@@ -21,29 +21,32 @@
 
 #include <atomic>
 #include <cstdint>
-#include <map>
 #include <mutex>
 #include <set>
 
-#include <fastdds/config.hpp>
-#include <fastdds/dds/core/policy/ParameterTypes.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/SampleIdentity.hpp>
+#include <fastrtps/config.h>
+
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/SampleIdentity.h>
 #include <fastdds/statistics/rtps/StatisticsCommon.hpp>
+#include <fastrtps/qos/ParameterTypes.h>
 #include <statistics/rtps/GuidUtils.hpp>
 #include <statistics/rtps/messages/RTPSStatisticsMessages.hpp>
-#include <statistics/types/types.hpp>
+#include <statistics/types/types.h>
+
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class MessageReceiver;
 class PDP;
 
 } // rtps
+} // fastrtps
 
+namespace fastdds {
 namespace statistics {
 
 #ifdef FASTDDS_STATISTICS
@@ -77,7 +80,7 @@ Function StatisticsListenersImpl::for_each_listener(
         Function f)
 {
     // Use a collection copy to prevent locking on traversal
-    std::unique_lock<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+    std::unique_lock<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
     if (members_)
     {
         auto listeners = members_->listeners;
@@ -94,15 +97,15 @@ Function StatisticsListenersImpl::for_each_listener(
 
 class StatisticsParticipantImpl
 {
-    friend class fastdds::rtps::PDP;
-    friend class fastdds::rtps::MessageReceiver;
+    friend class fastrtps::rtps::PDP;
+    friend class fastrtps::rtps::MessageReceiver;
 
     // statistics members protection only
     std::recursive_mutex statistics_mutex_;
 
 public:
 
-    using GUID_t = fastdds::rtps::GUID_t;
+    using GUID_t = fastrtps::rtps::GUID_t;
 
 private:
 
@@ -113,10 +116,10 @@ private:
         unsigned long long byte_count = {};
     };
 
-    std::map<fastdds::rtps::Locator_t, rtps_sent_data> traffic_;
+    std::map<fastrtps::rtps::Locator_t, rtps_sent_data> traffic_;
 
     // RTPS_LOST ancillary
-    using lost_traffic_key = std::pair<fastdds::rtps::GuidPrefix_t, fastdds::rtps::Locator_t>;
+    using lost_traffic_key = std::pair<fastrtps::rtps::GuidPrefix_t, fastrtps::rtps::Locator_t>;
     struct lost_traffic_value
     {
         uint64_t first_sequence = 0;
@@ -280,9 +283,9 @@ protected:
      * @param [in] datagram_size The size in bytes of the received datagram.
      */
     void on_network_statistics(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& source_locator,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& source_locator,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData& data,
             uint64_t datagram_size);
 
@@ -293,8 +296,8 @@ protected:
      * @param [in] ts The timestamp of the statistics submessage received.
      */
     void process_network_timestamp(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData::TimeStamp& ts);
 
     /*
@@ -305,8 +308,8 @@ protected:
      * @param [in] datagram_size The size in bytes of the received datagram.
      */
     void process_network_sequence(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData::Sequence& seq,
             uint64_t datagram_size);
 
@@ -316,7 +319,7 @@ protected:
      * @param payload_size size of the current message
      */
     void on_rtps_sent(
-            const fastdds::rtps::Locator_t& loc,
+            const fastrtps::rtps::Locator_t& loc,
             unsigned long payload_size);
 
     /*
@@ -458,14 +461,13 @@ public:
 };
 
 // auxiliary conversion functions
-// TODO(jlbueno): private headers shall not export API
-FASTDDS_EXPORTED_API detail::Locator_s to_statistics_type(fastdds::rtps::Locator_t);
-FASTDDS_EXPORTED_API fastdds::rtps::Locator_t to_fastdds_type(
+RTPS_DllAPI detail::Locator_s to_statistics_type(fastrtps::rtps::Locator_t);
+RTPS_DllAPI fastrtps::rtps::Locator_t to_fastdds_type(
         detail::Locator_s);
-FASTDDS_EXPORTED_API detail::GUID_s to_statistics_type(fastdds::rtps::GUID_t);
-FASTDDS_EXPORTED_API fastdds::rtps::GUID_t to_fastdds_type(
+RTPS_DllAPI detail::GUID_s to_statistics_type(fastrtps::rtps::GUID_t);
+RTPS_DllAPI fastrtps::rtps::GUID_t to_fastdds_type(
         detail::GUID_s);
-FASTDDS_EXPORTED_API detail::SampleIdentity_s to_statistics_type(fastdds::rtps::SampleIdentity);
+RTPS_DllAPI detail::SampleIdentity_s to_statistics_type(fastrtps::rtps::SampleIdentity);
 
 #else // dummy implementation
 
@@ -473,7 +475,7 @@ struct StatisticsAncillary {};
 
 class StatisticsParticipantImpl
 {
-    friend class fastdds::rtps::PDP;
+    friend class fastrtps::rtps::PDP;
 
 protected:
 
@@ -488,9 +490,9 @@ protected:
      * @param [in] The size in bytes of the received datagram.
      */
     inline void on_network_statistics(
-            const fastdds::rtps::GuidPrefix_t&,
-            const fastdds::rtps::Locator_t&,
-            const fastdds::rtps::Locator_t&,
+            const fastrtps::rtps::GuidPrefix_t&,
+            const fastrtps::rtps::Locator_t&,
+            const fastrtps::rtps::Locator_t&,
             const rtps::StatisticsSubmessageData&,
             uint64_t)
     {
@@ -505,7 +507,7 @@ protected:
      */
     template<class LocatorIteratorT>
     inline void on_rtps_send(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const LocatorIteratorT&,
             const LocatorIteratorT&,
             unsigned long)
@@ -519,7 +521,7 @@ protected:
      * @param properties The property list of the discoved entity
      */
     inline void on_entity_discovery(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const fastdds::dds::ParameterPropertyList_t&)
     {
     }
@@ -533,7 +535,7 @@ protected:
      */
     template<class LocatorIteratorT>
     inline void on_discovery_packet(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const LocatorIteratorT&,
             const LocatorIteratorT&)
     {

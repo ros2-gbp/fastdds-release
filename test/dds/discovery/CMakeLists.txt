@@ -30,7 +30,7 @@ if(NOT ((MSVC OR MSVC_IDE) AND EPROSIMA_INSTALLER) AND fastcdr_FOUND)
         )
     target_link_libraries(DDSParticipantDiscovery
         fastcdr
-        fastdds
+        fastrtps
         ${CMAKE_DL_LIBS}
         )
 

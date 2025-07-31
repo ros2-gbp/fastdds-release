@@ -25,13 +25,14 @@
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
+#include <fastrtps/utils/IPLocator.h>
 
 using namespace eprosima::fastdds::dds;
 using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 ParticipantModule::ParticipantModule(
         const std::string& discovery_protocol,
@@ -40,18 +41,18 @@ ParticipantModule::ParticipantModule(
 {
     if (discovery_protocol.compare(ParticipantType::SERVER) == 0)
     {
-        discovery_protocol_ = DiscoveryProtocol::SERVER;
+        discovery_protocol_ = DiscoveryProtocol_t::SERVER;
         std::istringstream server_guid_prefix_str(guid_prefix);
         server_guid_prefix_str >> server_guid_prefix_;
         unicast_metatraffic_port_ = atoi(unicast_metatraffic_port.c_str());
     }
     else if (discovery_protocol.compare(ParticipantType::CLIENT) == 0)
     {
-        discovery_protocol_ = DiscoveryProtocol::CLIENT;
+        discovery_protocol_ = DiscoveryProtocol_t::CLIENT;
     }
     else
     {
-        discovery_protocol_ = DiscoveryProtocol::SIMPLE;
+        discovery_protocol_ = DiscoveryProtocol_t::SIMPLE;
     }
 }
 
@@ -67,7 +68,7 @@ bool ParticipantModule::init()
 {
     DomainParticipantQos participant_qos;
     participant_qos.wire_protocol().builtin.discovery_config.discoveryProtocol = discovery_protocol_;
-    if (DiscoveryProtocol::SERVER == discovery_protocol_)
+    if (DiscoveryProtocol_t::SERVER == discovery_protocol_)
     {
         participant_qos.wire_protocol().prefix = server_guid_prefix_;
         Locator_t locator_server;
@@ -86,25 +87,22 @@ bool ParticipantModule::init()
 
 void ParticipantModule::on_participant_discovery(
         DomainParticipant* participant,
-        ParticipantDiscoveryStatus status,
-        const ParticipantBuiltinTopicData& info,
-        bool& should_be_ignored)
+        ParticipantDiscoveryInfo&& info)
 {
-    static_cast<void>(should_be_ignored);
-    if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
+    if (info.status == ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
     {
-        std::cout << "Participant " << participant->guid() << " discovered participant " << info.guid << ": "
+        std::cout << "Participant " << participant->guid() << " discovered participant " << info.info.m_guid << ": "
                   << ++matched_ << std::endl;
     }
-    else if (status == ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT)
+    else if (info.status == ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT)
     {
-        std::cout << "Participant " << participant->guid() << " detected changes on participant " << info.guid
+        std::cout << "Participant " << participant->guid() << " detected changes on participant " << info.info.m_guid
                   << std::endl;
     }
-    else if (status == ParticipantDiscoveryStatus::REMOVED_PARTICIPANT ||
-            status == ParticipantDiscoveryStatus::DROPPED_PARTICIPANT)
+    else if (info.status == ParticipantDiscoveryInfo::REMOVED_PARTICIPANT ||
+            info.status == ParticipantDiscoveryInfo::DROPPED_PARTICIPANT)
     {
-        std::cout << "Participant " << participant->guid() << " undiscovered participant " << info.guid << ": "
+        std::cout << "Participant " << participant->guid() << " undiscovered participant " << info.info.m_guid << ": "
                   << --matched_ << std::endl;
     }
 }

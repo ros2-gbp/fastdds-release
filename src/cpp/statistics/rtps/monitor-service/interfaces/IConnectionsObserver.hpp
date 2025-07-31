@@ -22,7 +22,7 @@
 
 #include <vector>
 
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Guid.h>
 #include <fastdds/statistics/rtps/monitor_service/connections_fwd.hpp>
 
 namespace eprosima {
@@ -40,7 +40,7 @@ struct IConnectionsObserver
      * @return Whether the implementor has been properly notified
      */
     virtual bool on_local_entity_connections_change(
-            const fastdds::rtps::GUID_t& guid) const = 0;
+            const fastrtps::rtps::GUID_t& guid) const = 0;
 };
 
 } // rtps

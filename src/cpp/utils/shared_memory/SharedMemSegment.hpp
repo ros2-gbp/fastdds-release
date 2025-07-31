@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
-#define FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
+#ifndef _FASTDDS_SHAREDMEM_SEGMENT_H_
+#define _FASTDDS_SHAREDMEM_SEGMENT_H_
 
 #include <boostconfig.hpp>
 
@@ -483,4 +483,4 @@ using SharedFileSegment = SharedSegment<
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
+#endif // _FASTDDS_SHAREDMEM_SEGMENT_H_

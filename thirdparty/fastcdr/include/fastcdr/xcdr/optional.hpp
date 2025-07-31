@@ -72,22 +72,16 @@ public:
     optional(
             const optional<T>& val) noexcept
     {
-        if (val.storage_.engaged_)
-        {
-            ::new(&storage_.val_)T(val.storage_.val_);
-            storage_.engaged_ = true;
-        }
+        ::new(&storage_.val_)T(val.storage_.val_);
+        storage_.engaged_ = val.storage_.engaged_;
     }
 
     //! Move constructor.
     optional(
             optional<T>&& val) noexcept
     {
-        if (val.storage_.engaged_)
-        {
-            ::new(&storage_.val_)T(std::move(val.storage_.val_));
-            storage_.engaged_ = true;
-        }
+        ::new(&storage_.val_)T(std::move(val.storage_.val_));
+        storage_.engaged_ = val.storage_.engaged_;
     }
 
     //! Destructor

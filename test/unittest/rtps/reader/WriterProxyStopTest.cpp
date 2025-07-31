@@ -13,24 +13,23 @@
 // limitations under the License.
 
 #include <future>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/reader/StatefulReader.hpp>
 #include <rtps/reader/WriterProxy.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
+#include <fastrtps/rtps/reader/RTPSReader.h>
+#include <fastrtps/rtps/reader/StatefulReader.h>
+#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
+#include <fastrtps/rtps/resources/ResourceEvent.h>
+#include <fastrtps/rtps/resources/TimedEvent.h>
+
 #include <rtps/reader/WriterProxy.cpp>
-#include <rtps/resources/ResourceEvent.h>
-#include <rtps/resources/TimedEvent.h>
 
 namespace testing {
 namespace internal {
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps;
 
 class WriterProxyTest : public WriterProxy
 {
@@ -40,7 +39,7 @@ public:
             StatefulReader* reader,
             const RemoteLocatorsAllocationAttributes& loc_alloc,
             const ResourceLimitedContainerConfig& changes_allocation,
-            eprosima::fastdds::rtps::ResourceEvent& service,
+            eprosima::fastrtps::rtps::ResourceEvent& service,
             std::promise<void>& promise)
         : WriterProxy(reader, loc_alloc, changes_allocation)
         , reader_(reader)
@@ -65,7 +64,7 @@ public:
             const SequenceNumber_t& initial_sequence)
     {
         WriterProxy::start(attributes, initial_sequence);
-        initial_acknack_test_->update_interval(reader_->getTimes().initial_acknack_delay);
+        initial_acknack_test_->update_interval(reader_->getTimes().initialAcknackDelay);
         initial_acknack_test_->restart_timer();
     }
 
@@ -85,7 +84,7 @@ private:
 } // namespace testing
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -95,8 +94,8 @@ namespace rtps {
 TEST(WriterProxyTests, WriterProxyStop)
 {
     // Create actual events service
-    eprosima::fastdds::rtps::ResourceEvent* service;
-    service = new eprosima::fastdds::rtps::ResourceEvent();
+    eprosima::fastrtps::rtps::ResourceEvent* service;
+    service = new eprosima::fastrtps::rtps::ResourceEvent();
     service->init_thread();
 
     // Synchronization primitives
@@ -123,7 +122,7 @@ TEST(WriterProxyTests, WriterProxyStop)
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 int main(

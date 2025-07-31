@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"  ?>
-<dds xmlns="http://www.eprosima.com">
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
     <library_settings>
         <intraprocess_delivery>FULL</intraprocess_delivery>
     </library_settings>
@@ -122,7 +122,6 @@
                     <offsetd1>1</offsetd1>
                     <offsetd2>2</offsetd2>
                     <offsetd3>3</offsetd3>
-                    <offsetd4>4</offsetd4>
                 </port>
                 <participantID>66</participantID>
                 <useBuiltinTransports>true</useBuiltinTransports>
@@ -139,10 +138,6 @@
                     <affinity>15</affinity>
                     <stack_size>1048576</stack_size>
                 </discovery_server_thread>
-                <typelookup_service_thread>
-                    <affinity>15</affinity>
-                    <stack_size>1048576</stack_size>
-                </typelookup_service_thread>
                 <builtin_transports_reception_threads>
                     <affinity>15</affinity>
                     <stack_size>1048576</stack_size>
@@ -192,11 +187,6 @@
                     <send_buffers>
                         <preallocated_number>127</preallocated_number>
                         <dynamic>true</dynamic>
-                        <network_buffers_config>
-                            <initial>16</initial>
-                            <maximum>0</maximum>
-                            <increment>16</increment>
-                        </network_buffers_config>
                     </send_buffers>
                 </allocation>
                 <defaultUnicastLocatorList>
@@ -289,7 +279,6 @@
                     <offsetd1>1</offsetd1>
                     <offsetd2>2</offsetd2>
                     <offsetd3>3</offsetd3>
-                    <offsetd4>4</offsetd4>
                 </port>
                 <participantID>99</participantID>
                 <useBuiltinTransports>true</useBuiltinTransports>
@@ -306,10 +295,6 @@
                     <affinity>15</affinity>
                     <stack_size>1048576</stack_size>
                 </discovery_server_thread>
-                <typelookup_service_thread>
-                    <affinity>15</affinity>
-                    <stack_size>1048576</stack_size>
-                </typelookup_service_thread>
                 <builtin_transports_reception_threads>
                     <affinity>15</affinity>
                     <stack_size>1048576</stack_size>
@@ -367,22 +352,22 @@
                 </publishMode>
             </qos>
             <times>
-                <initial_heartbeat_delay>
+                <initialHeartbeatDelay>
                     <sec>5</sec>
                     <nanosec>0</nanosec>
-                </initial_heartbeat_delay>
-                <heartbeat_period>
+                </initialHeartbeatDelay>
+                <heartbeatPeriod>
                     <sec>5</sec>
                     <nanosec>0</nanosec>
-                </heartbeat_period>
-                <nack_response_delay>
+                </heartbeatPeriod>
+                <nackResponseDelay>
                     <sec>5</sec>
                     <nanosec>0</nanosec>
-                </nack_response_delay>
-                <nack_supression_duration>
+                </nackResponseDelay>
+                <nackSupressionDuration>
                     <sec>120</sec>
                     <nanosec>500</nanosec>
-                </nack_supression_duration>
+                </nackSupressionDuration>
             </times>
             <unicastLocatorList>
                 <locator>
@@ -470,22 +455,22 @@
                 </publishMode>
             </qos>
             <times>
-                <initial_heartbeat_delay>
+                <initialHeartbeatDelay>
                     <sec>0</sec>
                     <nanosec>0</nanosec>
-                </initial_heartbeat_delay>
-                <heartbeat_period>
+                </initialHeartbeatDelay>
+                <heartbeatPeriod>
                     <sec>11</sec>
                     <nanosec>32</nanosec>
-                </heartbeat_period>
-                <nack_response_delay>
+                </heartbeatPeriod>
+                <nackResponseDelay>
                     <sec>0</sec>
                     <nanosec>0</nanosec>
-                </nack_response_delay>
-                <nack_supression_duration>
+                </nackResponseDelay>
+                <nackSupressionDuration>
                     <sec>121</sec>
                     <nanosec>332</nanosec>
-                </nack_supression_duration>
+                </nackSupressionDuration>
             </times>
             <unicastLocatorList>
                 <locator>
@@ -570,14 +555,14 @@
                 </partition>
             </qos>
             <times>
-                <initial_acknack_delay>
+                <initialAcknackDelay>
                     <sec>5</sec>
                     <nanosec>0</nanosec>
-                </initial_acknack_delay>
-                <heartbeat_response_delay>
+                </initialAcknackDelay>
+                <heartbeatResponseDelay>
                     <sec>5</sec>
                     <nanosec>0</nanosec>
-                </heartbeat_response_delay>
+                </heartbeatResponseDelay>
             </times>
             <unicastLocatorList>
                 <locator>
@@ -610,7 +595,7 @@
                     </udpv4>
                 </locator>
             </multicastLocatorList>
-            <expects_inline_qos>false</expects_inline_qos>
+            <expectsInlineQos>false</expectsInlineQos>
             <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
             <userDefinedID>40</userDefinedID>
             <entityID>40</entityID>
@@ -665,14 +650,14 @@
                 </partition>
             </qos>
             <times>
-                <initial_acknack_delay>
+                <initialAcknackDelay>
                     <sec>0</sec>
                     <nanosec>0</nanosec>
-                </initial_acknack_delay>
-                <heartbeat_response_delay>
+                </initialAcknackDelay>
+                <heartbeatResponseDelay>
                     <sec>18</sec>
                     <nanosec>81</nanosec>
-                </heartbeat_response_delay>
+                </heartbeatResponseDelay>
             </times>
             <unicastLocatorList>
                 <locator>
@@ -705,7 +690,7 @@
                     </udpv4>
                 </locator>
             </multicastLocatorList>
-            <expects_inline_qos>true</expects_inline_qos>
+            <expectsInlineQos>true</expectsInlineQos>
             <historyMemoryPolicy>PREALLOCATED_WITH_REALLOC</historyMemoryPolicy>
             <userDefinedID>13</userDefinedID>
             <entityID>31</entityID>

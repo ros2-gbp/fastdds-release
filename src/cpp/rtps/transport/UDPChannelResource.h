@@ -18,7 +18,7 @@
 #include <asio.hpp>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/Locator.h>
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
 
@@ -38,8 +38,8 @@ class eProsimaUDPSocket : public asio::ip::udp::socket
 public:
 
     explicit eProsimaUDPSocket(
-            asio::io_service& io_service)
-        : asio::ip::udp::socket(io_service)
+            asio::io_context& io_context)
+        : asio::ip::udp::socket(io_context)
     {
     }
 
@@ -74,9 +74,9 @@ inline eProsimaUDPSocket moveSocket(
 }
 
 inline eProsimaUDPSocket createUDPSocket(
-        asio::io_service& io_service)
+        asio::io_context& io_context)
 {
-    return eProsimaUDPSocket(io_service);
+    return eProsimaUDPSocket(io_context);
 }
 
 inline eProsimaUDPSocket& getRefFromPtr(
@@ -92,8 +92,8 @@ class eProsimaUDPSocket : public std::shared_ptr<asio::ip::udp::socket>
 public:
 
     explicit eProsimaUDPSocket(
-            asio::io_service& io_service)
-        : shared_ptr<asio::ip::udp::socket>(io_service)
+            asio::io_context& io_context)
+        : shared_ptr<asio::ip::udp::socket>(io_context)
     {
     }
 
@@ -128,9 +128,9 @@ inline eProsimaUDPSocket moveSocket(
 }
 
 inline eProsimaUDPSocket createUDPSocket(
-        asio::io_service& io_service)
+        asio::io_context& io_context)
 {
-    return eProsimaUDPSocket(io_service);
+    return eProsimaUDPSocket(io_context);
 }
 
 inline eProsimaUDPSocket getRefFromPtr(
@@ -232,11 +232,11 @@ protected:
      * @param receive_buffer vector with enough capacity (not size) to accomodate a full receive buffer. That
      * capacity must not be less than the receive_buffer_size supplied to this class during construction.
      * @param receive_buffer_capacity Maximum size of the receive_buffer.
-     * @param [out] receive_buffer_size Size of the received buffer.
-     * @param [out] remote_locator Locator describing the remote restination we received a packet from.
+     * @param[out] receive_buffer_size Size of the received buffer.
+     * @param[out] remote_locator Locator describing the remote restination we received a packet from.
      */
     bool Receive(
-            octet* receive_buffer,
+            fastrtps::rtps::octet* receive_buffer,
             uint32_t receive_buffer_capacity,
             uint32_t& receive_buffer_size,
             Locator& remote_locator);

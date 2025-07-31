@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<dds xmlns="http://www.eprosima.com" >
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles" >
     <profiles>
         <data_reader profile_name="datawriter_profile_example" is_default_profile="true">
             <topic>
@@ -112,13 +112,13 @@
             </qos>
 
             <times>
-                <initial_acknack_delay>
+                <initialAcknackDelay>
                     <nanosec>12</nanosec>
-                </initial_acknack_delay>
+                </initialAcknackDelay>
 
-                <heartbeat_response_delay>
+                <heartbeatResponseDelay>
                     <sec>3</sec>
-                </heartbeat_response_delay>
+                </heartbeatResponseDelay>
             </times>
 
             <unicastLocatorList>
@@ -219,7 +219,7 @@
 
             <ignore_non_matching_locators>true</ignore_non_matching_locators>
 
-            <expects_inline_qos>false</expects_inline_qos>
+            <expectsInlineQos>false</expectsInlineQos>
 
             <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
 

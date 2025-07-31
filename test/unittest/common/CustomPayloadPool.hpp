@@ -16,18 +16,15 @@
  * @file CustomPayloadPool.hpp
  */
 
-#ifndef _FASTDDS_CUSTOM_PAYLOAD_POOL_HPP
-#define _FASTDDS_CUSTOM_PAYLOAD_POOL_HPP
+#ifndef DDS_CUSTOM_PAYLOAD_POOL_HPP
+#define DDS_CUSTOM_PAYLOAD_POOL_HPP
 
-#include <cassert>
+#include <assert.h>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
-
-class CustomPayloadPool : public eprosima::fastdds::rtps::IPayloadPool
+class CustomPayloadPool : public eprosima::fastrtps::rtps::IPayloadPool
 {
 public:
 
@@ -35,18 +32,18 @@ public:
 
     bool get_payload(
             unsigned int size,
-            eprosima::fastdds::rtps::SerializedPayload_t& payload)
+            eprosima::fastrtps::rtps::CacheChange_t& cache_change)
     {
         // Reserve new memory for the payload buffer
-        unsigned char* payload_buff = new unsigned char[size];
+        unsigned char* payload = new unsigned char[size];
 
         // Assign the payload buffer to the CacheChange and update sizes
-        payload.data = payload_buff;
-        payload.length = size;
-        payload.max_size = size;
+        cache_change.serializedPayload.data = payload;
+        cache_change.serializedPayload.length = size;
+        cache_change.serializedPayload.max_size = size;
 
         // Tell the CacheChange who needs to release its payload
-        payload.payload_owner = this;
+        cache_change.payload_owner(this);
 
         ++requested_payload_count;
 
@@ -54,22 +51,23 @@ public:
     }
 
     bool get_payload(
-            const eprosima::fastdds::rtps::SerializedPayload_t& data,
-            eprosima::fastdds::rtps::SerializedPayload_t& payload)
+            eprosima::fastrtps::rtps::SerializedPayload_t& data,
+            eprosima::fastrtps::rtps::IPayloadPool*& /*data_owner*/,
+            eprosima::fastrtps::rtps::CacheChange_t& cache_change)
     {
         // Reserve new memory for the payload buffer
-        unsigned char* payload_buff = new unsigned char[data.length];
+        unsigned char* payload = new unsigned char[data.length];
 
         // Copy the data
-        memcpy(payload_buff, data.data, data.length);
+        memcpy(payload, data.data, data.length);
 
         // Assign the payload buffer to the CacheChange and update sizes
-        payload.data = payload_buff;
-        payload.length = data.length;
-        payload.max_size = data.length;
+        cache_change.serializedPayload.data = payload;
+        cache_change.serializedPayload.length = data.length;
+        cache_change.serializedPayload.max_size = data.length;
 
         // Tell the CacheChange who needs to release its payload
-        payload.payload_owner = this;
+        cache_change.payload_owner(this);
 
         ++requested_payload_count;
 
@@ -77,21 +75,21 @@ public:
     }
 
     bool release_payload(
-            eprosima::fastdds::rtps::SerializedPayload_t& payload)
+            eprosima::fastrtps::rtps::CacheChange_t& cache_change)
     {
         // Ensure precondition
-        assert(this == payload.payload_owner);
+        assert(this == cache_change.payload_owner());
 
         // Dealloc the buffer of the payload
-        delete[] payload.data;
+        delete[] cache_change.serializedPayload.data;
 
         // Reset sizes and pointers
-        payload.data = nullptr;
-        payload.length = 0;
-        payload.max_size = 0;
+        cache_change.serializedPayload.data = nullptr;
+        cache_change.serializedPayload.length = 0;
+        cache_change.serializedPayload.max_size = 0;
 
         // Reset the owner of the payload
-        payload.payload_owner = nullptr;
+        cache_change.payload_owner(nullptr);
 
         ++returned_payload_count;
 
@@ -103,4 +101,4 @@ public:
 
 };
 
-#endif  // _FASTDDS_CUSTOM_PAYLOAD_POOL_HPP
+#endif  // DDS_CUSTOM_PAYLOAD_POOL_HPP

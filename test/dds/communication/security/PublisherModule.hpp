@@ -23,14 +23,13 @@
 #include <condition_variable>
 #include <mutex>
 
-#include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/publisher/PublisherListener.hpp>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
 
-#include "types/FixedSizedPubSubTypes.hpp"
-#include "types/HelloWorldPubSubTypes.hpp"
+#include "types/FixedSizedPubSubTypes.h"
+#include "types/HelloWorldPubSubTypes.h"
 
 namespace eprosima {
 namespace fastdds {
@@ -43,9 +42,11 @@ public:
 
     PublisherModule(
             bool exit_on_lost_liveliness,
+            bool exit_on_disposal_received,
             bool fixed_type,
             bool zero_copy)
         : exit_on_lost_liveliness_(exit_on_lost_liveliness)
+        , exit_on_disposal_received_(exit_on_disposal_received)
         , fixed_type_(zero_copy || fixed_type) // If zero copy active, fixed type is required
         , zero_copy_(zero_copy)
     {
@@ -60,20 +61,17 @@ public:
     /**
      * This method is called when a new Participant is discovered, or a previously discovered participant
      * changes its QOS or is removed.
-     * @param participant Pointer to the Participant
+     * @param p Pointer to the Participant
      * @param info DiscoveryInfo.
-     * @param should_be_ignored Flag to indicate the library to automatically ignore the discovered Participant.
      */
     void on_participant_discovery(
-            DomainParticipant* participant,
-            fastdds::rtps::ParticipantDiscoveryStatus status,
-            const ParticipantBuiltinTopicData& info,
-            bool& should_be_ignored) override;
+            DomainParticipant* /*participant*/,
+            fastrtps::rtps::ParticipantDiscoveryInfo&& info) override;
 
 #if HAVE_SECURITY
     void onParticipantAuthentication(
             DomainParticipant* participant,
-            fastdds::rtps::ParticipantAuthenticationInfo&& info) override;
+            fastrtps::rtps::ParticipantAuthenticationInfo&& info) override;
 #endif // if HAVE_SECURITY
 
     bool init(
@@ -97,6 +95,7 @@ private:
     std::condition_variable cv_;
     unsigned int matched_ = 0;
     bool exit_on_lost_liveliness_ = false;
+    bool exit_on_disposal_received_ = false;
     bool fixed_type_ = false;
     bool zero_copy_ = false;
     std::atomic_bool run_ {true};

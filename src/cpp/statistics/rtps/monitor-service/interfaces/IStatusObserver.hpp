@@ -20,7 +20,7 @@
 #ifndef _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_ISTATUSOBSERVER_HPP_
 #define _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_ISTATUSOBSERVER_HPP_
 
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Guid.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -38,7 +38,7 @@ struct IStatusObserver
      * @return Whether the implementor has been properly notified
      */
     virtual bool on_local_entity_status_change(
-            const fastdds::rtps::GUID_t& guid,
+            const fastrtps::rtps::GUID_t& guid,
             const uint32_t& id) const = 0;
 };
 

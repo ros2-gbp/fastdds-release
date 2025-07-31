@@ -1,4 +1,4 @@
-name: Fast DDS MacOS CI reusable workflow
+name: Fast-DDS MacOS CI reusable workflow
 
 on:
   workflow_call:
@@ -27,7 +27,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: 'master'
+        default: '2.2.x'
       use-ccache:
         description: 'Use CCache to speed up the build'
         required: false
@@ -56,7 +56,7 @@ jobs:
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
-          path: src/fastdds
+          path: src/fastrtps
           submodules: true
           ref: ${{ inputs.fastdds-branch }}
 
@@ -82,7 +82,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/multiplatform/install_python_packages@v0
         with:
-          packages: vcstool xmlschema psutil
+          packages: vcstool xmlschema
           upgrade: false
 
       - name: Setup CCache
@@ -123,14 +123,14 @@ jobs:
       - name: Fetch Fast DDS dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/fastdds.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -142,7 +142,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: ${{ inputs.cmake-args }}
           cmake_args_default: -DCMAKE_CXX_FLAGS="-Werror -Wall -Wno-enum-constexpr-conversion"
@@ -154,11 +154,11 @@ jobs:
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
-          packages_names: fastdds
+          packages_names: fastrtps
           workspace: ${{ github.workspace }}
           test_report_artifact: ${{ format('test_report_{0}_{1}_{2}', inputs.label, github.job, join(matrix.*, '_')) }}
 

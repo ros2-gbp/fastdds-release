@@ -141,7 +141,6 @@ Cdr::Cdr(
     , offset_(cdr_buffer.begin())
     , origin_(cdr_buffer.begin())
     , end_(cdr_buffer.end())
-    , initial_state_(*this)
 {
     switch (cdr_version_)
     {
@@ -273,21 +272,7 @@ Cdr& Cdr::read_encapsulation()
         if (CdrVersion::CORBA_CDR < cdr_version_)
         {
             deserialize(options_);
-
-            uint8_t option_align {static_cast<uint8_t>(options_[1] & 0x3u)};
-
-            if (0 < option_align)
-            {
-                auto length {end_ - cdr_buffer_.begin()};
-                auto alignment = ((length + 3u) & ~3u) - length;
-
-                if (0 == alignment)
-                {
-                    end_ -= option_align;
-                }
-            }
         }
-
     }
     catch (Exception& ex)
     {
@@ -341,7 +326,6 @@ Cdr& Cdr::serialize_encapsulation()
     }
 
     reset_alignment();
-    encapsulation_serialized_ = true;
     return *this;
 }
 
@@ -381,25 +365,6 @@ void Cdr::set_dds_cdr_options(
         const std::array<uint8_t, 2>& options)
 {
     options_ = options;
-
-    if (CdrVersion::XCDRv1 == cdr_version_ ||
-            CdrVersion::XCDRv2 == cdr_version_)
-    {
-        auto length {offset_ - cdr_buffer_.begin()};
-        auto alignment = ((length + 3u) & ~3u) - length;
-        options_[1] = static_cast<uint8_t>(options_[1] & 0xC) + static_cast<uint8_t>(alignment & 0x3);
-    }
-
-    if (encapsulation_serialized_ && CdrVersion::CORBA_CDR < cdr_version_)
-    {
-        state previous_state(*this);
-        set_state(initial_state_);
-
-        jump(2);
-        serialize(options_);
-
-        set_state(previous_state);
-    }
 }
 
 void Cdr::change_endianness(
@@ -505,12 +470,6 @@ bool Cdr::resize(
 }
 
 Cdr& Cdr::serialize(
-        const uint8_t& octet_t)
-{
-    return serialize(static_cast<char>(octet_t));
-}
-
-Cdr& Cdr::serialize(
         const char char_t)
 {
     if (((end_ - offset_) >= sizeof(char_t)) || resize(sizeof(char_t)))
@@ -523,18 +482,6 @@ Cdr& Cdr::serialize(
     }
 
     throw NotEnoughMemoryException(NotEnoughMemoryException::NOT_ENOUGH_MEMORY_MESSAGE_DEFAULT);
-}
-
-Cdr& Cdr::serialize(
-        const int8_t int8)
-{
-    return serialize(static_cast<char>(int8));
-}
-
-Cdr& Cdr::serialize(
-        const uint16_t ushort_t)
-{
-    return serialize(static_cast<int16_t>(ushort_t));
 }
 
 Cdr& Cdr::serialize(
@@ -571,12 +518,6 @@ Cdr& Cdr::serialize(
 }
 
 Cdr& Cdr::serialize(
-        const uint32_t ulong_t)
-{
-    return serialize(static_cast<int32_t>(ulong_t));
-}
-
-Cdr& Cdr::serialize(
         const int32_t long_t)
 {
     size_t align = alignment(sizeof(long_t));
@@ -609,18 +550,6 @@ Cdr& Cdr::serialize(
     }
 
     throw NotEnoughMemoryException(NotEnoughMemoryException::NOT_ENOUGH_MEMORY_MESSAGE_DEFAULT);
-}
-
-Cdr& Cdr::serialize(
-        const wchar_t wchar)
-{
-    return serialize(static_cast<uint16_t>(wchar));
-}
-
-Cdr& Cdr::serialize(
-        const uint64_t ulonglong_t)
-{
-    return serialize(static_cast<int64_t>(ulonglong_t));
 }
 
 Cdr& Cdr::serialize(
@@ -846,12 +775,6 @@ Cdr& Cdr::serialize(
     }
 
     throw NotEnoughMemoryException(NotEnoughMemoryException::NOT_ENOUGH_MEMORY_MESSAGE_DEFAULT);
-}
-
-Cdr& Cdr::serialize(
-        char* string_t)
-{
-    return serialize(static_cast<const char*>(string_t));
 }
 
 Cdr& Cdr::serialize(
@@ -2229,38 +2152,6 @@ Cdr& Cdr::deserialize_array(
     }
 
     throw NotEnoughMemoryException(NotEnoughMemoryException::NOT_ENOUGH_MEMORY_MESSAGE_DEFAULT);
-}
-
-Cdr& Cdr::begin_serialize_type(
-        Cdr::state& current_state,
-        EncodingAlgorithmFlag type_encoding)
-{
-    return (this->*begin_serialize_type_)(current_state, type_encoding);
-}
-
-Cdr& Cdr::end_serialize_type(
-        Cdr::state& current_state)
-{
-    return (this->*end_serialize_type_)(current_state);
-}
-
-Cdr& Cdr::deserialize_type(
-        EncodingAlgorithmFlag type_encoding,
-        std::function<bool (Cdr&, const MemberId&)> functor)
-{
-    return (this->*deserialize_type_)(type_encoding, functor);
-}
-
-Cdr& Cdr::operator <<(
-        const MemberId& member_id)
-{
-    if (next_member_id_ != MEMBER_ID_INVALID)
-    {
-        throw exception::BadParamException("Member id already set and not encoded");
-    }
-
-    next_member_id_ = member_id;
-    return *this;
 }
 
 Cdr& Cdr::serialize_bool_array(

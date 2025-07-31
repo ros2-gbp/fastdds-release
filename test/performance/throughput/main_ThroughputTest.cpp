@@ -12,27 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <bitset>
-#include <cstdint>
-#include <iomanip>
-#include <iostream>
-#include <string>
-
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/log/Log.hpp>
-
-#include "../optionarg.hpp"
+#include "ThroughputTypes.hpp"
 #include "ThroughputPublisher.hpp"
 #include "ThroughputSubscriber.hpp"
-#include "ThroughputTypes.hpp"
+
+#include "../optionarg.hpp"
+
+#include <string>
+#include <iostream>
+#include <iomanip>
+#include <bitset>
+#include <cstdint>
+
+#include <fastdds/dds/log/Log.hpp>
+#include <fastrtps/Domain.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
 #pragma warning (disable:4512)
 #endif // if defined(_MSC_VER)
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 #if defined(_WIN32)
 #define COPYSTR strcpy_s
@@ -154,7 +156,7 @@ int main(
     uint32_t test_time_sec = 5;
     uint32_t recovery_time_ms = 5;
     int demand = 10000;
-    uint32_t msg_size = 1024;
+    int msg_size = 1024;
     bool reliable = false;
     uint32_t seed = 80;
     bool hostname = false;
@@ -262,7 +264,7 @@ int main(
                 break;
 
             case MSG_SIZE:
-                msg_size = strtoul(opt.arg, nullptr, 10);
+                msg_size = strtol(opt.arg, nullptr, 10);
                 break;
 
             case FILE_R:
@@ -455,7 +457,7 @@ int main(
     // Load an XML file with predefined profiles for publisher and subscriber
     if (xml_config_file.length() > 0)
     {
-        eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->load_XML_profiles_file(xml_config_file);
+        xmlparser::XMLProfileManager::loadXMLFile(xml_config_file);
     }
 
     uint8_t return_code = 0;

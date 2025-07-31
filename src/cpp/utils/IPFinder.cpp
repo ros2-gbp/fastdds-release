@@ -17,8 +17,8 @@
  *
  */
 
-#include <fastdds/utils/IPFinder.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPFinder.h>
+#include <fastrtps/utils/IPLocator.h>
 
 #include <fastdds/dds/log/Log.hpp>
 
@@ -70,9 +70,7 @@
 #include <cstring>
 #include <algorithm>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastrtps::rtps;
 
 IPFinder::IPFinder()
 {
@@ -653,7 +651,3 @@ std::string IPFinder::getIPv6Address(
     freeaddrinfo(result);
     return "";
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

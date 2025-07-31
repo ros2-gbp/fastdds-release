@@ -16,14 +16,14 @@
  * @file BuiltinTransports.hpp
  */
 
-#ifndef FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP
-#define FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP
+#ifndef _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_
+#define _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_
 
 #include <ostream>
 #include <cstdint>
+#include <fastdds/rtps/transport/TransportInterface.h>
 
-#include <fastdds/fastdds_dll.hpp>
-#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -33,7 +33,7 @@ namespace rtps {
 /**
  * @brief Options for configuring the built-in transports when using LARGE_DATA mode.
  */
-struct FASTDDS_EXPORTED_API BuiltinTransportsOptions
+struct RTPS_DllAPI BuiltinTransportsOptions
 {
     //! Whether to use non-blocking send operation.
     bool non_blocking_send = false;
@@ -104,15 +104,14 @@ inline bool operator ==(
  */
 enum class BuiltinTransports : uint16_t
 {
-    NONE = 0,          //< No transport will be instantiated
-    DEFAULT = 1,       //< Default value that will instantiate UDPv4 and SHM transports
+    NONE = 0,      //< No transport will be instantiated
+    DEFAULT = 1,   //< Default value that will instantiate UDPv4 and SHM transports
     DEFAULTv6 = 2,     //< Instantiate UDPv6 and SHM transports
     SHM = 3,           //< Instantiate SHM transport only
     UDPv4 = 4,         //< Instantiate UDPv4 transport only
     UDPv6 = 5,         //< Instantiate UDPv6 transport only
     LARGE_DATA = 6,    //< Instantiate SHM, UDPv4 and TCPv4 transports, but UDPv4 is only used for bootstrapping discovery
-    LARGE_DATAv6 = 7,  //< Instantiate SHM, UDPv6 and TCPv6 transports, but UDPv6 is only used for bootstrapping discovery
-    P2P = 8            //< Instantiate SHM, UDPv4 (unicast) and TCPv4 transports, shall only be used along with ROS2_EASY_MODE=<ip>
+    LARGE_DATAv6 = 7   //< Instantiate SHM, UDPv6 and TCPv6 transports, but UDPv6 is only used for bootstrapping discovery
 };
 
 inline std::ostream& operator <<(
@@ -145,9 +144,6 @@ inline std::ostream& operator <<(
         case BuiltinTransports::LARGE_DATAv6:
             output << "LARGE_DATAv6";
             break;
-        case BuiltinTransports::P2P:
-            output << "P2P";
-            break;
         default:
             output << "UNKNOWN";
             break;
@@ -159,4 +155,4 @@ inline std::ostream& operator <<(
 }  // namespace fastdds
 }  // namespace eprosima
 
-#endif  // FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP
+#endif  // _FASTDDS_RTPS_ATTRIBUTES__BUILTINTRANSPORTS_HPP_

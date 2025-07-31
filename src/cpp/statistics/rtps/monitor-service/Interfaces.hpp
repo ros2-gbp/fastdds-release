@@ -20,10 +20,11 @@
 #ifndef _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_HPP_
 #define _FASTDDS_STATISTICS_MONITOR_SERVICE_INTERFACES_HPP_
 
+#include <fastdds/statistics/rtps/monitor_service/interfaces/IProxyQueryable.hpp>
+
 #include "interfaces/IConnectionsObserver.hpp"
 #include "interfaces/IConnectionsQueryable.hpp"
 #include "interfaces/IProxyObserver.hpp"
-#include "interfaces/IProxyQueryable.hpp"
 #include "interfaces/IStatusObserver.hpp"
 #include "interfaces/IStatusQueryable.hpp"
 

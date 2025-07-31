@@ -24,7 +24,6 @@
 #include <string>
 
 #include <fastdds/dds/core/LoanableSequence.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/topic/IContentFilter.hpp>
 #include <fastdds/dds/topic/IContentFilterFactory.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
@@ -50,8 +49,8 @@ public:
     }
 
     bool is_relevant(
-            const fastdds::rtps::CacheChange_t& change,
-            const fastdds::rtps::GUID_t& reader_guid) const final;
+            const fastrtps::rtps::CacheChange_t& change,
+            const fastrtps::rtps::GUID_t& reader_guid) const final;
 
     /**
      * Add an entry to the list of DataReaderImpl that should be notified of changes to this object.
@@ -114,7 +113,7 @@ private:
      * @return whether the signature for the current filter was found on the inline QoS of the change.
      */
     bool check_filter_signature(
-            const fastdds::rtps::CacheChange_t& change,
+            const fastrtps::rtps::CacheChange_t& change,
             bool& filter_result) const;
 
     std::set<DataReaderImpl*> readers_;

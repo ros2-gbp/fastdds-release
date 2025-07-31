@@ -51,7 +51,7 @@ static const char* DataTags_str = "data_tags";
 static const char* Allow_str = "ALLOW";
 static const char* Deny_str = "DENY";
 
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps::security;
 
 void PermissionsParser::swap(
         PermissionsData& permissions)

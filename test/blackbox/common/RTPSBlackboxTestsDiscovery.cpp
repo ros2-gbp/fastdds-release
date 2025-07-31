@@ -14,16 +14,15 @@
 
 #include "BlackboxTests.hpp"
 
-#include <fastdds/LibrarySettings.hpp>
-#include <fastdds/rtps/RTPSDomain.hpp>
-#include <fastdds/rtps/builtin/data/PublicationBuiltinTopicData.hpp>
 #include <gtest/gtest.h>
+
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "RTPSWithRegistrationReader.hpp"
 #include "RTPSWithRegistrationWriter.hpp"
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 enum communication_type
 {
@@ -37,12 +36,12 @@ public:
 
     void SetUp() override
     {
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -52,12 +51,12 @@ public:
 
     void TearDown() override
     {
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -84,7 +83,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscovery)
         WITH_ERROR
     }
     iteration = NONE;
-    eprosima::fastdds::rtps::GUID_t writer_guid;
+    eprosima::fastrtps::rtps::GUID_t writer_guid;
     std::vector<octet> user_data;
 
     RTPSWithRegistrationReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
@@ -92,27 +91,27 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscovery)
 
     reader.set_on_writer_discovery(
         [&mutex, &cv, &iteration, &writer_guid, &user_data](
-            WriterDiscoveryStatus reason,
+            WriterDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t& w_guid,
-            const PublicationBuiltinTopicData* w_data)
+            const WriterProxyData* w_data)
         {
             std::unique_lock<std::mutex> lock(mutex);
             writer_guid = w_guid;
             if (nullptr != w_data)
             {
-                user_data = w_data->user_data;
+                user_data = w_data->m_qos.m_userData;
             }
-            if (Iterations::NONE == iteration && WriterDiscoveryStatus::DISCOVERED_WRITER == reason)
+            if (Iterations::NONE == iteration && WriterDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_WRITER == reason)
             {
                 iteration = Iterations::DISCOVERED_WRITER;
             }
             else if (Iterations::DISCOVERED_WRITER == iteration &&
-            WriterDiscoveryStatus::CHANGED_QOS_WRITER == reason)
+            WriterDiscoveryInfo::DISCOVERY_STATUS::CHANGED_QOS_WRITER == reason)
             {
                 iteration = Iterations::CHANGED_QOS_WRITER;
             }
             else if (Iterations::CHANGED_QOS_WRITER == iteration &&
-            WriterDiscoveryStatus::REMOVED_WRITER == reason)
+            WriterDiscoveryInfo::DISCOVERY_STATUS::REMOVED_WRITER == reason)
             {
                 iteration = Iterations::REMOVED_WRITER;
             }
@@ -125,7 +124,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscovery)
         ).init();
     ASSERT_TRUE(reader.isInitialized());
 
-    // Test first iteration: expect WriterDiscoveryStatus::DISCOVERED_WRITER.
+    // Test first iteration: expect WriterDiscoveryInfo::DISCOVERED_WRITER.
     writer.user_data({0, 1, 2, 3}).init();
     ASSERT_TRUE(writer.isInitialized());
     {
@@ -139,7 +138,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscovery)
         ASSERT_EQ(std::vector<octet>({0, 1, 2, 3}), user_data);
     }
 
-    // Test second iteration: expect WriterDiscoveryStatus::CHANGED_QOS_WRITER.
+    // Test second iteration: expect WriterDiscoveryInfo::CHANGED_QOS_WRITER.
     writer.user_data({2, 3, 4, 5, 6}).update();
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -152,7 +151,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscovery)
         ASSERT_EQ(std::vector<octet>({2, 3, 4, 5, 6}), user_data);
     }
 
-    // Test second iteration: expect WriterDiscoveryStatus::REMOVED_WRITER.
+    // Test second iteration: expect WriterDiscoveryInfo::REMOVED_WRITER.
     GUID_t w_guid = writer.guid();
     writer.destroy();
     {
@@ -183,7 +182,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscovery)
         WITH_ERROR
     }
     iteration = NONE;
-    eprosima::fastdds::rtps::GUID_t reader_guid;
+    eprosima::fastrtps::rtps::GUID_t reader_guid;
     std::vector<octet> user_data;
 
     RTPSWithRegistrationWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
@@ -191,25 +190,27 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscovery)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration, &reader_guid, &user_data](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t& r_guid,
-            const SubscriptionBuiltinTopicData* r_data)
+            const ReaderProxyData* r_data)
         {
             std::unique_lock<std::mutex> lock(mutex);
             reader_guid = r_guid;
             if (nullptr != r_data)
             {
-                user_data = r_data->user_data;
+                user_data = r_data->m_qos.m_userData;
             }
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
-            else if (Iterations::DISCOVERED_READER == iteration && ReaderDiscoveryStatus::CHANGED_QOS_READER == reason)
+            else if (Iterations::DISCOVERED_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::CHANGED_QOS_READER == reason)
             {
                 iteration = Iterations::CHANGED_QOS_READER;
             }
-            else if (Iterations::CHANGED_QOS_READER == iteration && ReaderDiscoveryStatus::REMOVED_READER == reason)
+            else if (Iterations::CHANGED_QOS_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::REMOVED_READER == reason)
             {
                 iteration = Iterations::REMOVED_READER;
             }
@@ -222,7 +223,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscovery)
         ).init();
     ASSERT_TRUE(writer.isInitialized());
 
-    // Test first iteration: expect ReaderDiscoveryStatus::DISCOVERED_READER.
+    // Test first iteration: expect ReaderDiscoveryInfo::DISCOVERED_READER.
     reader.user_data({0, 1, 2, 3}).init();
     ASSERT_TRUE(reader.isInitialized());
     {
@@ -236,7 +237,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscovery)
         ASSERT_EQ(std::vector<octet>({0, 1, 2, 3}), user_data);
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::CHANGED_QOS_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::CHANGED_QOS_READER.
     reader.user_data({2, 3, 4, 5, 6}).update();
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -249,7 +250,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscovery)
         ASSERT_EQ(std::vector<octet>({2, 3, 4, 5, 6}), user_data);
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::REMOVED_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::REMOVED_READER.
     GUID_t r_guid = reader.guid();
     reader.destroy();
     {
@@ -279,25 +280,25 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscoveryIncompatibleQoS)
         WITH_ERROR
     }
     iteration = NONE;
-    eprosima::fastdds::rtps::GUID_t writer_guid;
+    eprosima::fastrtps::rtps::GUID_t writer_guid;
 
     RTPSWithRegistrationReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     RTPSWithRegistrationWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.set_on_writer_discovery(
         [&mutex, &cv, &iteration, &writer_guid](
-            WriterDiscoveryStatus reason,
+            WriterDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t& w_guid,
-            const PublicationBuiltinTopicData*)
+            const WriterProxyData*)
         {
             std::unique_lock<std::mutex> lock(mutex);
             writer_guid = w_guid;
-            if (Iterations::NONE == iteration && WriterDiscoveryStatus::DISCOVERED_WRITER == reason)
+            if (Iterations::NONE == iteration && WriterDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_WRITER == reason)
             {
                 iteration = Iterations::DISCOVERED_WRITER;
             }
             else if (Iterations::DISCOVERED_WRITER == iteration &&
-            WriterDiscoveryStatus::REMOVED_WRITER == reason)
+            WriterDiscoveryInfo::DISCOVERY_STATUS::REMOVED_WRITER == reason)
             {
                 iteration = Iterations::REMOVED_WRITER;
             }
@@ -310,7 +311,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscoveryIncompatibleQoS)
         ).init();
     ASSERT_TRUE(reader.isInitialized());
 
-    // Test first iteration: expect WriterDiscoveryStatus::DISCOVERED_WRITER.
+    // Test first iteration: expect WriterDiscoveryInfo::DISCOVERED_WRITER.
     writer.init();
     ASSERT_TRUE(writer.isInitialized());
     {
@@ -323,7 +324,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscoveryIncompatibleQoS)
         ASSERT_EQ(writer.guid(), writer_guid);
     }
 
-    // Test second iteration: expect WriterDiscoveryStatus::CHANGED_QOS_WRITER.
+    // Test second iteration: expect WriterDiscoveryInfo::CHANGED_QOS_WRITER.
     std::vector<std::string> partitions({"A"});
     writer.partitions(partitions).update();
     {
@@ -336,7 +337,7 @@ TEST_P(RTPSDiscovery, ReaderListenerOnWriterDiscoveryIncompatibleQoS)
         ASSERT_EQ(writer.guid(), writer_guid);
     }
 
-    // Test second iteration: expect WriterDiscoveryStatus::REMOVED_WRITER.
+    // Test second iteration: expect WriterDiscoveryInfo::REMOVED_WRITER.
     writer.destroy();
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -364,24 +365,25 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscoveryIncompatibleQoS)
         WITH_ERROR
     }
     iteration = NONE;
-    eprosima::fastdds::rtps::GUID_t reader_guid;
+    eprosima::fastrtps::rtps::GUID_t reader_guid;
 
     RTPSWithRegistrationWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     RTPSWithRegistrationReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration, &reader_guid](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t& w_guid,
-            const SubscriptionBuiltinTopicData*)
+            const ReaderProxyData*)
         {
             std::unique_lock<std::mutex> lock(mutex);
             reader_guid = w_guid;
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
-            else if (Iterations::DISCOVERED_READER == iteration && ReaderDiscoveryStatus::REMOVED_READER == reason)
+            else if (Iterations::DISCOVERED_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::REMOVED_READER == reason)
             {
                 iteration = Iterations::REMOVED_READER;
             }
@@ -394,7 +396,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscoveryIncompatibleQoS)
         ).init();
     ASSERT_TRUE(writer.isInitialized());
 
-    // Test first iteration: expect ReaderDiscoveryStatus::DISCOVERED_READER.
+    // Test first iteration: expect ReaderDiscoveryInfo::DISCOVERED_READER.
     reader.init();
     ASSERT_TRUE(reader.isInitialized());
     {
@@ -407,7 +409,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscoveryIncompatibleQoS)
         ASSERT_EQ(reader.guid(), reader_guid);
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::CHANGED_QOS_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::CHANGED_QOS_READER.
     std::vector<std::string> partitions({"A"});
     reader.partitions(partitions).update();
     {
@@ -420,7 +422,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscoveryIncompatibleQoS)
         ASSERT_EQ(reader.guid(), reader_guid);
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::REMOVED_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::REMOVED_READER.
     reader.destroy();
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -433,7 +435,7 @@ TEST_P(RTPSDiscovery, WriterListenerOnReaderDiscoveryIncompatibleQoS)
 }
 
 /*!
- * \test RTPS-CFT-RRR-01 Tests a good `ContentFilterProperty` passed to `register_reader()` and `update_reader()` is
+ * \test RTPS-CFT-RRR-01 Tests a good `ContentFilterProperty` passed to `registerReader()` and `updateReader()` is
  * propagated successfully through discovery.
  */
 TEST_P(RTPSDiscovery, ContentFilterRegistration)
@@ -456,20 +458,21 @@ TEST_P(RTPSDiscovery, ContentFilterRegistration)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration, &content_filter_property](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t&,
-            const SubscriptionBuiltinTopicData* r_data)
+            const ReaderProxyData* r_data)
         {
             std::unique_lock<std::mutex> lock(mutex);
             if (nullptr != r_data)
             {
-                content_filter_property = r_data->content_filter;
+                content_filter_property = r_data->content_filter();
             }
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
-            else if (Iterations::DISCOVERED_READER == iteration && ReaderDiscoveryStatus::CHANGED_QOS_READER == reason)
+            else if (Iterations::DISCOVERED_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::CHANGED_QOS_READER == reason)
             {
                 iteration = Iterations::CHANGED_QOS_READER;
             }
@@ -484,7 +487,7 @@ TEST_P(RTPSDiscovery, ContentFilterRegistration)
 
     eprosima::fastdds::rtps::ContentFilterProperty cfp(content_filter_allocation);
 
-    // Test first iteration: expect ReaderDiscoveryStatus::DISCOVERED_READER.
+    // Test first iteration: expect ReaderDiscoveryInfo::DISCOVERED_READER.
     cfp.content_filtered_topic_name = "CFP_TEST";
     cfp.related_topic_name = "TEST";
     cfp.filter_class_name = "MyFilterClass";
@@ -505,7 +508,7 @@ TEST_P(RTPSDiscovery, ContentFilterRegistration)
         ASSERT_EQ(cfp.expression_parameters.size(), content_filter_property.expression_parameters.size());
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::CHANGED_QOS_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::CHANGED_QOS_READER.
     cfp.filter_expression = "New custom expression";
     cfp.expression_parameters.push_back("100");
     cfp.expression_parameters.push_back("200");
@@ -528,7 +531,7 @@ TEST_P(RTPSDiscovery, ContentFilterRegistration)
 }
 
 /*!
- * \test RTPS-CFT-RRR-02 Tests a wrong `ContentFilterProperty` passed to `register_reader()` makes the function fail.
+ * \test RTPS-CFT-RRR-02 Tests a wrong `ContentFilterProperty` passed to `registerReader()` makes the function fail.
  */
 TEST_P(RTPSDiscovery, ContentFilterWrongRegistration)
 {
@@ -546,9 +549,9 @@ TEST_P(RTPSDiscovery, ContentFilterWrongRegistration)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration](
-            ReaderDiscoveryStatus,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS,
             const GUID_t&,
-            const SubscriptionBuiltinTopicData*)
+            const ReaderProxyData*)
         {
             std::unique_lock<std::mutex> lock(mutex);
             iteration = Iterations::WITH_ERROR;
@@ -630,7 +633,7 @@ TEST_P(RTPSDiscovery, ContentFilterWrongRegistration)
 }
 
 /*!
- * \test RTPS-CFT-RRR-03 Tests a wrong `ContentFilterProperty` passed to `update_reader()` makes the function fail.
+ * \test RTPS-CFT-RRR-03 Tests a wrong `ContentFilterProperty` passed to `updateReader()` makes the function fail.
  */
 TEST_P(RTPSDiscovery, ContentFilterWrongUpdate)
 {
@@ -649,12 +652,12 @@ TEST_P(RTPSDiscovery, ContentFilterWrongUpdate)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t&,
-            const SubscriptionBuiltinTopicData*)
+            const ReaderProxyData*)
         {
             std::unique_lock<std::mutex> lock(mutex);
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
@@ -747,7 +750,7 @@ TEST_P(RTPSDiscovery, ContentFilterWrongUpdate)
 }
 
 /*!
- * \test RTPS-CFT-RRR-04 Tests `register_reader()` and `update_reader()` works successfully when the pointer to
+ * \test RTPS-CFT-RRR-04 Tests `registerReader()` and `updateReader()` works successfully when the pointer to
  * `ContentFilterProperty` is `nullptr`.
  */
 TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFP)
@@ -770,20 +773,21 @@ TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFP)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration, &content_filter_property](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t&,
-            const SubscriptionBuiltinTopicData* r_data)
+            const ReaderProxyData* r_data)
         {
             std::unique_lock<std::mutex> lock(mutex);
             if (nullptr != r_data)
             {
-                content_filter_property = r_data->content_filter;
+                content_filter_property = r_data->content_filter();
             }
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
-            else if (Iterations::DISCOVERED_READER == iteration && ReaderDiscoveryStatus::CHANGED_QOS_READER == reason)
+            else if (Iterations::DISCOVERED_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::CHANGED_QOS_READER == reason)
             {
                 iteration = Iterations::CHANGED_QOS_READER;
             }
@@ -812,7 +816,7 @@ TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFP)
         ASSERT_EQ(0u, content_filter_property.expression_parameters.size());
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::CHANGED_QOS_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::CHANGED_QOS_READER.
     reader.update();
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -830,8 +834,8 @@ TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFP)
 }
 
 /*!
- * \test RTPS-CFT-RRR_05 Tests ``update_reader()` works successfully when a `ContentFilterProperty` is added for first
- * time, because `register_reader()` passed a `nullptr`.
+ * \test RTPS-CFT-RRR_05 Tests ``updateReader()` works successfully when a `ContentFilterProperty` is added for first
+ * time, because `registerReader()` passed a `nullptr`.
  */
 TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFPButUpdate)
 {
@@ -853,20 +857,21 @@ TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFPButUpdate)
 
     writer.set_on_reader_discovery(
         [&mutex, &cv, &iteration, &content_filter_property](
-            ReaderDiscoveryStatus reason,
+            ReaderDiscoveryInfo::DISCOVERY_STATUS reason,
             const GUID_t&,
-            const SubscriptionBuiltinTopicData* r_data)
+            const ReaderProxyData* r_data)
         {
             std::unique_lock<std::mutex> lock(mutex);
             if (nullptr != r_data)
             {
-                content_filter_property = r_data->content_filter;
+                content_filter_property = r_data->content_filter();
             }
-            if (Iterations::NONE == iteration && ReaderDiscoveryStatus::DISCOVERED_READER == reason)
+            if (Iterations::NONE == iteration && ReaderDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_READER == reason)
             {
                 iteration = Iterations::DISCOVERED_READER;
             }
-            else if (Iterations::DISCOVERED_READER == iteration && ReaderDiscoveryStatus::CHANGED_QOS_READER == reason)
+            else if (Iterations::DISCOVERED_READER == iteration &&
+            ReaderDiscoveryInfo::DISCOVERY_STATUS::CHANGED_QOS_READER == reason)
             {
                 iteration = Iterations::CHANGED_QOS_READER;
             }
@@ -895,7 +900,7 @@ TEST_P(RTPSDiscovery, ContentFilterRegistrationWithoutCFPButUpdate)
         ASSERT_EQ(0, content_filter_property.expression_parameters.size());
     }
 
-    // Test second iteration: expect ReaderDiscoveryStatus::CHANGED_QOS_READER.
+    // Test second iteration: expect ReaderDiscoveryInfo::CHANGED_QOS_READER.
     eprosima::fastdds::rtps::ContentFilterProperty cfp(content_filter_allocation);
     cfp.content_filtered_topic_name = "CFP_TEST";
     cfp.related_topic_name = "TEST";

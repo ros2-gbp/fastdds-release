@@ -1,5 +1,5 @@
 names:
-    fastdds:
+    fastrtps:
         cmake-args:
             - "-DEPROSIMA_BUILD_TESTS=ON"
             - "-DFASTDDS_PIM_API_TESTS=ON"

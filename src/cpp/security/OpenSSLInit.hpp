@@ -14,13 +14,10 @@
 
 #include <memory>
 
-#include <openssl/evp.h>
-#include <openssl/engine.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
+#include <openssl/crypto.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -49,5 +46,5 @@ public:
 
 } // namespace security
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

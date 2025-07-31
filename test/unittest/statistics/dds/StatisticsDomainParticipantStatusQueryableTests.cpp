@@ -22,11 +22,14 @@
 #include <fastdds/statistics/dds/domain/DomainParticipant.hpp>
 #include <fastdds/statistics/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/statistics/topic_names.hpp>
+#include <fastrtps/types/TypesBase.h>
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 #include <statistics/fastdds/publisher/PublisherImpl.hpp>
-#include <statistics/types/typesPubSubTypes.hpp>
+#include <statistics/types/typesPubSubTypes.h>
 
 #include "../../logging/mock/MockConsumer.h"
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 constexpr const char* TEST_TOPIC = "test_topic";
 
@@ -37,53 +40,46 @@ public:
     TopicDataTypeMock()
         : TopicDataType()
     {
-        max_serialized_type_size = 4u;
-        set_name("footype");
+        m_typeSize = 4u;
+        setName("footype");
     }
 
     bool serialize(
-            const void* const /*data*/,
-            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
-            eprosima::fastdds::dds::DataRepresentationId_t /*data_representation*/) override
+            void* /*data*/,
+            eprosima::fastrtps::rtps::SerializedPayload_t* /*payload*/) override
     {
         return true;
     }
 
     bool deserialize(
-            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
+            eprosima::fastrtps::rtps::SerializedPayload_t* /*payload*/,
             void* /*data*/) override
     {
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const /*data*/,
-            eprosima::fastdds::dds::DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/) override
     {
-        return 0;
+        return []()->uint32_t
+               {
+                   return 0;
+               };
     }
 
-    void* create_data() override
+    void* createData() override
     {
         return nullptr;
     }
 
-    void delete_data(
+    void deleteData(
             void* /*data*/) override
     {
     }
 
-    bool compute_key(
-            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool /*force_md5*/) override
-    {
-        return true;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    bool getKey(
+            void* /*data*/,
+            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool /*force_md5*/) override
     {
         return true;
@@ -91,12 +87,12 @@ public:
 
     void clearName()
     {
-        set_name("");
+        setName("");
     }
 
 private:
 
-    using eprosima::fastdds::dds::TopicDataType::calculate_serialized_size;
+    using eprosima::fastdds::dds::TopicDataType::getSerializedSizeProvider;
     using eprosima::fastdds::dds::TopicDataType::serialize;
 };
 
@@ -134,7 +130,7 @@ public:
     }
 
     bool monitoring_status(
-            fastdds::rtps::GUID_t guid,
+            fastrtps::rtps::GUID_t guid,
             statistics::MonitorServiceData& status)
     {
         return get_monitoring_status(guid, status);

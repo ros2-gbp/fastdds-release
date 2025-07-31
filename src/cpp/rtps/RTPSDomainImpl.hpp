@@ -13,8 +13,8 @@
 // limitations under the License.
 
 
-#ifndef FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
-#define FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
+#ifndef _RTPS_RTPSDOMAINIMPL_HPP_
+#define _RTPS_RTPSDOMAINIMPL_HPP_
 
 #include <chrono>
 #include <memory>
@@ -25,13 +25,11 @@
 #endif // defined(_WIN32) || defined(__unix__)
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-#include <fastdds/rtps/RTPSDomain.hpp>
-#include <fastdds/rtps/writer/RTPSWriter.hpp>
+#include <fastdds/rtps/reader/LocalReaderPointer.hpp>
+#include <fastrtps/rtps/reader/RTPSReader.h>
+#include <fastrtps/rtps/RTPSDomain.h>
+#include <fastrtps/rtps/writer/RTPSWriter.h>
 
-#include <rtps/reader/BaseReader.hpp>
-#include <rtps/reader/LocalReaderPointer.hpp>
-#include <rtps/writer/BaseWriter.hpp>
 #include <utils/shared_memory/BoostAtExitRegistry.hpp>
 #include <utils/SystemInfo.hpp>
 
@@ -39,10 +37,8 @@
 #include <security/OpenSSLInit.hpp>
 #endif // HAVE_SECURITY
 
-#include <fastdds/xtypes/type_representation/TypeObjectRegistry.hpp>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -51,7 +47,6 @@ namespace rtps {
  */
 class RTPSDomainImpl
 {
-
 public:
 
     typedef std::pair<RTPSParticipant*, RTPSParticipantImpl*> t_p_RTPSParticipant;
@@ -91,44 +86,6 @@ public:
             RTPSParticipantListener* plisten);
 
     /**
-     * @brief Create a RTPSParticipant as default server or client if ROS_MASTER_URI environment variable is set.
-     * The RTPSParticipant is created as a ros easy mode client and its corresponding easy mode server is spawned
-     * if at least one of the following conditions are met:
-     *
-     * CONDITION_A:
-     *  - `easy_mode_ip` member of the input RTPSParticipantAttributes is a non-empty string.
-     *
-     * CONDITION_B:
-     *  - ROS2_EASY_MODE_URI environment variable is set.
-     *
-     * In case of both conditions are met at the same time, the value of `easy_mode_ip` member is used
-     * as the easy mode server IP and ROS2_EASY_MODE_URI value is ignored. A warning log is displayed in this case.
-     *
-     * @param domain_id DomainId to be used by the RTPSParticipant.
-     * @param enabled True if the RTPSParticipant should be enabled on creation. False if it will be enabled later with RTPSParticipant::enable()
-     * @param attrs RTPSParticipant Attributes.
-     * @param plisten Pointer to the ParticipantListener.
-     * @return Pointer to the RTPSParticipant or nullptr in the following cases:
-     *
-     *        - The input attributes are not overriden by the environment variables.
-     *          In this case no errors ocurred,
-     *          but preconditions are not met and the entire Participant setup is skipped.
-     *
-     *        - An error ocurred during the RTPSParticipant creation.
-     *
-     *        - RTPSParticipant is created correctly, but an error ocurred during the Easy Mode discovery server launch.
-     *          In this case, the RTPSParticipant is removed before returning.
-     *
-     * \warning The returned pointer is invalidated after a call to removeRTPSParticipant() or stopAll(),
-     *          so its use may result in undefined behaviour.
-     */
-    static RTPSParticipant* create_client_server_participant(
-            uint32_t domain_id,
-            bool enabled,
-            const RTPSParticipantAttributes& attrs,
-            RTPSParticipantListener* plisten);
-
-    /**
      * Remove a RTPSWriter.
      * @param writer Pointer to the writer you want to remove.
      * @return  True if correctly removed.
@@ -146,27 +103,28 @@ public:
 
     /**
      * Remove a RTPSParticipant and delete all its associated Writers, Readers, resources, etc.
-     * @param [in] p Pointer to the RTPSParticipant;
+     * @param[in] p Pointer to the RTPSParticipant;
      * @return True if correct.
      */
     static bool removeRTPSParticipant(
             RTPSParticipant* p);
 
     /**
-     * Fills RTPSParticipantAttributes to create a RTPSParticipant as default server or client
-     * if ROS_MASTER_URI environment variable is set.
-     * It also configures ROS 2 Easy Mode IP if ROS2_EASY_MODE_URI environment variable is set
-     * and it was empty in the input attributes.
-     *
+     * Creates a RTPSParticipant as default server or client if ROS_MASTER_URI environment variable is set.
      * @param domain_id DDS domain associated
-     * @param [in, out] attrs RTPSParticipant Attributes.
-     * @return True if the attributes were successfully modified,
-     * false if an error occurred or environment variable not set
+     * @param enabled True if the RTPSParticipant should be enabled on creation. False if it will be enabled later with RTPSParticipant::enable()
+     * @param attrs RTPSParticipant Attributes.
+     * @param listen Pointer to the ParticipantListener.
+     * @return Pointer to the RTPSParticipant.
      *
+     * \warning The returned pointer is invalidated after a call to removeRTPSParticipant() or stopAll(),
+     *          so its use may result in undefined behaviour.
      */
-    static bool client_server_environment_attributes_override(
+    static RTPSParticipant* clientServerEnvironmentCreationOverride(
             uint32_t domain_id,
-            RTPSParticipantAttributes& attrs);
+            bool enabled,
+            const RTPSParticipantAttributes& attrs,
+            RTPSParticipantListener* listen /*= nullptr*/);
 
     /**
      * Create a RTPSWriter in a participant.
@@ -185,8 +143,10 @@ public:
             RTPSParticipant* p,
             const EntityId_t& entity_id,
             WriterAttributes& watt,
+            const std::shared_ptr<IPayloadPool>& payload_pool,
+            const std::shared_ptr<IChangePool>& change_pool,
             WriterHistory* hist,
-            WriterListener* listen);
+            WriterListener* listen = nullptr);
 
     /**
      * Creates the guid of a participant given its identifier.
@@ -213,11 +173,14 @@ public:
     /**
      * Find a local-process reader.
      *
-     * @param reader_guid GUID of the local reader to search.
+     * @param [in, out] local_reader Reference to the shared pointer to be set.
+     * @param           reader_guid GUID of the local reader to search.
      *
-     * @returns A pointer to a local reader given its endpoint guid, or nullptr if not found.
+     * @post If @c local_reader had a non-null value upon entry, it will not be modified.
+     *       Otherwise, it will be set to point to a local reader whose GUID is the one given in @c reader_guid, or nullptr if not found.
      */
-    static std::shared_ptr<LocalReaderPointer> find_local_reader(
+    static void find_local_reader(
+            std::shared_ptr<LocalReaderPointer>& local_reader,
             const GUID_t& reader_guid);
 
     /**
@@ -227,7 +190,7 @@ public:
      *
      * @returns A pointer to a local writer given its endpoint guid, or nullptr if not found.
      */
-    static BaseWriter* find_local_writer(
+    static RTPSWriter* find_local_writer(
             const GUID_t& writer_guid);
 
     /**
@@ -258,51 +221,6 @@ public:
     static void set_filewatch_thread_config(
             const fastdds::rtps::ThreadSettings& watch_thread,
             const fastdds::rtps::ThreadSettings& callback_thread);
-
-    /**
-     * @brief Get the library settings.
-     *
-     * @param library_settings LibrarySettings reference where the settings are returned.
-     * @return True.
-     */
-    static bool get_library_settings(
-            fastdds::LibrarySettings& library_settings);
-
-    /**
-     * @brief Set the library settings.
-     *
-     * @param library_settings LibrarySettings to be set.
-     * @return False if there is any RTPSParticipant already created.
-     *         True if correctly set.
-     */
-    static bool set_library_settings(
-            const fastdds::LibrarySettings& library_settings);
-
-    /**
-     * @brief Return the ITypeObjectRegistry member to access the interface for the public API.
-     *
-     * @return const xtypes::ITypeObjectRegistry reference.
-     */
-    static fastdds::dds::xtypes::ITypeObjectRegistry& type_object_registry();
-
-    /**
-     * @brief Return the TypeObjectRegistry member to access the  API.
-     *
-     * @return const xtypes::TypeObjectRegistry reference.
-     */
-    static fastdds::dds::xtypes::TypeObjectRegistry& type_object_registry_observer();
-
-    /**
-     * @brief Run the Easy Mode discovery server using the Fast DDS CLI command
-     *
-     * @param domain_id Domain ID to use for the discovery server
-     * @param easy_mode_ip IP address to use for the discovery server
-     *
-     * @return True if the server was successfully started, false otherwise.
-     */
-    static bool run_easy_mode_discovery_server(
-            uint32_t domain_id,
-            const std::string& easy_mode_ip);
 
 private:
 
@@ -358,13 +276,10 @@ private:
     FileWatchHandle file_watch_handle_;
     fastdds::rtps::ThreadSettings watch_thread_config_;
     fastdds::rtps::ThreadSettings callback_thread_config_;
-
-    eprosima::fastdds::dds::xtypes::TypeObjectRegistry type_object_registry_;
-
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
-#endif  // FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
+#endif  // _RTPS_RTPSDOMAINIMPL_HPP_

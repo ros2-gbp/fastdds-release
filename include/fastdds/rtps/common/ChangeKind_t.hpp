@@ -16,35 +16,28 @@
  * @file ChangeKind_t.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__CHANGEKIND_T_HPP
-#define FASTDDS_RTPS_COMMON__CHANGEKIND_T_HPP
+#ifndef _FASTDDS_RTPS_COMMON_CHANGEKINDT_HPP_
+#define _FASTDDS_RTPS_COMMON_CHANGEKINDT_HPP_
 
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
  * Enumerates the different types of CacheChange_t.
  */
-// *INDENT-OFF* : Does not understand the #if correctly and ends up removing the ;
-//                at the end of the enum, which does not build.
-#if defined(_WIN32)  // Doxygen does not understand exported enums
-enum FASTDDS_EXPORTED_API ChangeKind_t
-#else
-enum ChangeKind_t
-#endif // if defined(_WIN32)
+enum RTPS_DllAPI ChangeKind_t
 {
-    ALIVE,                          //!< ALIVE
-    NOT_ALIVE_DISPOSED,             //!< NOT_ALIVE_DISPOSED
-    NOT_ALIVE_UNREGISTERED,         //!< NOT_ALIVE_UNREGISTERED
-    NOT_ALIVE_DISPOSED_UNREGISTERED //!< NOT_ALIVE_DISPOSED_UNREGISTERED
+    ALIVE,                            //!< ALIVE
+    NOT_ALIVE_DISPOSED,               //!< NOT_ALIVE_DISPOSED
+    NOT_ALIVE_UNREGISTERED,           //!< NOT_ALIVE_UNREGISTERED
+    NOT_ALIVE_DISPOSED_UNREGISTERED   //!< NOT_ALIVE_DISPOSED_UNREGISTERED
 };
-// *INDENT-ON*
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_COMMON__CHANGEKIND_T_HPP
+#endif /* _FASTDDS_RTPS_COMMON_CHANGEKINDT_HPP_ */

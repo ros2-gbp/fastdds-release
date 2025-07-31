@@ -51,17 +51,15 @@ message(STATUS "EPROSIMA_TEST_DNS_NOT_SET_UP: '${EPROSIMA_TEST_DNS_NOT_SET_UP}'"
 # Testing
 ###############################################################################
 if(EPROSIMA_BUILD_TESTS)
-
     find_package(GTest CONFIG REQUIRED)
     include(${PROJECT_SOURCE_DIR}/cmake/testing/GoogleTest.cmake)
 
     add_subdirectory(blackbox)
-    add_subdirectory(feature)
     add_subdirectory(unittest)
+    add_subdirectory(xtypes)
     add_subdirectory(dds/communication)
     add_subdirectory(dds/communication/security)
     add_subdirectory(dds/discovery)
-    add_subdirectory(dds/xtypes)
 
     if(UNIX AND NOT APPLE AND STRICT_REALTIME)
         add_subdirectory(realtime)
@@ -93,9 +91,6 @@ endif()
 # System tests
 ###############################################################################
 if(SYSTEM_TESTS)
-    find_package(GTest CONFIG REQUIRED)
-    include(${PROJECT_SOURCE_DIR}/cmake/testing/GoogleTest.cmake)
-
     add_subdirectory(system/tools/fastdds)
     add_subdirectory(system/tools/fds)
 endif()

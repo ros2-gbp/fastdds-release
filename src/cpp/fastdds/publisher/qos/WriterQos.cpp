@@ -20,13 +20,14 @@
 #include <fastdds/dds/publisher/qos/WriterQos.hpp>
 #include <fastdds/dds/log/Log.hpp>
 
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 
-//FASTDDS_EXPORTED_API const WriterQos DATAWRITER_QOS_DEFAULT;
+//RTPS_DllAPI const WriterQos DATAWRITER_QOS_DEFAULT;
 
 WriterQos::WriterQos()
 {
@@ -165,7 +166,7 @@ bool WriterQos::checkQos() const
     }
     if (m_liveliness.kind == AUTOMATIC_LIVELINESS_QOS || m_liveliness.kind == MANUAL_BY_PARTICIPANT_LIVELINESS_QOS)
     {
-        if (m_liveliness.lease_duration < dds::c_TimeInfinite &&
+        if (m_liveliness.lease_duration < c_TimeInfinite &&
                 m_liveliness.lease_duration <= m_liveliness.announcement_period)
         {
             EPROSIMA_LOG_ERROR(RTPS_QOS_CHECK, "WRITERQOS: LeaseDuration <= announcement period.");

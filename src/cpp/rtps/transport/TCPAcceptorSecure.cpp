@@ -14,31 +14,31 @@
 
 #include <rtps/transport/TCPAcceptorSecure.h>
 
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using Locator_t = fastdds::rtps::Locator_t;
+using Locator_t = fastrtps::rtps::Locator_t;
 using Log = fastdds::dds::Log;
 
 using namespace asio;
 
 TCPAcceptorSecure::TCPAcceptorSecure(
-        io_service& io_service,
+        io_context& io_context,
         TCPTransportInterface* parent,
         const Locator_t& locator)
-    : TCPAcceptor(io_service, parent, locator)
+    : TCPAcceptor(io_context, parent, locator)
 {
 }
 
 TCPAcceptorSecure::TCPAcceptorSecure(
-        io_service& io_service,
+        io_context& io_context,
         const std::string& iface,
         const Locator_t& locator)
-    : TCPAcceptor(io_service, iface, locator)
+    : TCPAcceptor(io_context, iface, locator)
 {
 }
 
@@ -83,7 +83,7 @@ void TCPAcceptorSecure::accept(
                 }
             });
 #else
-        auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(*io_service_, ssl_context);
+        auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(*io_context_, ssl_context);
 
         acceptor_.async_accept(secure_socket->lowest_layer(),
                 [locator, parent, secure_socket](const std::error_code& error)
@@ -117,5 +117,5 @@ void TCPAcceptorSecure::accept(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

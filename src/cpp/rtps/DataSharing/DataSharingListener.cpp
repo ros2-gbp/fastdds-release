@@ -17,8 +17,7 @@
  */
 
 #include <rtps/DataSharing/DataSharingListener.hpp>
-
-#include <rtps/reader/BaseReader.hpp>
+#include <fastdds/rtps/reader/RTPSReader.h>
 #include <utils/thread.hpp>
 #include <utils/threading.hpp>
 
@@ -26,18 +25,16 @@
 #include <mutex>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
-using BaseReader = fastdds::rtps::BaseReader;
-using ThreadSettings = fastdds::rtps::ThreadSettings;
 
 DataSharingListener::DataSharingListener(
         std::shared_ptr<DataSharingNotification> notification,
         const std::string& datasharing_pools_directory,
-        const ThreadSettings& thr_config,
+        const fastdds::rtps::ThreadSettings& thr_config,
         ResourceLimitedContainerConfig limits,
-        BaseReader* reader)
+        RTPSReader* reader)
     : notification_(notification)
     , is_running_(false)
     , reader_(reader)
@@ -173,7 +170,7 @@ void DataSharingListener::process_new_data ()
                 {
                     EPROSIMA_LOG_WARNING(RTPS_READER, "GAP (" << last_sequence + 1 << " - " << ch.sequenceNumber - 1 << ")"
                                                               << " detected on datasharing writer " << pool->writer());
-                    reader_->process_gap_msg(pool->writer(), last_sequence + 1,
+                    reader_->processGapMsg(pool->writer(), last_sequence + 1,
                             SequenceNumberSet_t(ch.sequenceNumber), c_VendorId_eProsima);
                 }
 
@@ -182,16 +179,16 @@ void DataSharingListener::process_new_data ()
                     EPROSIMA_LOG_INFO(RTPS_READER, "First change with SN " << ch.sequenceNumber
                                                                            << " detected on datasharing writer " <<
                             pool->writer());
-                    reader_->process_gap_msg(pool->writer(), SequenceNumber_t(0, 1),
+                    reader_->processGapMsg(pool->writer(), SequenceNumber_t(0, 1),
                             SequenceNumberSet_t(ch.sequenceNumber), c_VendorId_eProsima);
                 }
 
                 EPROSIMA_LOG_INFO(RTPS_READER, "New data found on writer " << pool->writer()
                                                                            << " with SN " << ch.sequenceNumber);
 
-                if (reader_->process_data_msg(&ch))
+                if (reader_->processDataMsg(&ch))
                 {
-                    pool->release_payload(ch.serializedPayload);
+                    pool->release_payload(ch);
                     pool->advance_to_next_payload();
                 }
             }
@@ -309,5 +306,5 @@ std::shared_ptr<ReaderPool> DataSharingListener::get_pool_for_writer(
 }
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima

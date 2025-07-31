@@ -14,8 +14,6 @@
 
 #include "SecurityTests.hpp"
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-
 TEST_F(SecurityTest, discovered_participant_validation_remote_identity_fail)
 {
     initialization_ok();
@@ -26,10 +24,10 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_fail)
             WillOnce(Return(true));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     ASSERT_FALSE(manager_.discovered_participant(participant_data));
@@ -41,7 +39,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_ok)
 
     auto& remote_identity_handle = get_handle<MockIdentityHandle>();
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
 
     EXPECT_CALL(*auth_plugin_, validate_remote_identity_rvr(_, Ref(local_identity_handle_), _, _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&remote_identity_handle), Return(ValidationResult_t::VALIDATION_OK)));
@@ -54,7 +52,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_ok)
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
@@ -77,7 +75,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
             WillOnce(Return(true));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     return_handle(remote_identity_handle);
@@ -103,10 +101,10 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     ASSERT_FALSE(manager_.discovered_participant(participant_data));
@@ -123,7 +121,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
     auto shared_secret_handle = get_sh_ptr<MockSharedSecretHandle>();
     auto participant_crypto_handle = get_sh_ptr<MockParticipantCryptoHandle>();
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
 
     EXPECT_CALL(*auth_plugin_, validate_remote_identity_rvr(_, Ref(local_identity_handle_), _, _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&remote_identity_handle),
@@ -157,7 +155,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     CacheChange_t kx_change_to_add;
@@ -166,7 +164,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
 
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 
     return_handle(remote_identity_handle);
     return_handle(handshake_handle);
@@ -187,7 +185,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_new_chang
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(nullptr));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&local_identity_handle_, _)).Times(1).
             WillRepeatedly(Return(true));
@@ -199,7 +197,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_new_chang
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_FALSE(manager_.discovered_participant(participant_data));
 
     return_handle(remote_identity_handle);
@@ -222,7 +220,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_add_chang
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(false));
@@ -236,7 +234,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_add_chang
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_FALSE(manager_.discovered_participant(participant_data));
 
     destroy_manager_and_change(change, false);
@@ -292,7 +290,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
     auto shared_secret_handle = get_sh_ptr<MockSharedSecretHandle>();
     auto participant_crypto_handle = get_sh_ptr<MockParticipantCryptoHandle>();
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
 
     EXPECT_CALL(*auth_plugin_, validate_remote_identity_rvr(_, Ref(local_identity_handle_), _, _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&remote_identity_handle),
@@ -301,7 +299,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_OK_WITH_FINAL_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(true));
@@ -330,7 +328,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     CacheChange_t kx_change_to_add;
@@ -339,7 +337,7 @@ TEST_F(SecurityTest, discovered_participant_validation_remote_identity_pending_h
 
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 
     destroy_manager_and_change(change);
 
@@ -363,7 +361,7 @@ TEST_F(SecurityTest, discovered_participant_ok)
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(true));
@@ -377,7 +375,7 @@ TEST_F(SecurityTest, discovered_participant_ok)
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     destroy_manager_and_change(change);
@@ -399,10 +397,10 @@ TEST_F(SecurityTest, discovered_participant_validate_remote_fail_and_then_ok)
             WillOnce(Return(ValidationResult_t::VALIDATION_FAILED));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     ASSERT_FALSE(manager_.discovered_participant(participant_data));
@@ -414,7 +412,7 @@ TEST_F(SecurityTest, discovered_participant_validate_remote_fail_and_then_ok)
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(true));

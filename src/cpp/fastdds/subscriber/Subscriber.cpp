@@ -21,9 +21,8 @@
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 #include <fastdds/subscriber/SubscriberImpl.hpp>
 
-namespace eprosima {
-namespace fastdds {
-namespace dds {
+using namespace eprosima;
+using namespace eprosima::fastdds::dds;
 
 Subscriber::Subscriber(
         SubscriberImpl* pimpl,
@@ -47,17 +46,17 @@ ReturnCode_t Subscriber::enable()
 {
     if (enable_)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     if (false == impl_->get_participant()->is_enabled())
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     enable_ = true;
     ReturnCode_t ret_code = impl_->enable();
-    enable_ = RETCODE_OK == ret_code;
+    enable_ = ReturnCode_t::RETCODE_OK == ret_code;
     return ret_code;
 }
 
@@ -70,7 +69,7 @@ ReturnCode_t Subscriber::get_qos(
         SubscriberQos& qos) const
 {
     qos = impl_->get_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t Subscriber::set_qos(
@@ -95,7 +94,7 @@ ReturnCode_t Subscriber::set_listener(
         const StatusMask& mask)
 {
     ReturnCode_t ret_val = impl_->set_listener(listener);
-    if (ret_val == RETCODE_OK)
+    if (ret_val == ReturnCode_t::RETCODE_OK)
     {
         status_mask_ = mask;
     }
@@ -108,7 +107,7 @@ DataReader* Subscriber::create_datareader(
         const DataReaderQos& reader_qos,
         DataReaderListener* listener,
         const StatusMask& mask,
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
 {
     return impl_->create_datareader(topic, reader_qos, listener, mask, payload_pool);
 }
@@ -118,7 +117,7 @@ DataReader* Subscriber::create_datareader_with_profile(
         const std::string& profile_name,
         DataReaderListener* listener,
         const StatusMask& mask,
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
 {
     return impl_->create_datareader_with_profile(topic, profile_name, listener, mask, payload_pool);
 }
@@ -151,7 +150,7 @@ ReturnCode_t Subscriber::get_datareaders(
     static_cast<void> (sample_states);
     static_cast<void> (view_states);
     static_cast<void> (instance_states);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
     /*
        return impl_->get_datareaders(readers);
      */
@@ -164,7 +163,7 @@ bool Subscriber::has_datareaders() const
 
 ReturnCode_t Subscriber::begin_access()
 {
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
     /*
        return impl_->begin_access();
      */
@@ -172,7 +171,7 @@ ReturnCode_t Subscriber::begin_access()
 
 ReturnCode_t Subscriber::end_access()
 {
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
     /*
        return impl_->end_access();
      */
@@ -208,7 +207,7 @@ ReturnCode_t Subscriber::get_default_datareader_qos(
         DataReaderQos& qos) const
 {
     qos = impl_->get_default_datareader_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t Subscriber::get_datareader_qos_from_profile(
@@ -216,61 +215,6 @@ ReturnCode_t Subscriber::get_datareader_qos_from_profile(
         DataReaderQos& qos) const
 {
     return impl_->get_datareader_qos_from_profile(profile_name, qos);
-}
-
-ReturnCode_t Subscriber::get_datareader_qos_from_profile(
-        const std::string& profile_name,
-        DataReaderQos& qos,
-        std::string& topic_name) const
-{
-    return impl_->get_datareader_qos_from_profile(profile_name, qos, topic_name);
-}
-
-ReturnCode_t Subscriber::get_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos) const
-{
-    return impl_->get_datareader_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t Subscriber::get_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos,
-        std::string& topic_name) const
-{
-    return impl_->get_datareader_qos_from_xml(xml, qos, topic_name);
-}
-
-ReturnCode_t Subscriber::get_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_datareader_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t Subscriber::get_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos,
-        std::string& topic_name,
-        const std::string& profile_name) const
-{
-    return impl_->get_datareader_qos_from_xml(xml, qos, topic_name, profile_name);
-}
-
-ReturnCode_t Subscriber::get_default_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos) const
-{
-    return impl_->get_default_datareader_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t Subscriber::get_default_datareader_qos_from_xml(
-        const std::string& xml,
-        DataReaderQos& qos,
-        std::string& topic_name) const
-{
-    return impl_->get_default_datareader_qos_from_xml(xml, qos, topic_name);
 }
 
 ReturnCode_t Subscriber::copy_from_topic_qos(
@@ -285,11 +229,7 @@ const DomainParticipant* Subscriber::get_participant() const
     return impl_->get_participant();
 }
 
-const fastdds::rtps::InstanceHandle_t& Subscriber::get_instance_handle() const
+const fastrtps::rtps::InstanceHandle_t& Subscriber::get_instance_handle() const
 {
     return impl_->get_instance_handle();
 }
-
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima

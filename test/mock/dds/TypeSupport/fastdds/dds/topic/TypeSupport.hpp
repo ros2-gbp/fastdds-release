@@ -16,8 +16,8 @@
  * @file TypeSupport.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__TYPESUPPORT_HPP
-#define FASTDDS_DDS_TOPIC__TYPESUPPORT_HPP
+#ifndef _FASTDDS_TYPE_SUPPORT_HPP_
+#define _FASTDDS_TYPE_SUPPORT_HPP_
 
 #include <fastdds/dds/topic/TopicDataType.hpp>
 
@@ -43,4 +43,4 @@ public:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_TOPIC__TYPESUPPORT_HPP
+#endif // _FASTDDS_TYPE_SUPPORT_HPP_

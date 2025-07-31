@@ -21,10 +21,11 @@
 
 #include <thread>
 
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
+#include <fastrtps/utils/System.h>
 #include <rtps/transport/tcp/RTCPHeader.h>
 #include <rtps/transport/TCPChannelResource.h>
 #include <rtps/transport/TCPTransportInterface.h>
@@ -33,10 +34,18 @@
 
 #define IDSTRING "(ID:" << std::this_thread::get_id() << ") " <<
 
+//using namespace eprosima::fastrtps;
+
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
+using IPLocator = fastrtps::rtps::IPLocator;
+using SerializedPayload_t = fastrtps::rtps::SerializedPayload_t;
+using octet = fastrtps::rtps::octet;
+using CDRMessage_t = fastrtps::rtps::CDRMessage_t;
+using RTPSMessageCreator = fastrtps::rtps::RTPSMessageCreator;
+using ProtocolVersion_t = fastrtps::rtps::ProtocolVersion_t;
 using Log = fastdds::dds::Log;
 
 static void endpoint_to_locator(
@@ -134,7 +143,7 @@ bool RTCPMessageManager::sendData(
     TCPHeader header;
     TCPControlMsgHeader ctrlHeader;
     CDRMessage_t msg(this->mTransport->get_configuration()->max_message_size());
-    fastdds::rtps::CDRMessage::initCDRMsg(&msg);
+    fastrtps::rtps::CDRMessage::initCDRMsg(&msg);
     const ResponseCode* code = (respCode != RETCODE_VOID) ? &respCode : nullptr;
 
     fillHeaders(kind, transaction_id, ctrlHeader, header, payload, code);
@@ -206,7 +215,7 @@ void RTCPMessageManager::fillHeaders(
             break;
     }
 
-    retCtrlHeader.endianess(fastdds::rtps::DEFAULT_ENDIAN); // Override "false" endianess set on the switch
+    retCtrlHeader.endianess(fastrtps::rtps::DEFAULT_ENDIAN); // Override "false" endianess set on the switch
     header.logical_port = 0; // This is a control message
     header.length = static_cast<uint32_t>(retCtrlHeader.length() + TCPHeader::size());
 
@@ -675,7 +684,7 @@ ResponseCode RTCPMessageManager::processRTCPMessage(
         std::shared_ptr<TCPChannelResource>& channel,
         octet* receive_buffer,
         size_t receivedSize,
-        fastdds::rtps::Endianness_t msg_endian)
+        fastrtps::rtps::Endianness_t msg_endian)
 {
     ResponseCode responseCode(RETCODE_OK);
 
@@ -850,5 +859,5 @@ bool RTCPMessageManager::isCompatibleProtocol(
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

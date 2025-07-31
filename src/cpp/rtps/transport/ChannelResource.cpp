@@ -73,5 +73,5 @@ void ChannelResource::clear()
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

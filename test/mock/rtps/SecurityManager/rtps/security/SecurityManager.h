@@ -15,16 +15,16 @@
 /*!
  * @file SecurityPluginFactory.h
  */
-#ifndef FASTDDS_RTPS_SECURITY__SECURITYMANAGER_H
-#define FASTDDS_RTPS_SECURITY__SECURITYMANAGER_H
+#ifndef _RTPS_SECURITY_SECURITYMANAGER_H_
+#define _RTPS_SECURITY_SECURITYMANAGER_H_
+
+#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
+#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
 
 #include <gmock/gmock.h>
 
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -73,14 +73,14 @@ public:
 
     MOCK_METHOD1(remove_participant, void(const ParticipantProxyData& participant_data));
 
-    MOCK_CONST_METHOD0(builtin_endpoints, fastdds::rtps::BuiltinEndpointSet_t());
+    MOCK_CONST_METHOD0(builtin_endpoints, fastrtps::rtps::BuiltinEndpointSet_t());
 
     // *INDENT-ON*
 };
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
-#endif // FASTDDS_RTPS_SECURITY__SECURITYMANAGER_H
+#endif // _RTPS_SECURITY_SECURITYMANAGER_H_

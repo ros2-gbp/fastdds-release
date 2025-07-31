@@ -17,13 +17,13 @@
  */
 
 #include <rtps/DataSharing/DataSharingNotification.hpp>
-#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 #include <memory>
 #include <mutex>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 std::shared_ptr<DataSharingNotification> DataSharingNotification::create_notification(
@@ -100,5 +100,5 @@ void DataSharingNotification::destroy()
 }
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima

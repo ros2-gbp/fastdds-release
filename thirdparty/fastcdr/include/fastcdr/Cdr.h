@@ -19,7 +19,6 @@
 #include <bitset>
 #include <cassert>
 #include <cstdint>
-#include <cstring>
 #include <functional>
 #include <map>
 #include <string>
@@ -531,7 +530,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const uint8_t& octet_t);
+            const uint8_t& octet_t)
+    {
+        return serialize(static_cast<char>(octet_t));
+    }
 
     /*!
      * @brief This function serializes a character.
@@ -549,7 +551,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const int8_t int8);
+            const int8_t int8)
+    {
+        return serialize(static_cast<char>(int8));
+    }
 
     /*!
      * @brief This function serializes an unsigned short.
@@ -558,7 +563,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const uint16_t ushort_t);
+            const uint16_t ushort_t)
+    {
+        return serialize(static_cast<int16_t>(ushort_t));
+    }
 
     /*!
      * @brief This function serializes a short.
@@ -576,7 +584,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const uint32_t ulong_t);
+            const uint32_t ulong_t)
+    {
+        return serialize(static_cast<int32_t>(ulong_t));
+    }
 
     /*!
      * @brief This function serializes a long.
@@ -594,7 +605,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const wchar_t wchar);
+            const wchar_t wchar)
+    {
+        return serialize(static_cast<uint16_t>(wchar));
+    }
 
     /*!
      * @brief This function serializes an unsigned long long.
@@ -603,7 +617,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            const uint64_t ulonglong_t);
+            const uint64_t ulonglong_t)
+    {
+        return serialize(static_cast<int64_t>(ulonglong_t));
+    }
 
     /*!
      * @brief This function serializes a long long.
@@ -658,7 +675,10 @@ public:
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& serialize(
-            char* string_t);
+            char* string_t)
+    {
+        return serialize(static_cast<const char*>(string_t));
+    }
 
     /*!
      * @brief This function serializes a string.
@@ -683,21 +703,12 @@ public:
      * @param string_t The string that will be serialized in the buffer.
      * @return Reference to the eprosima::fastcdr::Cdr object.
      * @exception exception::NotEnoughMemoryException This exception is thrown when trying to serialize a position that exceeds the internal memory size.
-     * @exception exception::BadParamException This exception is thrown when trying to serialize a string with null characters.
      */
     TEMPLATE_SPEC
     Cdr& serialize(
             const std::string& string_t)
     {
-        // Check there are no null characters in the string.
-        const char* c_str = string_t.c_str();
-        const auto str_len = strlen(c_str);
-        if (string_t.size() > str_len)
-        {
-            throw exception::BadParamException("The string contains null characters");
-        }
-
-        return serialize_sequence(c_str, str_len + 1);
+        return serialize(string_t.c_str());
     }
 
     /*!
@@ -1793,7 +1804,7 @@ public:
     {
         uint32_t length = 0;
         const char* str = read_string(length);
-        value.assign(str, length);
+        value = std::string(str, length);
         return *this;
     }
 
@@ -2754,7 +2765,10 @@ public:
      */
     Cdr_DllAPI Cdr& begin_serialize_type(
             Cdr::state& current_state,
-            EncodingAlgorithmFlag type_encoding);
+            EncodingAlgorithmFlag type_encoding)
+    {
+        return (this->*begin_serialize_type_)(current_state, type_encoding);
+    }
 
     /*!
      * @brief Tells to the encoder the encoding of the type finishes.
@@ -2764,7 +2778,10 @@ public:
      * position that exceeds the internal memory size.
      */
     Cdr_DllAPI Cdr& end_serialize_type(
-            Cdr::state& current_state);
+            Cdr::state& current_state)
+    {
+        return (this->*end_serialize_type_)(current_state);
+    }
 
     /*!
      * @brief Tells to the encoder a new type and its members starts to be decoded.
@@ -2776,7 +2793,10 @@ public:
      */
     Cdr_DllAPI Cdr& deserialize_type(
             EncodingAlgorithmFlag type_encoding,
-            std::function<bool (Cdr&, const MemberId&)> functor);
+            std::function<bool (Cdr&, const MemberId&)> functor)
+    {
+        return (this->*deserialize_type_)(type_encoding, functor);
+    }
 
     /*!
      * @brief Encodes an optional in the buffer.
@@ -2830,7 +2850,16 @@ public:
      * encoded.
      */
     Cdr_DllAPI Cdr& operator <<(
-            const MemberId& member_id);
+            const MemberId& member_id)
+    {
+        if (next_member_id_ != MEMBER_ID_INVALID)
+        {
+            throw exception::BadParamException("Member id already set and not encoded");
+        }
+
+        next_member_id_ = member_id;
+        return *this;
+    }
 
     /*!
      * @brief Decodes an optional from the buffer.
@@ -3518,12 +3547,6 @@ private:
     }
     //! Specifies if a DHEADER was serialized. Used to optimize XCDRv2 member headers.
     serialized_member_size_ {NO_SERIALIZED_MEMBER_SIZE};
-
-    //! Stores the initial state.
-    state initial_state_;
-
-    //! Whether the encapsulation was serialized.
-    bool encapsulation_serialized_ {false};
 
 
     uint32_t get_long_lc(

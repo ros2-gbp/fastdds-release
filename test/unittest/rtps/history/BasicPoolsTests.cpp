@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
 
 #include <rtps/history/BasicPayloadPool.hpp>
 #include <rtps/history/CacheChangePool.h>
@@ -22,7 +22,7 @@
 
 #include <tuple>
 
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 using namespace ::testing;
 using namespace std;
 
@@ -68,7 +68,7 @@ protected:
             return false;
         }
 
-        if (!payload_pool_->get_payload(data_size, change->serializedPayload))
+        if (!payload_pool_->get_payload(data_size, *change))
         {
             change_pool_->release_cache(change);
             return false;
@@ -80,7 +80,7 @@ protected:
     void release_cache(
             CacheChange_t*& change)
     {
-        payload_pool_->release_payload(change->serializedPayload);
+        payload_pool_->release_payload(*change);
         change_pool_->release_cache(change);
     }
 

@@ -15,14 +15,14 @@
 #ifndef _RTPS_TRANSPORT_CHAININGSENDERRESOURCE_HPP_
 #define _RTPS_TRANSPORT_CHAININGSENDERRESOURCE_HPP_
 
-#include <fastdds/rtps/transport/ChainingTransport.hpp>
-#include <fastdds/rtps/transport/SenderResource.hpp>
+#include <fastdds/rtps/transport/ChainingTransport.h>
+#include <fastdds/rtps/transport/SenderResource.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class ChainingSenderResource : public SenderResource
+class ChainingSenderResource : public fastrtps::rtps::SenderResource
 {
 public:
 
@@ -39,16 +39,16 @@ public:
                     // low_sender_resources_ makes its clean up on destruction.
                 };
 
-        send_buffers_lambda_ = [this, &transport](
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
-            LocatorsIterator* destination_locators_begin,
-            LocatorsIterator* destination_locators_end,
+        send_lambda_ = [this, &transport](
+            const fastrtps::rtps::octet* data,
+            uint32_t dataSize,
+            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
+            fastrtps::rtps::LocatorsIterator* destination_locators_end,
             const std::chrono::steady_clock::time_point& timeout) -> bool
                 {
                     if (low_sender_resource_)
                     {
-                        return transport.send(low_sender_resource_.get(), buffers, total_bytes,
+                        return transport.send(low_sender_resource_.get(), data, dataSize,
                                        destination_locators_begin, destination_locators_end, timeout);
                     }
 
@@ -56,13 +56,13 @@ public:
                 };
     }
 
-    SenderResource* lower_sender_cast()
+    fastrtps::rtps::SenderResource* lower_sender_cast()
     {
-        SenderResource* lower_sender_cast = nullptr;
+        fastrtps::rtps::SenderResource* lower_sender_cast = nullptr;
 
         if (low_sender_resource_)
         {
-            lower_sender_cast = static_cast<SenderResource*>(low_sender_resource_.get());
+            lower_sender_cast = static_cast<fastrtps::rtps::SenderResource*>(low_sender_resource_.get());
         }
 
         return lower_sender_cast;
@@ -90,7 +90,7 @@ private:
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif // _RTPS_TRANSPORT_CHAININGSENDERRESOURCE_HPP_

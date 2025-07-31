@@ -23,15 +23,17 @@
 #include <fstream>
 #include <thread>
 
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/log/Colors.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastrtps/log/Colors.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 #include <gtest/gtest.h>
 
 #define TIME_LIMIT_US 10000
 
 using namespace eprosima;
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps;
 using namespace eprosima::fastdds::dds;
 
 using std::cout;
@@ -139,8 +141,8 @@ void VideoTestPublisher::init(
         bool reliable,
         uint32_t pid,
         bool hostname,
-        const eprosima::fastdds::rtps::PropertyPolicy& part_property_policy,
-        const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& part_property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
         bool large_data,
         const std::string& sXMLConfigFile,
         int test_time,
@@ -209,8 +211,8 @@ void VideoTestPublisher::init(
     TypeSupport type_command;
     type_video.reset(new VideoDataType());
     type_command.reset(new TestCommandDataType());
-    ASSERT_EQ(mp_participant->register_type(type_video), RETCODE_OK);
-    ASSERT_EQ(mp_participant->register_type(type_command), RETCODE_OK);
+    ASSERT_EQ(mp_participant->register_type(type_video), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(mp_participant->register_type(type_command), ReturnCode_t::RETCODE_OK);
 
     // Create Data Publisher
     std::string profile_name = "publisher_profile";
@@ -254,11 +256,11 @@ void VideoTestPublisher::init(
     if (large_data)
     {
         datawriter_qos_data.endpoint().history_memory_policy =
-                eprosima::fastdds::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+                eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
         datawriter_qos_data.publish_mode().kind = PublishModeQosPolicyKind::ASYNCHRONOUS_PUBLISH_MODE;
     }
-    datawriter_qos_data.reliable_writer_qos().times.heartbeat_period.seconds = 0;
-    datawriter_qos_data.reliable_writer_qos().times.heartbeat_period.nanosec = 100000000;
+    datawriter_qos_data.reliable_writer_qos().times.heartbeatPeriod.seconds = 0;
+    datawriter_qos_data.reliable_writer_qos().times.heartbeatPeriod.nanosec = 100000000;
 
     mp_data_dw = mp_datapub->create_datawriter(mp_video_topic, datawriter_qos_data, &this->m_datapublistener);
     ASSERT_NE(mp_data_dw, nullptr);
@@ -413,7 +415,7 @@ void VideoTestPublisher::CommandSubListener::on_data_available(
 
     TestCommandType command;
     eprosima::fastdds::dds::SampleInfo info;
-    if (RETCODE_OK == datareader->take_next_sample((void*)&command, &info))
+    if (ReturnCode_t::RETCODE_OK == datareader->take_next_sample((void*)&command, &info))
     {
         if (info.valid_data)
         {
@@ -591,7 +593,7 @@ GstFlowReturn VideoTestPublisher::new_sample(
 
                     if (rand() % 100 > sub->m_dropRate)
                     {
-                        if (RETCODE_OK != sub->mp_data_dw->write((void*)sub->mp_video_out))
+                        if (!sub->mp_data_dw->write((void*)sub->mp_video_out))
                         {
                             std::cout << "VideoPublication::run -> Cannot write video" << std::endl;
                         }

@@ -20,14 +20,15 @@
 #include <rtps/persistence/SQLite3PersistenceService.h>
 #include <rtps/persistence/SQLite3PersistenceServiceStatements.h>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastrtps/utils/TimeConversion.h>
 
 #include <rtps/persistence/sqlite3.h>
 
 #include <sstream>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -248,18 +249,19 @@ SQLite3PersistenceService::~SQLite3PersistenceService()
 
 /**
  * Get all data stored for a writer.
- *
- * @param [in]     persistence_guid   GUID of the writer used to store samples.
- * @param [in]     writer_guid        GUID of the writer to load.
- * @param [in,out] history            History of the writer to load.
- * @param [out]    next_sequence      Sequence that should be applied to the next created sample.
- *
+ * @param persistence_guid GUID of persistence service that holds the data.
+ * @param writer_guid GUID of the writer to load.
+ * @param changes History of CacheChanges of the writer. It will be filled.
+ * @param pool Pool of CacheChanges from which new ones are reserved to add to the history.
+ * @param next_sequence Buffer to fill with the last sequence number on the history.
  * @return True if operation was successful.
  */
 bool SQLite3PersistenceService::load_writer_from_storage(
         const std::string& persistence_guid,
         const GUID_t& writer_guid,
         WriterHistory* history,
+        const std::shared_ptr<IChangePool>& change_pool,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
         SequenceNumber_t& next_sequence)
 {
     EPROSIMA_LOG_INFO(RTPS_PERSISTENCE, "Loading writer " << writer_guid);
@@ -277,8 +279,7 @@ bool SQLite3PersistenceService::load_writer_from_storage(
             CacheChange_t* change = nullptr;
             int size = sqlite3_column_bytes(load_writer_stmt_, 2);
 
-            change = history->create_change(size, ALIVE);
-            if (nullptr == change)
+            if (!change_pool->reserve_cache(change))
             {
                 continue;
             }
@@ -286,6 +287,11 @@ bool SQLite3PersistenceService::load_writer_from_storage(
             SampleIdentity identity;
             identity.writer_guid(writer_guid);
             identity.sequence_number(sn);
+            if (!payload_pool->get_payload(size, *change))
+            {
+                change_pool->release_cache(change);
+                continue;
+            }
 
             int instance_size = sqlite3_column_bytes(load_writer_stmt_, 1);
             instance_size = (instance_size > 16) ? 16 : instance_size;
@@ -566,5 +572,5 @@ int64_t SQLite3PersistenceServiceSchemaV3::now()
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

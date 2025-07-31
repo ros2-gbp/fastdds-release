@@ -17,7 +17,7 @@
  *
  */
 
-#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
 #include <fastdds/dds/log/Log.hpp>
 
 #include <rtps/history/CacheChangePool.h>
@@ -28,7 +28,7 @@
 #include <limits>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 CacheChangePool::~CacheChangePool()
@@ -259,5 +259,5 @@ bool CacheChangePool::release_cache(
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

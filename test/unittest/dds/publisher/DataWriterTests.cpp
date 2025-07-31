@@ -22,6 +22,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <dds/domain/DomainParticipant.hpp>
+#include <dds/pub/AnyDataWriter.hpp>
+#include <dds/pub/Publisher.hpp>
+#include <dds/pub/qos/DataWriterQos.hpp>
 #include <fastdds/dds/builtin/topic/SubscriptionBuiltinTopicData.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -37,6 +41,8 @@
 #include <fastdds/dds/subscriber/qos/SubscriberQos.hpp>
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 #include <fastdds/publisher/DataWriterImpl.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
 
 #include "../../common/CustomPayloadPool.hpp"
 #include "../../logging/mock/MockConsumer.h"
@@ -45,6 +51,7 @@ namespace eprosima {
 namespace fastdds {
 namespace dds {
 
+using namespace eprosima::fastrtps::rtps;
 using ::testing::_;
 
 class FooType
@@ -89,53 +96,61 @@ public:
     TopicDataTypeMock()
         : TopicDataType()
     {
-        max_serialized_type_size = 4u;
-        set_name("footype");
+        m_typeSize = 4u;
+        setName("footype");
     }
 
     bool serialize(
-            const void* const /*data*/,
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            void* data,
+            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override
+    {
+        return serialize(data, payload, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+    }
+
+    bool serialize(
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             DataRepresentationId_t /*data_representation*/) override
     {
         return true;
     }
 
     bool deserialize(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             void* /*data*/) override
     {
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const /*data*/,
-            DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* data) override
     {
-        return 0;
+        return getSerializedSizeProvider(data, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
     }
 
-    void* create_data() override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/,
+            DataRepresentationId_t /*data_representation*/) override
+    {
+        return []()->uint32_t
+               {
+                   return 0;
+               };
+    }
+
+    void* createData() override
     {
         return nullptr;
     }
 
-    void delete_data(
+    void deleteData(
             void* /*data*/) override
     {
     }
 
-    bool compute_key(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool /*force_md5*/) override
-    {
-        return true;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    bool getKey(
+            void* /*data*/,
+            fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool /*force_md5*/) override
     {
         return true;
@@ -185,57 +200,68 @@ public:
     InstanceTopicDataTypeMock()
         : TopicDataType()
     {
-        max_serialized_type_size = 4u;
-        is_compute_key_provided = true;
-        set_name("instancefootype");
+        m_typeSize = 4u;
+        m_isGetKeyDefined = true;
+        setName("instancefootype");
     }
 
     bool serialize(
-            const void* const /*data*/,
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/) override
+    {
+        return true;
+    }
+
+    bool serialize(
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             DataRepresentationId_t /*data_representation*/) override
     {
         return true;
     }
 
     bool deserialize(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             void* /*data*/) override
     {
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const /*data*/,
-            DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/) override
     {
-        return 0;
+        return []()->uint32_t
+               {
+                   return 0;
+               };
     }
 
-    void* create_data() override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/,
+            DataRepresentationId_t /*data_representation*/) override
+    {
+        return []()->uint32_t
+               {
+                   return 0;
+               };
+    }
+
+    void* createData() override
     {
         return nullptr;
     }
 
-    void delete_data(
+    void deleteData(
             void* /*data*/) override
     {
     }
 
-    bool compute_key(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    bool getKey(
+            void* /*data*/,
+            fastrtps::rtps::InstanceHandle_t* ihandle,
             bool /*force_md5*/) override
     {
-        return true;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            fastdds::rtps::InstanceHandle_t& ihandle,
-            bool /*force_md5*/) override
-    {
-        ihandle.value[0] = 1;
+        ihandle->value[0] = 1;
         return true;
     }
 
@@ -250,53 +276,58 @@ public:
     BoundedTopicDataTypeMock()
         : TopicDataType()
     {
-        max_serialized_type_size = 4u;
-        set_name("bounded_footype");
+        m_typeSize = 4u;
+        setName("bounded_footype");
     }
 
     bool serialize(
-            const void* const /*data*/,
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/) override
+    {
+        return true;
+    }
+
+    bool serialize(
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             DataRepresentationId_t /*data_representation*/) override
     {
         return true;
     }
 
     bool deserialize(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             void* /*data*/) override
     {
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const /*data*/,
-            DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/) override
     {
-        return 0;
+        return std::function<uint32_t()>();
     }
 
-    void* create_data() override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/,
+            DataRepresentationId_t /*data_representation*/) override
+    {
+        return std::function<uint32_t()>();
+    }
+
+    void* createData() override
     {
         return nullptr;
     }
 
-    void delete_data(
+    void deleteData(
             void* /*data*/) override
     {
     }
 
-    bool compute_key(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool /*force_md5*/) override
-    {
-        return true;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    bool getKey(
+            void* /*data*/,
+            fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool /*force_md5*/) override
     {
         return true;
@@ -329,10 +360,10 @@ TEST(DataWriterTests, get_type)
 
     ASSERT_EQ(type, datawriter->get_type());
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 /*!
@@ -344,35 +375,33 @@ TEST(DataWriterTests, get_guid)
     {
     public:
 
-        void on_data_writer_discovery(
+        void on_publisher_discovery(
                 DomainParticipant*,
-                fastdds::rtps::WriterDiscoveryStatus reason,
-                const fastdds::dds::PublicationBuiltinTopicData& info,
-                bool& /*should_be_ignored*/) override
+                fastrtps::rtps::WriterDiscoveryInfo&& info)
         {
             std::unique_lock<std::mutex> lock(mutex);
-            if (fastdds::rtps::WriterDiscoveryStatus::DISCOVERED_WRITER == reason)
+            if (fastrtps::rtps::WriterDiscoveryInfo::DISCOVERED_WRITER == info.status)
             {
-                guid = info.guid;
+                guid = info.info.guid();
                 cv.notify_one();
             }
         }
 
-        fastdds::rtps::GUID_t guid;
+        fastrtps::rtps::GUID_t guid;
         std::mutex mutex;
         std::condition_variable cv;
 
     private:
 
-        using DomainParticipantListener::on_data_writer_discovery;
+        using DomainParticipantListener::on_publisher_discovery;
     }
     discovery_listener;
 
     DomainParticipantQos participant_qos = PARTICIPANT_QOS_DEFAULT;
     participant_qos.wire_protocol().builtin.discovery_config.ignoreParticipantFlags =
-            static_cast<eprosima::fastdds::rtps::ParticipantFilteringFlags>(
-        eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST |
-        eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_PROCESS);
+            static_cast<eprosima::fastrtps::rtps::ParticipantFilteringFlags_t>(
+        eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_HOST |
+        eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_PROCESS);
 
     DomainParticipant* listener_participant =
             DomainParticipantFactory::get_instance()->create_participant(0, participant_qos,
@@ -399,7 +428,7 @@ TEST(DataWriterTests, get_guid)
     DataWriter* datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
     ASSERT_NE(datawriter, nullptr);
 
-    fastdds::rtps::GUID_t guid = datawriter->guid();
+    fastrtps::rtps::GUID_t guid = datawriter->guid();
 
     participant->enable();
 
@@ -410,17 +439,17 @@ TEST(DataWriterTests, get_guid)
         std::unique_lock<std::mutex> lock(discovery_listener.mutex);
         discovery_listener.cv.wait(lock, [&]()
                 {
-                    return fastdds::rtps::GUID_t::unknown() != discovery_listener.guid;
+                    return fastrtps::rtps::GUID_t::unknown() != discovery_listener.guid;
                 });
     }
     ASSERT_EQ(guid, discovery_listener.guid);
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
     ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(
-                listener_participant) == RETCODE_OK);
+                listener_participant) == ReturnCode_t::RETCODE_OK);
 }
 
 TEST(DataWriterTests, ChangeDataWriterQos)
@@ -447,17 +476,17 @@ TEST(DataWriterTests, ChangeDataWriterQos)
 
     qos.deadline().period = 260;
 
-    ASSERT_TRUE(datawriter->set_qos(qos) == RETCODE_OK);
+    ASSERT_TRUE(datawriter->set_qos(qos) == ReturnCode_t::RETCODE_OK);
     DataWriterQos wqos;
     datawriter->get_qos(wqos);
 
     ASSERT_EQ(qos, wqos);
     ASSERT_EQ(wqos.deadline().period, 260);
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 TEST(DataWriterTests, ChangeImmutableDataWriterQos)
@@ -488,29 +517,29 @@ TEST(DataWriterTests, ChangeImmutableDataWriterQos)
 
     qos.reliable_writer_qos().disable_positive_acks.enabled = true;
 
-    ASSERT_TRUE(datawriter->set_qos(qos) == RETCODE_OK);
+    ASSERT_TRUE(datawriter->set_qos(qos) == ReturnCode_t::RETCODE_OK);
     DataWriterQos wqos;
     datawriter->get_qos(wqos);
 
     ASSERT_EQ(qos, wqos);
     ASSERT_TRUE(wqos.reliable_writer_qos().disable_positive_acks.enabled);
 
-    ASSERT_TRUE(datawriter->enable() == RETCODE_OK);
+    ASSERT_TRUE(datawriter->enable() == ReturnCode_t::RETCODE_OK);
     ASSERT_TRUE(datawriter->is_enabled());
 
     qos.reliable_writer_qos().disable_positive_acks.enabled = false;
     ASSERT_FALSE(qos == wqos);
-    ASSERT_TRUE(datawriter->set_qos(qos) == RETCODE_IMMUTABLE_POLICY);
+    ASSERT_TRUE(datawriter->set_qos(qos) == ReturnCode_t::RETCODE_IMMUTABLE_POLICY);
 
     DataWriterQos wqos2;
     datawriter->get_qos(wqos2);
     ASSERT_EQ(wqos, wqos2);
     ASSERT_TRUE(wqos2.reliable_writer_qos().disable_positive_acks.enabled);
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 TEST(DataWriterTests, ForcedDataSharing)
@@ -540,19 +569,19 @@ TEST(DataWriterTests, ForcedDataSharing)
 
     // DataSharing automatic, unbounded topic data type
     qos = DATAWRITER_QOS_DEFAULT;
-    qos.endpoint().history_memory_policy = fastdds::rtps::PREALLOCATED_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
     datawriter = publisher->create_datawriter(topic, qos);
     ASSERT_NE(datawriter, nullptr);
-    ASSERT_EQ(publisher->delete_datawriter(datawriter), RETCODE_OK);
+    ASSERT_EQ(publisher->delete_datawriter(datawriter), ReturnCode_t::RETCODE_OK);
 
     // DataSharing automatic, bounded topic data type
     datawriter = publisher->create_datawriter(bounded_topic, qos);
     ASSERT_NE(datawriter, nullptr);
-    ASSERT_EQ(publisher->delete_datawriter(datawriter), RETCODE_OK);
+    ASSERT_EQ(publisher->delete_datawriter(datawriter), ReturnCode_t::RETCODE_OK);
 
     // DataSharing enabled, unbounded topic data type
     qos = DATAWRITER_QOS_DEFAULT;
-    qos.endpoint().history_memory_policy = fastdds::rtps::PREALLOCATED_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
     qos.data_sharing().on(".");
     datawriter = publisher->create_datawriter(topic, qos);
     ASSERT_EQ(datawriter, nullptr);
@@ -560,19 +589,19 @@ TEST(DataWriterTests, ForcedDataSharing)
     // DataSharing enabled, bounded topic data type
     datawriter = publisher->create_datawriter(bounded_topic, qos);
     ASSERT_NE(datawriter, nullptr);
-    ASSERT_EQ(publisher->delete_datawriter(datawriter), RETCODE_OK);
+    ASSERT_EQ(publisher->delete_datawriter(datawriter), ReturnCode_t::RETCODE_OK);
 
     // DataSharing enabled, bounded topic data type, Dynamic memory policy
     qos = DATAWRITER_QOS_DEFAULT;
     qos.data_sharing().on(".");
-    qos.endpoint().history_memory_policy = fastdds::rtps::DYNAMIC_RESERVE_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = fastrtps::rtps::DYNAMIC_RESERVE_MEMORY_MODE;
     datawriter = publisher->create_datawriter(bounded_topic, qos);
     ASSERT_EQ(datawriter, nullptr);
 
-    ASSERT_EQ(participant->delete_topic(topic), RETCODE_OK);
-    ASSERT_EQ(participant->delete_topic(bounded_topic), RETCODE_OK);
-    ASSERT_EQ(participant->delete_publisher(publisher), RETCODE_OK);
-    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), RETCODE_OK);
+    ASSERT_EQ(participant->delete_topic(topic), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant->delete_topic(bounded_topic), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant->delete_publisher(publisher), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), ReturnCode_t::RETCODE_OK);
 
 
     // DataSharing forced, bounded topic data type, security enabled
@@ -584,17 +613,17 @@ TEST(DataWriterTests, ForcedDataSharing)
     }
 
 #ifdef HAS_SECURITY
-    fastdds::rtps::PropertyPolicy security_property;
-    security_property.properties().emplace_back(fastdds::rtps::Property("dds.sec.auth.plugin",
+    fastrtps::rtps::PropertyPolicy security_property;
+    security_property.properties().emplace_back(fastrtps::rtps::Property("dds.sec.auth.plugin",
             "builtin.PKI-DH"));
-    security_property.properties().emplace_back(fastdds::rtps::Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
+    security_property.properties().emplace_back(fastrtps::rtps::Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
             "file://" + std::string(certs_path) + "/maincacert.pem"));
-    security_property.properties().emplace_back(fastdds::rtps::Property(
+    security_property.properties().emplace_back(fastrtps::rtps::Property(
                 "dds.sec.auth.builtin.PKI-DH.identity_certificate",
                 "file://" + std::string(certs_path) + "/mainsubcert.pem"));
-    security_property.properties().emplace_back(fastdds::rtps::Property("dds.sec.auth.builtin.PKI-DH.private_key",
+    security_property.properties().emplace_back(fastrtps::rtps::Property("dds.sec.auth.builtin.PKI-DH.private_key",
             "file://" + std::string(certs_path) + "/mainsubkey.pem"));
-    security_property.properties().emplace_back(fastdds::rtps::Property("dds.sec.crypto.plugin",
+    security_property.properties().emplace_back(fastrtps::rtps::Property("dds.sec.crypto.plugin",
             "builtin.AES-GCM-GMAC"));
     security_property.properties().emplace_back("rtps.participant.rtps_protection_kind", "ENCRYPT");
 
@@ -615,15 +644,15 @@ TEST(DataWriterTests, ForcedDataSharing)
 
     qos = DATAWRITER_QOS_DEFAULT;
     qos.data_sharing().on(".");
-    qos.endpoint().history_memory_policy = fastdds::rtps::PREALLOCATED_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
 
 
     datawriter = publisher->create_datawriter(bounded_topic, qos);
     ASSERT_EQ(datawriter, nullptr);
 
-    ASSERT_EQ(participant->delete_topic(bounded_topic), RETCODE_OK);
-    ASSERT_EQ(participant->delete_publisher(publisher), RETCODE_OK);
-    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), RETCODE_OK);
+    ASSERT_EQ(participant->delete_topic(bounded_topic), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant->delete_publisher(publisher), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), ReturnCode_t::RETCODE_OK);
 #endif // HAS_SECURITY
 }
 
@@ -647,9 +676,12 @@ TEST(DataWriterTests, InvalidQos)
     ASSERT_NE(datawriter, nullptr);
 
     /* Unsupported QoS */
-    const ReturnCode_t unsupported_code = RETCODE_UNSUPPORTED;
+    const ReturnCode_t unsupported_code = ReturnCode_t::RETCODE_UNSUPPORTED;
 
     DataWriterQos qos;
+    qos = DATAWRITER_QOS_DEFAULT;
+    qos.durability().kind = PERSISTENT_DURABILITY_QOS;
+    EXPECT_EQ(unsupported_code, datawriter->set_qos(qos));
 
     qos = DATAWRITER_QOS_DEFAULT;
     qos.destination_order().kind = BY_SOURCE_TIMESTAMP_DESTINATIONORDER_QOS;
@@ -660,7 +692,7 @@ TEST(DataWriterTests, InvalidQos)
     EXPECT_EQ(unsupported_code, datawriter->set_qos(qos));
 
     /* Inconsistent QoS */
-    const ReturnCode_t inconsistent_code = RETCODE_INCONSISTENT_POLICY;
+    const ReturnCode_t inconsistent_code = ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
 
     qos = DATAWRITER_QOS_DEFAULT;
     qos.properties().properties().emplace_back("fastdds.push_mode", "false");
@@ -668,7 +700,7 @@ TEST(DataWriterTests, InvalidQos)
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos));
 
     qos.reliability().kind = RELIABLE_RELIABILITY_QOS;
-    qos.reliable_writer_qos().times.heartbeat_period = eprosima::fastdds::dds::c_TimeInfinite;
+    qos.reliable_writer_qos().times.heartbeatPeriod = eprosima::fastrtps::c_TimeInfinite;
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos));
 
     qos = DATAWRITER_QOS_DEFAULT;
@@ -682,64 +714,33 @@ TEST(DataWriterTests, InvalidQos)
 
     qos = DATAWRITER_QOS_DEFAULT;
     qos.data_sharing().on("/tmp");
-    qos.endpoint().history_memory_policy = eprosima::fastdds::rtps::DYNAMIC_RESERVE_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = eprosima::fastrtps::rtps::DYNAMIC_RESERVE_MEMORY_MODE;
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos));
 
-    qos.endpoint().history_memory_policy = eprosima::fastdds::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
+    qos.endpoint().history_memory_policy = eprosima::fastrtps::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos));
 
-    qos.endpoint().history_memory_policy = eprosima::fastdds::rtps::PREALLOCATED_MEMORY_MODE;
-    EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos));
+    qos.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->set_qos(qos));
 
-    qos.endpoint().history_memory_policy = eprosima::fastdds::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
-    EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos));
+    qos.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->set_qos(qos));
 
     qos = DATAWRITER_QOS_DEFAULT;
     qos.history().kind = KEEP_LAST_HISTORY_QOS;
     qos.history().depth = 0;
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos)); // KEEP LAST 0 is inconsistent
     qos.history().depth = 2;
-    EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos)); // KEEP LAST 2 is OK
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->set_qos(qos)); // KEEP LAST 2 is OK
     // KEEP LAST 2000 but max_samples_per_instance default (400) is inconsistent but right now it only shows a warning
     // This test will fail whenever we enforce the consistency between depth and max_samples_per_instance.
     qos.history().depth = 2000;
-    EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->set_qos(qos));
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
-}
-
-TEST(DataWriterTests, PersistentDurabilityIsAValidQoS)
-{
-    DomainParticipantQos pqos = PARTICIPANT_QOS_DEFAULT;
-    pqos.entity_factory().autoenable_created_entities = false;
-    DomainParticipant* participant = DomainParticipantFactory::get_instance()->create_participant(0, pqos);
-    ASSERT_NE(participant, nullptr);
-
-    Publisher* publisher = participant->create_publisher(PUBLISHER_QOS_DEFAULT);
-    ASSERT_NE(publisher, nullptr);
-
-    TypeSupport type(new TopicDataTypeMock());
-    type.register_type(participant);
-
-    Topic* topic = participant->create_topic("footopic", type.get_type_name(), TOPIC_QOS_DEFAULT);
-    ASSERT_NE(topic, nullptr);
-
-    DataWriter* datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
-    ASSERT_NE(datawriter, nullptr);
-
-    DataWriterQos qos;
-    qos = DATAWRITER_QOS_DEFAULT;
-    qos.durability().kind = PERSISTENT_DURABILITY_QOS;
-    // PERSISTENT DataWriter behaves as TRANSIENT
-    EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos));
-
-    // Cleanup
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 //TODO: Activate the test once PSM API for DataWriter is in place
@@ -782,15 +783,15 @@ TEST(DataWriterTests, Write)
 
     FooType data;
     data.message("HelloWorld");
-    ASSERT_FALSE(datawriter->write(nullptr, HANDLE_NIL) == RETCODE_OK);
-    ASSERT_TRUE(datawriter->write(&data, HANDLE_NIL) == RETCODE_OK);
+    ASSERT_FALSE(datawriter->write(nullptr, HANDLE_NIL) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(datawriter->write(&data, HANDLE_NIL) == ReturnCode_t::RETCODE_OK);
     ASSERT_TRUE(datawriter->write(&data, participant->get_instance_handle()) ==
-            RETCODE_PRECONDITION_NOT_MET);
+            ReturnCode_t::RETCODE_PRECONDITION_NOT_MET);
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 TEST(DataWriterTests, WriteWithTimestamp)
@@ -811,28 +812,28 @@ TEST(DataWriterTests, WriteWithTimestamp)
     DataWriter* datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
     ASSERT_NE(datawriter, nullptr);
 
-    eprosima::fastdds::dds::Time_t ts{ 0, 1 };
+    eprosima::fastrtps::Time_t ts{ 0, 1 };
 
     FooType data;
     data.message("HelloWorld");
 
     // 1. Calling write with nullptr data returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_BAD_PARAMETER, datawriter->write_w_timestamp(nullptr, HANDLE_NIL, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->write_w_timestamp(nullptr, HANDLE_NIL, ts));
     // 2. Calling write with an invalid timestamps returns RETCODE_BAD_PARAMETER
-    EXPECT_EQ(RETCODE_BAD_PARAMETER,
-            datawriter->write_w_timestamp(&data, HANDLE_NIL, fastdds::dds::c_TimeInfinite));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER,
-            datawriter->write_w_timestamp(&data, HANDLE_NIL, fastdds::dds::c_TimeInvalid));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER,
+            datawriter->write_w_timestamp(&data, HANDLE_NIL, fastrtps::c_TimeInfinite));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER,
+            datawriter->write_w_timestamp(&data, HANDLE_NIL, fastrtps::c_TimeInvalid));
     // 3. Calling write with a wrong instance handle returns RETCODE_PRECONDITION_NOT_MET
-    ASSERT_EQ(RETCODE_PRECONDITION_NOT_MET,
+    ASSERT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET,
             datawriter->write_w_timestamp(&data, participant->get_instance_handle(), ts));
     // 4. Correct case
-    ASSERT_EQ(RETCODE_OK, datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 void set_listener_test (
@@ -840,7 +841,7 @@ void set_listener_test (
         DataWriterListener* listener,
         StatusMask mask)
 {
-    ASSERT_EQ(writer->set_listener(listener, mask), RETCODE_OK);
+    ASSERT_EQ(writer->set_listener(listener, mask), ReturnCode_t::RETCODE_OK);
     ASSERT_EQ(writer->get_status_mask(), mask);
 }
 
@@ -893,10 +894,10 @@ TEST(DataWriterTests, SetListener)
                 std::get<2>(testing_case));
     }
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 TEST(DataWriterTests, TerminateWithoutDestroyingWriter)
@@ -984,11 +985,11 @@ TEST(DataWriterTests, RegisterInstance)
     EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance(&data));
 
     // 2. Calling register_instance in a non keyed topic returns HANDLE_NIL
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
     EXPECT_EQ(HANDLE_NIL, datawriter->register_instance(&data));
 
     // 3. Calling register_instance with an invalid sample returns HANDLE_NIL
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
     EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance(nullptr));
 
     // 4. Calling register_instance with a valid key returns a valid handle
@@ -1009,23 +1010,23 @@ TEST(DataWriterTests, RegisterInstanceWithTimestamp)
     DataWriter* instance_datawriter;
     create_writers_for_instance_test(datawriter, instance_datawriter);
 
-    eprosima::fastdds::dds::Time_t ts{ 0, 1 };
+    eprosima::fastrtps::Time_t ts{ 0, 1 };
 
     // 1. Calling register_instance_w_timestamp in a disable writer returns HANDLE_NIL
     EXPECT_EQ(HANDLE_NIL, datawriter->register_instance_w_timestamp(&data, ts));
     EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, ts));
 
     // 2. Calling register_instance_w_timestamp in a non keyed topic returns HANDLE_NIL
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
     EXPECT_EQ(HANDLE_NIL, datawriter->register_instance_w_timestamp(&data, ts));
 
     // 3. Calling register_instance with an invalid sample returns HANDLE_NIL
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
     EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(nullptr, ts));
 
     // 4. Calling register_instance with an invalid timestamps returns HANDLE_NIL
-    EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, fastdds::dds::c_TimeInfinite));
-    EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, fastdds::dds::c_TimeInvalid));
+    EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, fastrtps::c_TimeInfinite));
+    EXPECT_EQ(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, fastrtps::c_TimeInvalid));
 
     // 5. Calling register_instance with a valid key returns a valid handle
     EXPECT_NE(HANDLE_NIL, instance_datawriter->register_instance_w_timestamp(&data, ts));
@@ -1048,34 +1049,34 @@ TEST(DataWriterTests, UnregisterInstance)
     create_writers_for_instance_test(datawriter, instance_datawriter, &instance_type);
 
     // 1. Calling unregister_instance in a disable writer returns RETCODE_NOT_ENABLED
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->unregister_instance(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->unregister_instance(&data, handle));
 
     // 2. Calling unregister_instance in a non keyed topic returns RETCODE_PRECONDITION_NOT MET
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->unregister_instance(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, datawriter->unregister_instance(&data, handle));
 
     // 3. Calling unregister_instance with an invalid sample returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->unregister_instance(nullptr, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->unregister_instance(nullptr, handle));
 
 #if !defined(NDEBUG)
     // 4. Calling unregister_instance with an inconsistent handle returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance(&data,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance(&data,
             datawriter->get_instance_handle()));
 #endif // NDEBUG
 
     // 5. Calling unregister_instance with a key not yet registered returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance(&data, handle));
 
     // 6. Calling unregister_instance with a valid key returns RETCODE_OK
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->unregister_instance(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->unregister_instance(&data, handle));
 
     // 7. Calling unregister_instance with a valid InstanceHandle also returns RETCODE_OK
     data.message("HelloWorld_1");
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
-    instance_type->compute_key(&data, handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->unregister_instance(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
+    instance_type.get_key(&data, &handle);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->unregister_instance(&data, handle));
 
     // TODO(jlbueno) There are other possible errors sending the unregister message: RETCODE_OUT_OF_RESOURCES,
     // RETCODE_ERROR, and RETCODE_TIMEOUT (only if HAVE_STRICT_REALTIME has been defined).
@@ -1097,48 +1098,48 @@ TEST(DataWriterTests, UnregisterInstanceWithTimestamp)
     DataWriter* instance_datawriter;
     create_writers_for_instance_test(datawriter, instance_datawriter, &instance_type);
 
-    eprosima::fastdds::dds::Time_t ts{ 0, 1 };
+    eprosima::fastrtps::Time_t ts{ 0, 1 };
 
     // 1. Calling unregister_instance in a disable writer returns RETCODE_NOT_ENABLED
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->unregister_instance_w_timestamp(&data, handle, ts));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // 2. Calling unregister_instance in a non keyed topic returns RETCODE_PRECONDITION_NOT MET
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET,
             datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // 3. Calling unregister_instance with an invalid sample returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
-    EXPECT_EQ(RETCODE_BAD_PARAMETER,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER,
             instance_datawriter->unregister_instance_w_timestamp(nullptr, handle, ts));
 
 #if !defined(NDEBUG)
     // 4. Calling unregister_instance with an inconsistent handle returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance_w_timestamp(&data,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->unregister_instance_w_timestamp(&data,
             datawriter->get_instance_handle(), ts));
 #endif // NDEBUG
 
     // 5. Calling unregister_instance with a key not yet registered returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET,
             instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // 6. Calling unregister_instance with a valid key returns RETCODE_OK
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // 7. Calling unregister_instance with a valid InstanceHandle also returns RETCODE_OK
     data.message("HelloWorld_1");
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    instance_type.compute_key(&data, handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    instance_type.get_key(&data, &handle);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // 8. Check invalid timestamps
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    ts = eprosima::fastdds::dds::c_TimeInfinite;
-    EXPECT_EQ(RETCODE_BAD_PARAMETER,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    ts = eprosima::fastrtps::c_TimeInfinite;
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER,
             instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
-    ts = eprosima::fastdds::dds::c_TimeInvalid;
-    EXPECT_EQ(RETCODE_BAD_PARAMETER,
+    ts = eprosima::fastrtps::c_TimeInvalid;
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER,
             instance_datawriter->unregister_instance_w_timestamp(&data, handle, ts));
 
     // TODO(jlbueno) There are other possible errors sending the unregister message: RETCODE_OUT_OF_RESOURCES,
@@ -1162,34 +1163,34 @@ TEST(DataWriterTests, Dispose)
     create_writers_for_instance_test(datawriter, instance_datawriter, &instance_type);
 
     // 1. Calling dispose in a disable writer returns RETCODE_NOT_ENABLED
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->dispose(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->dispose(&data, handle));
 
     // 2. Calling dispose in a non keyed topic returns RETCODE_PRECONDITION_NOT MET
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->dispose(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, datawriter->dispose(&data, handle));
 
     // 3. Calling dispose with an invalid sample returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->dispose(nullptr, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->dispose(nullptr, handle));
 
 #if !defined(NDEBUG)
     // 4. Calling dispose with an inconsistent handle returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose(&data,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose(&data,
             datawriter->get_instance_handle()));
 #endif // NDEBUG
 
     // 5. Calling dispose with a key not yet registered returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose(&data, handle));
 
     // 6. Calling dispose with a valid key returns RETCODE_OK
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->dispose(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->dispose(&data, handle));
 
     // 7. Calling dispose with a valid InstanceHandle also returns RETCODE_OK
     data.message("HelloWorld_1");
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
-    instance_type.compute_key(&data, handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->dispose(&data, handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
+    instance_type.get_key(&data, &handle);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->dispose(&data, handle));
 
     // TODO(jlbueno) There are other possible errors sending the dispose message: RETCODE_OUT_OF_RESOURCES,
     // RETCODE_ERROR, and RETCODE_TIMEOUT (only if HAVE_STRICT_REALTIME has been defined).
@@ -1211,44 +1212,44 @@ TEST(DataWriterTests, DisposeWithTimestamp)
     DataWriter* instance_datawriter;
     create_writers_for_instance_test(datawriter, instance_datawriter, &instance_type);
 
-    eprosima::fastdds::dds::Time_t ts{ 0, 1 };
+    eprosima::fastrtps::Time_t ts{ 0, 1 };
 
     // 1. Calling dispose in a disable writer returns RETCODE_NOT_ENABLED
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->dispose_w_timestamp(&data, handle, ts));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // 2. Calling dispose in a non keyed topic returns RETCODE_PRECONDITION_NOT MET
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->dispose_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // 3. Calling dispose with an invalid sample returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(nullptr, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(nullptr, handle, ts));
 
 #if !defined(NDEBUG)
     // 4. Calling dispose with an inconsistent handle returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose_w_timestamp(&data,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose_w_timestamp(&data,
             datawriter->get_instance_handle(), ts));
 #endif // NDEBUG
 
     // 5. Calling dispose with a key not yet registered returns RETCODE_PRECONDITION_NOT_MET
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // 6. Calling dispose with a valid key returns RETCODE_OK
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // 7. Calling dispose with a valid InstanceHandle also returns RETCODE_OK
     data.message("HelloWorld_1");
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    instance_type.compute_key(&data, handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    instance_type.get_key(&data, &handle);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // 8. Check invalid timestamps
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
-    ts = eprosima::fastdds::dds::c_TimeInfinite;
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
-    ts = eprosima::fastdds::dds::c_TimeInvalid;
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
+    ts = eprosima::fastrtps::c_TimeInfinite;
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
+    ts = eprosima::fastrtps::c_TimeInvalid;
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->dispose_w_timestamp(&data, handle, ts));
 
     // TODO(jlbueno) There are other possible errors sending the dispose message: RETCODE_OUT_OF_RESOURCES,
     // RETCODE_ERROR, and RETCODE_TIMEOUT (only if HAVE_STRICT_REALTIME has been defined).
@@ -1273,39 +1274,39 @@ TEST(DataWriterTests, GetKeyValue)
     create_writers_for_instance_test(datawriter, instance_datawriter);
 
     // 1. Check nullptr on key_holder
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->get_key_value(nullptr, wrong_handle));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(nullptr, wrong_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->get_key_value(nullptr, wrong_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(nullptr, wrong_handle));
 
     // 2. Check HANDLE_NIL
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->get_key_value(&data, HANDLE_NIL));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->get_key_value(&data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, HANDLE_NIL));
 
     // 3. Check type should have keys, and writer should be enabled
-    EXPECT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->get_key_value(&data, wrong_handle));
-    EXPECT_EQ(RETCODE_NOT_ENABLED, instance_datawriter->get_key_value(&data, wrong_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_ILLEGAL_OPERATION, datawriter->get_key_value(&data, wrong_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, instance_datawriter->get_key_value(&data, wrong_handle));
 
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
 
     // 4. Calling get_key_value with a key not yet registered returns RETCODE_BAD_PARAMETER
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, wrong_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, wrong_handle));
 
     // 5. Calling get_key_value on a registered instance should work.
     valid_handle = instance_datawriter->register_instance(&valid_data);
     EXPECT_NE(HANDLE_NIL, valid_handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
 
     // 6. Calling get_key_value on an unregistered instance should return RETCODE_BAD_PARAMETER.
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->unregister_instance(&valid_data, valid_handle));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, valid_handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->unregister_instance(&valid_data, valid_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->get_key_value(&data, valid_handle));
 
     // 7. Calling get_key_value with a valid instance should work
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&valid_data, HANDLE_NIL));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&valid_data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
 
     // 8. Calling get_key_value on a disposed instance should work.
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->dispose(&valid_data, valid_handle));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->dispose(&valid_data, valid_handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->get_key_value(&data, valid_handle));
 }
 
 struct LoanableType
@@ -1328,59 +1329,75 @@ public:
     LoanableTypeSupport()
         : TopicDataType()
     {
-        max_serialized_type_size = 4u + sizeof(LoanableType);
-        set_name("LoanableType");
+        m_typeSize = 4u + sizeof(LoanableType);
+        setName("LoanableType");
     }
 
     bool serialize(
-            const void* const /*data*/,
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/) override
+    {
+        return true;
+    }
+
+    bool serialize(
+            void* /*data*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             DataRepresentationId_t /*data_representation*/) override
     {
         return true;
     }
 
     bool deserialize(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
+            fastrtps::rtps::SerializedPayload_t* /*payload*/,
             void* /*data*/) override
     {
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const /*data*/,
-            DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/) override
     {
-        return max_serialized_type_size;
+        return [this]()
+               {
+                   return m_typeSize;
+               };
     }
 
-    void* create_data() override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* /*data*/,
+            DataRepresentationId_t /*data_representation*/) override
+    {
+        return [this]()
+               {
+                   return m_typeSize;
+               };
+    }
+
+    void* createData() override
     {
         return nullptr;
     }
 
-    void delete_data(
+    void deleteData(
             void* /*data*/) override
     {
     }
 
-    bool compute_key(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
-            bool /*force_md5*/) override
-    {
-        return true;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+    bool getKey(
+            void* /*data*/,
+            fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
             bool /*force_md5*/) override
     {
         return true;
     }
 
     bool is_bounded() const override
+    {
+        return true;
+    }
+
+    bool is_plain() const override
     {
         return true;
     }
@@ -1427,61 +1444,61 @@ TEST(DataWriterTests, LoanPositiveTests)
     void* sample = nullptr;
 
     // Loan and discard (check different initialization schemes)
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample, InitKind::NO_LOAN_INITIALIZATION));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample, InitKind::NO_LOAN_INITIALIZATION));
     EXPECT_NE(nullptr, sample);
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
 
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample, InitKind::ZERO_LOAN_INITIALIZATION));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample, InitKind::ZERO_LOAN_INITIALIZATION));
     ASSERT_NE(nullptr, sample);
     EXPECT_EQ(0u, static_cast<LoanableType*>(sample)->index);
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
 
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample, InitKind::CONSTRUCTED_LOAN_INITIALIZATION));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample, InitKind::CONSTRUCTED_LOAN_INITIALIZATION));
     ASSERT_NE(nullptr, sample);
     EXPECT_EQ(LoanableType::initialization_value(), static_cast<LoanableType*>(sample)->index);
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
 
     // Resource limits:
     // Depth has been configured to 1, so pool will allow up to depth + 1 loans.
     // We will check that the 3rd unreturned loan returns OUT_OF_RESOURCES.
     void* sample_2 = nullptr;
     void* sample_3 = nullptr;
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample));
     EXPECT_NE(nullptr, sample);
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample_2));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample_2));
     EXPECT_NE(nullptr, sample_2);
-    EXPECT_EQ(RETCODE_OUT_OF_RESOURCES, datawriter->loan_sample(sample_3));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OUT_OF_RESOURCES, datawriter->loan_sample(sample_3));
     EXPECT_EQ(nullptr, sample_3);
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample_2));
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample_2));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
 
     // Write samples, both loaned and not
     LoanableType data;
-    fastdds::rtps::InstanceHandle_t handle;
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample));
+    fastrtps::rtps::InstanceHandle_t handle;
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample));
     EXPECT_NE(nullptr, sample);
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample_2));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample_2));
     EXPECT_NE(nullptr, sample_2);
-    EXPECT_EQ(RETCODE_OK, datawriter->write(sample, handle));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
-    EXPECT_EQ(RETCODE_OK, datawriter->write(sample_2, handle));
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample_2));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write(sample, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write(sample_2, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, datawriter->discard_loan(sample_2));
 
-    EXPECT_EQ(RETCODE_OK, datawriter->write(&data, handle));
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample));
     EXPECT_NE(nullptr, sample);
-    EXPECT_EQ(RETCODE_OUT_OF_RESOURCES, datawriter->write(&data, handle));
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
-    EXPECT_EQ(RETCODE_OK, datawriter->write(&data, handle));
-    EXPECT_EQ(RETCODE_OK, datawriter->write(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OUT_OF_RESOURCES, datawriter->write(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write(&data, handle));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->write(&data, handle));
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 class LoanableTypeSupportTesting : public LoanableTypeSupport
@@ -1492,6 +1509,11 @@ public:
 
     bool is_plain_result = true;
     bool construct_sample_result = true;
+
+    bool is_plain() const override
+    {
+        return is_plain_result;
+    }
 
     bool is_plain(
             DataRepresentationId_t) const override
@@ -1536,35 +1558,35 @@ TEST(DataWriterTests, LoanNegativeTests)
     ASSERT_EQ(datawriter->get_status_mask(), StatusMask::all());
 
     void* sample = nullptr;
-    auto original_type_size = type_support->max_serialized_type_size;
+    auto original_type_size = type_support->m_typeSize;
 
     // Check for illegal operation
     type_support->is_plain_result = false;
-    EXPECT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->loan_sample(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_ILLEGAL_OPERATION, datawriter->loan_sample(sample));
     type_support->is_plain_result = true;
-    type_support->max_serialized_type_size = 0;
-    EXPECT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->loan_sample(sample));
-    type_support->max_serialized_type_size = original_type_size;
+    type_support->m_typeSize = 0;
+    EXPECT_EQ(ReturnCode_t::RETCODE_ILLEGAL_OPERATION, datawriter->loan_sample(sample));
+    type_support->m_typeSize = original_type_size;
 
     // Check for not enabled
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->loan_sample(sample));
-    EXPECT_EQ(RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->loan_sample(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
 
     // Check for constructor support
     type_support->construct_sample_result = false;
-    EXPECT_EQ(RETCODE_UNSUPPORTED,
+    EXPECT_EQ(ReturnCode_t::RETCODE_UNSUPPORTED,
             datawriter->loan_sample(sample, InitKind::CONSTRUCTED_LOAN_INITIALIZATION));
     type_support->construct_sample_result = true;
 
     // Check preconditions on delete_datawriter
-    EXPECT_EQ(RETCODE_OK, datawriter->loan_sample(sample));
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, publisher->delete_datawriter(datawriter));
-    EXPECT_EQ(RETCODE_OK, datawriter->discard_loan(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->loan_sample(sample));
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, publisher->delete_datawriter(datawriter));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, datawriter->discard_loan(sample));
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
-    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == ReturnCode_t::RETCODE_OK);
 }
 
 class DataWriterTest : public DataWriter
@@ -1584,7 +1606,7 @@ public:
 
     DataWriterHistory* get_history()
     {
-        return history_.get();
+        return &history_;
     }
 
 };
@@ -1596,7 +1618,7 @@ public:
 TEST(DataWriterTests, InstanceWaitForAcknowledgement)
 {
     // Test parameters
-    dds::Duration_t max_wait(2, 0);
+    Duration_t max_wait(2, 0);
     InstanceHandle_t handle;
     InstanceFooType data;
     data.message("HelloWorld");
@@ -1631,25 +1653,25 @@ TEST(DataWriterTests, InstanceWaitForAcknowledgement)
     ASSERT_NE(nullptr, instance_datawriter);
 
     // 1. Calling wait_for_acknowledgments in a disable writer returns RETCODE_NOT_ENABLED
-    EXPECT_EQ(RETCODE_NOT_ENABLED, datawriter->wait_for_acknowledgments(&data, handle, max_wait));
+    EXPECT_EQ(ReturnCode_t::RETCODE_NOT_ENABLED, datawriter->wait_for_acknowledgments(&data, handle, max_wait));
 
     // 2. Calling wait_for_acknowledgments in a non keyed topic returns RETCODE_PRECONDITION_NOT MET
-    ASSERT_EQ(RETCODE_OK, datawriter->enable());
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->wait_for_acknowledgments(&data, handle,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, datawriter->wait_for_acknowledgments(&data, handle,
             max_wait));
 
     // 3. Calling wait_for_acknowledgments with an invalid sample returns RETCODE_BAD_PARAMETER
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->enable());
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, instance_datawriter->wait_for_acknowledgments(nullptr, handle,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->enable());
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, instance_datawriter->wait_for_acknowledgments(nullptr, handle,
             max_wait));
 
 #if !defined(NDEBUG)
     // 4. Calling wait_for_acknowledgments with an inconsistent handle returns RETCODE_BAD_PARAMETER
-    EXPECT_EQ(RETCODE_PRECONDITION_NOT_MET, instance_datawriter->wait_for_acknowledgments(&data,
+    EXPECT_EQ(ReturnCode_t::RETCODE_PRECONDITION_NOT_MET, instance_datawriter->wait_for_acknowledgments(&data,
             datawriter->get_instance_handle(), max_wait));
 #endif // NDEBUG
 
-    // Access DataWriterHistory
+    // Access PublisherHistory
     DataWriterTest* instance_datawriter_test = static_cast<DataWriterTest*>(instance_datawriter);
     ASSERT_NE(nullptr, instance_datawriter_test);
     DataWriterImpl* datawriter_impl = instance_datawriter_test->get_impl();
@@ -1661,22 +1683,22 @@ TEST(DataWriterTests, InstanceWaitForAcknowledgement)
     // 5. Calling wait_for_acknowledgments in a keyed topic with HANDLE_NIL returns
     // RETCODE_OK
     EXPECT_CALL(*history, wait_for_acknowledgement_last_change(_, _, _)).WillOnce(testing::Return(true));
-    ASSERT_EQ(RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->wait_for_acknowledgments(&data, handle,
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->write(&data, HANDLE_NIL));
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->wait_for_acknowledgments(&data, handle,
             max_wait));
 
     // 6. Calling wait_for_acknowledgments in a keyed topic with a known handle returns RETCODE_OK (no matched readers)
     // Expectations
     EXPECT_CALL(*history, wait_for_acknowledgement_last_change(_, _, _)).WillOnce(testing::Return(true));
 
-    instance_type.compute_key(&data, handle);
-    EXPECT_EQ(RETCODE_OK, instance_datawriter->wait_for_acknowledgments(&data, handle, max_wait));
+    instance_type.get_key(&data, &handle);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, instance_datawriter->wait_for_acknowledgments(&data, handle, max_wait));
 
     // 7. Calling wait_for_acknowledgments in a keyed topic with a known handle timeouts if some reader has not
     // acknowledged before max_wait time (mock) returns RETCODE_TIMEOUT
     // Expectations
     EXPECT_CALL(*history, wait_for_acknowledgement_last_change(_, _, _)).WillOnce(testing::Return(false));
-    EXPECT_EQ(RETCODE_TIMEOUT, instance_datawriter->wait_for_acknowledgments(&data, handle, max_wait));
+    EXPECT_EQ(ReturnCode_t::RETCODE_TIMEOUT, instance_datawriter->wait_for_acknowledgments(&data, handle, max_wait));
 }
 #endif // __QNXNTO__
 
@@ -1732,8 +1754,10 @@ public:
 
 /*
  * This test checks that the DataWriter methods defined in the standard not yet implemented in FastDDS return
- * RETCODE_UNSUPPORTED. The following methods are checked:
- * 1. lookup_instance
+ * ReturnCode_t::RETCODE_UNSUPPORTED. The following methods are checked:
+ * 1. get_matched_subscription_data
+ * 2. get_matched_subscriptions
+ * 3. lookup_instance
  */
 TEST_F(DataWriterUnsupportedTests, UnsupportedDataWriterMethods)
 {
@@ -1753,15 +1777,24 @@ TEST_F(DataWriterUnsupportedTests, UnsupportedDataWriterMethods)
     DataWriter* data_writer = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
     ASSERT_NE(publisher, nullptr);
 
+    builtin::SubscriptionBuiltinTopicData subscription_data;
+    fastrtps::rtps::InstanceHandle_t subscription_handle;
+    EXPECT_EQ(
+        ReturnCode_t::RETCODE_UNSUPPORTED,
+        data_writer->get_matched_subscription_data(subscription_data, subscription_handle));
+
+    std::vector<InstanceHandle_t> subscription_handles;
+    EXPECT_EQ(ReturnCode_t::RETCODE_UNSUPPORTED, data_writer->get_matched_subscriptions(subscription_handles));
+
     EXPECT_EQ(HANDLE_NIL, data_writer->lookup_instance(nullptr /* instance */));
 
     // Expected logWarnings: lookup_instance
     HELPER_WaitForEntries(1);
 
-    ASSERT_EQ(publisher->delete_datawriter(data_writer), RETCODE_OK);
-    ASSERT_EQ(participant->delete_publisher(publisher), RETCODE_OK);
-    ASSERT_EQ(participant->delete_topic(topic), RETCODE_OK);
-    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), RETCODE_OK);
+    ASSERT_EQ(publisher->delete_datawriter(data_writer), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant->delete_publisher(publisher), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(participant->delete_topic(topic), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(DomainParticipantFactory::get_instance()->delete_participant(participant), ReturnCode_t::RETCODE_OK);
 }
 
 /*
@@ -1839,12 +1872,12 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyNotKeyed)
     ASSERT_NE(data_writer5, nullptr);
 
     // Next QoS config checks the default qos configuration,
-    // set_qos() should return RETCODE_OK = 0
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0
     DataWriterQos qos2 = DATAWRITER_QOS_DEFAULT;
     DataWriter* default_data_writer1 = publisher->create_datawriter(topic, qos2);
     ASSERT_NE(default_data_writer1, nullptr);
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Below an ampliation of the last comprobation, for which it is proved the case of < 0 (-1),
     // which also means infinite value.
@@ -1854,35 +1887,35 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyNotKeyed)
     qos2.resource_limits().max_instances = -1;
     qos2.resource_limits().max_samples_per_instance = -1;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples < ( max_instances * max_samples_per_instance ) ,
-    // set_qos() should return RETCODE_OK = 0
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0
     // By not using instances, instance allocation consistency is not checked.
     qos2.resource_limits().max_samples = 4999;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples > ( max_instances * max_samples_per_instance ) ,
-    // set_qos() should return RETCODE_OK = 0
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0
     // By not using instances, instance allocation consistency is not checked.
     qos2.resource_limits().max_samples = 5001;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples infinite
     // and ( max_instances * max_samples_per_instance ) finite,
-    // set_qos() should return RETCODE_OK = 0
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0
     // By not using instances, instance allocation consistency is not checked.
     qos2.resource_limits().max_samples = 0;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 }
 
 /*
@@ -1909,7 +1942,7 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyKeyed)
     type.register_type(participant);
 
     // This test pretends to use topic with instances, so the following flag is set.
-    type.get()->is_compute_key_provided = true;
+    type.get()->m_isGetKeyDefined = true;
 
     Topic* topic = participant->create_topic("footopic", type.get_type_name(), TOPIC_QOS_DEFAULT);
     ASSERT_NE(topic, nullptr);
@@ -1969,12 +2002,12 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyKeyed)
     ASSERT_NE(data_writer6, nullptr);
 
     // Next QoS config checks the default qos configuration,
-    // set_qos() should return RETCODE_OK = 0, as the by default values are already infinite.
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0, as the by default values are already infinite.
     DataWriterQos qos2 = DATAWRITER_QOS_DEFAULT;
     DataWriter* default_data_writer1 = publisher->create_datawriter(topic, qos2);
     ASSERT_NE(default_data_writer1, nullptr);
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Below an ampliation of the last comprobation, for which it is proved the case of < 0 (-1),
     // which also means infinite value.
@@ -1983,7 +2016,7 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyKeyed)
     qos2.resource_limits().max_instances = -1;
     qos2.resource_limits().max_samples_per_instance = -1;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples < ( max_instances * max_samples_per_instance ) ,
     // set_qos() should return a value != 0 (not OK)
@@ -1991,32 +2024,32 @@ TEST(DataWriterTests, InstancePolicyAllocationConsistencyKeyed)
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_NE(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_NE(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples > ( max_instances * max_samples_per_instance ) ,
-    // set_qos() should return RETCODE_OK = 0.
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0.
     qos2.resource_limits().max_samples = 5001;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples = ( max_instances * max_samples_per_instance ) ,
-    // set_qos() should return RETCODE_OK = 0.
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0.
     qos2.resource_limits().max_samples = 5000;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 
     // Next QoS config checks that if user sets max_samples infinite
     // and ( max_instances * max_samples_per_instance ) finite,
-    // set_qos() should return RETCODE_OK = 0.
+    // set_qos() should return ReturnCode_t::RETCODE_OK = 0.
     qos2.resource_limits().max_samples = 0;
     qos2.resource_limits().max_instances = 10;
     qos2.resource_limits().max_samples_per_instance = 500;
 
-    ASSERT_EQ(RETCODE_OK, default_data_writer1->set_qos(qos2));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, default_data_writer1->set_qos(qos2));
 }
 
 
@@ -2121,7 +2154,7 @@ TEST(DataWriterTests, history_depth_max_samples_per_instance_warning)
 
     /* Check that the datawriter can send data */
     FooType data;
-    ASSERT_EQ(RETCODE_OK, datawriter_1->write(&data, HANDLE_NIL));
+    ASSERT_EQ(ReturnCode_t::RETCODE_OK, datawriter_1->write(&data, HANDLE_NIL));
 
     /* Check that a correctly initialized writer does not produce any warning */
     qos.history().depth = 10;
@@ -2153,6 +2186,13 @@ public:
         return custom_is_plain_with_rep(data_representation_id);
     }
 
+    MOCK_CONST_METHOD0(custom_is_plain, bool());
+
+    bool is_plain() const override
+    {
+        return custom_is_plain();
+    }
+
 };
 
 TEST(DataWriterTests, data_type_is_plain_data_representation)
@@ -2177,6 +2217,7 @@ TEST(DataWriterTests, data_type_is_plain_data_representation)
     qos_xcdr.endpoint().history_memory_policy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 
     /* Expect the "is_plain" method called with default data representation (XCDR1) */
+    EXPECT_CALL(*type, custom_is_plain()).Times(0);
     EXPECT_CALL(*type, custom_is_plain_with_rep(DataRepresentationId_t::XCDR_DATA_REPRESENTATION)).Times(
         testing::AtLeast(1)).WillRepeatedly(testing::Return(true));
     EXPECT_CALL(*type, custom_is_plain_with_rep(DataRepresentationId_t::XCDR2_DATA_REPRESENTATION)).Times(0);
@@ -2194,6 +2235,7 @@ TEST(DataWriterTests, data_type_is_plain_data_representation)
     qos_xcdr2.representation().m_value.push_back(DataRepresentationId_t::XCDR2_DATA_REPRESENTATION);
 
     /* Expect the "is_plain" method called with XCDR2 data representation */
+    EXPECT_CALL(*type, custom_is_plain()).Times(0);
     EXPECT_CALL(*type, custom_is_plain_with_rep(DataRepresentationId_t::XCDR_DATA_REPRESENTATION)).Times(0);
     EXPECT_CALL(*type, custom_is_plain_with_rep(DataRepresentationId_t::XCDR2_DATA_REPRESENTATION)).Times(
         testing::AtLeast(1)).WillRepeatedly(testing::Return(true));

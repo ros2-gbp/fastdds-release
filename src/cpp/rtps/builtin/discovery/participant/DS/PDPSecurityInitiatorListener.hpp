@@ -21,13 +21,13 @@
 #define _DS_PDP_SECURITY_INITIATOR_LISTENER_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
+#include <fastdds/rtps/builtin/discovery/participant/PDPListener.h>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+
 #include <mutex>
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/discovery/participant/PDPListener.h>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class PDP;
@@ -54,9 +54,6 @@ public:
 
 protected:
 
-    bool check_discovery_conditions(
-            ParticipantProxyData& participant_data) override;
-
     void process_alive_data(
             ParticipantProxyData* old_data,
             ParticipantProxyData& new_data,
@@ -70,7 +67,7 @@ protected:
 
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC

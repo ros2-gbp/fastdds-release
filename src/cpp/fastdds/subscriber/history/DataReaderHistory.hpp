@@ -25,8 +25,6 @@
 #include <memory>
 #include <utility>
 
-#include <fastcdr/cdr/fixed_size_string.hpp>
-
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
@@ -35,16 +33,17 @@
 #include <fastdds/dds/topic/TopicDescription.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
-#include <fastdds/rtps/attributes/ResourceManagement.hpp>
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/InstanceHandle.hpp>
-#include <fastdds/rtps/common/SequenceNumber.hpp>
-#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/InstanceHandle.h>
+#include <fastdds/rtps/common/SequenceNumber.h>
+#include <fastdds/rtps/history/ReaderHistory.h>
+#include <fastdds/rtps/resources/ResourceManagement.h>
 
 #include <fastdds/subscriber/DataReaderImpl/StateFilter.hpp>
 
-#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastrtps/utils/fixed_size_string.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
 
 #include "DataReaderHistoryCounters.hpp"
 #include "DataReaderInstance.hpp"
@@ -57,15 +56,15 @@ namespace detail {
 /**
  * Class DataReaderHistory, container of the different CacheChanges of a DataReader
  */
-class DataReaderHistory : public eprosima::fastdds::rtps::ReaderHistory
+class DataReaderHistory : public eprosima::fastrtps::rtps::ReaderHistory
 {
 public:
 
-    using MemoryManagementPolicy_t = eprosima::fastdds::rtps::MemoryManagementPolicy_t;
-    using InstanceHandle_t = eprosima::fastdds::rtps::InstanceHandle_t;
-    using CacheChange_t = eprosima::fastdds::rtps::CacheChange_t;
-    using GUID_t = eprosima::fastdds::rtps::GUID_t;
-    using SequenceNumber_t = eprosima::fastdds::rtps::SequenceNumber_t;
+    using MemoryManagementPolicy_t = eprosima::fastrtps::rtps::MemoryManagementPolicy_t;
+    using InstanceHandle_t = eprosima::fastrtps::rtps::InstanceHandle_t;
+    using CacheChange_t = eprosima::fastrtps::rtps::CacheChange_t;
+    using GUID_t = eprosima::fastrtps::rtps::GUID_t;
+    using SequenceNumber_t = eprosima::fastrtps::rtps::SequenceNumber_t;
 
     using InstanceCollection = std::map<InstanceHandle_t, std::shared_ptr<DataReaderInstance>>;
     using instance_info = InstanceCollection::iterator;
@@ -103,7 +102,7 @@ public:
      * No Thread Safe.
      *
      * @param removal iterator to the CacheChange_t to remove.
-     * @param [in] max_blocking_time Maximum time this method has to complete the task.
+     * @param[in] max_blocking_time Maximum time this method has to complete the task.
      * @param release defaults to true and hints if the CacheChange_t should return to the pool
      *
      * @return iterator to the next CacheChange_t or end iterator.
@@ -139,7 +138,7 @@ public:
      *
      * @pre Change should not be already present in the history.
      *
-     * @param [in] change The received change
+     * @param[in] change The received change
      * @param unknown_missing_changes_up_to Number of missing changes before this one
      *
      * @return Whether the operation succeeded.
@@ -154,9 +153,9 @@ public:
      *
      * @pre Change should not be already present in the history.
      *
-     * @param [in] change The received change
-     * @param [in] unknown_missing_changes_up_to Number of missing changes before this one
-     * @param [out] rejection_reason In case of been rejected the sample, it will contain the reason of the rejection.
+     * @param[in] change The received change
+     * @param[in] unknown_missing_changes_up_to Number of missing changes before this one
+     * @param[out] rejection_reason In case of been rejected the sample, it will contain the reason of the rejection.
      *
      * @return Whether the operation succeeded.
      */
@@ -171,7 +170,7 @@ public:
      *
      * @pre Change should be already present in the history.
      *
-     * @param [in] change The received change
+     * @param[in] change The received change
      *
      * @return Whether the operation succeeded.
      */
@@ -184,9 +183,9 @@ public:
      *
      * @pre Change should be already present in the history.
      *
-     * @param [in] change The received change
-     * @param [in] unknown_missing_changes_up_to Number of missing changes before this one
-     * @param [out] rejection_reason In case of been rejected the sample, it will contain the reason of the rejection.
+     * @param[in] change The received change
+     * @param[in] unknown_missing_changes_up_to Number of missing changes before this one
+     * @param[out] rejection_reason In case of been rejected the sample, it will contain the reason of the rejection.
      *
      * @return Whether the operation succeeded.
      */
@@ -245,7 +244,7 @@ public:
      *
      * @param handle The handle to the instance
      * @param next_deadline_us The time point when the deadline will occur
-     * @param [in] deadline_missed true value when is called because the deadline was missed.
+     * @param[in] deadline_missed true value when is called because the deadline was missed.
      *
      * @return True if the deadline was set correctly
      */
@@ -343,14 +342,22 @@ public:
      * @brief Updates instance's information and also decides whether the sample is finally accepted or denied depending
      * on the Ownership strength.
      *
-     * @param [in] change Sample received by DataReader.
+     * @param[in] change Sample received by DataReader.
      * @return true is returned when the sample is accepted and false when the sample is denied.
      */
     bool update_instance_nts(
             CacheChange_t* const change);
 
-    void writer_not_alive(
-            const fastdds::rtps::GUID_t& writer_guid);
+    /*!
+     * @brief Inform the history that a writer should be considered as not alive.
+     *
+     * @param [in] writer_guid GUID of the writer that should be considered as not alive.
+     *
+     * @return true if a state notification sample was added to at least one instance.
+     *         This would mean that DATA_AVAILABLE status (and listener) shall be notified.
+     */
+    bool writer_not_alive(
+            const fastrtps::rtps::GUID_t& writer_guid);
 
     void check_and_remove_instance(
             instance_info& instance_info);
@@ -360,8 +367,8 @@ public:
     /*!
      * @brief This function should be called by reader if a writer updates its ownership strength.
      *
-     * @param [in] writer_guid Guid of the writer which changes its ownership strength.
-     * @param [out] ownership_strength New value of the writer's Ownership strength.
+     * @param[in] writer_guid Guid of the writer which changes its ownership strength.
+     * @param[out] ownership_strength New value of the writer's Ownership strength.
      */
     void writer_update_its_ownership_strength_nts(
             const GUID_t& writer_guid,
@@ -370,9 +377,9 @@ public:
 private:
 
     //!Resource limits for allocating the array of changes per instance
-    eprosima::fastdds::ResourceLimitedContainerConfig key_changes_allocation_;
+    eprosima::fastrtps::ResourceLimitedContainerConfig key_changes_allocation_;
     //!Resource limits for allocating the array of alive writers per instance
-    eprosima::fastdds::ResourceLimitedContainerConfig key_writers_allocation_;
+    eprosima::fastrtps::ResourceLimitedContainerConfig key_writers_allocation_;
     //!Collection of DataReaderInstance objects accessible by their handle
     InstanceCollection instances_;
     //!Collection of DataReaderInstance objects with available data, accessible by their handle
@@ -382,13 +389,16 @@ private:
     //!ResourceLimitsQosPolicy values.
     ResourceLimitsQosPolicy resource_limited_qos_;
     //!Topic name
-    fastcdr::string_255 topic_name_;
+    fastrtps::string_255 topic_name_;
     //!Type name
-    fastcdr::string_255 type_name_;
+    fastrtps::string_255 type_name_;
     //!Whether the type has keys
     bool has_keys_;
     //!TopicDataType
     fastdds::dds::TopicDataType* type_;
+
+    //!Type object to deserialize Key
+    void* get_key_object_;
 
     /// Function to compute the instance handle of a received change
     std::function<bool(CacheChange_t*)> compute_key_for_change_fn_;
@@ -413,7 +423,7 @@ private:
     /**
      * @name Variants of incoming change processing.
      *       Will be called with the history mutex taken.
-     * @param [in] change The received change
+     * @param[in] change The received change
      * @param unknown_missing_changes_up_to Number of missing changes before this one
      * @return
      */

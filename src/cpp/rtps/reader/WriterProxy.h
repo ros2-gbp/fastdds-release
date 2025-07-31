@@ -16,26 +16,24 @@
  * @file WriterProxy.h
  */
 
-#ifndef FASTDDS_RTPS_READER_WRITERPROXY_H_
-#define FASTDDS_RTPS_READER_WRITERPROXY_H_
+#ifndef FASTRTPS_RTPS_READER_WRITERPROXY_H_
+#define FASTRTPS_RTPS_READER_WRITERPROXY_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <set>
-#include <vector>
+#include <fastdds/rtps/common/Types.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/attributes/ReaderAttributes.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAllocationAttributes.hpp>
+#include <fastdds/rtps/messages/RTPSMessageSenderInterface.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 
 #include <foonathan/memory/container.hpp>
 #include <foonathan/memory/memory_pool.hpp>
 
-#include <fastdds/rtps/common/Types.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/attributes/ReaderAttributes.hpp>
-#include <fastdds/rtps/attributes/RTPSParticipantAllocationAttributes.hpp>
-#include <fastdds/rtps/messages/RTPSMessageSenderInterface.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
-#include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
-
-#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <set>
 
 // Testing purpose
 #ifndef TEST_FRIENDS
@@ -43,7 +41,7 @@
 #endif // TEST_FRIENDS
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSParticipantImpl;
@@ -114,7 +112,7 @@ public:
     /**
      * Update the missing changes up to the provided sequenceNumber.
      * All changes with status UNKNOWN with seq_num <= input seq_num are marked MISSING.
-     * @param [in] seq_num Pointer to the SequenceNumber.
+     * @param[in] seq_num Pointer to the SequenceNumber.
      */
     void missing_changes_update(
             const SequenceNumber_t& seq_num);
@@ -122,7 +120,7 @@ public:
     /**
      * Update the lost changes up to the provided sequenceNumber.
      * All changes with status UNKNOWN or MISSING with seq_num < input seq_num are marked LOST.
-     * @param [in] seq_num Pointer to the SequenceNumber.
+     * @param[in] seq_num Pointer to the SequenceNumber.
      */
     int32_t lost_changes_update(
             const SequenceNumber_t& seq_num);
@@ -178,7 +176,7 @@ public:
         return persistence_guid_;
     }
 
-    inline dds::LivelinessQosPolicyKind liveliness_kind() const
+    inline LivelinessQosPolicyKind liveliness_kind() const
     {
         return liveliness_kind_;
     }
@@ -227,7 +225,7 @@ public:
 
     /**
      * Checks whether a cache change was already received from this proxy.
-     * @param [in] seq_num Sequence number of the cache change to check.
+     * @param[in] seq_num Sequence number of the cache change to check.
      * @return true if the cache change was received, false otherwise.
      */
     bool change_was_received(
@@ -269,7 +267,7 @@ public:
      * @param interval New interval value.
      */
     void update_heartbeat_response_interval(
-            const dds::Duration_t& interval);
+            const Duration_t& interval);
 
     /**
      * Check if the destinations managed by this sender interface have changed.
@@ -316,13 +314,11 @@ public:
     /**
      * Send a message through this interface.
      *
-     * @param buffers Vector of NetworkBuffers to send with data already serialized.
-     * @param total_bytes Total number of bytes to send. Should be equal to the sum of the @c size field of all buffers.
+     * @param message Pointer to the buffer with the message already serialized.
      * @param max_blocking_time_point Future timepoint where blocking send should end.
      */
     virtual bool send(
-            const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
-            const uint32_t& total_bytes,
+            CDRMessage_t* message,
             std::chrono::steady_clock::time_point max_blocking_time_point) const override;
 
     bool is_on_same_process() const
@@ -362,7 +358,7 @@ private:
 
     /**
      * Set initial value for last acked sequence number.
-     * @param [in] seq_num last acked sequence number.
+     * @param[in] seq_num last acked sequence number.
      */
     void loaded_from_storage(
             const SequenceNumber_t& seq_num);
@@ -410,7 +406,7 @@ private:
     //! Taken from QoS
     uint32_t ownership_strength_;
     //! Taken from QoS
-    dds::LivelinessQosPolicyKind liveliness_kind_;
+    LivelinessQosPolicyKind liveliness_kind_;
     //! Taken from proxy data
     GUID_t persistence_guid_;
     //! Taken from proxy data
@@ -424,16 +420,16 @@ private:
 
     using ChangeIterator = decltype(changes_received_)::iterator;
 
-#if !defined(NDEBUG) && defined(FASTDDS_SOURCE) && defined(__unix__)
+#if !defined(NDEBUG) && defined(FASTRTPS_SOURCE) && defined(__unix__)
     int get_mutex_owner() const;
 
     int get_thread_id() const;
-#endif // if !defined(NDEBUG) && defined(FASTDDS_SOURCE) && defined(__unix__)
+#endif // if !defined(NDEBUG) && defined(FASTRTPS_SOURCE) && defined(__unix__)
 };
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif /* FASTDDS_RTPS_READER_WRITERPROXY_H_ */
+#endif /* FASTRTPS_RTPS_READER_WRITERPROXY_H_ */

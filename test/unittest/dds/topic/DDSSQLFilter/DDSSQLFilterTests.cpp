@@ -29,9 +29,9 @@
 #include "fastdds/dds/core/StackAllocatedSequence.hpp"
 #include "fastdds/dds/log/Log.hpp"
 
-#include "data_types/ContentFilterTestType.hpp"
-#include "data_types/ContentFilterTestTypePubSubTypes.hpp"
-#include "data_types/ContentFilterTestTypeTypeObjectSupport.hpp"
+#include "data_types/ContentFilterTestType.h"
+#include "data_types/ContentFilterTestTypePubSubTypes.h"
+#include "data_types/ContentFilterTestTypeTypeObject.h"
 
 namespace eprosima {
 namespace fastdds {
@@ -120,6 +120,7 @@ static bool are_types_compatible(
 }
 
 using DDSFilterFactory = DDSSQLFilter::DDSFilterFactory;
+using ReturnCode_t = DDSFilterFactory::ReturnCode_t;
 
 static ReturnCode_t create_content_filter(
         DDSFilterFactory& factory,
@@ -147,15 +148,8 @@ class DDSSQLFilterTests : public testing::Test
 
 protected:
 
-    void SetUp() override
-    {
-        eprosima::fastdds::dds::xtypes::TypeIdentifierPair type_ids;
-        register_ContentFilterTestType_type_identifier(type_ids);
-        eprosima::fastdds::dds::Log::ClearConsumers();
-    }
-
-    const ReturnCode_t ok_code = RETCODE_OK;
-    const ReturnCode_t bad_code = RETCODE_BAD_PARAMETER;
+    const ReturnCode_t ok_code = ReturnCode_t::RETCODE_OK;
+    const ReturnCode_t bad_code = ReturnCode_t::RETCODE_BAD_PARAMETER;
 
     struct TestCase
     {
@@ -191,7 +185,7 @@ protected:
 
 TEST_F(DDSSQLFilterTests, empty_expression)
 {
-    TestCase empty{ "", {}, RETCODE_OK };
+    TestCase empty{ "", {}, ReturnCode_t::RETCODE_OK };
     run(empty);
 }
 
@@ -559,6 +553,27 @@ TEST_F(DDSSQLFilterTests, type_compatibility_compare_operand_op_operand)
     }
 }
 
+/*
+ * Regression test for https://eprosima.easyredmine.com/issues/23265
+ *
+ * This test checks that a DDSSQL content filter can be created with a type name that is different from the one
+ * used to register the type object representation.
+ */
+TEST_F(DDSSQLFilterTests, different_type_name)
+{
+    ContentFilterTestTypePubSubType type;
+
+    IContentFilter* filter_instance = nullptr;
+    DDSFilterFactory factory;
+    StackAllocatedSequence<const char*, 10> params;
+
+    EXPECT_EQ(factory.create_content_filter("DDSSQL", "MyCustomType", &type,
+            "uint16_field = 3", params, filter_instance), ReturnCode_t::RETCODE_OK);
+
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK,
+            factory.delete_content_filter("DDSSQL", filter_instance));
+}
+
 /**
  * Singleton that holds the serialized payloads to be evaluated
  */
@@ -679,10 +694,10 @@ private:
     {
         static ContentFilterTestTypePubSubType type_support;
         auto data_ptr = const_cast<ContentFilterTestType*>(&data);
-        auto data_size = type_support.calculate_serialized_size(data_ptr, fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        auto data_size = type_support.getSerializedSizeProvider(data_ptr)();
         auto payload = new IContentFilter::SerializedPayload(data_size);
         values_.emplace_back(payload);
-        type_support.serialize(data_ptr, *payload, fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        type_support.serialize(data_ptr, payload);
     }
 
     void add_char_values(
@@ -1016,13 +1031,6 @@ public:
 
 protected:
 
-    void SetUp() override
-    {
-        eprosima::fastdds::dds::xtypes::TypeIdentifierPair type_ids;
-        register_ContentFilterTestType_type_identifier(type_ids);
-        eprosima::fastdds::dds::Log::ClearConsumers();
-    }
-
     DDSFilterFactory uut;
     ContentFilterTestTypePubSubType type_support;
 
@@ -1064,13 +1072,13 @@ TEST_P(DDSSQLFilterValueTests, test_filtered_value)
 
     IContentFilter* filter_instance = nullptr;
     auto ret = create_content_filter(uut, input.expression, input.params, &type_support, filter_instance);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     ASSERT_NE(nullptr, filter_instance);
 
     perform_basic_check(filter_instance, results, values);
 
     ret = uut.delete_content_filter("DDSSQL", filter_instance);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
 
     Log::Flush();
     Log::ClearConsumers();
@@ -1097,7 +1105,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { param_values.back() }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1112,7 +1120,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
             // Update parameter value
             params[0] = param_values[i].c_str();
             ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-            EXPECT_EQ(RETCODE_OK, ret);
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
             ASSERT_NE(nullptr, filter);
 
             // Update expected results
@@ -1127,7 +1135,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
         }
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1143,7 +1151,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_and)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { "-3.14159", "3.14159" }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1153,7 +1161,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_and)
         perform_basic_check(filter, results, values);
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1169,7 +1177,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_or)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { "-3.14159", "3.14159" }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1179,7 +1187,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_or)
         perform_basic_check(filter, results, values);
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1189,7 +1197,7 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
 
     IContentFilter* filter = nullptr;
     auto ret = create_content_filter(uut, expression, { "'BBB'", "'X'" }, &type_support, filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     ASSERT_NE(nullptr, filter);
 
     const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1205,28 +1213,28 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
     params[0] = "'Z??"; // Wrong (missing ending quote)
     params[1] = "'X'";  // Unchanged
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %0 to a wrong parameter should preserve filter state and results
     params[0] = "'Z??"; // Wrong (missing ending quote)
     params[1] = "'%'";   // Changed
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %1 to a wrong parameter should preserve filter state and results
     params[0] = "'BBB'"; // Unchanged
     params[1] = "'";  // Wrong (missing ending quote)
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %1 to a wrong parameter should preserve filter state and results
     params[0] = "'.*'"; // Changed
     params[1] = "'";  // Wrong (missing ending quote)
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Correctly changing both parameters should change results
@@ -1234,11 +1242,11 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
     params[1] = "''";  // Only first value matches
     results[0] = results[4] = true;
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     perform_basic_check(filter, results, values);
 
     ret = uut.delete_content_filter("DDSSQL", filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
 }
 
 static void add_test_filtered_value_inputs(
@@ -2103,5 +2111,7 @@ int main(
         char** argv)
 {
     testing::InitGoogleMock(&argc, argv);
+    registerContentFilterTestTypeTypes();
+    eprosima::fastdds::dds::Log::ClearConsumers();
     return RUN_ALL_TESTS();
 }

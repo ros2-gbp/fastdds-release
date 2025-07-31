@@ -17,17 +17,15 @@
  *
  */
 
-#include <utils/UnitsParser.hpp>
-
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <map>
-#include <regex>
 #include <set>
+#include <regex>
 #include <stdexcept>
-#include <string>
+
+#include <fastrtps/utils/UnitsParser.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,13 +35,19 @@ namespace utils {
 void to_uppercase(
         std::string& st) noexcept
 {
-    // These lambda has been taken from the notes in https://en.cppreference.com/w/cpp/string/byte/toupper
-    // Note how the argument passed is unsigned char to avoid undefined behavior
-    auto my_toupper = [](unsigned char c)
+    std::transform(st.begin(), st.end(), st.begin(),
+            [](char c)
             {
-                return static_cast<char>(std::toupper(c));
-            };
-    std::transform(st.begin(), st.end(), st.begin(), my_toupper);
+                //TODO Carlos: use std::toupper after update VS2019
+                if (c >= 'a' && c <= 'z')
+                {
+                    return static_cast<char>(c - 'a' + 'A');
+                }
+                else
+                {
+                    return static_cast<char>(c);
+                }
+            });
 }
 
 uint32_t parse_value_and_units(

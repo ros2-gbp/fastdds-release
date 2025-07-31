@@ -18,7 +18,10 @@ endif()
 
 set(STRINGMATCHINGTESTS_SOURCE
     StringMatchingTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -31,6 +34,9 @@ set(STRINGMATCHINGTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/StringMatching.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp)
 
+set(FIXEDSIZESTRINGTESTS_SOURCE
+    FixedSizeStringTests.cpp)
+
 set(BITMAPRANGETESTS_SOURCE
     BitmapRangeTests.cpp)
 
@@ -39,7 +45,10 @@ set(RESOURCELIMITEDVECTORTESTS_SOURCE
 
 set(LOCATORTESTS_SOURCE
     LocatorTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -56,7 +65,10 @@ set(FIXEDSIZEQUEUETESTS_SOURCE
 
 set(SYSTEMINFOTESTS_SOURCE
     SystemInfoTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -64,14 +76,9 @@ set(SYSTEMINFOTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp)
-
-set(TREETESTS_SOURCE
-    TreeNodeTests.cpp)
 
 set(REF_COUNTED_POINTER_TESTS_SOURCE
     RefCountedPointerTests.cpp)
@@ -89,17 +96,23 @@ target_include_directories(StringMatchingTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(StringMatchingTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
-    )
+target_link_libraries(StringMatchingTests GTest::gtest ${MOCKS})
 if(MSVC OR MSVC_IDE)
     target_link_libraries(StringMatchingTests ${PRIVACY} iphlpapi Shlwapi
         )
 endif()
 gtest_discover_tests(StringMatchingTests)
+
+
+add_executable(FixedSizeStringTests ${FIXEDSIZESTRINGTESTS_SOURCE})
+target_compile_definitions(FixedSizeStringTests PRIVATE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
+target_include_directories(FixedSizeStringTests PRIVATE
+    ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include)
+target_link_libraries(FixedSizeStringTests GTest::gtest ${MOCKS})
+gtest_discover_tests(FixedSizeStringTests)
 
 
 add_executable(BitmapRangeTests ${BITMAPRANGETESTS_SOURCE})
@@ -133,12 +146,7 @@ target_compile_definitions(LocatorTests PRIVATE
 target_include_directories(LocatorTests PRIVATE
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LocatorTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
-    )
+target_link_libraries(LocatorTests GTest::gtest ${MOCKS})
 if(QNX)
     target_link_libraries(LocatorTests socket)
 endif()
@@ -165,29 +173,18 @@ target_compile_definitions(SystemInfoTests PRIVATE
 target_include_directories(SystemInfoTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/cpp ${PROJECT_BINARY_DIR}/include)
-target_link_libraries(SystemInfoTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    )
-if(APPLE)
-    target_link_libraries(SystemInfoTests "-framework CoreFoundation" "-framework IOKit")
-endif()
+target_link_libraries(SystemInfoTests GTest::gtest)
 gtest_discover_tests(SystemInfoTests)
 
 add_executable(SharedMutexTests shared_mutex_tests.cpp)
 target_compile_definitions(SharedMutexTests PUBLIC USE_THIRDPARTY_SHARED_MUTEX=1)
-target_include_directories(SharedMutexTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
+target_include_directories(SharedMutexTests PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(SharedMutexTests PUBLIC GTest::gtest)
 gtest_discover_tests(SharedMutexTests)
 
-add_executable(TreeNodeTests ${TREETESTS_SOURCE})
-target_include_directories(TreeNodeTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(TreeNodeTests PUBLIC GTest::gtest)
-gtest_discover_tests(TreeNodeTests)
-
 add_executable(RefCountedPointerTests ${REF_COUNTED_POINTER_TESTS_SOURCE})
-target_include_directories(RefCountedPointerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
+target_include_directories(RefCountedPointerTests PRIVATE
+    ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/cpp)
 target_link_libraries(RefCountedPointerTests PUBLIC GTest::gtest)
 gtest_discover_tests(RefCountedPointerTests)
 

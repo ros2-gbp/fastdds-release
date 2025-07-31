@@ -18,13 +18,13 @@
 #include <memory>
 #include <mutex>
 
-#include <fastdds/dds/log/Colors.hpp>
+#include <fastrtps/utils/DBQueue.h>
+
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/OStreamConsumer.hpp>
 #include <fastdds/dds/log/StdoutConsumer.hpp>
 #include <fastdds/dds/log/StdoutErrConsumer.hpp>
-
-#include <utils/DBQueue.hpp>
+#include <fastdds/dds/log/Colors.hpp>
 #include <utils/SystemInfo.hpp>
 #include <utils/thread.hpp>
 #include <utils/threading.hpp>
@@ -115,38 +115,12 @@ struct LogResources
         category_filter_.reset(new std::regex(filter));
     }
 
-    void UnsetCategoryFilter()
-    {
-        std::unique_lock<std::mutex> configGuard(config_mutex_);
-        category_filter_.reset();
-    }
-
-    bool HasCategoryFilter()
-    {
-        std::unique_lock<std::mutex> configGuard(config_mutex_);
-        return !!category_filter_;
-    }
-
-    //! Returns a copy of the current category filter or an empty object otherwise
-    std::regex GetCategoryFilter()
-    {
-        std::unique_lock<std::mutex> configGuard(config_mutex_);
-        return category_filter_ ? *category_filter_ : std::regex{};
-    }
-
     //! Sets a filter that will pattern-match against filenames_, dropping any unmatched categories.
     void SetFilenameFilter(
             const std::regex& filter)
     {
         std::unique_lock<std::mutex> configGuard(config_mutex_);
         filename_filter_.reset(new std::regex(filter));
-    }
-
-    //! Returns a copy of the current filename filter or an empty object otherwise
-    std::regex GetFilenameFilter()
-    {
-        std::unique_lock<std::mutex> configGuard(config_mutex_);
-        return filename_filter_ ? *filename_filter_: std::regex{};
     }
 
     //! Sets a filter that will pattern-match against the provided error string, dropping any unmatched categories.
@@ -163,13 +137,6 @@ struct LogResources
     {
         std::lock_guard<std::mutex> guard(cv_mutex_);
         thread_settings_ = config;
-    }
-
-    //! Returns a copy of the current filename filter or an empty object otherwise
-    std::regex GetErrorStringFilter()
-    {
-        std::unique_lock<std::mutex> configGuard(config_mutex_);
-        return error_string_filter_ ? *error_string_filter_: std::regex{};
     }
 
     //! Returns the logging_ engine to configuration defaults.
@@ -376,7 +343,7 @@ private:
         return true;
     }
 
-    DBQueue<Log::Entry> logs_;
+    fastrtps::DBQueue<Log::Entry> logs_;
     std::vector<std::unique_ptr<LogConsumer>> consumers_;
     eprosima::thread logging_thread_;
 
@@ -486,31 +453,6 @@ void Log::SetThreadConfig(
         const rtps::ThreadSettings& config)
 {
     detail::get_log_resources()->SetThreadConfig(config);
-}
-
-void Log::UnsetCategoryFilter()
-{
-    return detail::get_log_resources()->UnsetCategoryFilter();
-}
-
-bool Log::HasCategoryFilter()
-{
-    return detail::get_log_resources()->HasCategoryFilter();
-}
-
-std::regex Log::GetCategoryFilter()
-{
-    return detail::get_log_resources()->GetCategoryFilter();
-}
-
-std::regex Log::GetFilenameFilter()
-{
-    return detail::get_log_resources()->GetFilenameFilter();
-}
-
-std::regex Log::GetErrorStringFilter()
-{
-    return detail::get_log_resources()->GetErrorStringFilter();
 }
 
 void LogConsumer::print_timestamp(

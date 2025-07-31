@@ -25,10 +25,13 @@ include_directories(${Asio_INCLUDE_DIR})
 # Binaries
 ###############################################################################
 set(COMMON_SOURCE
+    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorld.cxx
+    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldv1.cxx
     ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldPubSubTypes.cxx
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldTypeObjectSupport.cxx
+    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldTypeObject.cxx
+    ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSized.cxx
+    ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSizedv1.cxx
     ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSizedPubSubTypes.cxx
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSizedTypeObjectSupport.cxx
     )
 
 set(DDS_PUBLISHER_SOURCE ${COMMON_SOURCE}
@@ -41,7 +44,7 @@ target_compile_definitions(CommunicationPublisher PRIVATE
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     )
 target_include_directories(CommunicationPublisher PRIVATE ${PROJECT_SOURCE_DIR}/test/blackbox)
-target_link_libraries(CommunicationPublisher fastdds fastcdr foonathan_memory ${CMAKE_DL_LIBS})
+target_link_libraries(CommunicationPublisher fastrtps fastcdr foonathan_memory ${CMAKE_DL_LIBS})
 
 set(DDS_SUBSCRIBER_SOURCE ${COMMON_SOURCE}
     SubscriberModule.cpp
@@ -53,7 +56,7 @@ target_compile_definitions(CommunicationSubscriber PRIVATE
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     )
 target_include_directories(CommunicationSubscriber PRIVATE ${PROJECT_SOURCE_DIR}/test/blackbox)
-target_link_libraries(CommunicationSubscriber fastdds fastcdr foonathan_memory ${CMAKE_DL_LIBS})
+target_link_libraries(CommunicationSubscriber fastrtps fastcdr foonathan_memory ${CMAKE_DL_LIBS})
 
 ###############################################################################
 # Necessary files
@@ -409,6 +412,26 @@ if(SECURITY)
         if(WIN32)
             string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
             set_property(TEST SecureDiscoverServerMultipleClientsHandShakeAssertion APPEND PROPERTY ENVIRONMENT
+                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
+        endif()
+
+        add_test(NAME SecureDiscoverServerMultipleClientsDisposalsReceived
+            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
+            --pub $<TARGET_FILE:CommunicationPublisher>
+            --xml-pub secure_ds_simple_secure_msg_crypto_pub_profile.xml
+            --sub $<TARGET_FILE:CommunicationSubscriber>
+            --xml-sub secure_ds_simple_secure_msg_crypto_sub_profile.xml
+            --samples 5
+            --servers $<TARGET_FILE:fast-discovery-server>
+            --xml-servers secure_simple_ds_server_profile.xml
+            --exit-on-disposal-received)
+
+        # Set test with label NoMemoryCheck
+        set_property(TEST SecureDiscoverServerMultipleClientsDisposalsReceived PROPERTY LABELS "NoMemoryCheck")
+
+        if(WIN32)
+            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
+            set_property(TEST SecureDiscoverServerMultipleClientsDisposalsReceived APPEND PROPERTY ENVIRONMENT
                 "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
         endif()
 

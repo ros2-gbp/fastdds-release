@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <random>
-#include <thread>
-
-#include <gtest/gtest.h>
-
-#include <rtps/resources/ResourceEvent.h>
-
 #include "mock/MockEvent.h"
+#include <fastrtps/rtps/resources/ResourceEvent.h>
+#include <thread>
+#include <random>
+#include <gtest/gtest.h>
 
 class TimedEventEnvironment : public ::testing::Environment
 {
@@ -27,7 +24,7 @@ public:
 
     void SetUp()
     {
-        service_ = new eprosima::fastdds::rtps::ResourceEvent();
+        service_ = new eprosima::fastrtps::rtps::ResourceEvent();
         service_->init_thread();
     }
 
@@ -36,7 +33,7 @@ public:
         delete service_;
     }
 
-    eprosima::fastdds::rtps::ResourceEvent* service_;
+    eprosima::fastrtps::rtps::ResourceEvent* service_;
 };
 
 TimedEventEnvironment* const env =
@@ -375,7 +372,7 @@ TEST(TimedEventMultithread, Event_FourAutoRestart)
 
 TEST(TimedEventMultithread, PendingRaceCheck)
 {
-    using TimedEvent = eprosima::fastdds::rtps::TimedEvent;
+    using TimedEvent = eprosima::fastrtps::rtps::TimedEvent;
     using TimeClock = std::chrono::high_resolution_clock;
     using TimePoint = std::chrono::time_point<TimeClock>;
 
@@ -454,7 +451,7 @@ TEST(TimedEventMultithread, PendingRaceCheck)
  */
 TEST(TimedEvent, Event_UnregisterEventWithinCallbackOfAnotherEvent)
 {
-    using TimedEvent = eprosima::fastdds::rtps::TimedEvent;
+    using TimedEvent = eprosima::fastrtps::rtps::TimedEvent;
 
     constexpr auto expiration_ms = std::chrono::milliseconds(100);
     std::atomic_bool success(false);

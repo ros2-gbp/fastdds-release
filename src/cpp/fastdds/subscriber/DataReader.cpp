@@ -26,7 +26,8 @@
 
 namespace eprosima {
 
-using namespace fastdds::rtps;
+using namespace fastrtps;
+using namespace fastrtps::rtps;
 
 namespace fastdds {
 namespace dds {
@@ -58,21 +59,21 @@ ReturnCode_t DataReader::enable()
 {
     if (enable_)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     if (false == impl_->get_subscriber()->is_enabled())
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     ReturnCode_t ret_code = impl_->enable();
-    enable_ = RETCODE_OK == ret_code;
+    enable_ = ReturnCode_t::RETCODE_OK == ret_code;
     return ret_code;
 }
 
 bool DataReader::wait_for_unread_message(
-        const fastdds::dds::Duration_t& timeout)
+        const fastrtps::Duration_t& timeout)
 {
     return impl_->wait_for_unread_message(timeout);
 }
@@ -96,7 +97,7 @@ ReturnCode_t DataReader::read_w_condition(
 {
     if ( nullptr == a_condition )
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     return read(
@@ -143,7 +144,7 @@ ReturnCode_t DataReader::read_next_instance_w_condition(
 {
     if ( nullptr == a_condition )
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     return read_next_instance(
@@ -175,7 +176,7 @@ ReturnCode_t DataReader::take_w_condition(
 {
     if ( nullptr == a_condition )
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     return take(
@@ -222,7 +223,7 @@ ReturnCode_t DataReader::take_next_instance_w_condition(
 {
     if ( nullptr == a_condition )
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
 
     return take_next_instance(
@@ -248,7 +249,7 @@ ReturnCode_t DataReader::get_key_value(
 {
     static_cast<void> (key_holder);
     static_cast<void> (handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 InstanceHandle_t DataReader::lookup_instance(
@@ -318,7 +319,7 @@ ReturnCode_t DataReader::get_qos(
         DataReaderQos& qos) const
 {
     qos = impl_->get_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t DataReader::get_requested_deadline_missed_status(
@@ -344,7 +345,7 @@ ReturnCode_t DataReader::set_listener(
         const StatusMask& mask)
 {
     ReturnCode_t ret_val = impl_->set_listener(listener);
-    if (ret_val == RETCODE_OK)
+    if (ret_val == ReturnCode_t::RETCODE_OK)
     {
         status_mask_ = mask;
     }
@@ -391,16 +392,25 @@ ReturnCode_t DataReader::get_subscription_matched_status(
 }
 
 ReturnCode_t DataReader::get_matched_publication_data(
-        PublicationBuiltinTopicData& publication_data,
-        const fastdds::rtps::InstanceHandle_t& publication_handle) const
+        builtin::PublicationBuiltinTopicData& publication_data,
+        const fastrtps::rtps::InstanceHandle_t& publication_handle) const
 {
-    return impl_->get_matched_publication_data(publication_data, publication_handle);
+    static_cast<void> (publication_data);
+    static_cast<void> (publication_handle);
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    /*
+       return impl_->get_matched_publication_data(publication_data, publication_handle);
+     */
 }
 
 ReturnCode_t DataReader::get_matched_publications(
         std::vector<InstanceHandle_t>& publication_handles) const
 {
-    return impl_->get_matched_publications(publication_handles);
+    static_cast<void> (publication_handles);
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
+    /*
+       return impl_->get_matched_publication_data(publication_handles);
+     */
 }
 
 ReadCondition* DataReader::create_readcondition(
@@ -447,16 +457,16 @@ const Subscriber* DataReader::get_subscriber() const
 }
 
 ReturnCode_t DataReader::wait_for_historical_data(
-        const dds::Duration_t& max_wait) const
+        const Duration_t& max_wait) const
 {
     static_cast<void> (max_wait);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
     /*
        return impl_->wait_for_historical_data(a_condition);
      */
 }
 
-TypeSupport DataReader::type() const
+TypeSupport DataReader::type()
 {
     return impl_->type();
 }
@@ -477,12 +487,6 @@ ReturnCode_t DataReader::get_listening_locators(
         rtps::LocatorList& locators) const
 {
     return impl_->get_listening_locators(locators);
-}
-
-ReturnCode_t DataReader::get_subscription_builtin_topic_data(
-        SubscriptionBuiltinTopicData& subscription_data) const
-{
-    return impl_->get_subscription_builtin_topic_data(subscription_data);
 }
 
 } /* namespace dds */

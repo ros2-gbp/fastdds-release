@@ -14,8 +14,6 @@
 
 #include "SecurityTests.hpp"
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-
 TEST_F(SecurityTest, discovered_participant_begin_handshake_request_fail_and_then_ok)
 {
     initialization_ok();
@@ -33,10 +31,10 @@ TEST_F(SecurityTest, discovered_participant_begin_handshake_request_fail_and_the
             WillOnce(Return(ValidationResult_t::VALIDATION_FAILED));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
@@ -48,7 +46,7 @@ TEST_F(SecurityTest, discovered_participant_begin_handshake_request_fail_and_the
             Ref(remote_identity_handle), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(true));
@@ -99,7 +97,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_not_remote_participa
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_bad_message_class_id)
@@ -113,7 +111,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_message_class_id
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
@@ -142,7 +140,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_message_class_id
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     return_handle(remote_identity_handle);
 }
@@ -157,20 +155,20 @@ TEST_F(SecurityTest, discovered_participant_process_message_not_expecting_reques
             WillOnce(DoAll(SetArgPointee<0>(&remote_identity_handle), Return(ValidationResult_t::VALIDATION_OK)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, notifyAboveRemoteEndpoints(_, true)).Times(1);
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -199,7 +197,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_not_expecting_reques
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     return_handle(remote_identity_handle);
 }
@@ -215,12 +213,12 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_begin_handshake
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -253,12 +251,12 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_begin_handshake
             WillOnce(Return(true));
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     return_handle(remote_identity_handle);
 }
@@ -274,12 +272,12 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_begin_handshake_r
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -336,16 +334,16 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_begin_handshake_r
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
     CacheChange_t kx_change_to_add;
     CacheChange_t* kx_change_to_remove = new CacheChange_t(500);
     expect_kx_exchange(kx_change_to_add, kx_change_to_remove);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 
     return_handle(remote_identity_handle);
     return_handle(handshake_handle);
@@ -362,12 +360,12 @@ TEST_F(SecurityTest, discovered_participant_process_message_new_change_fail)
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -400,7 +398,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_new_change_fail)
             WillRepeatedly(Return(true));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&remote_identity_handle, _)).Times(1).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(nullptr));
     EXPECT_CALL(*auth_plugin_, return_handshake_handle(&handshake_handle, _)).Times(1).
             WillOnce(Return(true));
@@ -409,7 +407,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_new_change_fail)
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     return_handle(remote_identity_handle);
     return_handle(handshake_handle);
@@ -426,12 +424,12 @@ TEST_F(SecurityTest, discovered_participant_process_message_add_change_fail)
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -465,7 +463,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_add_change_fail)
             WillRepeatedly(Return(true));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&remote_identity_handle, _)).Times(1).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change2));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change2)).Times(1).
             WillOnce(Return(false));
@@ -476,7 +474,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_add_change_fail)
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     destroy_manager_and_change(change2, false);
 
@@ -535,14 +533,14 @@ TEST_F(SecurityTest, discovered_participant_process_message_pending_handshake_re
     expect_kx_exchange(kx_change_to_add, kx_change_to_remove);
 
     ParticipantProxyData participant_data;
-    fill_participant_key(participant_data.guid);
+    fill_participant_key(participant_data.m_guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data));
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data.guid);
-    message.destination_participant_key(participant_data.guid);
+    message.message_identity().source_guid(participant_data.m_guid);
+    message.destination_participant_key(participant_data.m_guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -578,7 +576,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_pending_handshake_re
             WillRepeatedly(Return(true));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&remote_identity_handle, _)).Times(1).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change2));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change2)).Times(1).
             WillOnce(Return(true));
@@ -605,10 +603,10 @@ TEST_F(SecurityTest, discovered_participant_process_message_pending_handshake_re
 
     ParticipantAuthenticationInfo info;
     info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-    info.guid = participant_data.guid;
+    info.guid = participant_data.m_guid;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     destroy_manager_and_change(change2);
 
@@ -621,7 +619,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_process_handsha
     request_process_ok();
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{0, 1})).Times(1).WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -664,7 +662,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_process_handsha
     info.guid = remote_participant_key;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake_reply)
@@ -674,7 +672,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{0, 1})).Times(1).
             WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -740,9 +738,9 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake
     CacheChange_t* kx_change_to_remove = new CacheChange_t(500);
     expect_kx_exchange(kx_change_to_add, kx_change_to_remove);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_reply_new_change_fail)
@@ -752,7 +750,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{0, 1})).Times(1).
             WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -789,14 +787,14 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
             WillRepeatedly(Return(true));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&remote_identity_handle_, _)).Times(1).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(nullptr));
     EXPECT_CALL(*auth_plugin_, return_handshake_handle(&handshake_handle_, _)).Times(1).
             WillOnce(Return(true));
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_reply_add_change_fail)
@@ -806,7 +804,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{0, 1})).Times(1).
             WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -844,7 +842,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
             WillRepeatedly(Return(true));
     EXPECT_CALL(*auth_plugin_, return_identity_handle(&remote_identity_handle_, _)).Times(1).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
             WillOnce(Return(change2));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change2)).Times(1).
             WillOnce(Return(false));
@@ -853,7 +851,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     destroy_manager_and_change(change2, false);
 }
@@ -885,7 +883,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
     CacheChange_t* final_message_change = nullptr;
     final_message_process_ok(&final_message_change);
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -920,7 +918,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_process_handshake_re
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
     destroy_manager_and_change(final_message_change);
 }
@@ -930,7 +928,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_related_guid)
     reply_process_ok();
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{ 0, 1 })).Times(1).WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
     remote_participant_key.guidPrefix.value[0] = 0xFF;
 
     ParticipantGenericMessage message;
@@ -968,7 +966,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_related_guid)
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_bad_related_sequence_number)
@@ -976,7 +974,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_related_sequence
     reply_process_ok();
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{ 0, 1 })).Times(1).WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -1013,7 +1011,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_bad_related_sequence
     EXPECT_CALL(*stateless_reader_->history_, remove_change_mock(change)).Times(1).
             WillOnce(Return(true));
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_fail_process_handshake_final)
@@ -1021,7 +1019,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_process_handsha
     reply_process_ok();
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{ 0, 1 })).Times(1).WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -1064,7 +1062,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_fail_process_handsha
     info.guid = remote_participant_key;
     EXPECT_CALL(*participant_.getListener(), onParticipantAuthentication(_, info)).Times(1);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 }
 
 TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake_final)
@@ -1074,7 +1072,7 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{0, 1})).Times(1).
             WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.guid);
+    GUID_t remote_participant_key(participant_data_.m_guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -1140,9 +1138,9 @@ TEST_F(SecurityTest, discovered_participant_process_message_ok_process_handshake
     CacheChange_t* kx_change_to_remove = new CacheChange_t(500);
     expect_kx_exchange(kx_change_to_add, kx_change_to_remove);
 
-    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
+    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
 
-    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
 }
 
 int main(

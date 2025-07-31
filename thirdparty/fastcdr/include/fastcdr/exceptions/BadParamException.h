@@ -24,7 +24,7 @@ namespace exception {
  * @brief This class is thrown as an exception when an invalid parameter is being serialized.
  * @ingroup EXCEPTIONMODULE
  */
-class Cdr_DllAPI BadParamException : public Exception
+class BadParamException : public Exception
 {
 public:
 
@@ -33,7 +33,7 @@ public:
      *
      * @param message An error message. This message pointer is copied.
      */
-    BadParamException(
+    Cdr_DllAPI BadParamException(
             const char* const& message) noexcept;
 
     /*!
@@ -41,7 +41,7 @@ public:
      *
      * @param ex BadParamException that will be copied.
      */
-    BadParamException(
+    Cdr_DllAPI BadParamException(
             const BadParamException& ex) noexcept;
 
     /*!
@@ -49,7 +49,7 @@ public:
      *
      * @param ex BadParamException that will be moved.
      */
-    BadParamException(
+    Cdr_DllAPI BadParamException(
             BadParamException&& ex) noexcept;
 
     /*!
@@ -57,7 +57,7 @@ public:
      *
      * @param ex BadParamException that will be copied.
      */
-    BadParamException& operator =(
+    Cdr_DllAPI BadParamException& operator =(
             const BadParamException& ex) noexcept;
 
     /*!
@@ -69,13 +69,13 @@ public:
             BadParamException&& ex) noexcept;
 
     //! @brief Default destructor
-    virtual ~BadParamException() noexcept;
+    virtual Cdr_DllAPI ~BadParamException() noexcept;
 
     //! @brief This function throws the object as exception.
-    void raise() const override;
+    Cdr_DllAPI void raise() const override;
 
     //! @brief Default message used in the library.
-    static const char* const BAD_PARAM_MESSAGE_DEFAULT;
+    static Cdr_DllAPI const char* const BAD_PARAM_MESSAGE_DEFAULT;
 };
 }         //namespace exception
 }     //namespace fastcdr

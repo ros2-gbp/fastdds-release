@@ -36,13 +36,14 @@
 
 #include <nlohmann/json.hpp>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/utils/IPFinder.hpp>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/utils/IPFinder.h>
 #include <utils/threading.hpp>
 
 namespace eprosima {
 
-using IPFinder = fastdds::rtps::IPFinder;
+using IPFinder = fastrtps::rtps::IPFinder;
+using ReturnCode_t = fastrtps::types::ReturnCode_t;
 
 SystemInfo::SystemInfo()
 {
@@ -59,19 +60,19 @@ SystemInfo::SystemInfo()
     update_interfaces();
 }
 
-fastdds::dds::ReturnCode_t SystemInfo::get_env(
+ReturnCode_t SystemInfo::get_env(
         const std::string& env_name,
         std::string& env_value)
 {
     if (env_name.empty())
     {
-        return fastdds::dds::RETCODE_BAD_PARAMETER;
+        return ReturnCode_t::RETCODE_BAD_PARAMETER;
     }
 
     // Try to read environment variable from file
-    if (!environment_file_.empty() && fastdds::dds::RETCODE_OK == get_env(environment_file_, env_name, env_value))
+    if (!environment_file_.empty() && ReturnCode_t::RETCODE_OK == get_env(environment_file_, env_name, env_value))
     {
-        return fastdds::dds::RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     char* data;
@@ -83,13 +84,13 @@ fastdds::dds::ReturnCode_t SystemInfo::get_env(
     }
     else
     {
-        return fastdds::dds::RETCODE_NO_DATA;
+        return ReturnCode_t::RETCODE_NO_DATA;
     }
 
-    return fastdds::dds::RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
-fastdds::dds::ReturnCode_t SystemInfo::get_env(
+ReturnCode_t SystemInfo::get_env(
         const std::string& filename,
         const std::string& env_name,
         std::string& env_value)
@@ -97,7 +98,7 @@ fastdds::dds::ReturnCode_t SystemInfo::get_env(
     // Check that the file exists
     if (!SystemInfo::file_exists(filename))
     {
-        return fastdds::dds::RETCODE_BAD_PARAMETER;
+        return ReturnCode_t::RETCODE_BAD_PARAMETER;
     }
 
     // Read json file
@@ -110,7 +111,7 @@ fastdds::dds::ReturnCode_t SystemInfo::get_env(
     }
     catch (const nlohmann::json::exception&)
     {
-        return fastdds::dds::RETCODE_ERROR;
+        return ReturnCode_t::RETCODE_ERROR;
     }
 
     try
@@ -119,12 +120,12 @@ fastdds::dds::ReturnCode_t SystemInfo::get_env(
     }
     catch (const nlohmann::json::exception&)
     {
-        return fastdds::dds::RETCODE_NO_DATA;
+        return ReturnCode_t::RETCODE_NO_DATA;
     }
-    return fastdds::dds::RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
-fastdds::dds::ReturnCode_t SystemInfo::get_username(
+ReturnCode_t SystemInfo::get_username(
         std::string& username)
 {
 #ifdef _WIN32
@@ -133,10 +134,10 @@ fastdds::dds::ReturnCode_t SystemInfo::get_username(
     DWORD bufCharCount = INFO_BUFFER_SIZE;
     if (!GetUserNameA(user, &bufCharCount))
     {
-        return fastdds::dds::RETCODE_ERROR;
+        return ReturnCode_t::RETCODE_ERROR;
     }
     username = user;
-    return fastdds::dds::RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 #else
     uid_t user_id = geteuid();
     struct passwd* pwd = getpwuid(user_id);
@@ -145,10 +146,10 @@ fastdds::dds::ReturnCode_t SystemInfo::get_username(
         username = pwd->pw_name;
         if (!username.empty())
         {
-            return fastdds::dds::RETCODE_OK;
+            return ReturnCode_t::RETCODE_OK;
         }
     }
-    return fastdds::dds::RETCODE_ERROR;
+    return ReturnCode_t::RETCODE_ERROR;
 #endif // _WIN32
 }
 
@@ -173,7 +174,7 @@ bool SystemInfo::wait_for_file_closure(
         const std::string& filename,
         const std::chrono::seconds timeout)
 {
-    auto start = std::chrono::steady_clock::now();
+    auto start = std::chrono::system_clock::now();
 
 #ifdef _MSC_VER
     std::ofstream os;
@@ -183,7 +184,7 @@ bool SystemInfo::wait_for_file_closure(
         os.open(filename, std::ios::out | std::ios::app, _SH_DENYWR);
         if (!os.is_open()
                 // If the file is lock-opened in an external editor do not hang
-                && (std::chrono::steady_clock::now() - start) < timeout )
+                && (std::chrono::system_clock::now() - start) < timeout )
         {
             std::this_thread::yield();
         }
@@ -198,7 +199,7 @@ bool SystemInfo::wait_for_file_closure(
 
     while (flock(fd, LOCK_EX | LOCK_NB)
             // If the file is lock-opened in an external editor do not hang
-            && (std::chrono::steady_clock::now() - start) < timeout )
+            && (std::chrono::system_clock::now() - start) < timeout )
     {
         std::this_thread::yield();
     }
@@ -213,10 +214,10 @@ bool SystemInfo::wait_for_file_closure(
     (void)filename;
 #endif // ifdef _MSC_VER
 
-    return std::chrono::steady_clock::now() - start < timeout;
+    return std::chrono::system_clock::now() - start < timeout;
 }
 
-fastdds::dds::ReturnCode_t SystemInfo::set_environment_file()
+ReturnCode_t SystemInfo::set_environment_file()
 {
     return SystemInfo::get_env(FASTDDS_ENVIRONMENT_FILE_ENV_VAR, SystemInfo::environment_file_);
 }

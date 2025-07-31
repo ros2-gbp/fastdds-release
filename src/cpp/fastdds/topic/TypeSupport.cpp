@@ -44,8 +44,8 @@ ReturnCode_t TypeSupport::register_type(
 }
 
 bool TypeSupport::serialize(
-        const void* const data,
-        fastdds::rtps::SerializedPayload_t& payload,
+        void* data,
+        fastrtps::rtps::SerializedPayload_t* payload,
         DataRepresentationId_t data_representation)
 {
     bool result = false;
@@ -62,7 +62,7 @@ bool TypeSupport::serialize(
 }
 
 bool TypeSupport::deserialize(
-        fastdds::rtps::SerializedPayload_t& payload,
+        fastrtps::rtps::SerializedPayload_t* payload,
         void* data)
 {
     bool result = false;

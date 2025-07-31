@@ -17,19 +17,29 @@
  *
  */
 
-#ifndef FASTDDS_DDS_BUILTIN_TOPIC__PARTICIPANTBUILTINTOPICDATA_HPP
-#define FASTDDS_DDS_BUILTIN_TOPIC__PARTICIPANTBUILTINTOPICDATA_HPP
+#ifndef FASTDDS_DDS_BUILTIN_TOPIC_PARTICIPANTBUILTINTOPICDATA_HPP
+#define FASTDDS_DDS_BUILTIN_TOPIC_PARTICIPANTBUILTINTOPICDATA_HPP
 
-#include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
+#include <fastdds/dds/builtin/topic/BuiltinTopicKey.hpp>
+#include <fastdds/dds/core/policy/QosPolicies.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
+namespace builtin {
 
-using ParticipantBuiltinTopicData = rtps::ParticipantBuiltinTopicData;
+struct ParticipantBuiltinTopicData
+{
+    //! Builtin topic Key
+    BuiltinTopicKey_t key;
 
+    //! UserData QoS
+    UserDataQosPolicy user_data;
+};
+
+} // builtin
 } // dds
 } // fastdds
 } // eprosima
 
-#endif // FASTDDS_DDS_BUILTIN_TOPIC__PARTICIPANTBUILTINTOPICDATA_HPP
+#endif // FASTDDS_DDS_BUILTIN_TOPIC_PARTICIPANTBUILTINTOPICDATA_HPP

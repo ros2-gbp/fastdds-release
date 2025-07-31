@@ -33,7 +33,7 @@
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 SubscriberModule::~SubscriberModule()
 {
@@ -218,29 +218,27 @@ bool SubscriberModule::run_for(
 
 void SubscriberModule::on_participant_discovery(
         DomainParticipant* /*participant*/,
-        ParticipantDiscoveryStatus status,
-        const ParticipantBuiltinTopicData& info,
-        bool& /*should_be_ignored*/)
+        ParticipantDiscoveryInfo&& info)
 {
-    if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
+    if (info.status == ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
     {
         std::cout << "Subscriber participant " <<         //participant->getGuid() <<
-            " discovered participant " << info.guid << std::endl;
+            " discovered participant " << info.info.m_guid << std::endl;
     }
-    else if (status == ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT)
+    else if (info.status == ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT)
     {
         std::cout << "Subscriber participant " <<         //participant->getGuid() <<
-            " detected changes on participant " << info.guid << std::endl;
+            " detected changes on participant " << info.info.m_guid << std::endl;
     }
-    else if (status == ParticipantDiscoveryStatus::REMOVED_PARTICIPANT)
+    else if (info.status == ParticipantDiscoveryInfo::REMOVED_PARTICIPANT)
     {
         std::cout << "Subscriber participant " <<         //participant->getGuid() <<
-            " removed participant " << info.guid << std::endl;
+            " removed participant " << info.info.m_guid << std::endl;
     }
-    else if (status == ParticipantDiscoveryStatus::DROPPED_PARTICIPANT)
+    else if (info.status == ParticipantDiscoveryInfo::DROPPED_PARTICIPANT)
     {
         std::cout << "Subscriber participant " <<         //participant->getGuid() <<
-            " dropped participant " << info.guid << std::endl;
+            " dropped participant " << info.info.m_guid << std::endl;
     }
 }
 
@@ -297,7 +295,7 @@ void SubscriberModule::on_data_available(
         LoanableSequence<FixedSized> l_sample;
         LoanableSequence<SampleInfo> l_info;
 
-        if (RETCODE_OK == reader->take_next_instance(l_sample, l_info))
+        if (ReturnCode_t::RETCODE_OK == reader->take_next_instance(l_sample, l_info))
         {
             SampleInfo info = l_info[0];
 
@@ -325,7 +323,7 @@ void SubscriberModule::on_data_available(
         if (fixed_type_)
         {
             FixedSized sample;
-            if (reader->take_next_sample((void*)&sample, &info) == RETCODE_OK)
+            if (reader->take_next_sample((void*)&sample, &info) == ReturnCode_t::RETCODE_OK)
             {
                 if (info.instance_state == ALIVE_INSTANCE_STATE)
                 {
@@ -343,7 +341,7 @@ void SubscriberModule::on_data_available(
         else
         {
             HelloWorld sample;
-            if (reader->take_next_sample((void*)&sample, &info) == RETCODE_OK)
+            if (reader->take_next_sample((void*)&sample, &info) == ReturnCode_t::RETCODE_OK)
             {
                 if (info.instance_state == ALIVE_INSTANCE_STATE)
                 {

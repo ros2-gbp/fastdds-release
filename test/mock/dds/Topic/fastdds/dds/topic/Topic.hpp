@@ -16,8 +16,8 @@
  * @file Topic.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__TOPIC_HPP
-#define FASTDDS_DDS_TOPIC__TOPIC_HPP
+#ifndef _FASTDDS_TOPIC_HPP_
+#define _FASTDDS_TOPIC_HPP_
 
 #include <fastdds/dds/core/Entity.hpp>
 #include <fastdds/dds/core/status/BaseStatus.hpp>
@@ -50,4 +50,4 @@ public:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_TOPIC__TOPIC_HPP
+#endif // _FASTDDS_TOPIC_HPP_

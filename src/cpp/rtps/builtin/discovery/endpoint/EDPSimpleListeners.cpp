@@ -21,24 +21,22 @@
 
 #include <mutex>
 
-#include <fastdds/core/policy/ParameterList.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/InstanceHandle.hpp>
-#include <fastdds/rtps/history/ReaderHistory.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDPSimple.h>
+#include <fastdds/rtps/builtin/discovery/participant/PDPSimple.h>
+#include <fastdds/rtps/common/InstanceHandle.h>
+#include <fastdds/rtps/history/ReaderHistory.h>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/reader/StatefulReader.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
 
-#include <fastdds/builtin/type_lookup_service/TypeLookupManager.hpp>
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/builtin/discovery/endpoint/EDPSimple.h>
-#include <rtps/builtin/discovery/participant/PDPSimple.h>
-#include <rtps/network/NetworkFactory.hpp>
-#include <rtps/reader/StatefulReader.hpp>
-#include <rtps/writer/StatefulWriter.hpp>
+#include <fastdds/core/policy/ParameterList.hpp>
+#include <rtps/network/NetworkFactory.h>
 
 using ParameterList = eprosima::fastdds::dds::ParameterList;
-
 
 // Release reader lock to avoid ABBA lock. PDP mutex should always be first.
 // Keep change information on local variables to check consistency later
@@ -58,7 +56,7 @@ using ParameterList = eprosima::fastdds::dds::ParameterList;
     (void)seq_num
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 void EDPBasePUBListener::add_writer_from_change(
@@ -66,102 +64,68 @@ void EDPBasePUBListener::add_writer_from_change(
         ReaderHistory* reader_history,
         CacheChange_t* change,
         EDP* edp,
-        bool release_change /*= true*/,
-        const EndpointAddedCallback& writer_added_callback /* = nullptr*/)
+        bool release_change /*=true*/)
 {
     //LOAD INFORMATION IN DESTINATION WRITER PROXY DATA
-    NetworkFactory& network = edp->mp_RTPSParticipant->network_factory();
+    const NetworkFactory& network = edp->mp_RTPSParticipant->network_factory();
     CDRMessage_t tempMsg(change->serializedPayload);
     auto temp_writer_data = edp->get_temporary_writer_proxies_pool().get();
-    const auto type_server = change->writerGUID;
 
-    if (temp_writer_data->read_from_cdr_message(&tempMsg, change->vendor_id))
+    if (temp_writer_data->readFromCDRMessage(&tempMsg, network,
+            edp->mp_RTPSParticipant->has_shm_transport(), true, change->vendor_id))
     {
-        if (temp_writer_data->guid.guidPrefix == edp->mp_RTPSParticipant->getGuid().guidPrefix)
+        if (temp_writer_data->guid().guidPrefix == edp->mp_RTPSParticipant->getGuid().guidPrefix)
         {
             EPROSIMA_LOG_INFO(RTPS_EDP, "Message from own RTPSParticipant, ignoring");
             return;
         }
 
-        // Callback function to continue after typelookup is complete
-        fastdds::dds::builtin::AsyncGetTypeWriterCallback after_typelookup_callback =
-                [reader, change, edp, &network, writer_added_callback]
-                    (eprosima::fastdds::dds::ReturnCode_t request_ret_status,
-                        eprosima::fastdds::rtps::WriterProxyData* temp_writer_data)
+        //LOAD INFORMATION IN DESTINATION WRITER PROXY DATA
+        auto copy_data_fun = [&temp_writer_data, &network](
+            WriterProxyData* data,
+            bool updating,
+            const ParticipantProxyData& participant_data)
                 {
-                    //LOAD INFORMATION IN DESTINATION WRITER PROXY DATA
-                    auto copy_data_fun = [&request_ret_status, &temp_writer_data, &network](
-                        WriterProxyData* data,
-                        bool updating,
-                        const ParticipantProxyData& participant_data)
-                            {
-                                if (updating && !data->is_update_allowed(*temp_writer_data))
-                                {
-                                    EPROSIMA_LOG_WARNING(RTPS_EDP,
-                                            "Received incompatible update for WriterQos. writer_guid = " <<
-                                            data->guid);
-                                }
-                                *data = *temp_writer_data;
-                                data->setup_locators(*temp_writer_data, network, participant_data);
-
-                                if (request_ret_status != fastdds::dds::RETCODE_OK)
-                                {
-                                    data->type_information.clear();
-                                }
-                                return true;
-                            };
-
-                    GUID_t participant_guid;
-                    WriterProxyData* writer_data =
-                            edp->mp_PDP->addWriterProxyData(temp_writer_data->guid, participant_guid, copy_data_fun);
-
-                    if (writer_data != nullptr)
+                    if (!temp_writer_data->has_locators())
                     {
-                        edp->pairing_writer_proxy_with_any_local_reader(participant_guid, writer_data);
-                        if (nullptr != writer_added_callback)
-                        {
-                            writer_added_callback(reader, change);
-                        }
+                        temp_writer_data->set_remote_locators(participant_data.default_locators, network, true);
                     }
-                    else
+
+                    if (updating && !data->is_update_allowed(*temp_writer_data))
                     {
-                        EPROSIMA_LOG_WARNING(RTPS_EDP, "Received message from UNKNOWN RTPSParticipant, removing");
+                        EPROSIMA_LOG_WARNING(RTPS_EDP,
+                                "Received incompatible update for WriterQos. writer_guid = " << data->guid());
                     }
+                    *data = *temp_writer_data;
+                    return true;
                 };
 
-        // Remove change from history.
-        reader_history->remove_change(reader_history->find_change(change), release_change);
+        GUID_t participant_guid;
+        WriterProxyData* writer_data =
+                edp->mp_PDP->addWriterProxyData(temp_writer_data->guid(), participant_guid, copy_data_fun);
 
-        // At this point, we can release the reader lock because the change is not used
-        reader->getMutex().unlock();
-
-        auto typelookup_manager = edp->mp_RTPSParticipant->typelookup_manager();
-
-        // Check if TypeInformation exists to start the typelookup service
-        if (nullptr != typelookup_manager && temp_writer_data->type_information.assigned())
-        {
-            typelookup_manager->async_get_type(
-                temp_writer_data,
-                type_server,
-                after_typelookup_callback);
-        }
-        // If TypeInformation does not exist, try fallback mechanism
-        else
-        {
-            EPROSIMA_LOG_INFO(
-                RTPS_EDP, "EDPSimpleListener: No TypeLookupManager or TypeInformation. Trying fallback mechanism");
-            after_typelookup_callback(fastdds::dds::RETCODE_NO_DATA, temp_writer_data.get());
-        }
-        // Release temporary proxy
+        // release temporary proxy
         temp_writer_data.reset();
 
+        //Removing change from history
+        reader_history->remove_change(reader_history->find_change(change), release_change);
 
-        // Take the reader lock again if needed.
+        // At this point we can release reader lock, cause change is not used
+        reader->getMutex().unlock();
+        if (writer_data != nullptr)
+        {
+            edp->pairing_writer_proxy_with_any_local_reader(participant_guid, writer_data);
+        }
+        else //NOT ADDED BECAUSE IT WAS ALREADY THERE
+        {
+            EPROSIMA_LOG_WARNING(RTPS_EDP, "Received message from UNKNOWN RTPSParticipant, removing");
+        }
+        // Take again the reader lock.
         reader->getMutex().lock();
     }
 }
 
-void EDPSimplePUBListener::on_new_cache_change_added(
+void EDPSimplePUBListener::onNewCacheChangeAdded(
         RTPSReader* reader,
         const CacheChange_t* const change_in)
 {
@@ -211,102 +175,71 @@ void EDPBaseSUBListener::add_reader_from_change(
         ReaderHistory* reader_history,
         CacheChange_t* change,
         EDP* edp,
-        bool release_change /*= true*/,
-        const EndpointAddedCallback& reader_added_callback /* = nullptr*/)
+        bool release_change /*=true*/)
 {
-    //LOAD INFORMATION IN TEMPORAL READER PROXY DATA
-    NetworkFactory& network = edp->mp_RTPSParticipant->network_factory();
+    //LOAD INFORMATION IN TEMPORAL WRITER PROXY DATA
+    const NetworkFactory& network = edp->mp_RTPSParticipant->network_factory();
     CDRMessage_t tempMsg(change->serializedPayload);
     auto temp_reader_data = edp->get_temporary_reader_proxies_pool().get();
-    const auto type_server = change->writerGUID;
 
-    if (temp_reader_data->read_from_cdr_message(&tempMsg, change->vendor_id))
+    if (temp_reader_data->readFromCDRMessage(&tempMsg, network,
+            edp->mp_RTPSParticipant->has_shm_transport(), true, change->vendor_id))
     {
-        if (temp_reader_data->guid.guidPrefix == edp->mp_RTPSParticipant->getGuid().guidPrefix)
+        if (temp_reader_data->guid().guidPrefix == edp->mp_RTPSParticipant->getGuid().guidPrefix)
         {
             EPROSIMA_LOG_INFO(RTPS_EDP, "From own RTPSParticipant, ignoring");
             return;
         }
 
-        // Callback function to continue after typelookup is complete
-        fastdds::dds::builtin::AsyncGetTypeReaderCallback after_typelookup_callback =
-                [reader, change, edp, &network, reader_added_callback]
-                    (eprosima::fastdds::dds::ReturnCode_t request_ret_status,
-                        eprosima::fastdds::rtps::ReaderProxyData* temp_reader_data)
+        auto copy_data_fun = [&temp_reader_data, &network](
+            ReaderProxyData* data,
+            bool updating,
+            const ParticipantProxyData& participant_data)
                 {
-                    //LOAD INFORMATION IN DESTINATION READER PROXY DATA
-                    auto copy_data_fun = [&request_ret_status, &temp_reader_data, &network](
-                        ReaderProxyData* data,
-                        bool updating,
-                        const ParticipantProxyData& participant_data)
-                            {
-                                if (updating && !data->is_update_allowed(*temp_reader_data))
-                                {
-                                    EPROSIMA_LOG_WARNING(RTPS_EDP,
-                                            "Received incompatible update for ReaderQos. reader_guid = " <<
-                                            data->guid);
-                                }
-                                *data = *temp_reader_data;
-                                data->setup_locators(*temp_reader_data, network, participant_data);
-
-                                if (request_ret_status != fastdds::dds::RETCODE_OK)
-                                {
-                                    data->type_information.clear();
-                                }
-                                return true;
-                            };
-
-                    //LOOK IF IS AN UPDATED INFORMATION
-                    GUID_t participant_guid;
-                    ReaderProxyData* reader_data =
-                            edp->mp_PDP->addReaderProxyData(temp_reader_data->guid, participant_guid, copy_data_fun);
-
-                    if (reader_data != nullptr) //ADDED NEW DATA
+                    if (!temp_reader_data->has_locators())
                     {
-                        edp->pairing_reader_proxy_with_any_local_writer(participant_guid, reader_data);
-                        if (nullptr != reader_added_callback)
-                        {
-                            reader_added_callback(reader, change);
-                        }
+                        temp_reader_data->set_remote_locators(participant_data.default_locators, network, true);
                     }
-                    else
+
+                    if (updating && !data->is_update_allowed(*temp_reader_data))
                     {
-                        EPROSIMA_LOG_WARNING(RTPS_EDP, "From UNKNOWN RTPSParticipant, removing");
+                        EPROSIMA_LOG_WARNING(RTPS_EDP,
+                                "Received incompatible update for ReaderQos. reader_guid = " << data->guid());
                     }
+                    *data = *temp_reader_data;
+                    return true;
                 };
+
+        //LOOK IF IS AN UPDATED INFORMATION
+        GUID_t participant_guid;
+        ReaderProxyData* reader_data =
+                edp->mp_PDP->addReaderProxyData(temp_reader_data->guid(), participant_guid, copy_data_fun);
+
+        // Release the temporary proxy
+        temp_reader_data.reset();
 
         // Remove change from history.
         reader_history->remove_change(reader_history->find_change(change), release_change);
 
-        // At this point, we can release the reader lock because the change is not used
+        // At this point we can release reader lock, cause change is not used
         reader->getMutex().unlock();
 
-        auto typelookup_manager = edp->mp_RTPSParticipant->typelookup_manager();
-
-        // Check if TypeInformation exists to start the typelookup service
-        if (nullptr != typelookup_manager && temp_reader_data->type_information.assigned())
+        if (reader_data != nullptr) //ADDED NEW DATA
         {
-            typelookup_manager->async_get_type(
-                temp_reader_data,
-                type_server,
-                after_typelookup_callback);
+            edp->pairing_reader_proxy_with_any_local_writer(participant_guid, reader_data);
+
         }
-        // If TypeInformation does not exist, try fallback mechanism
         else
         {
-            EPROSIMA_LOG_INFO(
-                RTPS_EDP, "EDPSimpleListener: No TypeLookupManager or TypeInformation. Trying fallback mechanism");
-            after_typelookup_callback(fastdds::dds::RETCODE_NO_DATA, temp_reader_data.get());
+            EPROSIMA_LOG_WARNING(RTPS_EDP, "From UNKNOWN RTPSParticipant, removing");
         }
-        // Release the temporary proxy
-        temp_reader_data.reset();
 
-        // Take the reader lock again if needed.
+        // Take again the reader lock.
         reader->getMutex().lock();
     }
 }
 
-void EDPSimpleSUBListener::on_new_cache_change_added(
+void EDPSimpleSUBListener::onNewCacheChangeAdded(
         RTPSReader* reader,
         const CacheChange_t* const change_in)
 {
@@ -346,7 +279,7 @@ void EDPSimpleSUBListener::on_new_cache_change_added(
     }
 }
 
-void EDPSimplePUBListener::on_writer_change_received_by_all(
+void EDPSimplePUBListener::onWriterChangeReceivedByAll(
         RTPSWriter* writer,
         CacheChange_t* change)
 {
@@ -365,7 +298,7 @@ void EDPSimplePUBListener::on_writer_change_received_by_all(
     }
 }
 
-void EDPSimpleSUBListener::on_writer_change_received_by_all(
+void EDPSimpleSUBListener::onWriterChangeReceivedByAll(
         RTPSWriter* writer,
         CacheChange_t* change)
 {
@@ -386,5 +319,5 @@ void EDPSimpleSUBListener::on_writer_change_received_by_all(
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

@@ -19,10 +19,10 @@
 #include <cstdint>
 #include <limits>
 
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
-#ifndef FASTDDS_RTPS_ATTRIBUTES_THREADSETTINGS_HPP
-#define FASTDDS_RTPS_ATTRIBUTES_THREADSETTINGS_HPP
+#ifndef _FASTDDS_THREADSETTINGS_HPP_
+#define _FASTDDS_THREADSETTINGS_HPP_
 
 namespace eprosima {
 namespace fastdds {
@@ -33,7 +33,7 @@ namespace rtps {
  * This class is used to define attributes across a wide set of Qos and APIs.
  * @ingroup RTPS_ATTRIBUTES_MODULE
  */
-struct FASTDDS_EXPORTED_API ThreadSettings
+struct RTPS_DllAPI ThreadSettings
 {
     /**
      * @brief The scheduling policy used for this thread.
@@ -108,4 +108,4 @@ struct FASTDDS_EXPORTED_API ThreadSettings
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_ATTRIBUTES_THREADSETTINGS_HPP
+#endif /* _FASTDDS_THREADSETTINGS_HPP_ */

@@ -15,18 +15,19 @@
 /*!
  * @file SecurityPluginFactory.h
  */
-#ifndef FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
-#define FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
+#ifndef _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
+#define _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/accesscontrol/AccessControl.h>
-#include <rtps/security/authentication/Authentication.h>
-#include <rtps/security/cryptography/Cryptography.h>
+#include <fastrtps/rtps/security/authentication/Authentication.h>
+#include <fastrtps/rtps/security/accesscontrol/AccessControl.h>
+#include <fastrtps/rtps/security/cryptography/Cryptography.h>
+#include <fastdds/rtps/security/logging/Logging.h>
+#include <fastrtps/rtps/attributes/PropertyPolicy.h>
+
 #include <rtps/security/ISecurityPluginFactory.h>
-#include <rtps/security/logging/Logging.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -79,7 +80,7 @@ private:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
-#endif // FASTDDS_RTPS_SECURITY__SECURITYPLUGINFACTORY_H
+#endif // _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_

@@ -16,8 +16,8 @@
  * @file DataReaderQos.hpp
  */
 
-#ifndef FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS__DATAREADERQOS_HPP
-#define FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS__DATAREADERQOS_HPP
+#ifndef _FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS_DATAREADERQOS_HPP_
+#define _FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS_DATAREADERQOS_HPP_
 
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 
@@ -38,7 +38,7 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API DataReaderQos();
+    RTPS_DllAPI DataReaderQos();
 };
 
 /**
@@ -53,7 +53,7 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API MonitorServiceDataReaderQos();
+    RTPS_DllAPI MonitorServiceDataReaderQos();
 };
 
 //! Constant to access default Statistics DataReader Qos
@@ -67,4 +67,4 @@ const eprosima::fastdds::statistics::dds::MonitorServiceDataReaderQos MONITOR_SE
 } // fastdds
 } // eprosima
 
-#endif // FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS__DATAREADERQOS_HPP
+#endif /* _FASTDDS_STATISTICS_DDS_SUBSCRIBER_QOS_DATAREADERQOS_HPP_ */

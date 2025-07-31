@@ -16,11 +16,11 @@
  * @file BlockedNetworkInterface.hpp
  */
 
-#ifndef FASTDDS_RTPS_TRANSPORT_NETWORK__BLOCKEDNETWORKINTERFACE_HPP
-#define FASTDDS_RTPS_TRANSPORT_NETWORK__BLOCKEDNETWORKINTERFACE_HPP
+#ifndef _FASTDDS_RTPS_TRANSPORT_NETWORK_BLOCKEDNETWORKINTERFACE_HPP_
+#define _FASTDDS_RTPS_TRANSPORT_NETWORK_BLOCKEDNETWORKINTERFACE_HPP_
 
 #include <fastdds/rtps/transport/network/NetworkInterface.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,22 +37,22 @@ struct BlockedNetworkInterface : public NetworkInterface
     using NetworkInterface::NetworkInterface;
 
     //! Destructor
-    virtual FASTDDS_EXPORTED_API ~BlockedNetworkInterface() = default;
+    virtual RTPS_DllAPI ~BlockedNetworkInterface() = default;
 
     //! Copy constructor
-    FASTDDS_EXPORTED_API BlockedNetworkInterface(
+    RTPS_DllAPI BlockedNetworkInterface(
             const BlockedNetworkInterface& iface) = default;
 
     //! Copy assignment
-    FASTDDS_EXPORTED_API BlockedNetworkInterface& operator =(
+    RTPS_DllAPI BlockedNetworkInterface& operator =(
             const BlockedNetworkInterface& iface) = default;
 
     //! Move constructor
-    FASTDDS_EXPORTED_API BlockedNetworkInterface(
+    RTPS_DllAPI BlockedNetworkInterface(
             BlockedNetworkInterface&& iface) = default;
 
     //! Move assignment
-    FASTDDS_EXPORTED_API BlockedNetworkInterface& operator =(
+    RTPS_DllAPI BlockedNetworkInterface& operator =(
             BlockedNetworkInterface&& iface) = default;
 };
 
@@ -60,4 +60,4 @@ struct BlockedNetworkInterface : public NetworkInterface
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_TRANSPORT_NETWORK__BLOCKEDNETWORKINTERFACE_HPP
+#endif // _FASTDDS_RTPS_TRANSPORT_NETWORK_BLOCKEDNETWORKINTERFACE_HPP_

@@ -12,22 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FASTDDS_DDS_PUBLISHER__PUBLISHER_HPP
-#define FASTDDS_DDS_PUBLISHER__PUBLISHER_HPP
+#ifndef _FASTDDS_PUBLISHER_HPP_
+#define _FASTDDS_PUBLISHER_HPP_
 
 #include <string>
 #include <vector>
 
 #include <gmock/gmock.h>
 #include <fastdds/dds/core/Entity.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/status/StatusMask.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/dds/publisher/qos/PublisherQos.hpp>
-#include <fastdds/rtps/common/InstanceHandle.hpp>
+#include <fastdds/rtps/common/InstanceHandle.h>
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/publisher/PublisherImpl.hpp>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -74,7 +76,7 @@ public:
 
     ReturnCode_t enable() override
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     const PublisherQos& get_qos() const
@@ -85,7 +87,7 @@ public:
     ReturnCode_t set_listener(
             PublisherListener* /*listener*/)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     DataWriter* create_datawriter(
@@ -106,7 +108,7 @@ public:
     {
         if (delete_datawriter_mock())
         {
-            return RETCODE_ERROR;
+            return ReturnCode_t::RETCODE_ERROR;
         }
         return impl_->delete_datawriter(writer);
     }
@@ -153,8 +155,8 @@ protected:
     PublisherImpl* impl_;
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} // dds
+} // fastdds
+} // eprosima
 
-#endif // FASTDDS_DDS_PUBLISHER__PUBLISHER_HPP
+#endif /* _FASTDDS_PUBLISHER_HPP_ */

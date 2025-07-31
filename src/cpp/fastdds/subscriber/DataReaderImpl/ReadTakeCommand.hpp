@@ -22,11 +22,12 @@
 #include <cassert>
 #include <cstdint>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/LoanableCollection.hpp>
 #include <fastdds/dds/core/LoanableTypedCollection.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
+
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/subscriber/DataReaderImpl.hpp>
 #include <fastdds/subscriber/DataReaderImpl/DataReaderLoanManager.hpp>
@@ -35,10 +36,9 @@
 #include <fastdds/subscriber/DataReaderImpl/SampleLoanManager.hpp>
 #include <fastdds/subscriber/history/DataReaderHistory.hpp>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/reader/RTPSReader.h>
 
-#include <rtps/reader/BaseReader.hpp>
 #include <rtps/reader/WriterProxy.h>
 #include <rtps/DataSharing/DataSharingPayloadPool.hpp>
 
@@ -50,12 +50,13 @@ namespace detail {
 
 struct ReadTakeCommand
 {
+    using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
     using history_type = eprosima::fastdds::dds::detail::DataReaderHistory;
-    using CacheChange_t = eprosima::fastdds::rtps::CacheChange_t;
-    using RTPSReader = eprosima::fastdds::rtps::RTPSReader;
-    using WriterProxy = eprosima::fastdds::rtps::WriterProxy;
+    using CacheChange_t = eprosima::fastrtps::rtps::CacheChange_t;
+    using RTPSReader = eprosima::fastrtps::rtps::RTPSReader;
+    using WriterProxy = eprosima::fastrtps::rtps::WriterProxy;
     using SampleInfoSeq = LoanableTypedCollection<SampleInfo>;
-    using DataSharingPayloadPool = eprosima::fastdds::rtps::DataSharingPayloadPool;
+    using DataSharingPayloadPool = eprosima::fastrtps::rtps::DataSharingPayloadPool;
 
     ReadTakeCommand(
             DataReaderImpl& reader,
@@ -89,7 +90,7 @@ struct ReadTakeCommand
 
     ~ReadTakeCommand()
     {
-        if (!data_values_.has_ownership() && RETCODE_NO_DATA == return_value_)
+        if (!data_values_.has_ownership() && ReturnCode_t::RETCODE_NO_DATA == return_value_)
         {
             loan_manager_.return_loan(data_values_, sample_infos_);
             data_values_.unloan();
@@ -120,7 +121,7 @@ struct ReadTakeCommand
                 WriterProxy* wp = nullptr;
                 bool is_future_change = false;
                 bool remove_change = false;
-                if (rtps::BaseReader::downcast(reader_)->begin_sample_access_nts(change, wp, is_future_change))
+                if (reader_->begin_sample_access_nts(change, wp, is_future_change))
                 {
                     //Check if the payload is dirty
                     remove_change = !check_datasharing_validity(change, data_values_.has_ownership());
@@ -147,7 +148,7 @@ struct ReadTakeCommand
                     ReturnCode_t previous_return_value = return_value_;
                     bool added = add_sample(*it, remove_change);
                     history_.change_was_processed_nts(change, added);
-                    rtps::BaseReader::downcast(reader_)->end_sample_access_nts(change, wp, added);
+                    reader_->end_sample_access_nts(change, wp, added);
 
                     // Check if the payload is dirty
                     if (added && !check_datasharing_validity(change, data_values_.has_ownership()))
@@ -178,6 +179,18 @@ struct ReadTakeCommand
 
             // Go to next sample on instance
             ++it;
+        }
+
+        // Check if there is a state notification sample available
+        if (!finished_ && instance_->second->has_state_notification_sample)
+        {
+            // Add sample and info to collections
+            bool deserialization_error = false;
+            bool added = add_sample(nullptr, deserialization_error);
+            if (added && take_samples)
+            {
+                instance_->second->has_state_notification_sample = false;
+            }
         }
 
         if (current_slot_ > first_slot)
@@ -243,7 +256,7 @@ struct ReadTakeCommand
          * More importantly, the related sample identity should be taken from the related sample identity
          * in write_params.
          */
-        FASTDDS_TODO_BEFORE(4, 0, "Fill both sample_identity and related_sample_identity with write_params");
+        FASTDDS_TODO_BEFORE(3, 0, "Fill both sample_identity and related_sample_identity with write_params");
         info.sample_identity.writer_guid(item->writerGUID);
         info.sample_identity.sequence_number(item->sequenceNumber);
         info.related_sample_identity = item->write_params.sample_identity();
@@ -252,12 +265,12 @@ struct ReadTakeCommand
 
         switch (item->kind)
         {
-            case eprosima::fastdds::rtps::NOT_ALIVE_DISPOSED:
-            case eprosima::fastdds::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED:
-            case eprosima::fastdds::rtps::NOT_ALIVE_UNREGISTERED:
+            case eprosima::fastrtps::rtps::NOT_ALIVE_DISPOSED:
+            case eprosima::fastrtps::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED:
+            case eprosima::fastrtps::rtps::NOT_ALIVE_UNREGISTERED:
                 info.valid_data = false;
                 break;
-            case eprosima::fastdds::rtps::ALIVE:
+            case eprosima::fastrtps::rtps::ALIVE:
             default:
                 break;
         }
@@ -281,7 +294,7 @@ private:
     bool loop_for_data_;
 
     bool finished_ = false;
-    ReturnCode_t return_value_ = RETCODE_NO_DATA;
+    ReturnCode_t return_value_ = ReturnCode_t::RETCODE_NO_DATA;
 
     LoanableCollection::size_type current_slot_ = 0;
 
@@ -352,7 +365,7 @@ private:
             }
 
             // Mark that some data is available
-            return_value_ = RETCODE_OK;
+            return_value_ = ReturnCode_t::RETCODE_OK;
             ++current_slot_;
             --remaining_samples_;
             ret_val = true;
@@ -370,7 +383,7 @@ private:
         if (data_values_.has_ownership())
         {
             // perform deserialization
-            return type_->deserialize(*payload, data_values_.buffer()[current_slot_]);
+            return type_->deserialize(payload, data_values_.buffer()[current_slot_]);
         }
         else
         {
@@ -394,7 +407,34 @@ private:
         }
 
         SampleInfo& info = sample_infos_[current_slot_];
-        generate_info(info, *instance_->second, item);
+        const DataReaderInstance& instance = *instance_->second;
+        if (item)
+        {
+            generate_info(info, instance, item);
+        }
+        else
+        {
+            fastrtps::rtps::Time_t current_time;
+            fastrtps::rtps::Time_t::now(current_time);
+
+            info.sample_state = NOT_READ_SAMPLE_STATE;
+            info.instance_state = instance.instance_state;
+            info.view_state = instance.view_state;
+            info.disposed_generation_count = instance.disposed_generation_count;
+            info.no_writers_generation_count = instance.no_writers_generation_count;
+            info.sample_rank = 0;
+            info.generation_rank = 0;
+            info.absolute_generation_rank = 0;
+            info.source_timestamp = current_time;
+            info.reception_timestamp = current_time;
+            info.instance_handle = instance_->first;
+            info.publication_handle = HANDLE_NIL;
+
+            info.sample_identity = fastrtps::rtps::SampleIdentity{};
+            info.related_sample_identity = fastrtps::rtps::SampleIdentity{};
+
+            info.valid_data = false;
+        }
     }
 
     bool check_datasharing_validity(
@@ -404,8 +444,7 @@ private:
         bool is_valid = true;
         if (has_ownership)  //< On loans the user must check the validity anyways
         {
-            DataSharingPayloadPool* pool =
-                    dynamic_cast<DataSharingPayloadPool*>(change->serializedPayload.payload_owner);
+            DataSharingPayloadPool* pool = dynamic_cast<DataSharingPayloadPool*>(change->payload_owner());
             if (pool)
             {
                 //Check if the payload is dirty

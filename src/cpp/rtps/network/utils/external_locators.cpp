@@ -22,15 +22,15 @@
 #include <vector>
 
 #include <fastdds/rtps/attributes/ExternalLocators.hpp>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
 #include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 #include <utils/SystemInfo.hpp>
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
 #include <rtps/network/utils/external_locators.hpp>
 
 namespace eprosima {
@@ -44,9 +44,9 @@ static uint8_t get_locator_mask(
 {
     uint8_t ret = 24;
 
-    std::vector<fastdds::rtps::IPFinder::info_IP> infoIPs;
+    std::vector<fastrtps::rtps::IPFinder::info_IP> infoIPs;
     SystemInfo::get_ips(infoIPs, true, false);
-    for (const fastdds::rtps::IPFinder::info_IP& infoIP : infoIPs)
+    for (const fastrtps::rtps::IPFinder::info_IP& infoIP : infoIPs)
     {
         if (infoIP.locator.kind == locator.kind &&
                 std::equal(infoIP.locator.address, infoIP.locator.address + 16, locator.address))
@@ -206,7 +206,7 @@ static uint64_t heuristic(
         return heuristic_value(0, 0);
     }
 
-    if (fastdds::rtps::IPLocator::isLocal(remote_locator))
+    if (fastrtps::rtps::IPLocator::isLocal(remote_locator))
     {
         return heuristic_value(0, 1);
     }
@@ -229,7 +229,7 @@ static uint64_t heuristic(
 }
 
 static void filter_remote_locators(
-        fastdds::ResourceLimitedVector<Locator>& locators,
+        fastrtps::ResourceLimitedVector<Locator>& locators,
         const ExternalLocators& external_locators,
         bool ignore_non_matching)
 {

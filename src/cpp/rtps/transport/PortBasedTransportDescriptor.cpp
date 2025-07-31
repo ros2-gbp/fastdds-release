@@ -14,7 +14,9 @@
 
 #include <fastdds/rtps/transport/PortBasedTransportDescriptor.hpp>
 
-#include <fastdds/rtps/transport/TransportDescriptorInterface.hpp>
+#include <fastdds/rtps/transport/TransportDescriptorInterface.h>
+
+using namespace eprosima::fastdds::rtps;
 
 namespace eprosima {
 namespace fastdds {

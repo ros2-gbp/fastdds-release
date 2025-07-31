@@ -21,7 +21,7 @@
 
 #include <cstdint>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -29,7 +29,7 @@ namespace dds {
 namespace detail {
 
 /// A DataReader cache entry
-using DataReaderCacheChange = fastdds::rtps::CacheChange_t*;
+using DataReaderCacheChange = fastrtps::rtps::CacheChange_t*;
 
 } /* namespace detail */
 } /* namespace dds */

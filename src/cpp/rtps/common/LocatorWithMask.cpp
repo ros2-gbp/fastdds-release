@@ -19,8 +19,8 @@
 #include <cassert>
 #include <string>
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/Types.h>
 #include <rtps/network/utils/network.hpp>
 
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
@@ -68,7 +68,7 @@ LocatorWithMask& LocatorWithMask::operator =(
 {
     kind = loc.kind;
     port = loc.port;
-    std::memcpy(address, loc.address, 16 * sizeof(octet));
+    std::memcpy(address, loc.address, 16 * sizeof(fastrtps::rtps::octet));
     return *this;
 }
 

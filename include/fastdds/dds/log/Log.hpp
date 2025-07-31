@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#ifndef FASTDDS_DDS_LOG__LOG_HPP
-#define FASTDDS_DDS_LOG__LOG_HPP
+#ifndef _FASTDDS_DDS_LOG_LOG_HPP_
+#define _FASTDDS_DDS_LOG_LOG_HPP_
 
 #include <regex>
 #include <sstream>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 /**
  * eProsima log layer. Logging categories and verbosity can be specified dynamically at runtime.
@@ -98,66 +98,51 @@ public:
      * There is a default stdout consumer active as default.
      * @param consumer r-value to a consumer unique_ptr. It will be invalidated after the call.
      */
-    FASTDDS_EXPORTED_API static void RegisterConsumer(
+    RTPS_DllAPI static void RegisterConsumer(
             std::unique_ptr<LogConsumer>&& consumer);
 
     //! Removes all registered consumers, including the default stdout.
-    FASTDDS_EXPORTED_API static void ClearConsumers();
+    RTPS_DllAPI static void ClearConsumers();
 
     //! Enables the reporting of filenames in log entries. Disabled by default.
-    FASTDDS_EXPORTED_API static void ReportFilenames(
+    RTPS_DllAPI static void ReportFilenames(
             bool);
 
     //! Enables the reporting of function names in log entries. Enabled by default when supported.
-    FASTDDS_EXPORTED_API static void ReportFunctions(
+    RTPS_DllAPI static void ReportFunctions(
             bool);
 
     //! Sets the verbosity level, allowing for messages equal or under that priority to be logged.
-    FASTDDS_EXPORTED_API static void SetVerbosity(
+    RTPS_DllAPI static void SetVerbosity(
             Log::Kind);
 
     //! Returns the current verbosity level.
-    FASTDDS_EXPORTED_API static Log::Kind GetVerbosity();
+    RTPS_DllAPI static Log::Kind GetVerbosity();
 
     //! Sets a filter that will pattern-match against log categories, dropping any unmatched categories.
-    FASTDDS_EXPORTED_API static void SetCategoryFilter(
+    RTPS_DllAPI static void SetCategoryFilter(
             const std::regex&);
-
-    //! Unset the category filter.
-    FASTDDS_EXPORTED_API static void UnsetCategoryFilter();
-
-    //! Returns whether a category filter was set or not.
-    FASTDDS_EXPORTED_API static bool HasCategoryFilter();
-
-    //! Returns a copy of the current category filter or an empty object otherwise
-    FASTDDS_EXPORTED_API static std::regex GetCategoryFilter();
 
     //! Sets a filter that will pattern-match against filenames, dropping any unmatched categories.
-    FASTDDS_EXPORTED_API static void SetFilenameFilter(
+    RTPS_DllAPI static void SetFilenameFilter(
             const std::regex&);
 
-    //! Returns a copy of the current filename filter or an empty object otherwise
-    FASTDDS_EXPORTED_API static std::regex GetFilenameFilter();
-
     //! Sets a filter that will pattern-match against the provided error string, dropping any unmatched categories.
-    FASTDDS_EXPORTED_API static void SetErrorStringFilter(
+    RTPS_DllAPI static void SetErrorStringFilter(
             const std::regex&);
 
     //! Sets thread configuration for the logging thread.
-    FASTDDS_EXPORTED_API static void SetThreadConfig(
+    RTPS_DllAPI static void SetThreadConfig(
             const rtps::ThreadSettings&);
 
-    //! Returns a copy of the current error string filter or an empty object otherwise
-    FASTDDS_EXPORTED_API static std::regex GetErrorStringFilter();
-
     //! Returns the logging engine to configuration defaults.
-    FASTDDS_EXPORTED_API static void Reset();
+    RTPS_DllAPI static void Reset();
 
     //! Waits until all info logged up to the call time is consumed
-    FASTDDS_EXPORTED_API static void Flush();
+    RTPS_DllAPI static void Flush();
 
     //! Stops the logging thread. It will re-launch on the next call to a successful log macro.
-    FASTDDS_EXPORTED_API static void KillThread();
+    RTPS_DllAPI static void KillThread();
 
     // Note: In VS2013, if you're linking this class statically, you will have to call KillThread before leaving
     // main, due to an unsolved MSVC bug.
@@ -184,9 +169,10 @@ public:
      *  * EPROSIMA_LOG_WARNING(cat, msg);
      *  * EPROSIMA_LOG_ERROR(cat, msg);
      *
+     * @todo this method takes 2 mutexes (same mutex) internally.
      * This is a very high sensible point of the code and it should be refactored to be as efficient as possible.
      */
-    FASTDDS_EXPORTED_API static void QueueLog(
+    RTPS_DllAPI static void QueueLog(
             const std::string& message,
             const Log::Context&,
             Log::Kind);
@@ -232,27 +218,27 @@ public:
 
 protected:
 
-    FASTDDS_EXPORTED_API void print_timestamp(
+    RTPS_DllAPI void print_timestamp(
             std::ostream& stream,
             const Log::Entry&,
             bool color) const;
 
-    FASTDDS_EXPORTED_API void print_header(
+    RTPS_DllAPI void print_header(
             std::ostream& stream,
             const Log::Entry&,
             bool color) const;
 
-    FASTDDS_EXPORTED_API void print_context(
+    RTPS_DllAPI void print_context(
             std::ostream& stream,
             const Log::Entry&,
             bool color) const;
 
-    FASTDDS_EXPORTED_API void print_message(
+    RTPS_DllAPI void print_message(
             std::ostream& stream,
             const Log::Entry&,
             bool color) const;
 
-    FASTDDS_EXPORTED_API void print_new_line(
+    RTPS_DllAPI void print_new_line(
             std::ostream& stream,
             bool color) const;
 };
@@ -287,18 +273,17 @@ protected:
 // Name of variables inside macros must be unique, or it could produce an error with external variables
 #if !HAVE_LOG_NO_ERROR
 
-#define EPROSIMA_LOG_ERROR_IMPL_(cat, msg)                                                                             \
+#define EPROSIMA_LOG_ERROR_IMPL_(cat, msg)                                                                                 \
     do {                                                                                                               \
+        using namespace eprosima::fastdds::dds;                                                                        \
         std::stringstream fastdds_log_ss_tmp__;                                                                        \
         fastdds_log_ss_tmp__ << msg;                                                                                   \
-        eprosima::fastdds::dds::Log::QueueLog(                                                                         \
-            fastdds_log_ss_tmp__.str(), eprosima::fastdds::dds::Log::Context{__FILE__, __LINE__, __func__, #cat},      \
-            eprosima::fastdds::dds::Log::Kind::Error);                                                                 \
+        Log::QueueLog(fastdds_log_ss_tmp__.str(), Log::Context{__FILE__, __LINE__, __func__, #cat}, Log::Kind::Error); \
     } while (0)
 
 #elif (__INTERNALDEBUG || _INTERNALDEBUG)
 
-#define EPROSIMA_LOG_ERROR_IMPL_(cat, msg)                      \
+#define EPROSIMA_LOG_ERROR_IMPL_(cat, msg)                          \
     do {                                                        \
         auto fastdds_log_lambda_tmp__ = [&]()                   \
                 {                                               \
@@ -318,21 +303,21 @@ protected:
 ***********/
 #if !HAVE_LOG_NO_WARNING
 
-#define EPROSIMA_LOG_WARNING_IMPL_(cat, msg)                                                                          \
-    do {                                                                                                              \
-        if (eprosima::fastdds::dds::Log::GetVerbosity() >= eprosima::fastdds::dds::Log::Kind::Warning)                \
-        {                                                                                                             \
-            std::stringstream fastdds_log_ss_tmp__;                                                                   \
-            fastdds_log_ss_tmp__ << msg;                                                                              \
-            eprosima::fastdds::dds::Log::QueueLog(                                                                    \
-                fastdds_log_ss_tmp__.str(), eprosima::fastdds::dds::Log::Context{__FILE__, __LINE__, __func__, #cat}, \
-                eprosima::fastdds::dds::Log::Kind::Warning);                                                          \
-        }                                                                                                             \
+#define EPROSIMA_LOG_WARNING_IMPL_(cat, msg)                                                                            \
+    do {                                                                                                            \
+        using namespace eprosima::fastdds::dds;                                                                     \
+        if (Log::GetVerbosity() >= Log::Kind::Warning)                                                              \
+        {                                                                                                           \
+            std::stringstream fastdds_log_ss_tmp__;                                                                 \
+            fastdds_log_ss_tmp__ << msg;                                                                            \
+            Log::QueueLog(                                                                                          \
+                fastdds_log_ss_tmp__.str(), Log::Context{__FILE__, __LINE__, __func__, #cat}, Log::Kind::Warning);  \
+        }                                                                                                           \
     } while (0)
 
 #elif (__INTERNALDEBUG || _INTERNALDEBUG)
 
-#define EPROSIMA_LOG_WARNING_IMPL_(cat, msg)                    \
+#define EPROSIMA_LOG_WARNING_IMPL_(cat, msg)                        \
     do {                                                        \
         auto fastdds_log_lambda_tmp__ = [&]()                   \
                 {                                               \
@@ -357,16 +342,16 @@ protected:
     ((defined(__INTERNALDEBUG) || defined(_INTERNALDEBUG)) && (defined(_DEBUG) || defined(__DEBUG) || \
     !defined(NDEBUG))))
 
-#define EPROSIMA_LOG_INFO_IMPL_(cat, msg)                                                                             \
-    do {                                                                                                              \
-        if (eprosima::fastdds::dds::Log::GetVerbosity() >= eprosima::fastdds::dds::Log::Kind::Info)                   \
-        {                                                                                                             \
-            std::stringstream fastdds_log_ss_tmp__;                                                                   \
-            fastdds_log_ss_tmp__ << msg;                                                                              \
-            eprosima::fastdds::dds::Log::QueueLog(                                                                    \
-                fastdds_log_ss_tmp__.str(), eprosima::fastdds::dds::Log::Context{__FILE__, __LINE__, __func__, #cat}, \
-                eprosima::fastdds::dds::Log::Kind::Info);                                                             \
-        }                                                                                                             \
+#define EPROSIMA_LOG_INFO_IMPL_(cat, msg)                                                                   \
+    do {                                                                                                \
+        using namespace eprosima::fastdds::dds;                                                         \
+        if (Log::GetVerbosity() >= Log::Kind::Info)                                                     \
+        {                                                                                               \
+            std::stringstream fastdds_log_ss_tmp__;                                                     \
+            fastdds_log_ss_tmp__ << msg;                                                                \
+            Log::QueueLog(fastdds_log_ss_tmp__.str(), Log::Context{__FILE__, __LINE__, __func__, #cat}, \
+                    Log::Kind::Info);                                                                   \
+        }                                                                                               \
     } while (0)
 
 #elif (__INTERNALDEBUG || _INTERNALDEBUG)
@@ -392,4 +377,4 @@ protected:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_LOG__LOG_HPP
+#endif // ifndef _FASTDDS_DDS_LOG_LOG_HPP_

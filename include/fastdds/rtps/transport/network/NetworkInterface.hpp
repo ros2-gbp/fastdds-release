@@ -16,13 +16,13 @@
  * @file NetworkInterface.hpp
  */
 
-#ifndef FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACE_HPP
-#define FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACE_HPP
+#ifndef _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACE_HPP_
+#define _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACE_HPP_
 
 #include <string>
 
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,36 +37,36 @@ namespace rtps {
 struct NetworkInterface
 {
     //! Constructor by name
-    FASTDDS_EXPORTED_API NetworkInterface(
+    RTPS_DllAPI NetworkInterface(
             const std::string& name);
 
     //! Constructor by device name, IP address string and locator with mask
-    FASTDDS_EXPORTED_API NetworkInterface(
+    RTPS_DllAPI NetworkInterface(
             const std::string& device,
             const std::string& ip,
             const LocatorWithMask& locator);
 
     //! Destructor
-    virtual FASTDDS_EXPORTED_API ~NetworkInterface() = default;
+    virtual RTPS_DllAPI ~NetworkInterface() = default;
 
     //! Copy constructor
-    FASTDDS_EXPORTED_API NetworkInterface(
+    RTPS_DllAPI NetworkInterface(
             const NetworkInterface& iface) = default;
 
     //! Copy assignment
-    FASTDDS_EXPORTED_API NetworkInterface& operator =(
+    RTPS_DllAPI NetworkInterface& operator =(
             const NetworkInterface& iface) = default;
 
     //! Move constructor
-    FASTDDS_EXPORTED_API NetworkInterface(
+    RTPS_DllAPI NetworkInterface(
             NetworkInterface&& iface) = default;
 
     //! Move assignment
-    FASTDDS_EXPORTED_API NetworkInterface& operator =(
+    RTPS_DllAPI NetworkInterface& operator =(
             NetworkInterface&& iface) = default;
 
     //! Comparison operator
-    FASTDDS_EXPORTED_API bool operator ==(
+    RTPS_DllAPI bool operator ==(
             const NetworkInterface& iface) const;
 
     //! Interface device name or IP address in string format (to be filled by the user)
@@ -84,4 +84,4 @@ struct NetworkInterface
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_TRANSPORT_NETWORK__NETWORKINTERFACE_HPP
+#endif // _FASTDDS_RTPS_TRANSPORT_NETWORK_NETWORKINTERFACE_HPP_

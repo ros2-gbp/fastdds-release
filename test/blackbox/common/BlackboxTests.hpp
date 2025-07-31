@@ -31,32 +31,21 @@
 #include <unistd.h>
 #endif // if defined(_WIN32)
 
-#include "../types/Data1mbPubSubTypes.hpp"
-#include "../types/Data100kbPubSubTypes.hpp"
-#include "../types/Data64kbPubSubTypes.hpp"
-#include "../types/FixedSizedPubSubTypes.hpp"
-#include "../types/HelloWorldPubSubTypes.hpp"
-#include "../types/KeyedData1mbPubSubTypes.hpp"
-#include "../types/KeyedHelloWorldPubSubTypes.hpp"
-#include "../types/core/core_typesPubSubTypes.hpp"
-#include "../types/StringTestPubSubTypes.hpp"
-#include "../types/UnboundedHelloWorldPubSubTypes.hpp"
+#include "../types/Data1mbPubSubTypes.h"
+#include "../types/Data64kbPubSubTypes.h"
+#include "../types/Data100kbPubSubTypes.h"
+#include "../types/FixedSizedPubSubTypes.h"
+#include "../types/HelloWorldPubSubTypes.h"
+#include "../types/KeyedData1mbPubSubTypes.h"
+#include "../types/KeyedHelloWorldPubSubTypes.h"
+#include "../types/StringTestPubSubTypes.h"
+#include "../types/UnboundedHelloWorldPubSubTypes.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <list>
 #include <functional>
-
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
-
-struct BuiltinTopicKey_t;
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
 
 #if HAVE_SECURITY
 extern void blackbox_security_init();
@@ -226,16 +215,5 @@ void print_non_received_messages(
 }
 
 /***** End auxiliary lambda function *****/
-
-/****** Auxiliary conversion helpers *******/
-void entity_id_to_builtin_topic_key(
-        eprosima::fastdds::rtps::BuiltinTopicKey_t& bt_key,
-        const eprosima::fastdds::rtps::EntityId_t& entity_id);
-
-void guid_prefix_to_builtin_topic_key(
-        eprosima::fastdds::rtps::BuiltinTopicKey_t& bt_key,
-        const eprosima::fastdds::rtps::GuidPrefix_t& guid_prefix);
-
-/****** End Auxiliary conversion helpers *******/
 
 #endif // __BLACKBOX_BLACKBOXTESTS_HPP__

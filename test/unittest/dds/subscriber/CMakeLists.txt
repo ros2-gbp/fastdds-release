@@ -21,14 +21,15 @@ set(DATAREADERTESTS_SOURCE
     DataReaderTests.cpp
     )
 set(DATAREADERINSTANCETESTS_SOURCE DataReaderInstanceTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     )
 set(DATAREADERHISTORYTESTS_SOURCE DataReaderHistoryTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/history/DataReaderHistory.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/topic/TopicDataType.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/history/History.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/history/ReaderHistory.cpp
@@ -73,9 +74,8 @@ target_compile_definitions(SubscriberTests PRIVATE
 target_include_directories(SubscriberTests PRIVATE
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/test/utils
     )
-target_link_libraries(SubscriberTests fastdds fastcdr foonathan_memory
+target_link_libraries(SubscriberTests fastrtps fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
 gtest_discover_tests(SubscriberTests)
@@ -92,8 +92,9 @@ target_include_directories(DataReaderTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
+    ${Asio_INCLUDE_DIR}
     )
-target_link_libraries(DataReaderTests fastdds fastcdr foonathan_memory
+target_link_libraries(DataReaderTests fastrtps fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
 gtest_discover_tests(DataReaderTests)
@@ -135,10 +136,7 @@ target_include_directories(DataReaderHistoryTests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/cpp
     ${THIRDPARTY_BOOST_INCLUDE_DIR}
     )
-target_link_libraries(DataReaderHistoryTests
-    fastcdr
-    fastdds::log
-    foonathan_memory
+target_link_libraries(DataReaderHistoryTests fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
 gtest_discover_tests(DataReaderHistoryTests)

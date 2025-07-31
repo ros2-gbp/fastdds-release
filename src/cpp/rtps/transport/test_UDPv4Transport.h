@@ -17,10 +17,10 @@
 
 #include <vector>
 
-#include <fastdds/rtps/common/SequenceNumber.hpp>
-#include <fastdds/rtps/messages/RTPS_messages.hpp>
-#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
-#include <rtps/messages/CDRMessage.hpp>
+#include <fastdds/rtps/common/SequenceNumber.h>
+#include <fastdds/rtps/messages/RTPS_messages.h>
+#include <fastdds/rtps/messages/CDRMessage.h>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.h>
 #include <rtps/transport/UDPv4Transport.h>
 
 
@@ -41,11 +41,11 @@ public:
             const test_UDPv4TransportDescriptor& descriptor);
 
     virtual bool send(
-            const std::vector<NetworkBuffer>& send_buffer,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
             eProsimaUDPSocket& socket,
-            LocatorsIterator* destination_locators_begin,
-            LocatorsIterator* destination_locators_end,
+            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
+            fastrtps::rtps::LocatorsIterator* destination_locators_end,
             bool only_multicast_purpose,
             bool whitelisted,
             const std::chrono::steady_clock::time_point& max_blocking_time_point) override;
@@ -53,12 +53,19 @@ public:
     virtual LocatorList NormalizeLocator(
             const Locator& locator) override;
 
-    std::shared_ptr<TestUDPv4TransportOptions> test_transport_options;
+    RTPS_DllAPI static std::atomic<bool> test_UDPv4Transport_ShutdownAllNetwork;
+    // Handle to a persistent log of dropped packets. Defaults to length 0 (no logging) to prevent wasted resources.
+    RTPS_DllAPI static std::vector<std::vector<fastrtps::rtps::octet>> test_UDPv4Transport_DropLog;
+    RTPS_DllAPI static std::atomic<uint32_t> test_UDPv4Transport_DropLogLength;
+    RTPS_DllAPI static std::atomic<bool> always_drop_participant_builtin_topic_data;
+    RTPS_DllAPI static std::atomic<bool> simulate_no_interfaces;
+
+    RTPS_DllAPI static test_UDPv4TransportDescriptor::DestinationLocatorFilter locator_filter;
 
 protected:
 
     virtual bool get_ips(
-            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
 
@@ -78,9 +85,6 @@ private:
     };
 
     PercentageData drop_data_messages_percentage_;
-    PercentageData drop_participant_builtin_data_messages_percentage_;
-    PercentageData drop_publication_builtin_data_messages_percentage_;
-    PercentageData drop_subscription_builtin_data_messages_percentage_;
     test_UDPv4TransportDescriptor::filter drop_data_messages_filter_;
     test_UDPv4TransportDescriptor::filter drop_builtin_data_messages_filter_;
     bool drop_participant_builtin_topic_data_;
@@ -97,25 +101,25 @@ private:
     test_UDPv4TransportDescriptor::filter sub_messages_filter_;
     PercentageData percentage_of_messages_to_drop_;
     test_UDPv4TransportDescriptor::filter messages_filter_;
-    std::vector<fastdds::rtps::SequenceNumber_t> sequence_number_data_messages_to_drop_;
+    std::vector<fastrtps::rtps::SequenceNumber_t> sequence_number_data_messages_to_drop_;
     test_UDPv4TransportDescriptor::DestinationLocatorFilter locator_filter_;
 
     bool should_drop_locator(
             const Locator& remote_locator);
 
     bool log_drop(
-            const std::vector<NetworkBuffer>& buffer,
+            const fastrtps::rtps::octet* buffer,
             uint32_t size);
     bool packet_should_drop(
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes);
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size);
     bool random_chance_drop();
     bool should_be_dropped(
             PercentageData* percentage);
 
     bool send(
-            const std::vector<NetworkBuffer>& send_buffer,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
             eProsimaUDPSocket& socket,
             const Locator& remote_locator,
             bool only_multicast_purpose,

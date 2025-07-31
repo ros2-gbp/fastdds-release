@@ -18,36 +18,43 @@
  */
 
 #include <fastdds/publisher/PublisherImpl.hpp>
+#include <fastdds/publisher/DataWriterImpl.hpp>
+#include <fastdds/domain/DomainParticipantImpl.hpp>
+#include <fastdds/topic/TopicDescriptionImpl.hpp>
+
+#include <fastdds/utils/QosConverters.hpp>
+
+#include <fastdds/dds/publisher/Publisher.hpp>
+#include <fastdds/dds/publisher/PublisherListener.hpp>
+#include <fastdds/dds/publisher/DataWriter.hpp>
+#include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
+#include <fastdds/dds/domain/DomainParticipantListener.hpp>
+#include <fastdds/dds/topic/TypeSupport.hpp>
+
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/participant/RTPSParticipant.h>
+
+#include <rtps/network/utils/netmask_filter.hpp>
+
+#include <fastrtps/attributes/PublisherAttributes.h>
+
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include <functional>
 
-#include <fastdds/dds/domain/DomainParticipantListener.hpp>
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/publisher/DataWriter.hpp>
-#include <fastdds/dds/publisher/Publisher.hpp>
-#include <fastdds/dds/publisher/PublisherListener.hpp>
-#include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
-#include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/domain/DomainParticipantImpl.hpp>
-#include <fastdds/publisher/DataWriterImpl.hpp>
-#include <fastdds/rtps/participant/RTPSParticipant.hpp>
-#include <fastdds/topic/TopicDescriptionImpl.hpp>
-#include <fastdds/utils/QosConverters.hpp>
-
-#include <rtps/network/utils/netmask_filter.hpp>
 #ifdef FASTDDS_STATISTICS
-#include <statistics/types/monitorservice_types.hpp>
+#include <statistics/types/monitorservice_types.h>
 #endif //FASTDDS_STATISTICS
-#include <xmlparser/attributes/PublisherAttributes.hpp>
-#include <xmlparser/XMLProfileManager.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 
-using xmlparser::XMLProfileManager;
-using xmlparser::XMLP_ret;
-using rtps::InstanceHandle_t;
+using fastrtps::xmlparser::XMLProfileManager;
+using fastrtps::xmlparser::XMLP_ret;
+using fastrtps::rtps::InstanceHandle_t;
+using fastrtps::Duration_t;
+using fastrtps::PublisherAttributes;
 
 PublisherImpl::PublisherImpl(
         DomainParticipantImpl* p,
@@ -61,7 +68,7 @@ PublisherImpl::PublisherImpl(
     , rtps_participant_(p->get_rtps_participant())
     , default_datawriter_qos_(DATAWRITER_QOS_DEFAULT)
 {
-    xmlparser::PublisherAttributes pub_attr;
+    PublisherAttributes pub_attr;
     XMLProfileManager::getDefaultPublisherAttributes(pub_attr);
     utils::set_qos_from_attributes(default_datawriter_qos_, pub_attr);
 }
@@ -80,7 +87,7 @@ ReturnCode_t PublisherImpl::enable()
         }
     }
 
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 void PublisherImpl::disable()
@@ -132,7 +139,7 @@ ReturnCode_t PublisherImpl::set_qos(
     if (&qos != &PUBLISHER_QOS_DEFAULT)
     {
         ReturnCode_t ret_val = check_qos(qos_to_set);
-        if (RETCODE_OK != ret_val)
+        if (!ret_val)
         {
             return ret_val;
         }
@@ -140,7 +147,7 @@ ReturnCode_t PublisherImpl::set_qos(
 
     if (enabled && !can_qos_be_updated(qos_, qos_to_set))
     {
-        return RETCODE_IMMUTABLE_POLICY;
+        return ReturnCode_t::RETCODE_IMMUTABLE_POLICY;
     }
     set_qos(qos_, qos_to_set, !enabled);
 
@@ -156,7 +163,7 @@ ReturnCode_t PublisherImpl::set_qos(
         }
     }
 
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 const PublisherListener* PublisherImpl::get_listener() const
@@ -168,7 +175,7 @@ ReturnCode_t PublisherImpl::set_listener(
         PublisherListener* listener)
 {
     listener_ = listener;
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 void PublisherImpl::PublisherWriterListener::on_publication_matched(
@@ -193,7 +200,7 @@ void PublisherImpl::PublisherWriterListener::on_liveliness_lost(
 
 void PublisherImpl::PublisherWriterListener::on_offered_deadline_missed(
         DataWriter* writer,
-        const OfferedDeadlineMissedStatus& status)
+        const fastrtps::OfferedDeadlineMissedStatus& status)
 {
     if (publisher_->listener_ != nullptr)
     {
@@ -206,7 +213,7 @@ DataWriterImpl* PublisherImpl::create_datawriter_impl(
         Topic* topic,
         const DataWriterQos& qos,
         DataWriterListener* listener,
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
 {
     return new DataWriterImpl(this, type, topic, qos, listener, payload_pool);
 }
@@ -216,7 +223,7 @@ DataWriter* PublisherImpl::create_datawriter(
         const DataWriterQos& qos,
         DataWriterListener* listener,
         const StatusMask& mask,
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
 {
     EPROSIMA_LOG_INFO(PUBLISHER, "CREATING WRITER IN TOPIC: " << topic->get_name());
     //Look for the correct type registration
@@ -230,7 +237,7 @@ DataWriter* PublisherImpl::create_datawriter(
         return nullptr;
     }
 
-    if (RETCODE_OK != DataWriterImpl::check_qos_including_resource_limits(qos, type_support))
+    if (!DataWriterImpl::check_qos_including_resource_limits(qos, type_support))
     {
         return nullptr;
     }
@@ -274,7 +281,7 @@ DataWriter* PublisherImpl::create_datawriter(
 
     if (user_publisher_->is_enabled() && qos_.entity_factory().autoenable_created_entities)
     {
-        if (RETCODE_OK != writer->enable())
+        if (ReturnCode_t::RETCODE_OK != writer->enable())
         {
             delete_datawriter(writer);
             return nullptr;
@@ -289,10 +296,10 @@ DataWriter* PublisherImpl::create_datawriter_with_profile(
         const std::string& profile_name,
         DataWriterListener* listener,
         const StatusMask& mask,
-        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
 {
     // TODO (ILG): Change when we have full XML support for DDS QoS profiles
-    xmlparser::PublisherAttributes attr;
+    PublisherAttributes attr;
     if (XMLP_ret::XML_OK == XMLProfileManager::fillPublisherAttributes(profile_name, attr))
     {
         DataWriterQos qos = default_datawriter_qos_;
@@ -308,7 +315,7 @@ ReturnCode_t PublisherImpl::delete_datawriter(
 {
     if (user_publisher_ != writer->get_publisher())
     {
-        return RETCODE_PRECONDITION_NOT_MET;
+        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
     }
     std::unique_lock<std::mutex> lock(mtx_writers_);
     auto vit = writers_.find(writer->get_topic()->get_name());
@@ -320,7 +327,7 @@ ReturnCode_t PublisherImpl::delete_datawriter(
             //First extract the writer from the maps to free the mutex
             DataWriterImpl* writer_impl = *dw_it;
             ReturnCode_t ret_code = writer_impl->check_delete_preconditions();
-            if (RETCODE_OK != ret_code)
+            if (!ret_code)
             {
                 return ret_code;
             }
@@ -335,10 +342,10 @@ ReturnCode_t PublisherImpl::delete_datawriter(
             //Now we can delete it
             writer_impl->get_topic()->get_impl()->dereference();
             delete (writer_impl);
-            return RETCODE_OK;
+            return ReturnCode_t::RETCODE_OK;
         }
     }
-    return RETCODE_ERROR;
+    return ReturnCode_t::RETCODE_ERROR;
 }
 
 DataWriter* PublisherImpl::lookup_datawriter(
@@ -377,7 +384,7 @@ bool PublisherImpl::has_datawriters() const
 }
 
 bool PublisherImpl::contains_entity(
-        const fastdds::rtps::InstanceHandle_t& handle) const
+        const fastrtps::rtps::InstanceHandle_t& handle) const
 {
     std::lock_guard<std::mutex> lock(mtx_writers_);
     for (auto vit : writers_)
@@ -433,23 +440,23 @@ ReturnCode_t PublisherImpl::set_default_datawriter_qos(
     if (&qos == &DATAWRITER_QOS_DEFAULT)
     {
         reset_default_datawriter_qos();
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     ReturnCode_t ret_val = DataWriterImpl::check_qos(qos);
-    if (RETCODE_OK != ret_val)
+    if (!ret_val)
     {
         return ret_val;
     }
     DataWriterImpl::set_qos(default_datawriter_qos_, qos, true);
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 void PublisherImpl::reset_default_datawriter_qos()
 {
     // TODO (ILG): Change when we have full XML support for DDS QoS profiles
     DataWriterImpl::set_qos(default_datawriter_qos_, DATAWRITER_QOS_DEFAULT, true);
-    xmlparser::PublisherAttributes attr;
+    PublisherAttributes attr;
     XMLProfileManager::getDefaultPublisherAttributes(attr);
     utils::set_qos_from_attributes(default_datawriter_qos_, attr);
 }
@@ -459,112 +466,19 @@ const DataWriterQos& PublisherImpl::get_default_datawriter_qos() const
     return default_datawriter_qos_;
 }
 
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_profile(
+const ReturnCode_t PublisherImpl::get_datawriter_qos_from_profile(
         const std::string& profile_name,
         DataWriterQos& qos) const
 {
-    std::string _topic_name;
-    return get_datawriter_qos_from_profile(profile_name, qos, _topic_name);
-}
-
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_profile(
-        const std::string& profile_name,
-        DataWriterQos& qos,
-        std::string& topic_name) const
-{
-    xmlparser::PublisherAttributes attr;
+    PublisherAttributes attr;
     if (XMLP_ret::XML_OK == XMLProfileManager::fillPublisherAttributes(profile_name, attr, false))
     {
         qos = default_datawriter_qos_;
         utils::set_qos_from_attributes(qos, attr);
-        topic_name = attr.topic.getTopicName();
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
-    return RETCODE_BAD_PARAMETER;
-}
-
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos) const
-{
-    std::string _topic_name;
-    return get_datawriter_qos_from_xml(xml, qos, _topic_name);
-}
-
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos,
-        std::string& topic_name) const
-{
-    xmlparser::PublisherAttributes attr;
-    if (XMLP_ret::XML_OK == XMLProfileManager::fill_publisher_attributes_from_xml(xml, attr, false))
-    {
-        qos = default_datawriter_qos_;
-        utils::set_qos_from_attributes(qos, attr);
-        topic_name = attr.topic.getTopicName();
-        return RETCODE_OK;
-    }
-
-    return RETCODE_BAD_PARAMETER;
-}
-
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos,
-        const std::string& profile_name) const
-{
-    std::string _topic_name;
-    return get_datawriter_qos_from_xml(xml, qos, _topic_name, profile_name);
-}
-
-ReturnCode_t PublisherImpl::get_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos,
-        std::string& topic_name,
-        const std::string& profile_name) const
-{
-    if (profile_name.empty())
-    {
-        EPROSIMA_LOG_ERROR(PUBLISHER, "Provided profile name must be non-empty");
-        return RETCODE_BAD_PARAMETER;
-    }
-
-    xmlparser::PublisherAttributes attr;
-    if (XMLP_ret::XML_OK == XMLProfileManager::fill_publisher_attributes_from_xml(xml, attr, true, profile_name))
-    {
-        qos = default_datawriter_qos_;
-        utils::set_qos_from_attributes(qos, attr);
-        topic_name = attr.topic.getTopicName();
-        return RETCODE_OK;
-    }
-
-    return RETCODE_BAD_PARAMETER;
-}
-
-ReturnCode_t PublisherImpl::get_default_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos) const
-{
-    std::string _topic_name;
-    return get_default_datawriter_qos_from_xml(xml, qos, _topic_name);
-}
-
-ReturnCode_t PublisherImpl::get_default_datawriter_qos_from_xml(
-        const std::string& xml,
-        DataWriterQos& qos,
-        std::string& topic_name) const
-{
-    xmlparser::PublisherAttributes attr;
-    if (XMLP_ret::XML_OK == XMLProfileManager::fill_default_publisher_attributes_from_xml(xml, attr, true))
-    {
-        qos = default_datawriter_qos_;
-        utils::set_qos_from_attributes(qos, attr);
-        topic_name = attr.topic.getTopicName();
-        return RETCODE_OK;
-    }
-
-    return RETCODE_BAD_PARAMETER;
+    return ReturnCode_t::RETCODE_BAD_PARAMETER;
 }
 
 ReturnCode_t PublisherImpl::copy_from_topic_qos(
@@ -584,34 +498,34 @@ ReturnCode_t PublisherImpl::copy_from_topic_qos(
     writer_qos.lifespan(topic_qos.lifespan());
     writer_qos.ownership(topic_qos.ownership());
     writer_qos.representation(topic_qos.representation());
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t PublisherImpl::wait_for_acknowledgments(
-        const dds::Duration_t& max_wait)
+        const Duration_t& max_wait)
 {
-    dds::Duration_t current = max_wait;
-    dds::Duration_t begin, end;
+    Duration_t current = max_wait;
+    Duration_t begin, end;
     std::lock_guard<std::mutex> lock(mtx_writers_);
     for (auto& vit : writers_)
     {
         for (DataWriterImpl* dw : vit.second)
         {
             participant_->get_current_time(begin);
-            if (RETCODE_OK != dw->wait_for_acknowledgments(current))
+            if (!dw->wait_for_acknowledgments(current))
             {
-                return RETCODE_ERROR;
+                return ReturnCode_t::RETCODE_ERROR;
             }
             // Check ellapsed time and decrement
             participant_->get_current_time(end);
             current = current - (end - begin);
-            if (current < fastdds::dds::c_TimeZero)
+            if (current < fastrtps::c_TimeZero)
             {
-                return RETCODE_TIMEOUT;
+                return ReturnCode_t::RETCODE_TIMEOUT;
             }
         }
     }
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 const DomainParticipant* PublisherImpl::get_participant() const
@@ -627,7 +541,7 @@ const Publisher* PublisherImpl::get_publisher() const
 ReturnCode_t PublisherImpl::delete_contained_entities()
 {
     // Let's be optimistic
-    ReturnCode_t result = RETCODE_OK;
+    ReturnCode_t result = ReturnCode_t::RETCODE_OK;
 
     bool can_be_deleted = true;
 
@@ -636,10 +550,10 @@ ReturnCode_t PublisherImpl::delete_contained_entities()
     {
         for (DataWriterImpl* dw: writer.second)
         {
-            can_be_deleted = dw->check_delete_preconditions() == RETCODE_OK;
+            can_be_deleted = dw->check_delete_preconditions() == ReturnCode_t::RETCODE_OK;
             if (!can_be_deleted)
             {
-                return RETCODE_PRECONDITION_NOT_MET;
+                return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
             }
         }
     }
@@ -652,9 +566,9 @@ ReturnCode_t PublisherImpl::delete_contained_entities()
         auto it = writer_iterator->second.begin();
         DataWriterImpl* writer_impl = *it;
         ReturnCode_t ret_code = writer_impl->check_delete_preconditions();
-        if (RETCODE_OK != ret_code)
+        if (!ret_code)
         {
-            return RETCODE_ERROR;
+            return ReturnCode_t::RETCODE_ERROR;
         }
         writer_impl->set_listener(nullptr);
         it = writer_iterator->second.erase(it);
@@ -678,7 +592,7 @@ bool PublisherImpl::can_be_deleted()
     {
         for (DataWriterImpl* dw : topic_writers.second)
         {
-            can_be_deleted = can_be_deleted && (dw->check_delete_preconditions() == RETCODE_OK);
+            can_be_deleted = can_be_deleted && (dw->check_delete_preconditions() == ReturnCode_t::RETCODE_OK);
             if (!can_be_deleted)
             {
                 return can_be_deleted;
@@ -688,41 +602,6 @@ bool PublisherImpl::can_be_deleted()
     }
 
     return can_be_deleted;
-}
-
-bool PublisherImpl::can_be_deleted(
-        DataWriter* writer) const
-{
-    if (!writer)
-    {
-        EPROSIMA_LOG_ERROR(PUBLISHER, "DataWriter is nullptr.");
-        return false;
-    }
-
-    if (user_publisher_ != writer->get_publisher())
-    {
-        EPROSIMA_LOG_ERROR(PUBLISHER, "DataWriter does not belong to this Publisher.");
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(mtx_writers_);
-    auto it = writers_.find(writer->get_topic()->get_name());
-
-    if (it != writers_.end())
-    {
-        auto dw_it = std::find(it->second.begin(), it->second.end(), writer->impl_);
-
-        if (dw_it == it->second.end())
-        {
-            EPROSIMA_LOG_ERROR(PUBLISHER, "DataWriter implementation not found.");
-            return false;
-        }
-
-        return (*dw_it)->check_delete_preconditions() == RETCODE_OK;
-    }
-
-    EPROSIMA_LOG_ERROR(PUBLISHER, "DataWriter not found.");
-    return false;
 }
 
 const InstanceHandle_t& PublisherImpl::get_instance_handle() const
@@ -776,7 +655,7 @@ ReturnCode_t PublisherImpl::check_qos(
         const PublisherQos& qos)
 {
     (void) qos;
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 bool PublisherImpl::can_qos_be_updated(
@@ -802,7 +681,7 @@ PublisherListener* PublisherImpl::get_listener_for(
 #ifdef FASTDDS_STATISTICS
 bool PublisherImpl::get_monitoring_status(
         statistics::MonitorServiceData& status,
-        const fastdds::rtps::GUID_t& entity_guid)
+        const fastrtps::rtps::GUID_t& entity_guid)
 {
     bool ret = false;
     std::vector<DataWriter*> writers;
@@ -814,7 +693,7 @@ bool PublisherImpl::get_monitoring_status(
             {
                 switch (status._d())
                 {
-                    case statistics::StatusKind::INCOMPATIBLE_QOS:
+                    case statistics::INCOMPATIBLE_QOS:
                     {
                         OfferedIncompatibleQosStatus incompatible_qos_status;
                         writer->get_offered_incompatible_qos_status(incompatible_qos_status);
@@ -831,13 +710,13 @@ bool PublisherImpl::get_monitoring_status(
                         break;
                     }
                     //! TODO
-                    /*case statistics::StatusKind::INCONSISTENT_TOPIC:
+                    /*case statistics::INCONSISTENT_TOPIC:
                        {
                         writer->get_inconsistent_topic_status();
                         ret = true;
                         break;
                        }*/
-                    case statistics::StatusKind::LIVELINESS_LOST:
+                    case statistics::LIVELINESS_LOST:
                     {
                         LivelinessLostStatus liveliness_lost_status;
                         writer->get_liveliness_lost_status(liveliness_lost_status);
@@ -845,7 +724,7 @@ bool PublisherImpl::get_monitoring_status(
                         ret = true;
                         break;
                     }
-                    case statistics::StatusKind::DEADLINE_MISSED:
+                    case statistics::DEADLINE_MISSED:
                     {
                         DeadlineMissedStatus deadline_missed_status;
                         writer->get_offered_deadline_missed_status(deadline_missed_status);
