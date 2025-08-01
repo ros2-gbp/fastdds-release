@@ -35,6 +35,7 @@
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/domain/DomainParticipantImpl.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 #include <fastdds/rtps/participant/RTPSParticipant.h>
 #include <fastdds/rtps/reader/RTPSReader.h>
 #include <fastdds/rtps/resources/ResourceEvent.h>
@@ -387,28 +388,6 @@ bool DataReaderImpl::wait_for_unread_message(
 void DataReaderImpl::set_read_communication_status(
         bool trigger_value)
 {
-    if (trigger_value)
-    {
-        auto user_reader = user_datareader_;
-
-        //First check if we can handle with on_data_on_readers
-        SubscriberListener* subscriber_listener =
-                subscriber_->get_listener_for(StatusMask::data_on_readers());
-        if (subscriber_listener != nullptr)
-        {
-            subscriber_listener->on_data_on_readers(subscriber_->user_subscriber_);
-        }
-        else
-        {
-            // If not, try with on_data_available
-            DataReaderListener* listener = get_listener_for(StatusMask::data_available());
-            if (listener != nullptr)
-            {
-                listener->on_data_available(user_reader);
-            }
-        }
-    }
-
     StatusMask notify_status = StatusMask::data_on_readers();
     subscriber_->user_subscriber_->get_statuscondition().get_impl()->set_status(notify_status, trigger_value);
 
@@ -740,6 +719,11 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
         return ReturnCode_t::RETCODE_NOT_ENABLED;
     }
 
+    if (history_.getHistorySize() == 0)
+    {
+        return ReturnCode_t::RETCODE_NO_DATA;
+    }
+
 #if HAVE_STRICT_REALTIME
     auto max_blocking_time = std::chrono::steady_clock::now() +
             std::chrono::microseconds(::TimeConv::Time_t2MicroSecondsInt64(qos_.reliability().max_blocking_time));
@@ -934,6 +918,25 @@ void DataReaderImpl::InnerDataReaderListener::on_data_available(
 
     if (data_reader_->on_data_available(writer_guid, first_sequence, last_sequence))
     {
+        auto user_reader = data_reader_->user_datareader_;
+
+        //First check if we can handle with on_data_on_readers
+        SubscriberListener* subscriber_listener =
+                data_reader_->subscriber_->get_listener_for(StatusMask::data_on_readers());
+        if (subscriber_listener != nullptr)
+        {
+            subscriber_listener->on_data_on_readers(data_reader_->subscriber_->user_subscriber_);
+        }
+        else
+        {
+            // If not, try with on_data_available
+            DataReaderListener* listener = data_reader_->get_listener_for(StatusMask::data_available());
+            if (listener != nullptr)
+            {
+                listener->on_data_available(user_reader);
+            }
+        }
+
         data_reader_->set_read_communication_status(true);
     }
 }
@@ -1103,7 +1106,7 @@ bool DataReaderImpl::on_new_cache_change_added(
     {
         if (!history_.set_next_deadline(
                     change->instanceHandle,
-                    steady_clock::now() + duration_cast<system_clock::duration>(deadline_duration_us_)))
+                    steady_clock::now() + duration_cast<steady_clock::duration>(deadline_duration_us_)))
         {
             EPROSIMA_LOG_ERROR(SUBSCRIBER, "Could not set next deadline in the history");
         }
@@ -1122,12 +1125,13 @@ bool DataReaderImpl::on_new_cache_change_added(
         return true;
     }
 
-    auto source_timestamp = system_clock::time_point() + nanoseconds(change->sourceTimestamp.to_ns());
-    auto now = system_clock::now();
+    fastrtps::rtps::Time_t expiration_ts = change->sourceTimestamp + qos_.lifespan().duration;
+    fastrtps::rtps::Time_t current_ts;
+    fastrtps::rtps::Time_t::now(current_ts);
 
     // The new change could have expired if it arrived too late
     // If so, remove it from the history and return false to avoid notifying the listener
-    if (now - source_timestamp >= lifespan_duration_us_)
+    if (expiration_ts <= current_ts)
     {
         history_.remove_change_sub(new_change);
         return false;
@@ -1149,11 +1153,10 @@ bool DataReaderImpl::on_new_cache_change_added(
         EPROSIMA_LOG_ERROR(SUBSCRIBER, "A change was added to history that could not be retrieved");
     }
 
-    auto interval = source_timestamp - now + duration_cast<nanoseconds>(lifespan_duration_us_);
-
     // Update and restart the timer
     // If the timer is already running this will not have any effect
-    lifespan_timer_->update_interval_millisec(interval.count() * 1e-6);
+    fastrtps::rtps::Time_t interval = expiration_ts - current_ts;
+    lifespan_timer_->update_interval_millisec(interval.to_ns() * 1e-6);
     lifespan_timer_->restart_timer();
     return true;
 }
@@ -1173,10 +1176,7 @@ void DataReaderImpl::update_subscription_matched_status(
 
     if (count_change < 0)
     {
-        if (history_.writer_not_alive(iHandle2GUID(status.last_publication_handle)))
-        {
-            set_read_communication_status(true);
-        }
+        history_.writer_not_alive(iHandle2GUID(status.last_publication_handle));
         try_notify_read_conditions();
     }
 }
@@ -1244,7 +1244,7 @@ bool DataReaderImpl::deadline_missed()
 
     if (!history_.set_next_deadline(
                 timer_owner_,
-                steady_clock::now() + duration_cast<system_clock::duration>(deadline_duration_us_), true))
+                steady_clock::now() + duration_cast<steady_clock::duration>(deadline_duration_us_), true))
     {
         EPROSIMA_LOG_ERROR(SUBSCRIBER, "Could not set next deadline in the history");
         return false;
@@ -1275,17 +1275,19 @@ bool DataReaderImpl::lifespan_expired()
 {
     std::unique_lock<RecursiveTimedMutex> lock(reader_->getMutex());
 
+    fastrtps::rtps::Time_t current_ts;
+    fastrtps::rtps::Time_t::now(current_ts);
+
     CacheChange_t* earliest_change;
     while (history_.get_earliest_change(&earliest_change))
     {
-        auto source_timestamp = system_clock::time_point() + nanoseconds(earliest_change->sourceTimestamp.to_ns());
-        auto now = system_clock::now();
+        fastrtps::rtps::Time_t expiration_ts = earliest_change->sourceTimestamp + qos_.lifespan().duration;
 
         // Check that the earliest change has expired (the change which started the timer could have been removed from the history)
-        if (now - source_timestamp < lifespan_duration_us_)
+        if (current_ts < expiration_ts)
         {
-            auto interval = source_timestamp - now + lifespan_duration_us_;
-            lifespan_timer_->update_interval_millisec(static_cast<double>(duration_cast<milliseconds>(interval).count()));
+            fastrtps::rtps::Time_t interval = expiration_ts - current_ts;
+            lifespan_timer_->update_interval_millisec(interval.to_ns() * 1e-6);
             return true;
         }
 
@@ -1293,23 +1295,6 @@ bool DataReaderImpl::lifespan_expired()
         history_.remove_change_sub(earliest_change);
 
         try_notify_read_conditions();
-
-        // Set the timer for the next change if there is one
-        if (!history_.get_earliest_change(&earliest_change))
-        {
-            return false;
-        }
-
-        // Calculate when the next change is due to expire and restart
-        source_timestamp = system_clock::time_point() + nanoseconds(earliest_change->sourceTimestamp.to_ns());
-        now = system_clock::now();
-        auto interval = source_timestamp - now + lifespan_duration_us_;
-
-        if (interval.count() > 0)
-        {
-            lifespan_timer_->update_interval_millisec(static_cast<double>(duration_cast<milliseconds>(interval).count()));
-            return true;
-        }
     }
 
     return false;
@@ -1464,10 +1449,7 @@ LivelinessChangedStatus& DataReaderImpl::update_liveliness_status(
 {
     if (0 < status.not_alive_count_change)
     {
-        if (history_.writer_not_alive(iHandle2GUID(status.last_publication_handle)))
-        {
-            set_read_communication_status(true);
-        }
+        history_.writer_not_alive(iHandle2GUID(status.last_publication_handle));
         try_notify_read_conditions();
     }
 
