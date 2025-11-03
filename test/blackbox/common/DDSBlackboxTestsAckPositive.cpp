@@ -35,27 +35,18 @@
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
-#include <fastrtps/utils/TimeConversion.h>
-#include <fastrtps/transport/test_UDPv4TransportDescriptor.h>
-#include <rtps/transport/test_UDPv4Transport.h>
-#include <fastrtps/types/TypesBase.h>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 
 #include "BlackboxTests.hpp"
 #include "../api/dds-pim/CustomPayloadPool.hpp"
 #include "../api/dds-pim/PubSubReader.hpp"
 #include "../api/dds-pim/PubSubWriter.hpp"
-#include "../api/dds-pim/ReqRepAsReliableHelloWorldRequester.hpp"
-#include "../api/dds-pim/ReqRepAsReliableHelloWorldReplier.hpp"
-#include "../types/FixedSized.h"
-#include "../types/FixedSizedPubSubTypes.h"
-#include "../types/HelloWorldPubSubTypes.h"
+#include "../types/FixedSized.hpp"
+#include "../types/FixedSizedPubSubTypes.hpp"
+#include "../types/HelloWorldPubSubTypes.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using test_UDPv4Transport = eprosima::fastdds::rtps::test_UDPv4Transport;
-using test_UDPv4TransportDescriptor = eprosima::fastdds::rtps::test_UDPv4TransportDescriptor;
-
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 TEST(AcknackQos, DDSEnableUpdatabilityOfPositiveAcksPeriodDDSLayer)
 {
@@ -68,15 +59,15 @@ TEST(AcknackQos, DDSEnableUpdatabilityOfPositiveAcksPeriodDDSLayer)
 
     // Configure datapublisher_qos
     writer.keep_duration({1, 0});
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.durability_kind(eprosima::fastrtps::VOLATILE_DURABILITY_QOS);
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS);
     writer.init();
 
     ASSERT_TRUE(writer.isInitialized());
 
     // Configure datasubscriber_qos
     reader.keep_duration({1, 0});
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     reader.init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -84,7 +75,7 @@ TEST(AcknackQos, DDSEnableUpdatabilityOfPositiveAcksPeriodDDSLayer)
     // Check correct initialitation
     eprosima::fastdds::dds::DataWriterQos get_att = writer.get_qos();
     EXPECT_TRUE(get_att.reliable_writer_qos().disable_positive_acks.enabled);
-    EXPECT_EQ(get_att.reliable_writer_qos().disable_positive_acks.duration, eprosima::fastrtps::Duration_t({1, 0}));
+    EXPECT_EQ(get_att.reliable_writer_qos().disable_positive_acks.duration, eprosima::fastdds::dds::Duration_t({1, 0}));
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -115,14 +106,14 @@ TEST(AcknackQos, DDSEnableUpdatabilityOfPositiveAcksPeriodDDSLayer)
     // Update attributes on DDS layer
     eprosima::fastdds::dds::DataWriterQos w_att = writer.get_qos();
     w_att.reliable_writer_qos().disable_positive_acks.enabled = true;
-    w_att.reliable_writer_qos().disable_positive_acks.duration = eprosima::fastrtps::Duration_t({2, 0});
+    w_att.reliable_writer_qos().disable_positive_acks.duration = eprosima::fastdds::dds::Duration_t({2, 0});
 
     EXPECT_TRUE(writer.set_qos(w_att));
 
     // Check that period has been changed in DataWriterQos
     get_att = writer.get_qos();
     EXPECT_TRUE(get_att.reliable_writer_qos().disable_positive_acks.enabled);
-    EXPECT_EQ(get_att.reliable_writer_qos().disable_positive_acks.duration, eprosima::fastrtps::Duration_t({2, 0}));
+    EXPECT_EQ(get_att.reliable_writer_qos().disable_positive_acks.duration, eprosima::fastdds::dds::Duration_t({2, 0}));
 
     data = default_helloworld_data_generator();
 
@@ -157,23 +148,23 @@ TEST(AcknackQos, RecoverAfterLosingCommunicationWithDisablePositiveAck)
     // Number of samples written by writer
     uint32_t writer_samples = 15;
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
 
     writer.keep_duration({2, 0});
-    //writer.history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS);
-    writer.history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+    //writer.history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS);
+    writer.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
     //writer.history_depth(15);
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     //writer.lifespan_period(lifespan_s);
     writer.disable_builtin_transport();
-    writer.add_user_transport_to_pparams(testTransport);
+    writer.add_user_transport_to_pparams(test_transport);
     writer.init();
 
     reader.keep_duration({1, 0});
-    //reader.history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS);
-    reader.history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+    //reader.history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS);
+    reader.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
     //reader.history_depth(15);
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     //reader.lifespan_period(lifespan_s);
     reader.init();
 
@@ -193,7 +184,7 @@ TEST(AcknackQos, RecoverAfterLosingCommunicationWithDisablePositiveAck)
     // Block reader until reception finished or timeout.
     reader.block_for_all();
 
-    test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = true;
+    test_transport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = true;
 
     data = default_helloworld_data_generator(writer_samples);
     reader.startReception(data);
@@ -204,7 +195,7 @@ TEST(AcknackQos, RecoverAfterLosingCommunicationWithDisablePositiveAck)
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = false;
+    test_transport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = false;
 
     // Block reader until reception finished or timeout.
     reader.block_for_all();
@@ -223,23 +214,23 @@ TEST(AcknackQos, NotRecoverAfterLosingCommunicationWithDisablePositiveAck)
     // Number of samples written by writer
     uint32_t writer_samples = 15;
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
 
     writer.keep_duration({1, 0});
-    //writer.history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS);
-    writer.history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+    //writer.history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS);
+    writer.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
     //writer.history_depth(15);
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     //writer.lifespan_period(lifespan_s);
     writer.disable_builtin_transport();
-    writer.add_user_transport_to_pparams(testTransport);
+    writer.add_user_transport_to_pparams(test_transport);
     writer.init();
 
     reader.keep_duration({1, 0});
-    //reader.history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS);
-    reader.history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+    //reader.history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS);
+    reader.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
     //reader.history_depth(15);
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     //reader.lifespan_period(lifespan_s);
     reader.init();
 
@@ -259,7 +250,7 @@ TEST(AcknackQos, NotRecoverAfterLosingCommunicationWithDisablePositiveAck)
     // Block reader until reception finished or timeout.
     reader.block_for_all();
 
-    test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = true;
+    test_transport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = true;
 
     data = default_helloworld_data_generator(writer_samples);
     reader.startReception(data);
@@ -270,7 +261,7 @@ TEST(AcknackQos, NotRecoverAfterLosingCommunicationWithDisablePositiveAck)
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = false;
+    test_transport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = false;
 
     // Block reader until reception finished or timeout.
     ASSERT_EQ(reader.block_for_all(std::chrono::seconds(1)), 0u);
@@ -285,12 +276,12 @@ TEST(AcknackQos, DisablePositiveAcksWithBestEffortReader)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     writer.keep_duration({2, 0});
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.durability_kind(eprosima::fastrtps::VOLATILE_DURABILITY_QOS);
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS);
     writer.init();
 
     reader.keep_duration({1, 0});
-    reader.reliability(eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS);
+    reader.reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS);
     reader.init();
 
     ASSERT_TRUE(reader.isInitialized());

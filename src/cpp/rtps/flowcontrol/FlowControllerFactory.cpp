@@ -7,22 +7,15 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-const char* const pure_sync_flow_controller_name = "PureSyncFlowController";
-const char* const sync_flow_controller_name = "SyncFlowController";
-const char* const async_flow_controller_name = "AsyncFlowController";
-#ifdef FASTDDS_STATISTICS
-const char* const async_statistics_flow_controller_name = "AsyncStatisticsFlowController";
-#endif // ifndef FASTDDS_STATISTICS
-
 void FlowControllerFactory::init(
-        fastrtps::rtps::RTPSParticipantImpl* participant)
+        fastdds::rtps::RTPSParticipantImpl* participant)
 {
     participant_ = participant;
     // Create default flow controllers.
 
     const ThreadSettings& sender_thread_settings =
             (nullptr == participant_) ? ThreadSettings{}
-            : participant_->getAttributes().builtin_controllers_sender_thread;
+            : participant_->get_attributes().builtin_controllers_sender_thread;
 
     // PureSyncFlowController -> used by volatile besteffort writers.
     flow_controllers_.insert(decltype(flow_controllers_)::value_type(
@@ -157,16 +150,16 @@ void FlowControllerFactory::register_flow_controller (
  */
 FlowController* FlowControllerFactory::retrieve_flow_controller(
         const std::string& flow_controller_name,
-        const fastrtps::rtps::WriterAttributes& writer_attributes)
+        const fastdds::rtps::WriterAttributes& writer_attributes)
 {
     FlowController* returned_flow = nullptr;
 
     // Detect it has to be returned a default flow_controller.
     if (0 == flow_controller_name.compare(FASTDDS_FLOW_CONTROLLER_DEFAULT))
     {
-        if (fastrtps::rtps::SYNCHRONOUS_WRITER == writer_attributes.mode)
+        if (fastdds::rtps::SYNCHRONOUS_WRITER == writer_attributes.mode)
         {
-            if (fastrtps::rtps::BEST_EFFORT == writer_attributes.endpoint.reliabilityKind)
+            if (fastdds::rtps::BEST_EFFORT == writer_attributes.endpoint.reliabilityKind)
             {
                 returned_flow = flow_controllers_[pure_sync_flow_controller_name].get();
             }
@@ -183,7 +176,7 @@ FlowController* FlowControllerFactory::retrieve_flow_controller(
 #ifdef FASTDDS_STATISTICS
     else if (0 == flow_controller_name.compare(FASTDDS_STATISTICS_FLOW_CONTROLLER_DEFAULT))
     {
-        assert(fastrtps::rtps::ASYNCHRONOUS_WRITER == writer_attributes.mode);
+        assert(fastdds::rtps::ASYNCHRONOUS_WRITER == writer_attributes.mode);
         returned_flow = flow_controllers_[async_statistics_flow_controller_name].get();
     }
 #endif // ifdef FASTDDS_STATISTICS

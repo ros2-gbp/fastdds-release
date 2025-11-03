@@ -22,13 +22,12 @@
 
 #include <vector>
 
-#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Guid.hpp>
 #include <fastdds/statistics/rtps/monitor_service/connections_fwd.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace statistics {
-
 namespace rtps {
 
 struct IConnectionsQueryable
@@ -43,7 +42,7 @@ struct IConnectionsQueryable
      * @return Whether the list of connnections could be retrieved
      */
     virtual bool get_entity_connections(
-            const fastrtps::rtps::GUID_t& guid,
+            const fastdds::rtps::GUID_t& guid,
             ConnectionList& conns_list) = 0;
 };
 

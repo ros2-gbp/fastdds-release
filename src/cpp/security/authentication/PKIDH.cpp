@@ -18,18 +18,22 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <security/authentication/PKIDH.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <fastdds/rtps/security/logging/Logging.h>
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
 
 #include <openssl/opensslv.h>
 
 #include <fastdds/core/policy/ParameterList.hpp>
+#include <fastdds/dds/log/Log.hpp>
+
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/security/logging/Logging.h>
+#include <rtps/messages/CDRMessage.hpp>
+#include <security/authentication/PKIIdentityHandle.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -61,9 +65,11 @@
 #define LOCATION " (" __FILE__ ":" S2(__LINE__) ")"
 #define _SecurityException_(str) SecurityException(std::string(str) + LOCATION)
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using namespace security;
 
 using ParameterList = eprosima::fastdds::dds::ParameterList;
 
@@ -1118,7 +1124,7 @@ ValidationResult_t PKIDH::validate_local_identity(
         password = &empty_password;
     }
 
-    std::string key_agreement_algorithm = DH_2048_256;
+    std::string key_agreement_algorithm = "AUTO";
     std::string* key_agreement_property =
             PropertyPolicyHelper::find_property(auth_properties, "preferred_key_agreement");
     if (nullptr != key_agreement_property)
@@ -2700,3 +2706,7 @@ bool PKIDH::check_guid_comes_from(
     return adjusted == original;
 
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

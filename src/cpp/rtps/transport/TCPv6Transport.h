@@ -21,8 +21,8 @@
 
 #include <asio.hpp>
 
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 #include <rtps/transport/tcp/RTCPHeader.h>
 
@@ -85,7 +85,7 @@ protected:
     }
 
     virtual bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
 
@@ -97,6 +97,10 @@ protected:
 
     bool is_locator_allowed(
             const Locator& locator) const override;
+
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
 
     //! Checks if the interfaces white list is empty.
     virtual bool is_interface_whitelist_empty() const override;
@@ -129,7 +133,7 @@ protected:
 
 public:
 
-    RTPS_DllAPI TCPv6Transport(
+    FASTDDS_EXPORTED_API TCPv6Transport(
             const TCPv6TransportDescriptor&);
 
     virtual ~TCPv6Transport() override;

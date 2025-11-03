@@ -18,16 +18,21 @@
 
 #include <statistics/rtps/monitor-service/MonitorService.hpp>
 
+#include <fastdds/rtps/builtin/data/TopicDescription.hpp>
+
+#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/publisher/DataWriterHistory.hpp>
 #include <fastdds/statistics/topic_names.hpp>
-#include <fastrtps/utils/TimeConversion.h>
 
+#include <rtps/history/CacheChangePool.h>
 #include <rtps/history/PoolConfig.h>
 #include <rtps/history/TopicPayloadPoolRegistry.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
 #include <statistics/rtps/StatisticsBase.hpp>
+#include <utils/TimeConversion.hpp>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 namespace eprosima {
 namespace fastdds {
@@ -35,7 +40,7 @@ namespace statistics {
 namespace rtps {
 
 MonitorService::MonitorService(
-        const fastrtps::rtps::GUID_t& guid,
+        const fastdds::rtps::GUID_t& guid,
         IProxyQueryable* proxy_q,
         IConnectionsQueryable* conns_q,
         IStatusQueryable& status_q,
@@ -152,8 +157,16 @@ bool MonitorService::disable_monitor_service()
 }
 
 bool MonitorService::remove_local_entity(
-        const fastrtps::rtps::EntityId_t& entity_id)
+        const fastdds::rtps::EntityId_t& entity_id)
 {
+    // Remove the entity from the extended incompatible QoS collection
+    {
+        std::lock_guard<std::mutex> lock(extended_incompatible_qos_mtx_);
+        GUID_t entity_guid = {local_participant_guid_.guidPrefix, entity_id};
+        extended_incompatible_qos_collection_.erase(entity_guid);
+    }
+
+    // Remove the entity from the local entities
     {
         std::lock_guard<std::mutex> lock (mtx_);
 
@@ -161,6 +174,11 @@ bool MonitorService::remove_local_entity(
         if (!local_entities_[entity_id].second)
         {
             changed_entities_.push_back(entity_id);
+            if (!timer_active_.load())
+            {
+                event_->restart_timer();
+                timer_active_.store(true);
+            }
         }
 
         //! But remove it from the collection of entities
@@ -176,9 +194,9 @@ bool MonitorService::initialize_entity(
 {
     bool retcode = false;
 
-    std::pair<EntityId_t, std::pair<std::bitset<STATUSES_SIZE>, bool>> local_entity;
-    local_entity.second.first[PROXY] = 1;
-    local_entity.second.first[CONNECTION_LIST] = 1;
+    std::pair<EntityId_t, std::pair<std::bitset<StatusKind::STATUSES_SIZE>, bool>> local_entity;
+    local_entity.second.first[StatusKind::PROXY] = 1;
+    local_entity.second.first[StatusKind::CONNECTION_LIST] = 1;
     local_entity.first = entity_id;
     local_entity.second.second = true;
 
@@ -198,7 +216,7 @@ bool MonitorService::initialize_entity(
 }
 
 bool MonitorService::push_entity_update(
-        const fastrtps::rtps::EntityId_t& entity_id,
+        const fastdds::rtps::EntityId_t& entity_id,
         const uint32_t& status_id)
 {
     bool ret = false;
@@ -220,7 +238,8 @@ bool MonitorService::push_entity_update(
         }
         else
         {
-            if (entity_id != monitor_service_status_writer && status_id != PROXY && status_id != CONNECTION_LIST)
+            if (entity_id != monitor_service_status_writer && status_id != StatusKind::PROXY &&
+                    status_id != StatusKind::CONNECTION_LIST)
             {
                 EPROSIMA_LOG_ERROR(MONITOR_SERVICE,
                         "Trying to update the status of an entity without previously initialize it");
@@ -246,8 +265,8 @@ bool MonitorService::push_entity_update(
 }
 
 bool MonitorService::write_status(
-        const fastrtps::rtps::EntityId_t& entity_id,
-        const std::bitset<STATUSES_SIZE>& changed_statuses,
+        const fastdds::rtps::EntityId_t& entity_id,
+        const std::bitset<StatusKind::STATUSES_SIZE>& changed_statuses,
         const bool& entity_disposed)
 {
     if (!entity_disposed)
@@ -265,8 +284,9 @@ bool MonitorService::write_status(
                 bool status_retrieved = true;
                 switch (i)
                 {
-                    case PROXY:
+                    case StatusKind::PROXY:
                     {
+                        data.entity_proxy({});
                         CDRMessage_t msg;
                         //! Depending on the entity type [Participant, Writer, Reader]
                         //! the size will be accordingly calculated
@@ -274,48 +294,55 @@ bool MonitorService::write_status(
                         data.entity_proxy().assign(msg.buffer, msg.buffer + msg.length);
                         break;
                     }
-                    case CONNECTION_LIST:
+                    case StatusKind::CONNECTION_LIST:
                     {
+                        data.connection_list({});
                         std::vector<statistics::Connection> conns;
                         status_retrieved = conns_queryable_->get_entity_connections(local_entity_guid, conns);
                         data.connection_list(conns);
                         break;
                     }
-                    case INCOMPATIBLE_QOS:
+                    case StatusKind::INCOMPATIBLE_QOS:
                     {
                         data.incompatible_qos_status(IncompatibleQoSStatus_s{});
                         status_retrieved = status_queryable_.get_monitoring_status(local_entity_guid, data);
                         break;
                     }
                     //Not triggered for the moment
-                    case INCONSISTENT_TOPIC:
+                    case StatusKind::INCONSISTENT_TOPIC:
                     {
                         EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Inconsistent topic status not supported yet");
                         static_cast<void>(local_entity_guid);
                         break;
                     }
-                    case LIVELINESS_LOST:
+                    case StatusKind::LIVELINESS_LOST:
                     {
                         data.liveliness_lost_status(LivelinessLostStatus_s{});
                         status_retrieved = status_queryable_.get_monitoring_status(local_entity_guid, data);
                         break;
                     }
-                    case LIVELINESS_CHANGED:
+                    case StatusKind::LIVELINESS_CHANGED:
                     {
                         data.liveliness_changed_status(LivelinessChangedStatus_s{});
                         status_retrieved = status_queryable_.get_monitoring_status(local_entity_guid, data);
                         break;
                     }
-                    case DEADLINE_MISSED:
+                    case StatusKind::DEADLINE_MISSED:
                     {
                         data.deadline_missed_status(DeadlineMissedStatus_s{});
                         status_retrieved = status_queryable_.get_monitoring_status(local_entity_guid, data);
                         break;
                     }
-                    case SAMPLE_LOST:
+                    case StatusKind::SAMPLE_LOST:
                     {
                         data.sample_lost_status(SampleLostStatus_s{});
                         status_retrieved = status_queryable_.get_monitoring_status(local_entity_guid, data);
+                        break;
+                    }
+                    case StatusKind::EXTENDED_INCOMPATIBLE_QOS:
+                    {
+                        std::lock_guard<std::mutex> lock(extended_incompatible_qos_mtx_);
+                        data.extended_incompatible_qos_status(extended_incompatible_qos_collection_[local_entity_guid]);
                         break;
                     }
                     default:
@@ -328,7 +355,7 @@ bool MonitorService::write_status(
 
                 if (status_retrieved)
                 {
-                    status_data.status_kind((StatusKind)i);
+                    status_data.status_kind(static_cast<StatusKind::StatusKind>(i));
                     status_data.value(data);
                     add_change(status_data, false);
                 }
@@ -347,7 +374,7 @@ bool MonitorService::write_status(
 
         status_data.local_entity(to_statistics_type({local_participant_guid_.guidPrefix, entity_id}));
 
-        status_data.status_kind(PROXY);
+        status_data.status_kind(StatusKind::PROXY);
         status_data.value().entity_proxy(std::vector<uint8_t>());
 
         //! Communicate the application what entity was removed
@@ -355,9 +382,9 @@ bool MonitorService::write_status(
         add_change(status_data, false);
 
         //! Send a dispose for every statuskind of this entity
-        for (uint32_t i = PROXY; i < STATUSES_SIZE; i++)
+        for (uint32_t i = StatusKind::PROXY; i < StatusKind::STATUSES_SIZE; i++)
         {
-            status_data.status_kind((StatusKind)i);
+            status_data.status_kind(i);
             add_change(status_data, true);
         }
     }
@@ -370,21 +397,29 @@ bool MonitorService::add_change(
         const bool& disposed)
 {
     InstanceHandle_t handle;
-    type_.getKey(&status_data, &handle, false);
+    type_.compute_key(&status_data, handle, false);
 
-    CacheChange_t* change = status_writer_->new_change(
-        type_.getSerializedSizeProvider(&status_data),
-        (disposed ? fastrtps::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED : fastrtps::rtps::ALIVE),
+    CacheChange_t* change = status_writer_history_->create_change(
+        (disposed ? fastdds::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED : fastdds::rtps::ALIVE),
         handle);
+    if (nullptr != change)
+    {
+        uint32_t cdr_size = type_.calculate_serialized_size(&status_data, fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        if (!status_writer_payload_pool_->get_payload(cdr_size, change->serializedPayload))
+        {
+            status_writer_history_->release_change(change);
+            change = nullptr;
+        }
+    }
 
     if (nullptr != change)
     {
         CDRMessage_t aux_msg(change->serializedPayload);
 
-        if (!type_.serialize(&status_data, &change->serializedPayload))
+        if (!type_.serialize(&status_data, change->serializedPayload, fastdds::dds::DEFAULT_DATA_REPRESENTATION))
         {
             EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Serialization failed");
-            status_writer_->release_change(change);
+            status_writer_history_->release_change(change);
             return false;
         }
 
@@ -393,13 +428,13 @@ bool MonitorService::add_change(
 
         std::unique_lock<RecursiveTimedMutex> lock(status_writer_->getMutex());
         auto max_blocking_time = std::chrono::steady_clock::now() +
-                std::chrono::microseconds(::TimeConv::Time_t2MicroSecondsInt64(Duration_t()));
+                std::chrono::microseconds(fastdds::rtps::TimeConv::Time_t2MicroSecondsInt64(dds::Duration_t()));
         datawriter_history->add_pub_change(change, wp, lock, max_blocking_time);
     }
     else
     {
-        EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not request a valid CacheChange for " << status_data.status_kind() <<
-                " of " << to_fastdds_type(status_data.local_entity()));
+        EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not request a valid CacheChange for " <<
+                status_data.status_kind() << " of " << to_fastdds_type(status_data.local_entity()));
         return false;
     }
 
@@ -417,7 +452,7 @@ bool MonitorService::create_endpoint()
     RTPSWriter* tmp_writer = nullptr;
 
     WriterAttributes watts;
-    watts.endpoint.endpointKind = fastrtps::rtps::WRITER;
+    watts.endpoint.endpointKind = fastdds::rtps::WRITER;
     watts.endpoint.durabilityKind = TRANSIENT_LOCAL;
     watts.endpoint.reliabilityKind = RELIABLE;
     watts.endpoint.topicKind = WITH_KEY;
@@ -428,35 +463,39 @@ bool MonitorService::create_endpoint()
     watts.endpoint.properties.properties().push_back(std::move(property));
 
     HistoryAttributes hatt;
-    hatt.payloadMaxSize = type_.m_typeSize;
+    hatt.payloadMaxSize = type_.max_serialized_type_size;
     hatt.memoryPolicy = MemoryManagementPolicy_t::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
     hatt.initialReservedCaches = 25;
     hatt.maximumReservedCaches = 0;
 
-    TopicAttributes tatt;
-    tatt.historyQos.kind = KEEP_LAST_HISTORY_QOS;
-    tatt.historyQos.depth = 1;
-    tatt.topicKind = WITH_KEY;
-    tatt.topicName = MONITOR_SERVICE_TOPIC;
-    tatt.resourceLimitsQos.max_instances = 0;
-    tatt.resourceLimitsQos.max_samples_per_instance = 1;
+    dds::HistoryQosPolicy hqos;
+    hqos.kind = dds::KEEP_LAST_HISTORY_QOS;
+    hqos.depth = 1;
 
-    status_writer_history_.reset(new eprosima::fastdds::dds::DataWriterHistory(tatt, type_.m_typeSize,
-            MemoryManagementPolicy_t::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
-            [](
-                const InstanceHandle_t& ) -> void
-            {
-            }));
+    TopicKind_t topic_kind = WITH_KEY;
+
+    dds::ResourceLimitsQosPolicy rl_qos;
+    rl_qos.max_instances = 0;
+    rl_qos.max_samples_per_instance = 1;
 
     PoolConfig writer_pool_cfg = PoolConfig::from_history_attributes(hatt);
     status_writer_payload_pool_ = TopicPayloadPoolRegistry::get(MONITOR_SERVICE_TOPIC, writer_pool_cfg);
     status_writer_payload_pool_->reserve_history(writer_pool_cfg, false);
 
+    status_writer_history_.reset(new eprosima::fastdds::dds::DataWriterHistory(
+                status_writer_payload_pool_,
+                std::make_shared<fastdds::rtps::CacheChangePool>(writer_pool_cfg),
+                hqos, rl_qos, topic_kind, type_.max_serialized_type_size,
+                MemoryManagementPolicy_t::PREALLOCATED_WITH_REALLOC_MEMORY_MODE,
+                [](
+                    const InstanceHandle_t& ) -> void
+                {
+                }));
+
     listener_ = new MonitorServiceListener(this);
 
     created = endpoint_creator_(&tmp_writer,
                     watts,
-                    status_writer_payload_pool_,
                     status_writer_history_.get(),
                     listener_,
                     monitor_service_status_writer,
@@ -467,17 +506,30 @@ bool MonitorService::create_endpoint()
         status_writer_ = dynamic_cast<StatefulWriter*>(tmp_writer);
 
         //! Register the writer in the participant
-        WriterQos wqos;
+        fastdds::dds::WriterQos wqos;
 
-        wqos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
+        wqos.m_reliability.kind = dds::RELIABLE_RELIABILITY_QOS;
         wqos.m_durability.kind = dds::TRANSIENT_LOCAL_DURABILITY_QOS;
 
-        TopicAttributes tatts;
-        tatts.topicName = MONITOR_SERVICE_TOPIC;
-        tatts.topicDataType = type_.getName();
-        tatts.topicKind = WITH_KEY;
+        TopicDescription topic_desc;
+        topic_desc.topic_name = MONITOR_SERVICE_TOPIC;
+        topic_desc.type_name = type_.get_name();
 
-        endpoint_registrator_(status_writer_, tatts, wqos);
+        //! Register and propagate type object representation
+        type_.register_type_object_representation();
+        fastdds::dds::xtypes::TypeInformation type_info;
+        if (fastdds::dds::RETCODE_OK ==
+                RTPSDomainImpl::get_instance()->type_object_registry_observer().get_type_information(
+                    type_.type_identifiers(), type_info))
+        {
+            topic_desc.type_information = type_info;
+        }
+        else
+        {
+            EPROSIMA_LOG_WARNING(MONITOR_SERVICE, "Failed to retrieve type information for " << MONITOR_SERVICE_TOPIC);
+        }
+
+        endpoint_registrator_(status_writer_, topic_desc, wqos);
     }
     else
     {
@@ -492,7 +544,7 @@ bool MonitorService::spin_queue()
 {
     EntityId_t entity_id;
     bool re_schedule = false;
-    std::bitset<STATUSES_SIZE> changed_statuses;
+    std::bitset<StatusKind::STATUSES_SIZE> changed_statuses;
     bool local_instance_disposed = false;
 
     {
@@ -535,6 +587,119 @@ bool MonitorService::spin_queue()
     }
 
     return re_schedule;
+}
+
+void MonitorService::on_incompatible_qos_matching(
+        const fastdds::rtps::GUID_t& local_guid,
+        const fastdds::rtps::GUID_t& remote_guid,
+        const fastdds::dds::PolicyMask& incompatible_qos_policies)
+{
+    // Convert the PolicyMask to a vector of policy ids
+    std::vector<uint32_t> incompatible_policies;
+    for (uint32_t id = 1; id < dds::NEXT_QOS_POLICY_ID; ++id)
+    {
+        if (incompatible_qos_policies.test(id))
+        {
+            incompatible_policies.push_back(id);
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(extended_incompatible_qos_mtx_);
+
+    if (!incompatible_policies.empty())
+    {
+        // Check if the local_guid is already in the collection. If not, create a new entry
+        auto local_entity_incompatibilites =
+                extended_incompatible_qos_collection_.insert({local_guid, {}});
+
+        bool first_incompatibility_with_remote = false;
+
+        // Local entity already in the collection (has any incompatible QoS with any remote entity)
+        if (!local_entity_incompatibilites.second)
+        {
+            // Check if the local entitiy already had an incompatibility with this remote entity
+            auto it = std::find_if(
+                local_entity_incompatibilites.first->second.begin(),
+                local_entity_incompatibilites.first->second.end(),
+                [&remote_guid](const ExtendedIncompatibleQoSStatus_s& status)
+                {
+                    return to_fastdds_type(status.remote_guid()) == remote_guid;
+                });
+
+            if (it == local_entity_incompatibilites.first->second.end())
+            {
+                // First incompatibility with that remote entity
+                first_incompatibility_with_remote = true;
+            }
+            else
+            {
+                // Already had an incompatibility with that remote entity.
+                // Update them
+                it->current_incompatible_policies(incompatible_policies);
+                push_entity_update(local_guid.entityId, StatusKind::EXTENDED_INCOMPATIBLE_QOS);
+            }
+        }
+        else
+        {
+            // This will be the first incompatibility of this entity
+            first_incompatibility_with_remote = true;
+        }
+
+        if (first_incompatibility_with_remote)
+        {
+            ExtendedIncompatibleQoSStatus_s status;
+            status.remote_guid(to_statistics_type(remote_guid));
+            status.current_incompatible_policies(incompatible_policies);
+            local_entity_incompatibilites.first->second.emplace_back(status);
+            push_entity_update(local_guid.entityId, StatusKind::EXTENDED_INCOMPATIBLE_QOS);
+        }
+    }
+    else
+    {
+        // Remove remote guid from the local guid incompatibilities collection
+        auto it = extended_incompatible_qos_collection_.find(local_guid);
+
+        if (it != extended_incompatible_qos_collection_.end())
+        {
+            auto it_remote = std::find_if(
+                it->second.begin(),
+                it->second.end(),
+                [&remote_guid](const ExtendedIncompatibleQoSStatus_s& status)
+                {
+                    return to_fastdds_type(status.remote_guid()) == remote_guid;
+                });
+
+            if (it_remote != it->second.end())
+            {
+                it->second.erase(it_remote);
+                push_entity_update(local_guid.entityId, StatusKind::EXTENDED_INCOMPATIBLE_QOS);
+            }
+        }
+    }
+}
+
+void MonitorService::on_remote_proxy_data_removed(
+        const fastdds::rtps::GUID_t& removed_proxy_guid)
+{
+    auto& ext_incompatible_qos_collection = extended_incompatible_qos_collection_;
+    std::lock_guard<std::mutex> lock(extended_incompatible_qos_mtx_);
+
+    for (auto& local_entity : ext_incompatible_qos_collection)
+    {
+        auto it = std::find_if(
+            local_entity.second.begin(),
+            local_entity.second.end(),
+            [&removed_proxy_guid](const ExtendedIncompatibleQoSStatus_s& status)
+            {
+                return to_fastdds_type(status.remote_guid()) == removed_proxy_guid;
+            });
+
+        if (it != local_entity.second.end())
+        {
+            local_entity.second.erase(it);
+            push_entity_update(local_entity.first.entityId, StatusKind::EXTENDED_INCOMPATIBLE_QOS);
+        }
+    }
 }
 
 } // namespace rtps

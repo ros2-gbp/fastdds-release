@@ -15,16 +15,18 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
-#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
-#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
-#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
-#include <rtps/participant/RTPSParticipantImpl.h>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/builtin/discovery/endpoint/EDP.h>
+#include <rtps/builtin/discovery/participant/PDP.h>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
 
+#if HAVE_SECURITY
+#include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
+#endif // if HAVE_SECURITY
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 using ::testing::Return;
@@ -57,26 +59,26 @@ public:
     {
     }
 
-    bool removeLocalReader(
+    bool remove_reader(
             RTPSReader* /*R*/) override
     {
         return true;
     }
 
-    bool removeLocalWriter(
+    bool remove_writer(
             RTPSWriter* /*W*/) override
     {
         return true;
     }
 
-    bool processLocalReaderProxyData(
+    bool process_reader_proxy_data(
             RTPSReader* /*reader*/,
             ReaderProxyData* /*rdata*/) override
     {
         return true;
     }
 
-    bool processLocalWriterProxyData(
+    bool process_writer_proxy_data(
             RTPSWriter* /*writer*/,
             WriterProxyData* /*wdata*/) override
     {
@@ -92,23 +94,22 @@ protected:
     void SetUp() override
     {
         wdata = new ::testing::NiceMock<WriterProxyData>(1, 1);
-        rdata = new ::testing::NiceMock<ReaderProxyData>(1, 1);
+        rdata = new ::testing::NiceMock<ReaderProxyData>((size_t)1, (size_t)1);
 
         //Same Topic
-        wdata->topicName("Topic");
-        rdata->topicName("Topic");
+        wdata->topic_name = "Topic";
+        rdata->topic_name = "Topic";
 
         //Same Topic Kind
-        wdata->topicKind(TopicKind_t::NO_KEY);
-        rdata->topicKind(TopicKind_t::NO_KEY);
+        wdata->topic_kind = TopicKind_t::NO_KEY;
+        rdata->topic_kind = TopicKind_t::NO_KEY;
 
         //With no type information, only Type name is compared
-        rdata->m_qos.type_consistency.m_force_type_validation = false;
-        wdata->typeName("TypeName");
-        rdata->typeName("TypeName");
+        rdata->type_consistency.m_force_type_validation = false;
+        wdata->type_name = "TypeName";
+        rdata->type_name = "TypeName";
 
-        rdata->isAlive(true);
-        wdata->isAlive(true);
+        rdata->is_alive(true);
 
         edp = new EDPMock(&pdp_, &participant_);
     }
@@ -122,17 +123,19 @@ protected:
 
     void set_incompatible_topic()
     {
-        rdata->topicName("AnotherTopic");
+        rdata->topic_name = "AnotherTopic";
     }
 
     void set_incompatible_topic_kind()
     {
-        rdata->topicKind(TopicKind_t::WITH_KEY);
+        rdata->topic_kind = TopicKind_t::WITH_KEY;
     }
 
     void set_incompatible_type()
     {
-        rdata->typeName("AnotherTypeName");
+        rdata->type_name = "AnotherTypeName";
+        rdata->type_information.assigned(false);
+        wdata->type_information.assigned(false);
     }
 
     void check_expectations(
@@ -230,65 +233,81 @@ TEST_F(EdpTests, IncompatibleType)
 TEST_F(EdpTests, CheckPartitionCompatibility)
 {
     // Start with the same partitions
-    wdata->m_qos.m_partition.push_back("Partition1");
-    rdata->m_qos.m_partition.push_back("Partition1");
+    wdata->partition.push_back("Partition1");
+    rdata->partition.push_back("Partition1");
     check_expectations(true);
 
     // Add new (different) partitions. They still match on the previous one
-    wdata->m_qos.m_partition.push_back("Partition2");
-    rdata->m_qos.m_partition.push_back("Partition3");
+    wdata->partition.push_back("Partition2");
+    rdata->partition.push_back("Partition3");
     check_expectations(true);
 
     // Clear and add different partitions
-    wdata->m_qos.m_partition.clear();
-    wdata->m_qos.m_partition.push_back("Partition10");
-    rdata->m_qos.m_partition.clear();
-    rdata->m_qos.m_partition.push_back("Partition20");
+    wdata->partition.clear();
+    wdata->partition.push_back("Partition10");
+    rdata->partition.clear();
+    rdata->partition.push_back("Partition20");
     check_expectations(false);
 
     // Wildcard matching
-    wdata->m_qos.m_partition.clear();
-    wdata->m_qos.m_partition.push_back("Part*");
-    rdata->m_qos.m_partition.clear();
-    rdata->m_qos.m_partition.push_back("Partition");
+    wdata->partition.clear();
+    wdata->partition.push_back("Part*");
+    rdata->partition.clear();
+    rdata->partition.push_back("Partition");
     check_expectations(true);
 
     // Matching empty list against empty partition
-    wdata->m_qos.m_partition.clear();
-    rdata->m_qos.m_partition.clear();
-    rdata->m_qos.m_partition.push_back("");
+    wdata->partition.clear();
+    rdata->partition.clear();
+    rdata->partition.push_back("");
     check_expectations(true);
-    wdata->m_qos.m_partition.clear();
-    wdata->m_qos.m_partition.push_back("");
-    rdata->m_qos.m_partition.clear();
+    wdata->partition.clear();
+    wdata->partition.push_back("");
+    rdata->partition.clear();
     check_expectations(true);
 }
 
 TEST_F(EdpTests, CheckDurabilityCompatibility)
 {
-    std::vector<QosTestingCase<DurabilityQosPolicyKind>> testing_cases{
-        { PERSISTENT_DURABILITY_QOS, PERSISTENT_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { PERSISTENT_DURABILITY_QOS, TRANSIENT_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { PERSISTENT_DURABILITY_QOS, TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { PERSISTENT_DURABILITY_QOS, VOLATILE_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { TRANSIENT_DURABILITY_QOS, PERSISTENT_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { TRANSIENT_DURABILITY_QOS, TRANSIENT_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { TRANSIENT_DURABILITY_QOS, TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { TRANSIENT_DURABILITY_QOS, VOLATILE_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { TRANSIENT_LOCAL_DURABILITY_QOS, PERSISTENT_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { TRANSIENT_LOCAL_DURABILITY_QOS, TRANSIENT_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { TRANSIENT_LOCAL_DURABILITY_QOS, TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { TRANSIENT_LOCAL_DURABILITY_QOS, VOLATILE_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { VOLATILE_DURABILITY_QOS, PERSISTENT_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { VOLATILE_DURABILITY_QOS, TRANSIENT_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { VOLATILE_DURABILITY_QOS, TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::DURABILITY_QOS_POLICY_ID},
-        { VOLATILE_DURABILITY_QOS, VOLATILE_DURABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID}
+    std::vector<QosTestingCase<fastdds::dds::DurabilityQosPolicyKind>> testing_cases{
+        { fastdds::dds::PERSISTENT_DURABILITY_QOS, fastdds::dds::PERSISTENT_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::PERSISTENT_DURABILITY_QOS, fastdds::dds::TRANSIENT_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::PERSISTENT_DURABILITY_QOS, fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::PERSISTENT_DURABILITY_QOS, fastdds::dds::VOLATILE_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_DURABILITY_QOS, fastdds::dds::PERSISTENT_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_DURABILITY_QOS, fastdds::dds::TRANSIENT_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_DURABILITY_QOS, fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_DURABILITY_QOS, fastdds::dds::VOLATILE_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::PERSISTENT_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::TRANSIENT_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS, fastdds::dds::VOLATILE_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::VOLATILE_DURABILITY_QOS, fastdds::dds::PERSISTENT_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::VOLATILE_DURABILITY_QOS, fastdds::dds::TRANSIENT_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::VOLATILE_DURABILITY_QOS, fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS,
+          fastdds::dds::DURABILITY_QOS_POLICY_ID},
+        { fastdds::dds::VOLATILE_DURABILITY_QOS, fastdds::dds::VOLATILE_DURABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID}
     };
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_durability.kind = testing_case.offered_qos;
-        rdata->m_qos.m_durability.kind = testing_case.requested_qos;
+        wdata->durability.kind = testing_case.offered_qos;
+        rdata->durability.kind = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
@@ -303,48 +322,59 @@ TEST_F(EdpTests, CheckDeadlineCompatibility)
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_deadline.period = testing_case.offered_qos;
-        rdata->m_qos.m_deadline.period = testing_case.requested_qos;
+        wdata->deadline.period = testing_case.offered_qos;
+        rdata->deadline.period = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
 
 TEST_F(EdpTests, CheckOwnershipCompatibility)
 {
-    std::vector<QosTestingCase<OwnershipQosPolicyKind>> testing_cases{
-        { SHARED_OWNERSHIP_QOS, SHARED_OWNERSHIP_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { SHARED_OWNERSHIP_QOS, EXCLUSIVE_OWNERSHIP_QOS, fastdds::dds::OWNERSHIP_QOS_POLICY_ID},
-        { EXCLUSIVE_OWNERSHIP_QOS, SHARED_OWNERSHIP_QOS, fastdds::dds::OWNERSHIP_QOS_POLICY_ID},
-        { EXCLUSIVE_OWNERSHIP_QOS, EXCLUSIVE_OWNERSHIP_QOS, fastdds::dds::INVALID_QOS_POLICY_ID}
+    std::vector<QosTestingCase<fastdds::dds::OwnershipQosPolicyKind>> testing_cases{
+        { fastdds::dds::SHARED_OWNERSHIP_QOS, fastdds::dds::SHARED_OWNERSHIP_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::SHARED_OWNERSHIP_QOS, fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS,
+          fastdds::dds::OWNERSHIP_QOS_POLICY_ID},
+        { fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS, fastdds::dds::SHARED_OWNERSHIP_QOS,
+          fastdds::dds::OWNERSHIP_QOS_POLICY_ID},
+        { fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS, fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID}
     };
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_ownership.kind = testing_case.offered_qos;
-        rdata->m_qos.m_ownership.kind = testing_case.requested_qos;
+        wdata->ownership.kind = testing_case.offered_qos;
+        rdata->ownership.kind = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
 
 TEST_F(EdpTests, CheckLivelinessKindCompatibility)
 {
-    std::vector<QosTestingCase<LivelinessQosPolicyKind>> testing_cases{
-        { MANUAL_BY_TOPIC_LIVELINESS_QOS, MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { MANUAL_BY_TOPIC_LIVELINESS_QOS, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { MANUAL_BY_TOPIC_LIVELINESS_QOS, AUTOMATIC_LIVELINESS_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::LIVELINESS_QOS_POLICY_ID},
-        { MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS,
+    std::vector<QosTestingCase<fastdds::dds::LivelinessQosPolicyKind>> testing_cases{
+        { fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS,
           fastdds::dds::INVALID_QOS_POLICY_ID},
-        { MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, AUTOMATIC_LIVELINESS_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { AUTOMATIC_LIVELINESS_QOS, MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::LIVELINESS_QOS_POLICY_ID},
-        { AUTOMATIC_LIVELINESS_QOS, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, fastdds::dds::LIVELINESS_QOS_POLICY_ID},
-        { AUTOMATIC_LIVELINESS_QOS, AUTOMATIC_LIVELINESS_QOS, fastdds::dds::INVALID_QOS_POLICY_ID}
+        { fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS, fastdds::dds::AUTOMATIC_LIVELINESS_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS,
+          fastdds::dds::LIVELINESS_QOS_POLICY_ID},
+        { fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS, fastdds::dds::AUTOMATIC_LIVELINESS_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::AUTOMATIC_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_TOPIC_LIVELINESS_QOS,
+          fastdds::dds::LIVELINESS_QOS_POLICY_ID},
+        { fastdds::dds::AUTOMATIC_LIVELINESS_QOS, fastdds::dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS,
+          fastdds::dds::LIVELINESS_QOS_POLICY_ID},
+        { fastdds::dds::AUTOMATIC_LIVELINESS_QOS, fastdds::dds::AUTOMATIC_LIVELINESS_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID}
     };
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_liveliness.kind = testing_case.offered_qos;
-        rdata->m_qos.m_liveliness.kind = testing_case.requested_qos;
+        wdata->liveliness.kind = testing_case.offered_qos;
+        rdata->liveliness.kind = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
@@ -359,25 +389,29 @@ TEST_F(EdpTests, CheckLeaseDurationCompatibility)
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_liveliness.lease_duration = testing_case.offered_qos;
-        rdata->m_qos.m_liveliness.lease_duration = testing_case.requested_qos;
+        wdata->liveliness.lease_duration = testing_case.offered_qos;
+        rdata->liveliness.lease_duration = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
 
 TEST_F(EdpTests, CheckReliabilityCompatibility)
 {
-    std::vector<QosTestingCase<ReliabilityQosPolicyKind>> testing_cases{
-        { RELIABLE_RELIABILITY_QOS, RELIABLE_RELIABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { RELIABLE_RELIABILITY_QOS, BEST_EFFORT_RELIABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { BEST_EFFORT_RELIABILITY_QOS, RELIABLE_RELIABILITY_QOS, fastdds::dds::RELIABILITY_QOS_POLICY_ID},
-        { BEST_EFFORT_RELIABILITY_QOS, BEST_EFFORT_RELIABILITY_QOS, fastdds::dds::INVALID_QOS_POLICY_ID}
+    std::vector<QosTestingCase<fastdds::dds::ReliabilityQosPolicyKind>> testing_cases{
+        { fastdds::dds::RELIABLE_RELIABILITY_QOS, fastdds::dds::RELIABLE_RELIABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::RELIABLE_RELIABILITY_QOS, fastdds::dds::BEST_EFFORT_RELIABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID},
+        { fastdds::dds::BEST_EFFORT_RELIABILITY_QOS, fastdds::dds::RELIABLE_RELIABILITY_QOS,
+          fastdds::dds::RELIABILITY_QOS_POLICY_ID},
+        { fastdds::dds::BEST_EFFORT_RELIABILITY_QOS, fastdds::dds::BEST_EFFORT_RELIABILITY_QOS,
+          fastdds::dds::INVALID_QOS_POLICY_ID}
     };
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_reliability.kind = testing_case.offered_qos;
-        rdata->m_qos.m_reliability.kind = testing_case.requested_qos;
+        wdata->reliability.kind = testing_case.offered_qos;
+        rdata->reliability.kind = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
@@ -393,43 +427,53 @@ TEST_F(EdpTests, CheckPositiveAckCompatibility)
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.m_disablePositiveACKs.enabled = testing_case.offered_qos;
-        rdata->m_qos.m_disablePositiveACKs.enabled = testing_case.requested_qos;
+        wdata->disable_positive_acks.enabled = testing_case.offered_qos;
+        rdata->disable_positive_acks.enabled = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
 
 TEST_F(EdpTests, CheckDataRepresentationCompatibility)
 {
-    using DataRepresentationQosVector = std::vector<DataRepresentationId>;
+    using DataRepresentationQosVector = std::vector<fastdds::dds::DataRepresentationId>;
     std::vector<QosTestingCase<DataRepresentationQosVector>> testing_cases{
         { {}, {}, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {}, {DataRepresentationId::XCDR_DATA_REPRESENTATION}, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {}, {DataRepresentationId::XCDR_DATA_REPRESENTATION, DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+        { {}, {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION}, fastdds::dds::INVALID_QOS_POLICY_ID},
+        { {},
+            {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION,
+             fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
             fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {}, {DataRepresentationId::XCDR2_DATA_REPRESENTATION}, fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR_DATA_REPRESENTATION}, {}, fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR_DATA_REPRESENTATION}, {DataRepresentationId::XCDR_DATA_REPRESENTATION},
-            fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR_DATA_REPRESENTATION},
-            {DataRepresentationId::XCDR_DATA_REPRESENTATION, DataRepresentationId::XCDR2_DATA_REPRESENTATION},
-            fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR_DATA_REPRESENTATION}, {DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+        { {}, {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
             fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR2_DATA_REPRESENTATION}, {}, fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR2_DATA_REPRESENTATION}, {DataRepresentationId::XCDR_DATA_REPRESENTATION},
-            fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR2_DATA_REPRESENTATION},
-            {DataRepresentationId::XCDR_DATA_REPRESENTATION, DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+        { {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION}, {}, fastdds::dds::INVALID_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION},
             fastdds::dds::INVALID_QOS_POLICY_ID},
-        { {DataRepresentationId::XCDR2_DATA_REPRESENTATION}, {DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+        { {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION,
+             fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            fastdds::dds::INVALID_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION}, {},
+            fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION},
+            fastdds::dds::DATAREPRESENTATION_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR_DATA_REPRESENTATION,
+             fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            fastdds::dds::INVALID_QOS_POLICY_ID},
+        { {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
+            {fastdds::dds::DataRepresentationId::XCDR2_DATA_REPRESENTATION},
             fastdds::dds::INVALID_QOS_POLICY_ID}
     };
 
     for (auto testing_case : testing_cases)
     {
-        wdata->m_qos.representation.m_value = testing_case.offered_qos;
-        rdata->m_qos.representation.m_value = testing_case.requested_qos;
+        wdata->representation.m_value = testing_case.offered_qos;
+        rdata->representation.m_value = testing_case.requested_qos;
         check_expectations(testing_case.failed_qos);
     }
 }
@@ -449,11 +493,69 @@ TEST(MatchingFailureMask, matching_failure_mask_overflow)
 
     mask.set(EDP::MatchingFailureMask::partitions);
     EXPECT_TRUE(mask.test(EDP::MatchingFailureMask::partitions));
+
+    mask.set(EDP::MatchingFailureMask::different_typeinfo);
+    EXPECT_TRUE(mask.test(EDP::MatchingFailureMask::different_typeinfo));
+}
+
+TEST_F(EdpTests, CheckTypeIdentifierComparation)
+{
+    dds::xtypes::TypeIdentifier minimal;
+    minimal.equivalence_hash({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14});
+    minimal._d(dds::xtypes::EK_MINIMAL);
+    dds::xtypes::TypeIdentifier complete;
+    complete.equivalence_hash({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+    complete._d(dds::xtypes::EK_COMPLETE);
+
+    wdata->type_information.assigned(true);
+    rdata->type_information.assigned(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    rdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    check_expectations(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    rdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id().no_value({});
+    check_expectations(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    rdata->type_information.type_information.complete().typeid_with_size().type_id().no_value({});
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    check_expectations(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id().no_value({});
+    rdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    check_expectations(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id().no_value({});
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    rdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    check_expectations(true);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id().no_value({});
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id().no_value({});
+    rdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    check_expectations(false);
+
+    wdata->type_information.type_information.complete().typeid_with_size().type_id(complete);
+    wdata->type_information.type_information.minimal().typeid_with_size().type_id(minimal);
+    rdata->type_information.type_information.complete().typeid_with_size().type_id().no_value({});
+    rdata->type_information.type_information.minimal().typeid_with_size().type_id().no_value({});
+    check_expectations(false);
 }
 
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 int main(

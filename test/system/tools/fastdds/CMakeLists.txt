@@ -26,9 +26,14 @@ if(Python3_Interpreter_FOUND)
 
     set(TESTS
         test_fastdds_installed
+        test_fastdds_version
         test_fastdds_discovery
+        test_fastdds_discovery_run
+        test_fastdds_discovery_help
+        test_fastdds_discovery_examples
         test_ros_discovery
         test_fastdds_shm
+        test_fastdds_shm_force
         test_fastdds_xml_validate
     )
 
@@ -54,6 +59,53 @@ if(Python3_Interpreter_FOUND)
         )
 
     endforeach()
+
+    if (INSTALL_TOOLS AND NOT WIN32)
+        set(DISCOVERY_PARSER_TESTS
+            TestDiscoveryParser.test_parser_shutdown_when_on
+            TestDiscoveryParser.test_parser_shutdown_when_off
+            TestDiscoveryParser.test_parser_auto_fails_ip
+            TestDiscoveryParser.test_parser_auto_fails_domain
+            TestDiscoveryParser.test_parser_auto_fails_extra_arg
+            TestDiscoveryParser.test_parser_auto
+            TestDiscoveryParser.test_parser_auto_reverse
+            TestDiscoveryParser.test_parser_auto_domain_env
+            TestDiscoveryParser.test_parser_start_fails_ip
+            TestDiscoveryParser.test_parser_start_fails_domain
+            TestDiscoveryParser.test_parser_start_fails_extra_arg
+            TestDiscoveryParser.test_parser_start
+            TestDiscoveryParser.test_parser_start_domain_env
+            TestDiscoveryParser.test_parser_stop_when_off
+            TestDiscoveryParser.test_parser_stop_when_on
+            TestDiscoveryParser.test_parser_stop_whith_unknown_args
+            TestDiscoveryParser.test_parser_list_when_off
+            TestDiscoveryParser.test_parser_list_when_on
+            TestDiscoveryParser.test_parser_add_fails_domain
+            TestDiscoveryParser.test_parser_add_fails_ip
+            TestDiscoveryParser.test_parser_add_when_off
+            TestDiscoveryParser.test_parser_add_when_on
+            TestDiscoveryParser.test_parser_set_fails_domain
+            TestDiscoveryParser.test_parser_set_fails_ip
+            TestDiscoveryParser.test_parser_set_when_off
+            TestDiscoveryParser.test_parser_set_when_on
+        )
+
+        foreach(TEST ${DISCOVERY_PARSER_TESTS})
+            add_test(
+                NAME system.tools.fastdds.${TEST}
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_discovery_parser.py ${TEST}
+                )
+            # Set environment
+            set(TEST_ENVIRONMENT
+                "PYTHON_VERSION=${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}"
+                "TOOL_PATH=${CMAKE_INSTALL_PREFIX}"
+            )
+            set_property(
+                TEST system.tools.fastdds.${TEST}
+                PROPERTY ENVIRONMENT ${TEST_ENVIRONMENT}
+            )
+        endforeach()
+    endif()
 
     ###############################################################################
     # XML GENERAL validation

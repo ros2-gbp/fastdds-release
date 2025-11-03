@@ -14,15 +14,20 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
-#include "AuthenticationPluginTests.hpp"
-
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/authentication/PKIHandshakeHandle.h>
-#include <fastrtps/rtps/messages/CDRMessage.h>
-
+#include <iostream>
 #include <openssl/opensslv.h>
+#include <openssl/pem.h>
+
+#include <rtps/messages/CDRMessage.hpp>
+
+#include "AuthenticationPluginTests.hpp"
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <security/authentication/PKIIdentityHandle.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -30,11 +35,8 @@
 #define IS_OPENSSL_1_1 0
 #endif // if OPENSSL_VERSION_NUMBER >= 0x10100000L
 
-#include <iostream>
-#include <openssl/pem.h>
-
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastdds::rtps::security;
 
 static const char* certs_path = nullptr;
 

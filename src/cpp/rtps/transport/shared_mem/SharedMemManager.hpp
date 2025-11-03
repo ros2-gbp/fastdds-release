@@ -549,7 +549,8 @@ public:
                 {
                     collisions_count--;
                 }
-            } while (collisions_count > 0 && nullptr == segment_name_lock_);
+            }
+            while (collisions_count > 0 && nullptr == segment_name_lock_);
 
             if (nullptr == segment_name_lock_)
             {
@@ -869,8 +870,8 @@ public:
 
         /**
          * Try to enqueue a buffer in the port.
-         * @param[in, out] buffer reference to the SHM buffer to push to
-         * @param[out] is_port_ok true if the port is ok
+         * @param [in, out] buffer reference to the SHM buffer to push to
+         * @param [out] is_port_ok true if the port is ok
          * @returns false If the port's queue is full so buffer couldn't be enqueued.
          */
         bool try_push(

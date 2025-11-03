@@ -12,24 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdlib>
-#include <ctime>
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
+#include <ctime>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
-
-#include <gtest/gtest.h>
-
-#include "BlackboxTests.hpp"
-#include "PubSubParticipant.hpp"
-#include "PubSubReader.hpp"
-#include "PubSubWriter.hpp"
 
 #include <fastdds/dds/core/policy/ParameterTypes.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
@@ -37,14 +29,21 @@
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastdds/rtps/common/Locator.h>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
-#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
-#include <rtps/transport/test_UDPv4Transport.h>
-#include <utils/SystemInfo.hpp>
+#include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.hpp>
+#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+
+#include <gtest/gtest.h>
+
 #include "../utils/filter_helpers.hpp"
+#include "BlackboxTests.hpp"
+#include "PubSubParticipant.hpp"
+#include "PubSubReader.hpp"
+#include "PubSubWriter.hpp"
+
 
 // Regression test for redmine issue 11857
 TEST(DDSDiscovery, IgnoreParticipantFlags)
@@ -94,7 +93,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
 {
     using namespace eprosima;
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     char* value = nullptr;
     std::string W_UNICAST_PORT_RANDOM_NUMBER_STR;
@@ -114,15 +113,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     PubSubParticipant<HelloWorldPubSubType> server_1(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_1_qos;
-    server_1_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::SERVER;
-    // Generate random GUID prefix
-    srand(static_cast<unsigned>(time(nullptr)));
-    GuidPrefix_t server_1_prefix;
-    for (auto i = 0; i < 12; i++)
-    {
-        server_1_prefix.value[i] = eprosima::fastrtps::rtps::octet(rand() % 254);
-    }
-    server_1_qos.prefix = server_1_prefix;
+    server_1_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
     // Generate server's listening locator
     Locator_t locator_server_1;
     IPLocator::setIPv4(locator_server_1, 127, 0, 0, 1);
@@ -136,11 +127,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     PubSubParticipant<HelloWorldPubSubType> server_2(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_2_qos;
-    server_2_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::SERVER;
-    // Generate random GUID prefix
-    GuidPrefix_t server_2_prefix = server_1_prefix;
-    server_2_prefix.value[11]++;
-    server_2_qos.prefix = server_2_prefix;
+    server_2_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
     // Generate server's listening locator
     Locator_t locator_server_2;
     IPLocator::setIPv4(locator_server_2, 127, 0, 0, 1);
@@ -154,12 +141,9 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     PubSubParticipant<HelloWorldPubSubType> client(0u, 0u, 0u, 0u);
     // Set participant as client
     WireProtocolConfigQos client_qos;
-    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::CLIENT;
+    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
     // Connect to first server
-    RemoteServerAttributes server_1_att;
-    server_1_att.guidPrefix = server_1_prefix;
-    server_1_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_1));
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_1_att);
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
     // Init client
     ASSERT_TRUE(client.wire_protocol(client_qos).init_participant());
 
@@ -172,10 +156,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     server_2.wait_discovery(std::chrono::seconds::zero(), 0, true);
 
     /* Add server_2 to client */
-    RemoteServerAttributes server_2_att;
-    server_2_att.guidPrefix = server_2_prefix;
-    server_2_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_2));
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_2_att);
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_2);
     // Update client's servers list
     ASSERT_TRUE(client.update_wire_protocol(client_qos));
 
@@ -185,7 +166,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     server_2.wait_discovery(std::chrono::seconds::zero(), 1, true);
 
     /* Add server_2 to server_1 */
-    server_1_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_2_att);
+    server_1_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_2);
     ASSERT_TRUE(server_1.update_wire_protocol(server_1_qos));
 
     /* Check that they all know each other */
@@ -206,7 +187,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
 {
     using namespace eprosima;
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     // TCP default DS port
     constexpr uint16_t W_UNICAST_PORT_RANDOM_NUMBER_STR = 42100;
@@ -215,13 +196,6 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     PubSubParticipant<HelloWorldPubSubType> server_1(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_1_qos;
-    // Generate random GUID prefix
-    srand(static_cast<unsigned>(time(nullptr)));
-    GuidPrefix_t server_1_prefix;
-    for (auto i = 0; i < 12; i++)
-    {
-        server_1_prefix.value[i] = eprosima::fastrtps::rtps::octet(rand() % 254);
-    }
     uint16_t server_1_port = W_UNICAST_PORT_RANDOM_NUMBER_STR;
     Locator_t locator_server_1;
     // Add TCP transport
@@ -229,8 +203,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     descriptor_1->add_listener_port(server_1_port);
 
     // Init server
-    ASSERT_TRUE(server_1.fill_server_qos(server_1_qos, server_1_prefix, locator_server_1, server_1_port,
-            LOCATOR_KIND_TCPv4)
+    ASSERT_TRUE(server_1.fill_server_qos(server_1_qos, locator_server_1, server_1_port, LOCATOR_KIND_TCPv4)
                     .disable_builtin_transport()
                     .add_user_transport_to_pparams(descriptor_1)
                     .init_participant());
@@ -239,8 +212,6 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     PubSubParticipant<HelloWorldPubSubType> server_2(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_2_qos;
-    GuidPrefix_t server_2_prefix = server_1_prefix;
-    server_2_prefix.value[11]++;
     Locator_t locator_server_2;
     uint16_t server_2_port = server_1_port + 1;
     // Add TCP transport
@@ -248,8 +219,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     descriptor_2->add_listener_port(server_2_port);
 
     // Init server
-    ASSERT_TRUE(server_2.fill_server_qos(server_2_qos, server_2_prefix, locator_server_2, server_2_port,
-            LOCATOR_KIND_TCPv4)
+    ASSERT_TRUE(server_2.fill_server_qos(server_2_qos, locator_server_2, server_2_port, LOCATOR_KIND_TCPv4)
                     .disable_builtin_transport()
                     .add_user_transport_to_pparams(descriptor_2)
                     .init_participant());
@@ -259,12 +229,9 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     PubSubParticipant<HelloWorldPubSubType> client_1(0u, 0u, 0u, 0u);
     // Set participant as client
     WireProtocolConfigQos client_qos_1;
-    client_qos_1.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::CLIENT;
+    client_qos_1.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
     // Connect to first server
-    RemoteServerAttributes server_1_att;
-    server_1_att.guidPrefix = server_1_prefix;
-    server_1_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_1));
-    client_qos_1.builtin.discovery_config.m_DiscoveryServers.push_back(server_1_att);
+    client_qos_1.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
     auto descriptor_3 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     uint16_t client_1_port = server_1_port + 10;
     descriptor_3->add_listener_port(client_1_port);
@@ -278,9 +245,9 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     PubSubParticipant<HelloWorldPubSubType> client_2(0u, 0u, 0u, 0u);
     // Set participant as client
     WireProtocolConfigQos client_qos_2;
-    client_qos_2.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::CLIENT;
+    client_qos_2.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
     // Connect to first server
-    client_qos_2.builtin.discovery_config.m_DiscoveryServers.push_back(server_1_att);
+    client_qos_2.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
     auto descriptor_4 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     uint16_t client_2_port = server_1_port - 10;
     descriptor_4->add_listener_port(client_2_port);
@@ -296,10 +263,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     server_2.wait_discovery(std::chrono::seconds::zero(), 0, true); // Knows no one
 
     /* Add server_2 to client */
-    RemoteServerAttributes server_2_att;
-    server_2_att.guidPrefix = server_2_prefix;
-    server_2_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_2));
-    client_qos_1.builtin.discovery_config.m_DiscoveryServers.push_back(server_2_att);
+    client_qos_1.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_2);
     // Update client_1's servers list
     ASSERT_TRUE(client_1.update_wire_protocol(client_qos_1));
 
@@ -309,7 +273,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListTCP)
     server_2.wait_discovery(std::chrono::seconds::zero(), 1, true); // Knows client1
 
     /* Add server_2 to server_1 */
-    server_1_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_2_att);
+    server_1_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_2);
     ASSERT_TRUE(server_1.update_wire_protocol(server_1_qos));
 
     server_1.wait_discovery(std::chrono::seconds::zero(), 3, true); // Knows client1, client2 and server2
@@ -322,7 +286,7 @@ TEST(DDSDiscovery, ServersConnectionTCP)
 {
     using namespace eprosima;
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     // TCP default DS port
     constexpr uint16_t W_UNICAST_PORT_RANDOM_NUMBER_STR = 41100;
@@ -331,21 +295,13 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     PubSubParticipant<HelloWorldPubSubType> server_1(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_1_qos;
-    // Generate random GUID prefix
-    srand(static_cast<unsigned>(time(nullptr)));
-    GuidPrefix_t server_1_prefix;
-    for (auto i = 0; i < 12; i++)
-    {
-        server_1_prefix.value[i] = eprosima::fastrtps::rtps::octet(rand() % 254);
-    }
     Locator_t locator_server_1;
     uint16_t server_1_port = W_UNICAST_PORT_RANDOM_NUMBER_STR;
     // Add TCP transport
     auto descriptor_1 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     descriptor_1->add_listener_port(server_1_port);
     // Init server
-    ASSERT_TRUE(server_1.fill_server_qos(server_1_qos, server_1_prefix, locator_server_1, server_1_port,
-            LOCATOR_KIND_TCPv4)
+    ASSERT_TRUE(server_1.fill_server_qos(server_1_qos, locator_server_1, server_1_port, LOCATOR_KIND_TCPv4)
                     .disable_builtin_transport()
                     .add_user_transport_to_pparams(descriptor_1)
                     .init_participant());
@@ -354,8 +310,6 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     PubSubParticipant<HelloWorldPubSubType> server_2(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_2_qos;
-    GuidPrefix_t server_2_prefix = server_1_prefix;
-    server_2_prefix.value[11]++;
     Locator_t locator_server_2;
     uint16_t server_2_port = server_1_port + 1;
     // Add TCP transport
@@ -363,14 +317,10 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     descriptor_2->add_listener_port(server_2_port);
 
     // Connect to first server
-    RemoteServerAttributes server_1_att;
-    server_1_att.guidPrefix = server_1_prefix;
-    server_1_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_1));
-    server_2_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_1_att);
+    server_2_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
 
     // Init server
-    ASSERT_TRUE(server_2.fill_server_qos(server_2_qos, server_2_prefix, locator_server_2, server_2_port,
-            LOCATOR_KIND_TCPv4)
+    ASSERT_TRUE(server_2.fill_server_qos(server_2_qos, locator_server_2, server_2_port, LOCATOR_KIND_TCPv4)
                     .disable_builtin_transport()
                     .add_user_transport_to_pparams(descriptor_2)
                     .init_participant());
@@ -379,19 +329,16 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     PubSubParticipant<HelloWorldPubSubType> server_3(0u, 0u, 0u, 0u);
     // Set participant as server
     WireProtocolConfigQos server_3_qos;
-    GuidPrefix_t server_3_prefix = server_1_prefix;
-    server_3_prefix.value[11]--;
     Locator_t locator_server_3;
     uint16_t server_3_port = server_1_port - 1;
     // Add TCP transport
     auto descriptor_3 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
     descriptor_3->add_listener_port(server_3_port);
     // Connect to first server
-    server_3_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_1_att);
+    server_3_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
 
     // Init server
-    ASSERT_TRUE(server_3.fill_server_qos(server_3_qos, server_3_prefix, locator_server_3, server_3_port,
-            LOCATOR_KIND_TCPv4)
+    ASSERT_TRUE(server_3.fill_server_qos(server_3_qos, locator_server_3, server_3_port, LOCATOR_KIND_TCPv4)
                     .disable_builtin_transport()
                     .add_user_transport_to_pparams(descriptor_3)
                     .init_participant());
@@ -402,10 +349,7 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     server_3.wait_discovery(std::chrono::seconds::zero(), 1, true); // Knows server1
 
     /* Add server_3 to server_2 */
-    RemoteServerAttributes server_3_att;
-    server_3_att.guidPrefix = server_3_prefix;
-    server_3_att.metatrafficUnicastLocatorList.push_back(Locator_t(locator_server_3));
-    server_2_qos.builtin.discovery_config.m_DiscoveryServers.push_back(server_3_att);
+    server_2_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_3);
     ASSERT_TRUE(server_2.update_wire_protocol(server_2_qos));
 
     // Check adding servers after initialization
@@ -434,13 +378,13 @@ TEST(DDSDiscovery, DDSNetworkInterfaceChangesAtRunTime)
     PubSubReader<HelloWorldPubSubType> datareader(TEST_TOPIC_NAME);
 
     // datareader is initialized with all the network interfaces
-    datareader.durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS).history_depth(100).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+    datareader.durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS).history_depth(100).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
     ASSERT_TRUE(datareader.isInitialized());
 
     // datawriter: launch without interfaces
-    test_UDPv4Transport::simulate_no_interfaces = true;
     auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+    test_transport->test_transport_options->simulate_no_interfaces = true;
     datawriter.disable_builtin_transport().add_user_transport_to_pparams(test_transport).history_depth(100).init();
     ASSERT_TRUE(datawriter.isInitialized());
 
@@ -463,7 +407,7 @@ TEST(DDSDiscovery, DDSNetworkInterfaceChangesAtRunTime)
     EXPECT_EQ(datareader.block_for_all(std::chrono::seconds(3)), 0u);
 
     // enable interfaces
-    test_UDPv4Transport::simulate_no_interfaces = false;
+    test_transport->test_transport_options->simulate_no_interfaces = false;
     datawriter.participant_set_qos();
 
     // Wait for discovery
@@ -620,7 +564,7 @@ TEST(DDSDiscovery, UpdateMatchedStatus)
 TEST(DDSDiscovery, ParticipantProxyPhysicalData)
 {
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     class CustomDomainParticipantListener : public DomainParticipantListener
     {
@@ -651,24 +595,27 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
 
         void on_participant_discovery(
                 DomainParticipant* participant,
-                ParticipantDiscoveryInfo&& info)
+                eprosima::fastdds::rtps::ParticipantDiscoveryStatus status,
+                const eprosima::fastdds::dds::ParticipantBuiltinTopicData& info,
+                bool& should_be_ignored)
         {
+            static_cast<void>(should_be_ignored);
             std::unique_lock<std::mutex> lck(*mtx_);
-            if (info.status ==
-                    eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_PARTICIPANT)
+            if (status ==
+                    eprosima::fastdds::rtps::ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
             {
                 static_cast<void>(participant);
                 if (nullptr != remote_participant_info)
                 {
                     delete remote_participant_info;
                 }
-                remote_participant_info = new ParticipantProxyData(info.info);
+                remote_participant_info = new ParticipantBuiltinTopicData(info);
                 found_->store(true);
                 cv_->notify_one();
             }
         }
 
-        ParticipantProxyData* remote_participant_info;
+        eprosima::fastdds::dds::ParticipantBuiltinTopicData* remote_participant_info;
 
     private:
 
@@ -681,7 +628,6 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
         std::atomic<bool>* found_;
     };
 
-    std::srand(static_cast<unsigned int>(std::time(nullptr)));
     int domain_id = std::rand() % 100;
 
     std::vector<std::string> physical_property_names =
@@ -722,7 +668,7 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
         participant_found.store(false);
 
         // Prevent assertion on spurious discovery of a participant from elsewhere
-        if (part_1->guid() == listener.remote_participant_info->m_guid)
+        if (part_1->guid() == listener.remote_participant_info->guid)
         {
             // Check that all three properties are present in the ParticipantProxyData, and that their value
             // is that of the property in part_1 (the original property value)
@@ -730,13 +676,13 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
             {
                 // Find property in ParticipantProxyData
                 auto received_property = std::find_if(
-                    listener.remote_participant_info->m_properties.begin(),
-                    listener.remote_participant_info->m_properties.end(),
+                    listener.remote_participant_info->properties.begin(),
+                    listener.remote_participant_info->properties.end(),
                     [&](const ParameterProperty_t& property)
                     {
                         return property.first() == physical_property_name;
                     });
-                ASSERT_NE(received_property, listener.remote_participant_info->m_properties.end());
+                ASSERT_NE(received_property, listener.remote_participant_info->properties.end());
 
                 // Find property in first participant
                 auto part_1_property = PropertyPolicyHelper::find_property(
@@ -782,20 +728,20 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
         participant_found.store(false);
 
         // Prevent assertion on spurious discovery of a participant from elsewhere
-        if (part_1->guid() == listener.remote_participant_info->m_guid)
+        if (part_1->guid() == listener.remote_participant_info->guid)
         {
             // Check that none of the three properties are present in the ParticipantProxyData.
             for (auto physical_property_name : physical_property_names)
             {
                 // Look for property in ParticipantProxyData
                 auto received_property = std::find_if(
-                    listener.remote_participant_info->m_properties.begin(),
-                    listener.remote_participant_info->m_properties.end(),
+                    listener.remote_participant_info->properties.begin(),
+                    listener.remote_participant_info->properties.end(),
                     [&](const ParameterProperty_t& property)
                     {
                         return property.first() == physical_property_name;
                     });
-                ASSERT_EQ(received_property, listener.remote_participant_info->m_properties.end());
+                ASSERT_EQ(received_property, listener.remote_participant_info->properties.end());
             }
             break;
         }
@@ -817,7 +763,7 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
 TEST(DDSDiscovery, DDSDiscoveryDoesNotDropUDPLocator)
 {
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     struct CustomDomainParticipantListener : public DomainParticipantListener
     {
@@ -830,13 +776,16 @@ TEST(DDSDiscovery, DDSDiscoveryDoesNotDropUDPLocator)
 
         void on_participant_discovery(
                 DomainParticipant* /*participant*/,
-                ParticipantDiscoveryInfo&& info) override
+                ParticipantDiscoveryStatus status,
+                const ParticipantBuiltinTopicData& info,
+                bool& should_be_ignored) override
         {
-            if (info.status == info.DISCOVERED_PARTICIPANT)
+            static_cast<void>(should_be_ignored);
+            if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
             {
                 std::lock_guard<std::mutex> guard(mtx);
-                guid = info.info.m_guid;
-                metatraffic = info.info.metatraffic_locators;
+                guid = info.guid;
+                metatraffic = info.metatraffic_locators;
                 cv.notify_all();
             }
         }
@@ -902,11 +851,11 @@ TEST(DDSDiscovery, DDSDiscoveryDoesNotDropUDPLocator)
 TEST(DDSDiscovery, WriterAndReaderMatchUsingDynamicReusableMemoryMode)
 {
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
 
     WireProtocolConfigQos qos;
 
-    qos.builtin.readerHistoryMemoryPolicy = eprosima::fastrtps::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
+    qos.builtin.readerHistoryMemoryPolicy = eprosima::fastdds::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
 
     PubSubWriter<HelloWorldPubSubType> writer("test");
     PubSubReader<HelloWorldPubSubType> reader("test");
@@ -931,18 +880,18 @@ TEST(DDSDiscovery, WriterAndReaderMatchUsingDynamicReusableMemoryMode)
 
 /**
  * This test checks the missing file case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckMissingFileXmlStaticDiscoveryFile)
 {
     std::string file = "MissingFile.xml";
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the correct data case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_OK
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_OK
  */
 TEST(DDSDiscovery, CheckCorrectXmlStaticDiscoveryFile)
 {
@@ -975,12 +924,12 @@ TEST(DDSDiscovery, CheckCorrectXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_OK);
 }
 
 /**
  * This test checks the incorrect <staticdiscovery> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectStaticdiscoveryXmlStaticDiscoveryFile)
 {
@@ -1013,12 +962,12 @@ TEST(DDSDiscovery, CheckIncorrectStaticdiscoveryXmlStaticDiscoveryFile)
             "</staticdiscoveryBROKEN>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect <participant> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectParticipantXmlStaticDiscoveryFile)
 {
@@ -1051,12 +1000,12 @@ TEST(DDSDiscovery, CheckIncorrectParticipantXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect <reader> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderXmlStaticDiscoveryFile)
 {
@@ -1089,12 +1038,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <userId> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderUserIDXmlStaticDiscoveryFile)
 {
@@ -1127,11 +1076,11 @@ TEST(DDSDiscovery, CheckIncorrectReaderUserIDXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 /**
  * This test checks the incorrect reader <entityID> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderEntityIDXmlStaticDiscoveryFile)
 {
@@ -1164,12 +1113,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderEntityIDXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <topicName> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderTopicNameXmlStaticDiscoveryFile)
 {
@@ -1202,12 +1151,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderTopicNameXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect data case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderTopicDataTypeXmlStaticDiscoveryFile)
 {
@@ -1240,12 +1189,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderTopicDataTypeXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <topicKind> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderTopicKindXmlStaticDiscoveryFile)
 {
@@ -1278,12 +1227,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderTopicKindXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <partitionQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderPartitionQosXmlStaticDiscoveryFile)
 {
@@ -1316,12 +1265,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderPartitionQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <reliabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderReliabilityQosXmlStaticDiscoveryFile)
 {
@@ -1354,12 +1303,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderReliabilityQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <durabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderDurabilityQosXmlStaticDiscoveryFile)
 {
@@ -1392,12 +1341,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderDurabilityQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect reader <multicastLocator> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectReaderMulticastLocatorXmlStaticDiscoveryFile)
 {
@@ -1430,12 +1379,12 @@ TEST(DDSDiscovery, CheckIncorrectReaderMulticastLocatorXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect <writer> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterXmlStaticDiscoveryFile)
 {
@@ -1468,12 +1417,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <userId> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterUserIDXmlStaticDiscoveryFile)
 {
@@ -1506,12 +1455,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterUserIDXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <entityID> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterEntityIDXmlStaticDiscoveryFile)
 {
@@ -1544,12 +1493,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterEntityIDXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <topicName> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterTopicNameXmlStaticDiscoveryFile)
 {
@@ -1582,12 +1531,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterTopicNameXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <topicDataType> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterTopicDataTypeXmlStaticDiscoveryFile)
 {
@@ -1620,12 +1569,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterTopicDataTypeXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <topicKind> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterTopicKindXmlStaticDiscoveryFile)
 {
@@ -1658,12 +1607,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterTopicKindXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <partitionQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterPartitionQosXmlStaticDiscoveryFile)
 {
@@ -1696,12 +1645,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterPartitionQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <reliabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterReliabilityQosXmlStaticDiscoveryFile)
 {
@@ -1734,12 +1683,12 @@ TEST(DDSDiscovery, CheckIncorrectWriterReliabilityQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
  * This test checks the incorrect writer <durabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
- * method and checks it returns RETCODE_ERROR
+ * method and checks it returns eprosima::fastdds::dds::RETCODE_ERROR
  */
 TEST(DDSDiscovery, CheckIncorrectWriterDurabilityQosXmlStaticDiscoveryFile)
 {
@@ -1772,7 +1721,7 @@ TEST(DDSDiscovery, CheckIncorrectWriterDurabilityQosXmlStaticDiscoveryFile)
             "</staticdiscovery>";
 
     DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
-    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+    ASSERT_EQ(factory->check_xml_static_discovery(file), eprosima::fastdds::dds::RETCODE_ERROR);
 }
 
 /**
@@ -1787,10 +1736,10 @@ static void test_DDSDiscovery_WaitSetMatchedStatus(
     fastdds::dds::DomainParticipantQos pqos;
     factory->get_default_participant_qos(pqos);
     uint32_t ignore_flags =
-            fastrtps::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST |
-            fastrtps::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_PROCESS;
+            fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST |
+            fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_PROCESS;
     pqos.wire_protocol().builtin.discovery_config.ignoreParticipantFlags =
-            static_cast<fastrtps::rtps::ParticipantFilteringFlags>(ignore_flags);
+            static_cast<fastdds::rtps::ParticipantFilteringFlags>(ignore_flags);
 
     fastdds::dds::DomainParticipantListener listener;
     auto listener_to_use = with_listener ? &listener : nullptr;
@@ -1799,9 +1748,9 @@ static void test_DDSDiscovery_WaitSetMatchedStatus(
     ASSERT_NE(participant, nullptr);
 
     fastdds::dds::TypeSupport type(new HelloWorldPubSubType());
-    EXPECT_EQ(type.register_type(participant), ReturnCode_t::RETCODE_OK);
+    EXPECT_EQ(type.register_type(participant), eprosima::fastdds::dds::RETCODE_OK);
 
-    auto topic = participant->create_topic(TEST_TOPIC_NAME, type->getName(), fastdds::dds::TOPIC_QOS_DEFAULT);
+    auto topic = participant->create_topic(TEST_TOPIC_NAME, type->get_name(), fastdds::dds::TOPIC_QOS_DEFAULT);
     ASSERT_NE(topic, nullptr);
 
     auto publisher = participant->create_publisher(fastdds::dds::PUBLISHER_QOS_DEFAULT);
@@ -1822,8 +1771,8 @@ static void test_DDSDiscovery_WaitSetMatchedStatus(
                 fastdds::dds::PublicationMatchedStatus matched_status{};
                 while (1 > matched_status.current_count)
                 {
-                    ReturnCode_t ret_code = wait_set.wait(triggered_conditions, fastrtps::c_TimeInfinite);
-                    if (ReturnCode_t::RETCODE_OK != ret_code)
+                    ReturnCode_t ret_code = wait_set.wait(triggered_conditions, fastdds::dds::c_TimeInfinite);
+                    if (eprosima::fastdds::dds::RETCODE_OK != ret_code)
                     {
                         continue;
                     }
@@ -1871,6 +1820,7 @@ TEST(DDSDiscovery, WaitSetMatchedStatus)
 TEST(DDSDiscovery, DataracePDP)
 {
     using namespace eprosima;
+    using namespace eprosima::fastdds;
     using namespace eprosima::fastdds::dds;
     using namespace eprosima::fastdds::rtps;
 
@@ -1890,9 +1840,11 @@ TEST(DDSDiscovery, DataracePDP)
 
         void on_participant_discovery(
                 DomainParticipant* /*participant*/,
-                eprosima::fastrtps::rtps::ParticipantDiscoveryInfo&& info) override
+                ParticipantDiscoveryStatus status,
+                const ParticipantBuiltinTopicData& /*info*/,
+                bool& /*should_be_ignored*/) override
         {
-            if (info.status == eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
+            if (status == eprosima::fastdds::rtps::ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
             {
                 try
                 {
@@ -1904,8 +1856,8 @@ TEST(DDSDiscovery, DataracePDP)
                 }
                 destruction_future.wait();
             }
-            else if (info.status == eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::REMOVED_PARTICIPANT ||
-                    info.status == eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DROPPED_PARTICIPANT)
+            else if (status == eprosima::fastdds::rtps::ParticipantDiscoveryStatus::REMOVED_PARTICIPANT ||
+                    status == eprosima::fastdds::rtps::ParticipantDiscoveryStatus::DROPPED_PARTICIPANT)
             {
                 try
                 {
@@ -1929,10 +1881,11 @@ TEST(DDSDiscovery, DataracePDP)
     };
 
     // Disable intraprocess
-    auto settings = fastrtps::xmlparser::XMLProfileManager::library_settings();
+    LibrarySettings settings;
+    DomainParticipantFactory::get_instance()->get_library_settings(settings);
     auto prev_intraprocess_delivery = settings.intraprocess_delivery;
-    settings.intraprocess_delivery = fastrtps::INTRAPROCESS_OFF;
-    fastrtps::xmlparser::XMLProfileManager::library_settings(settings);
+    settings.intraprocess_delivery = INTRAPROCESS_OFF;
+    DomainParticipantFactory::get_instance()->set_library_settings(settings);
 
     // DDS Domain Id
     const unsigned int DOMAIN_ID = (uint32_t)GET_PID() % 230;
@@ -1970,7 +1923,7 @@ TEST(DDSDiscovery, DataracePDP)
         participant_listener.discovery_future.wait();
 
         // Shutdown auxiliary participant's network, so it will be removed after lease duration
-        test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = true;
+        aux_udp_transport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = true;
         DomainParticipantFactory::get_instance()->delete_participant(aux_participant);
         std::this_thread::sleep_for(std::chrono::milliseconds(1500)); // Wait for longer than lease duration
 
@@ -2000,56 +1953,55 @@ TEST(DDSDiscovery, DataracePDP)
 
     // Reestablish previous intraprocess configuration
     settings.intraprocess_delivery = prev_intraprocess_delivery;
-    fastrtps::xmlparser::XMLProfileManager::library_settings(settings);
+    DomainParticipantFactory::get_instance()->set_library_settings(settings);
 }
 
-// This test checks that a Discover Server does not send duplicated PDP messages of itself when new clients
-// are discovered
-TEST(Discovery, discovery_server_pdp_messages_sent)
+/*!
+ * @test: Test for validating correct behavior of PID_DOMAIN_ID
+ *
+ * This test checks that two PDP Simple participants with the same PID_DOMAIN_ID
+ * are able to discover each other.
+ * It also checks that the PID_DOMAIN_ID is sent and received.
+ *
+ */
+TEST(DDSDiscovery, pdp_simple_participants_exchange_same_pid_domain_id_and_discover)
 {
-    using namespace eprosima;
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
+    using namespace eprosima::fastdds::rtps;
 
-    // One discovery server will be created, with multiple direct clients connected to it.
-    // Initial announcements will be disabled and lease announcements will be configured to control discovery sequence.
-    // The main participant will use the test transport to count the number of Data(p) sent.
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
-    // Look for the PID_PARTICIPANT_LEASE_DURATION in the message as it is only present in Data(p) messages
-    auto builtin_msg_is_data_p = [](fastrtps::rtps::CDRMessage_t& msg, std::atomic<size_t>& num_data_p)
+    auto reader_test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto writer_test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+
+    bool reader_received_pid_domin_id = true;
+    bool writer_sends_pid_domin_id = true;
+
+    auto find_pid_domain_id = [](CDRMessage_t& msg, bool& pid_was_found)
             {
                 uint32_t qos_size = 0;
                 uint32_t original_pos = msg.pos;
                 bool is_sentinel = false;
-                bool inline_qos_msg = false;
 
                 while (!is_sentinel)
                 {
                     msg.pos = original_pos + qos_size;
 
-                    uint16_t pid = fastdds::helpers::cdr_parse_u16(
+                    uint16_t pid = eprosima::fastdds::helpers::cdr_parse_u16(
                         (char*)&msg.buffer[msg.pos]);
                     msg.pos += 2;
-                    uint16_t plength = fastdds::helpers::cdr_parse_u16(
+                    uint16_t plength = eprosima::fastdds::helpers::cdr_parse_u16(
                         (char*)&msg.buffer[msg.pos]);
                     msg.pos += 2;
                     bool valid = true;
 
-                    // If inline_qos submessage is found we will have an additional Sentinel
-                    if (pid == eprosima::fastdds::dds::PID_RELATED_SAMPLE_IDENTITY)
-                    {
-                        inline_qos_msg = true;
-                    }
-                    else if (pid == eprosima::fastdds::dds::PID_SENTINEL)
+                    if (pid == eprosima::fastdds::dds::PID_SENTINEL)
                     {
                         // PID_SENTINEL is always considered of length 0
                         plength = 0;
-                        if (!inline_qos_msg)
-                        {
-                            // If the PID is not inline qos, then we need to set the sentinel
-                            // to true, as it is the last PID
-                            is_sentinel = true;
-                        }
+                        is_sentinel = true;
                     }
 
                     qos_size += (4 + plength);
@@ -2063,11 +2015,14 @@ TEST(Discovery, discovery_server_pdp_messages_sent)
                     }
                     else if (!is_sentinel)
                     {
-                        if (pid == eprosima::fastdds::dds::PID_PARTICIPANT_LEASE_DURATION)
+                        if (pid == eprosima::fastdds::dds::PID_DOMAIN_ID)
                         {
-                            std::cout << "Data(p) sent by the server" << std::endl;
-                            inline_qos_msg = false;
-                            num_data_p.fetch_add(1u, std::memory_order_seq_cst);
+                            uint32_t domain_id = eprosima::fastdds::helpers::cdr_parse_u32(
+                                (char*)&msg.buffer[msg.pos]);
+                            if (domain_id == (uint32_t)GET_PID() % 230)
+                            {
+                                pid_was_found = true;
+                            }
                             break;
                         }
                     }
@@ -2077,416 +2032,469 @@ TEST(Discovery, discovery_server_pdp_messages_sent)
                 return false;
             };
 
-    // Declare a test transport that will count the number of Data(p) messages sent
-    std::atomic<size_t> num_data_p_sends{ 0 };
-    auto test_transport = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
-    test_transport->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
+    reader_test_transport->drop_builtin_data_messages_filter_ = [&](CDRMessage_t& msg)
             {
-                return builtin_msg_is_data_p(msg, num_data_p_sends);
+                return find_pid_domain_id(msg, reader_received_pid_domin_id);
             };
 
-    // Create the main participant
-    auto server = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+    writer_test_transport->drop_builtin_data_messages_filter_ = [&](CDRMessage_t& msg)
+            {
+                return find_pid_domain_id(msg, writer_sends_pid_domin_id);
+            };
 
-    Locator_t locator_server;  // UDPv4 locator by default
-    IPLocator::setIPv4(locator_server, 127, 0, 0, 1);
-    IPLocator::setPhysicalPort(locator_server, global_port);
+    reader.disable_builtin_transport().add_user_transport_to_pparams(reader_test_transport);
+    writer.disable_builtin_transport().add_user_transport_to_pparams(writer_test_transport);
 
-    WireProtocolConfigQos server_wp_qos;
-    server_wp_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
-    std::istringstream("44.53.00.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos.prefix;
-    server_wp_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server);
+    reader.init();
+    writer.init();
 
-    server_wp_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
-    server_wp_qos.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
-    server_wp_qos.builtin.discovery_config.initial_announcements.count = 0;
+    ASSERT_TRUE(reader.isInitialized());
+    ASSERT_TRUE(writer.isInitialized());
 
-    // The main participant will use the test transport and a specific announcements configuration
-    server->disable_builtin_transport().add_user_transport_to_pparams(test_transport)
-            .wire_protocol(server_wp_qos);
+    reader.wait_discovery();
+    writer.wait_discovery();
 
-    // Start the main participant
-    ASSERT_TRUE(server->init_participant());
-
-    // Create a client that connects to the first server
-    PubSubParticipant<HelloWorldPubSubType> client_1(0u, 0u, 0u, 0u);
-    PubSubParticipant<HelloWorldPubSubType> client_2(0u, 0u, 0u, 0u);
-    PubSubParticipant<HelloWorldPubSubType> client_3(0u, 0u, 0u, 0u);
-    // Set participant as client
-    WireProtocolConfigQos client_qos;
-    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
-    RemoteServerAttributes remote_server_att;
-    remote_server_att.ReadguidPrefix("44.53.00.5f.45.50.52.4f.53.49.4d.41");
-    remote_server_att.metatrafficUnicastLocatorList.push_back(locator_server);
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att);
-    client_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
-    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
-    client_qos.builtin.discovery_config.initial_announcements.count = 1;
-    // Init client 1
-    ASSERT_TRUE(client_1.wire_protocol(client_qos)
-                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-                    .init_participant());
-
-    // Wait for the initial announcements to be sent
-    server->wait_discovery(std::chrono::seconds(5), 1, true);
-    // Let some time for the server to run the internal routine and check if it sent Data(p)
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 1u);
-
-    // Init client 2
-    ASSERT_TRUE(client_2.wire_protocol(client_qos)
-                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-                    .init_participant());
-
-
-    // Wait for the initial announcements to be sent
-    server->wait_discovery(std::chrono::seconds(5), 2, true);
-    // Let some time for the server to run the internal routine and check if it sent Data(p)
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 2u);
-
-    // Init client 3
-    ASSERT_TRUE(client_3.wire_protocol(client_qos)
-                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-                    .init_participant());
-
-
-    // Wait for the initial announcements to be sent
-    server->wait_discovery(std::chrono::seconds(5), 3, true);
-    // Let some time for the server to run the internal routine and check if it sent Data(p)
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 3u);
+    ASSERT_TRUE(writer_sends_pid_domin_id);
+    ASSERT_TRUE(reader_received_pid_domin_id);
 }
 
-TEST(Discovery, discovery_server_edp_messages_sent)
+/*!
+ * @test: Test for validating correct behavior of PID_DOMAIN_ID
+ *
+ * This test checks that two PDP Simple participants in different domains
+ * do not discover each other despite the first one is initial peer of the second.
+ *
+ */
+TEST(DDSDiscovery, pdp_simple_initial_peer_participants_with_different_domain_ids_do_not_discover)
+{
+    PubSubWriter<HelloWorldPubSubType> writer_domain_1(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader_domain_2(TEST_TOPIC_NAME);
+
+    writer_domain_1.set_xml_filename("discovery_participants_initial_peers_profile.xml");
+    writer_domain_1.set_participant_profile("participant_from_domain_1", true);
+    writer_domain_1.init();
+    EXPECT_TRUE(writer_domain_1.isInitialized());
+
+    reader_domain_2.set_xml_filename("discovery_participants_initial_peers_profile.xml");
+    reader_domain_2.set_participant_profile("participant_from_domain_2", true);
+    reader_domain_2.init();
+    EXPECT_TRUE(reader_domain_2.isInitialized());
+
+    writer_domain_1.wait_discovery(std::chrono::seconds(2));
+    reader_domain_2.wait_discovery(std::chrono::seconds(2));
+
+    ASSERT_FALSE(writer_domain_1.is_matched());
+    ASSERT_FALSE(reader_domain_2.is_matched());
+}
+
+/*!
+ * @test: Test for validating correct behavior of PID_DOMAIN_ID
+ *
+ * This test checks that a Discovery Server and a Client in different domains,
+ * discover each other.
+ *
+ */
+TEST(DDSDiscovery, client_server_participants_with_different_domain_ids_discover)
+{
+    PubSubReader<HelloWorldPubSubType> server_domain_1(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> client_domain_2(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> client_domain_3(TEST_TOPIC_NAME);
+
+    server_domain_1.set_xml_filename("discovery_participants_client_server_profile.xml");
+    server_domain_1.set_participant_profile("ds_server", true);
+    server_domain_1.init();
+    EXPECT_TRUE(server_domain_1.isInitialized());
+
+    client_domain_2.set_xml_filename("discovery_participants_client_server_profile.xml");
+    client_domain_2.set_participant_profile("ds_client_pub", true);
+    client_domain_2.init();
+    EXPECT_TRUE(client_domain_2.isInitialized());
+
+    client_domain_3.set_xml_filename("discovery_participants_client_server_profile.xml");
+    client_domain_3.set_participant_profile("ds_client_sub", true);
+    client_domain_3.init();
+    EXPECT_TRUE(client_domain_3.isInitialized());
+
+    server_domain_1.wait_discovery(std::chrono::seconds(2));
+    client_domain_2.wait_discovery(std::chrono::seconds(2));
+    client_domain_3.wait_discovery(std::chrono::seconds(2));
+
+    ASSERT_TRUE(client_domain_2.is_matched());
+    ASSERT_TRUE(client_domain_3.is_matched());
+
+    auto data = default_helloworld_data_generator();
+    size_t data_size = data.size();
+
+    client_domain_3.startReception(data);
+
+    client_domain_2.send(data);
+    EXPECT_TRUE(data.empty());
+
+    // All data received
+    EXPECT_EQ(client_domain_3.block_for_all(std::chrono::seconds(3)), data_size);
+}
+
+/*!
+ * @test: regression test for redmine issue #23047
+ *
+ * This test checks that type_information is always copied between
+ * proxy data copies/assignments, even if the type information is not assigned.
+ *
+ */
+TEST(DDSDiscovery, proxy_data_assignment_operator_always_include_type_information)
 {
     using namespace eprosima;
     using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
+    using namespace eprosima::fastdds::rtps;
+    using namespace eprosima::fastdds::dds::xtypes;
 
-    // Two discovery servers will be created, each with a direct client connected to them.
-    // Initial announcements will be disabled and lease announcements will be configured to control discovery sequence.
-    // The main participant will use the test transport to count the number of Data(r/w) sent.
+    /**
+     * A dummy type support class with the same type name as HelloWorldPubSubType.
+     * Does not register any TypeIdentifier so related proxies will have no
+     * type_information assigned.
+     */
+    class HelloWorldDummyType : public TopicDataType
+    {
+    public:
 
-    // Look for the PID_ENDPOINT_GUID in the message as it is only present in Data(r/w) messages
-    auto builtin_msg_is_data_r_w = [](fastrtps::rtps::CDRMessage_t& msg, std::atomic<size_t>& num_data_r_w)
+        HelloWorldDummyType()
+            : TopicDataType()
+        {
+            set_name("HelloWorld");
+            is_compute_key_provided = false;
+            max_serialized_type_size = 16;
+        }
+
+        bool serialize(
+                const void* const,
+                fastdds::rtps::SerializedPayload_t&,
+                fastdds::dds::DataRepresentationId_t) override
+        {
+            return true;
+        }
+
+        bool deserialize(
+                fastdds::rtps::SerializedPayload_t&,
+                void*) override
+        {
+            return true;
+        }
+
+        uint32_t calculate_serialized_size(
+                const void* const,
+                fastdds::dds::DataRepresentationId_t) override
+        {
+            return 0u;
+        }
+
+        void* create_data() override
+        {
+            return nullptr;
+        }
+
+        void delete_data(
+                void*) override
+        {
+        }
+
+        bool compute_key(
+                fastdds::rtps::SerializedPayload_t&,
+                fastdds::rtps::InstanceHandle_t&,
+                bool) override
+        {
+            return true;
+        }
+
+        bool compute_key(
+                const void* const,
+                fastdds::rtps::InstanceHandle_t&,
+                bool) override
+        {
+            return false;
+        }
+
+    private:
+
+        using TopicDataType::calculate_serialized_size;
+        using TopicDataType::serialize;
+    };
+
+    struct CustomParticipantReaders
+    {
+        class ReadersListener : public eprosima::fastdds::dds::DataReaderListener
+        {
+        public:
+
+            ReadersListener(
+                    std::condition_variable& cv)
+                : cv_(cv)
             {
-                uint32_t qos_size = 0;
-                uint32_t original_pos = msg.pos;
-                bool is_sentinel = false;
-                bool inline_qos_msg = false;
+            }
 
-                while (!is_sentinel)
+            void on_subscription_matched(
+                    eprosima::fastdds::dds::DataReader* /*datareader*/,
+                    const eprosima::fastdds::dds::SubscriptionMatchedStatus& info) override
+            {
+                if (0 < info.current_count_change)
                 {
-                    msg.pos = original_pos + qos_size;
+                    std::cout << "Subscriber matched publisher " << info.last_publication_handle << std::endl;
+                    n_matches_++;
+                    cv_.notify_one();
+                }
+                else
+                {
+                    std::cout << "Subscriber unmatched publisher " << info.last_publication_handle << std::endl;
+                    n_matches_--;
+                    cv_.notify_one();
+                }
+            }
 
-                    uint16_t pid = fastdds::helpers::cdr_parse_u16(
-                        (char*)&msg.buffer[msg.pos]);
-                    msg.pos += 2;
-                    uint16_t plength = fastdds::helpers::cdr_parse_u16(
-                        (char*)&msg.buffer[msg.pos]);
-                    msg.pos += 2;
-                    bool valid = true;
+            std::atomic<uint16_t> n_matches_{0};
+            std::condition_variable& cv_;
 
-                    if (pid == eprosima::fastdds::dds::PID_RELATED_SAMPLE_IDENTITY)
-                    {
-                        inline_qos_msg = true;
-                    }
-                    else if (pid == eprosima::fastdds::dds::PID_SENTINEL)
-                    {
-                        // PID_SENTINEL is always considered of length 0
-                        plength = 0;
-                        if (!inline_qos_msg)
-                        {
-                            // If the PID is not inline qos, then we need to set the sentinel
-                            // to true, as it is the last PID
-                            is_sentinel = true;
-                        }
-                    }
+        };
 
-                    qos_size += (4 + plength);
+        CustomParticipantReaders(
+                const std::vector<std::pair<std::string, TypeSupport>>& topics_and_types,
+                uint32_t ms_delay_between_creations = 10)
+        {
+            readers_listeners_.reserve(topics_and_types.size());
 
-                    // Align to 4 byte boundary and prepare for next iteration
-                    qos_size = (qos_size + 3) & ~3;
+            DomainParticipantQos pqos;
 
-                    if (!valid || ((msg.pos + plength) > msg.length))
-                    {
-                        return false;
-                    }
-                    else if (!is_sentinel)
-                    {
-                        if (pid == eprosima::fastdds::dds::PID_ENDPOINT_GUID)
-                        {
-                            std::cout << "Data (r/w) sent by the server" << std::endl;
-                            num_data_r_w.fetch_add(1u, std::memory_order_seq_cst);
-                            break;
-                        }
-                        else if (pid == eprosima::fastdds::dds::PID_VENDORID)
-                        {
-                            // Vendor ID is present in both Data(p) and Data(r/w) messages
-                            inline_qos_msg = false;
-                        }
-                    }
+            pqos.transport().use_builtin_transports = false;
+            auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+            pqos.transport().user_transports.push_back(udp_transport);
+
+            participant_ = DomainParticipantFactory::get_instance()->create_participant(
+                (uint32_t)GET_PID() % 230, pqos, nullptr);
+
+            if (participant_ == nullptr)
+            {
+                std::cerr << "Error creating participant" << std::endl;
+            }
+
+            subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+
+            if (subscriber_ == nullptr)
+            {
+                std::cerr << "Error creating subscriber" << std::endl;
+            }
+
+            for (auto& topic_and_type : topics_and_types)
+            {
+                participant_->register_type(topic_and_type.second);
+
+                Topic* topic;
+
+                // Magic to fit with the same one in PubSubWriter/Reader
+                std::ostringstream t;
+                t << topic_and_type.first << "_" << asio::ip::host_name() << "_" << GET_PID();
+
+                topic = participant_->create_topic(t.str(), topic_and_type.second->get_name(), TOPIC_QOS_DEFAULT);
+
+                if (topic == nullptr)
+                {
+                    std::cerr << "Error creating topic" << std::endl;
                 }
 
+                readers_listeners_.emplace_back(std::make_shared<ReadersListener>(cv_));
+
+                DataReader* reader;
+                reader = subscriber_->create_datareader(&(*topic), DATAREADER_QOS_DEFAULT,
+                                readers_listeners_.back().get());
+                if (reader == nullptr)
+                {
+                    std::cerr << "Error creating reader" << std::endl;
+                }
+
+                topics_and_readers_.push_back({topic, reader});
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(ms_delay_between_creations));
+            }
+        }
+
+        bool wait_discovery(
+                const std::vector<unsigned int>& expected_matches,
+                std::chrono::seconds timeout = std::chrono::seconds::zero())
+        {
+            if (expected_matches.size() != readers_listeners_.size())
+            {
+                EPROSIMA_LOG_ERROR(TEST, "Expected matches size does not match readers listeners size");
+                return false;
+            }
+
+            bool ret = false;
+            std::unique_lock<std::mutex> lock(discovery_mutex_);
+
+            if (timeout == std::chrono::seconds::zero())
+            {
+                cv_.wait(lock, [&]()
+                        {
+                            for (size_t i = 0; i < readers_listeners_.size(); ++i)
+                            {
+                                if (readers_listeners_[i]->n_matches_.load() < expected_matches[i])
+                                {
+                                    return false;
+                                }
+                            }
+                            ret = true;
+                            return true;
+                        });
+            }
+            else
+            {
+                cv_.wait_for(lock, timeout, [&]()
+                        {
+                            for (size_t i = 0; i < readers_listeners_.size(); ++i)
+                            {
+                                if (readers_listeners_[i]->n_matches_.load() < expected_matches[i])
+                                {
+                                    return false;
+                                }
+                            }
+                            ret = true;
+                            return true;
+                        });
+            }
+
+            return ret;
+        }
+
+        ~CustomParticipantReaders()
+        {
+            if (participant_)
+            {
+                participant_->delete_contained_entities();
+                DomainParticipantFactory::get_instance()->delete_participant(participant_);
+            }
+        }
+
+        DomainParticipant* participant_;
+        std::vector<std::pair<Topic*, DataReader*>> topics_and_readers_;
+        Subscriber* subscriber_;
+        std::mutex discovery_mutex_;
+        std::condition_variable cv_;
+        std::vector<std::shared_ptr<ReadersListener>> readers_listeners_;
+    };
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    writer.disable_builtin_transport();
+    auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+    writer.add_user_transport_to_pparams(udp_transport);
+
+    std::vector<std::pair<std::string, TypeSupport>> topics_and_types;
+    topics_and_types.reserve(2);
+    topics_and_types.push_back(std::make_pair("OtherTopic", TypeSupport(new Data64kbPubSubType())));
+    topics_and_types.push_back(std::make_pair(TEST_TOPIC_NAME, TypeSupport(new HelloWorldDummyType())));
+
+    writer.init();
+
+    // Create two readers in the same participant on different topics
+    // When the second reader is registered, it will try to match with the writer,
+    // so it lookups and loads its ReaderProxyData into a temporal reader proxy pool
+    // previously filled with the Data64k type (with type_information), which is not cleared before.
+    // If the assignment operation in the ReaderProxyData for the HelloworldDummy type does not
+    // always copy the type_information into the temporal proxydata,
+    // the second reader will not be able to match with the writer, failing at EDP::valid_matching
+    CustomParticipantReaders readers(
+        topics_and_types);
+
+    // Wait for the writer to match the second reader
+    writer.wait_discovery();
+    ASSERT_EQ(writer.get_matched(), 1u);
+
+    // The second reader should match with the writer
+    ASSERT_TRUE(readers.wait_discovery({0u, 1u}, std::chrono::seconds(3)));
+}
+
+/*!
+ * @test: regression test for redmine issue #23252
+ *
+ * This test checks that only one packet is sent to multicast (per interface)
+ * when a writer is matched with multiple readers.
+ * Typically, it is expected to send one via localhost and another via local lan interface.
+ */
+TEST(DDSDiscovery, multicast_only_one_packet_sent_when_multiple_multicast_readers_matched)
+{
+    using namespace eprosima::fastdds::dds;
+    using namespace eprosima::fastdds::rtps;
+    using namespace eprosima::fastdds::rtps;
+
+    std::vector<std::shared_ptr<PubSubReader<HelloWorldPubSubType>>> readers;
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+
+    auto writer_test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+
+    const uint8_t n_readers = 5u;
+    uint8_t n_multicast_times_sent = 0u;
+
+    // Add new multicast locator with IP 239.255.0.4 and port 7900
+    DataReaderQos reader_qos;
+    eprosima::fastdds::rtps::Locator_t new_multicast_locator;
+    eprosima::fastdds::rtps::LocatorList multicast_locators;
+    eprosima::fastdds::rtps::IPLocator::setIPv4(new_multicast_locator, "239.255.0.4");
+    new_multicast_locator.port = 6900u;
+    multicast_locators.push_back(new_multicast_locator);
+
+    writer_test_transport->locator_filter_ = [&n_multicast_times_sent, &new_multicast_locator](
+        const eprosima::fastdds::rtps::Locator& destination)
+            {
+                if (destination == new_multicast_locator)
+                {
+                    ++n_multicast_times_sent;
+                }
                 // Do not drop the packet in any case
                 return false;
             };
 
-    // Declare a test transport that will count the number of Data(r/w) messages sent
-    std::atomic<size_t> num_data_r_w_sends_s1{ 0 };
-    std::atomic<size_t> num_data_r_w_sends_s2{ 0 };
-    auto test_transport_s1 = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
-    test_transport_s1->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
-            {
-                return builtin_msg_is_data_r_w(msg, num_data_r_w_sends_s1);
-            };
+    writer.disable_builtin_transport().add_user_transport_to_pparams(writer_test_transport);
 
-    auto test_transport_s2 = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
-    test_transport_s2->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
-            {
-                return builtin_msg_is_data_r_w(msg, num_data_r_w_sends_s2);
-            };
+    readers.reserve(n_readers);
+    for (size_t i = 0; i < n_readers; ++i)
+    {
+        readers.emplace_back(
+            std::make_shared<PubSubReader<HelloWorldPubSubType>>(TEST_TOPIC_NAME));
+        readers.back()->multicast_locator_list(multicast_locators);
+        readers.back()->init();
+        ASSERT_TRUE(readers.back()->isInitialized());
+    }
 
-    // Create server 1
-    auto server_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
 
-    Locator_t locator_server_1;  // UDPv4 locator by default
-    IPLocator::setIPv4(locator_server_1, 127, 0, 0, 1);
-    IPLocator::setPhysicalPort(locator_server_1, global_port);
+    // Wait for discoveries
+    writer.wait_discovery(5);
+    auto default_helloworld_data = default_helloworld_data_generator(1);
 
-    WireProtocolConfigQos server_wp_qos_1;
-    server_wp_qos_1.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
-    std::istringstream("44.53.01.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos_1.prefix;
-    server_wp_qos_1.builtin.metatrafficUnicastLocatorList.push_back(locator_server_1);
+    for (const auto& reader : readers)
+    {
+        reader->wait_discovery(std::chrono::seconds::zero(), 1u);
+        reader->startReception(default_helloworld_data);
+    }
 
-    server_wp_qos_1.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
-    server_wp_qos_1.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
-    server_wp_qos_1.builtin.discovery_config.initial_announcements.count = 0;
+    writer.send_sample(default_helloworld_data.back());
 
-    // The main participant will use the test transport and a specific announcements configuration
-    server_1->disable_builtin_transport().add_user_transport_to_pparams(test_transport_s1)
-            .wire_protocol(server_wp_qos_1);
+    // Sample should be received by all readers
+    for (const auto& reader : readers)
+    {
+        ASSERT_EQ(reader->block_for_all(std::chrono::seconds(3)), 1u);
+    }
 
-    // Start the main participant
-    ASSERT_TRUE(server_1->init_participant());
+    std::vector<eprosima::fastdds::rtps::IPFinder::info_IP> ips;
 
-    // Create server 2
-    auto server_2 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+    ASSERT_TRUE(IPFinder::getIPs(&ips, true));
 
-    Locator_t locator_server_2 = locator_server_1;  // UDPv4 locator by default
-    IPLocator::setPhysicalPort(locator_server_2, global_port + 1);
+    uint8_t n_v4_addresses = 0u;
+    for (const auto& ip : ips)
+    {
+        if (ip.type == eprosima::fastdds::rtps::IPFinder::IP4 ||
+                ip.type == eprosima::fastdds::rtps::IPFinder::IP4_LOCAL)
+        {
+            ++n_v4_addresses;
+        }
+    }
 
-    WireProtocolConfigQos server_wp_qos_2 = server_wp_qos_1;
-    std::istringstream("44.53.02.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos_2.prefix;
-    server_wp_qos_2.builtin.metatrafficUnicastLocatorList.clear();
-    server_wp_qos_2.builtin.metatrafficUnicastLocatorList.push_back(locator_server_2);
-    // Configure 1 initial announcement as this Server will connect to the first one
-    server_wp_qos_2.builtin.discovery_config.initial_announcements.count = 1;
-    RemoteServerAttributes remote_server_att_1;
-    remote_server_att_1.ReadguidPrefix("44.53.01.5f.45.50.52.4f.53.49.4d.41");
-    remote_server_att_1.metatrafficUnicastLocatorList.push_back(locator_server_1);
-    server_wp_qos_2.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_1);
-
-    // The main participant will use the test transport and a specific announcements configuration
-    server_2->disable_builtin_transport().add_user_transport_to_pparams(test_transport_s2)
-            .wire_protocol(server_wp_qos_2);
-
-    // Start the main participant
-    ASSERT_TRUE(server_2->init_participant());
-
-    // Both servers match
-    server_1->wait_discovery(std::chrono::seconds(5), 1, true);
-    server_2->wait_discovery(std::chrono::seconds(5), 1, true);
-    // Let some time for the server to run the internal routine and match virtual endpoints
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-
-    // Create a client that connects to their corresponding server
-    PubSubWriter<HelloWorldPubSubType> client_1(TEST_TOPIC_NAME);
-    PubSubReader<HelloWorldPubSubType> client_2(TEST_TOPIC_NAME);
-    // Set participant as client
-    WireProtocolConfigQos client_qos;
-    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_1);
-    client_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
-    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 15, 0 };
-    client_qos.builtin.discovery_config.initial_announcements.count = 0;
-
-    // Init client 1
-    client_1.set_wire_protocol_qos(client_qos)
-            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-            .init();
-
-    // Init client 2
-    client_qos.builtin.discovery_config.m_DiscoveryServers.clear();
-    RemoteServerAttributes remote_server_att_2;
-    remote_server_att_2.ReadguidPrefix("44.53.02.5f.45.50.52.4f.53.49.4d.41");
-    remote_server_att_2.metatrafficUnicastLocatorList.push_back(locator_server_2);
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_2);
-    client_2.set_wire_protocol_qos(client_qos)
-            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-            .init();
-
-    ASSERT_TRUE(client_1.isInitialized());
-    ASSERT_TRUE(client_2.isInitialized());
-
-    // Wait the lease announcement period to discover endpoints
-    server_1->wait_discovery(std::chrono::seconds(5), 2, true);
-    server_2->wait_discovery(std::chrono::seconds(5), 2, true);
-
-    // Ensure that no additional Data(r/w) messages are sent by DS routine
-    std::this_thread::sleep_for(std::chrono::seconds(15));
-
-    EXPECT_EQ(num_data_r_w_sends_s1.load(std::memory_order::memory_order_seq_cst), 2u);
-    EXPECT_EQ(num_data_r_w_sends_s2.load(std::memory_order::memory_order_seq_cst), 2u);
-}
-
-// This is a regression test for Redmine #23088, which corrects the following data race in the discovery server:
-// a) When a participant is being removed (either because it is being deleted or because its lease duration has expired),
-//    it is not deleted from participants_ map until the server has received all ACKs from clients of the Data(Up).
-// b) If the same participant is re-discovered (Data(p) received) while the server is waiting for the Data(Up) ACKs,
-//    it will not be updated in the participants_ map as ALIVE.
-// c) If the Data(Up) ACKs and the Data(r/w) of the rediscovered participant are received at the same time,
-//    the server will delete the participant and try to process the Data(r/w) messages in the same routine.
-//    The server will try to register a reader/writer from a deleted participant, which will result in the error:
-//    "Matching unexisting participant from reader/writer".
-// This test checks that this does not happen after fixing point b) and updating the participant to ALIVE.
-TEST(Discovery, discovery_server_rediscover_participant_being_removed)
-{
-    using namespace eprosima;
-    using namespace eprosima::fastdds::dds;
-    using namespace eprosima::fastrtps::rtps;
-
-    // One discovery server will be created, with two direct clients connected to it.
-    // Client 1 will be removed and then relaunched, while the Client 2 will be kept alive.
-    // Client 2 ACKs will be blocked to simulate a slow discovery process.
-
-    std::atomic<bool> filter_activated { false };
-    auto block_data_up_acks = [&filter_activated](fastrtps::rtps::CDRMessage_t& msg)
-            {
-                // Filter Data(Up) ACKs messages
-                if (filter_activated.load(std::memory_order::memory_order_seq_cst))
-                {
-                    // Go back to submsgkind
-                    auto submsgkind_pos = msg.pos - 4;
-                    auto acknack_submsg = eprosima::fastdds::helpers::cdr_parse_acknack_submsg(
-                        (char*)&msg.buffer[submsgkind_pos],
-                        msg.length - submsgkind_pos);
-
-                    assert(acknack_submsg.submsgHeader().submessageId() == ACKNACK);
-
-                    if (eprosima::fastrtps::rtps::c_EntityId_SPDPWriter ==
-                            *reinterpret_cast<EntityId_t*>(&acknack_submsg.writerId()) ||
-                            eprosima::fastrtps::rtps::c_EntityId_SEDPPubWriter ==
-                            *reinterpret_cast<EntityId_t*>(&acknack_submsg.writerId()))
-                    {
-                        std::cout << "Blocking Data(Up) ACKs" << std::endl;
-                        return true;
-                    }
-                }
-                return false;
-            };
-
-    // Declare a test transport that will count the number of Data(p) messages sent
-    auto default_udp_transport = std::make_shared<UDPv4TransportDescriptor>();
-    auto test_transport = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
-    test_transport->drop_ack_nack_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
-            {
-                return block_data_up_acks(msg);
-            };
-
-    // Create the main participant
-    auto server = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
-
-    Locator_t locator_server;  // UDPv4 locator by default
-    IPLocator::setIPv4(locator_server, 127, 0, 0, 1);
-    IPLocator::setPhysicalPort(locator_server, global_port);
-
-    WireProtocolConfigQos server_wp_qos;
-    server_wp_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
-    std::istringstream("44.53.00.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos.prefix;
-    server_wp_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server);
-    // Raise the routine period to control the discovery process
-    server_wp_qos.builtin.discovery_config.discoveryServer_client_syncperiod = { 5, 0 };
-    server_wp_qos.builtin.discovery_config.leaseDuration = { 60, 0 };
-    server_wp_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 59, 0 };
-    server_wp_qos.builtin.discovery_config.initial_announcements.count = 1;
-
-    // The main participant will use the test transport and a specific announcements configuration
-    server->disable_builtin_transport()
-            .add_user_transport_to_pparams(default_udp_transport)
-            .wire_protocol(server_wp_qos);
-
-    // Start the main participant
-    ASSERT_TRUE(server->init_participant());
-
-    // Create clients
-    std::shared_ptr<PubSubParticipant<HelloWorldPubSubType>> client_1 =
-            std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(1u, 0u, 0u, 1u);
-    std::shared_ptr<PubSubParticipant<HelloWorldPubSubType>> client_2 =
-            std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0u, 1u, 1u, 0u);
-    // Set participant as client
-    WireProtocolConfigQos client_qos;
-    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
-    RemoteServerAttributes remote_server_att;
-    remote_server_att.ReadguidPrefix("44.53.00.5f.45.50.52.4f.53.49.4d.41");
-    remote_server_att.metatrafficUnicastLocatorList.push_back(locator_server);
-    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att);
-    client_qos.builtin.discovery_config.leaseDuration = { 60, 0 };
-    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 59, 0 };
-    client_qos.builtin.discovery_config.initial_announcements.count = 1;
-    std::istringstream("64.61.74.61.5f.72.61.63.65.5f.64.73") >> client_qos.prefix;
-
-    // Init client 1
-    client_1->wire_protocol(client_qos)
-            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-            .pub_topic_name(TEST_TOPIC_NAME);
-    ASSERT_TRUE(client_1->init_participant());
-    ASSERT_TRUE(client_1->init_publisher(0u));
-
-    // Init client 2
-    WireProtocolConfigQos client2_qos = client_qos;
-    std::istringstream("73.61.74.61.5f.72.61.63.65.5f.64.73") >> client2_qos.prefix;
-    client_2->wire_protocol(client2_qos)
-            .disable_builtin_transport()
-            .add_user_transport_to_pparams(test_transport)
-            .sub_topic_name(TEST_TOPIC_NAME);
-    ASSERT_TRUE(client_2->init_participant());
-    ASSERT_TRUE(client_2->init_subscriber(0u));
-
-    // Wait at least the servers routine period to discover endpoints
-    ASSERT_TRUE(server->wait_discovery(std::chrono::seconds(6), 2, true));
-    client_2->sub_wait_discovery(1);
-    client_1->pub_wait_discovery(1);
-
-    // Server discovered both clients, activate filter to block Data(Up) ACKs
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "Blocking Data(Up) ACKs activated" << std::endl;
-    filter_activated.store(true, std::memory_order::memory_order_seq_cst);
-
-    // Remove client 1
-    client_1.reset();
-    ASSERT_TRUE(client_1 == nullptr);
-    // Ensure client 2 has unmatched the client 1
-    client_2->sub_wait_discovery(0);
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-
-    // Relaunch client 1 and deactivate the filter
-    client_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(1u, 0u, 0u, 1u);
-    client_1->wire_protocol(client_qos)
-            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
-            .pub_topic_name(TEST_TOPIC_NAME);
-    // Init only the participant, publisher will be initialized later
-    ASSERT_TRUE(client_1->init_participant());
-    std::cout << "Blocking Data(Up) ACKs deactivated" << std::endl;
-    filter_activated.store(false, std::memory_order::memory_order_seq_cst);
-
-    // Give time to receive Data(Up) ACK, process the Data(p) and update the participant,
-    // but do it before a whole period of the server's routine.
-    // In this way new Data(w) and Data(Up) ACK are processed in the same routine
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    ASSERT_TRUE(client_1->init_publisher(0u));
-
-    // Client 2 should discover client 1 again and log error "Writer has no associated participant." should not appear
-    client_2->sub_wait_discovery(1);
+    // Check sample was only sent one per interface
+    ASSERT_EQ(n_multicast_times_sent, n_v4_addresses);
 }

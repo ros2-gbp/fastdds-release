@@ -17,13 +17,17 @@
  *
  */
 
-#include <stdint.h>
-#include <vector>
-
 #ifndef LATENCYTESTTYPES_H_
 #define LATENCYTESTTYPES_H_
 
-#include "fastrtps/fastrtps_all.h"
+#include <cstdint>
+#include <vector>
+#include <string>
+
+#include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastdds/dds/topic/TopicDataType.hpp>
+#include <fastdds/rtps/common/InstanceHandle.hpp>
+#include <fastdds/rtps/common/SerializedPayload.hpp>
 
 #define MAX_TYPE_SIZE 10 * 1024 * 1024
 
@@ -79,21 +83,21 @@ public:
     LatencyDataType()
         : buffer_size_(MAX_TYPE_SIZE - LatencyType::overhead)
     {
-        setName("LatencyType");
-        m_typeSize = MAX_TYPE_SIZE;
-        m_isGetKeyDefined = false;
+        set_name("LatencyType");
+        max_serialized_type_size = MAX_TYPE_SIZE;
+        is_compute_key_provided = false;
     }
 
     LatencyDataType(
             const size_t& size)
         : buffer_size_(size)
     {
-        setName("LatencyType");
-        m_typeSize = sizeof(decltype(LatencyType::seqnum)) +
+        set_name("LatencyType");
+        max_serialized_type_size = sizeof(decltype(LatencyType::seqnum)) +
                 sizeof(decltype(LatencyType::bounce)) +
                 ((size + 3) & ~3) +
-                eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
-        m_isGetKeyDefined = false;
+                eprosima::fastdds::rtps::SerializedPayload_t::representation_header_size;
+        is_compute_key_provided = false;
     }
 
     ~LatencyDataType()
@@ -101,34 +105,32 @@ public:
     }
 
     bool serialize(
-            void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override
-    {
-        return serialize(data, payload, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
-    }
-
-    bool serialize(
-            void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            const void* const data,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
     bool deserialize(
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             void* data) override;
-    std::function<uint32_t()> getSerializedSizeProvider(
-            void* data) override
+
+    uint32_t calculate_serialized_size(
+            const void* const data,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
+    void* create_data() override;
+    void delete_data(
+            void* data) override;
+
+    bool compute_key(
+            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
+            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+            bool force_md5 = false) override
     {
-        return getSerializedSizeProvider(data, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        (void)force_md5;
+        return false;
     }
 
-    std::function<uint32_t()> getSerializedSizeProvider(
-            void* data,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
-    void* createData() override;
-    void deleteData(
-            void* data) override;
-    bool getKey(
-            void* /*data*/,
-            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
+    bool compute_key(
+            const void* const /*data*/,
+            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;
@@ -145,11 +147,11 @@ public:
 
     bool is_bounded() const override
     {
-        // All plain types are bounded
-        return is_plain();
+        return true;
     }
 
-    bool is_plain() const override
+    bool is_plain(
+            eprosima::fastdds::dds::DataRepresentationId_t) const override
     {
         // It is plain because the type has a fixed size
         return true;
@@ -160,7 +162,7 @@ public:
 
 private:
 
-    using eprosima::fastrtps::TopicDataType::is_plain;
+    using eprosima::fastdds::dds::TopicDataType::is_plain;
 };
 
 enum TESTCOMMAND : uint32_t
@@ -195,9 +197,9 @@ public:
 
     TestCommandDataType()
     {
-        setName("TestCommandType");
-        m_typeSize = 4;
-        m_isGetKeyDefined = false;
+        set_name("TestCommandType");
+        max_serialized_type_size = 4;
+        is_compute_key_provided = false;
     }
 
     ~TestCommandDataType()
@@ -205,34 +207,32 @@ public:
     }
 
     bool serialize(
-            void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override
-    {
-        return serialize(data, payload, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
-    }
-
-    bool serialize(
-            void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            const void* const data,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
     bool deserialize(
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             void* data) override;
-    std::function<uint32_t()> getSerializedSizeProvider(
-            void* data) override
+
+    uint32_t calculate_serialized_size(
+            const void* const data,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
+    void* create_data() override;
+    void delete_data(
+            void* data) override;
+
+    bool compute_key(
+            eprosima::fastdds::rtps::SerializedPayload_t& /*payload*/,
+            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
+            bool force_md5 = false) override
     {
-        return getSerializedSizeProvider(data, eprosima::fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        (void)force_md5;
+        return false;
     }
 
-    std::function<uint32_t()> getSerializedSizeProvider(
-            void* data,
-            eprosima::fastdds::dds::DataRepresentationId_t data_representation) override;
-    void* createData() override;
-    void deleteData(
-            void* data) override;
-    bool getKey(
-            void* /*data*/,
-            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
+    bool compute_key(
+            const void* const /*data*/,
+            eprosima::fastdds::rtps::InstanceHandle_t& /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;

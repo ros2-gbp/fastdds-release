@@ -1,4 +1,4 @@
-name: Fast-DDS Ubuntu CI reusable workflow
+name: Fast DDS Ubuntu CI reusable workflow
 
 on:
   workflow_call:
@@ -31,7 +31,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: '2.2.x'
+        default: '2.3.x'
       security:
         description: 'Enable security features'
         required: false
@@ -61,6 +61,11 @@ on:
 env:
   security-cmake-flag: ${{ inputs.security == true && '-DSECURITY=ON' || '-DSECURITY=OFF' }}
   colcon-build-default-cmake-args: '-DCMAKE_CXX_FLAGS="-Werror -Wall -Wextra -Wpedantic -Wunused-value -Woverloaded-virtual"'
+  fastdds-python-branch: '2.2.x'
+  fastdds-docs-branch: '3.2.x'
+  shapes-demo-branch: '3.2.x'
+  discovery-server-branch: '2.0.x'
+  
 defaults:
   run:
     shell: bash
@@ -86,7 +91,7 @@ jobs:
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
-          path: src/fastrtps
+          path: src/fastdds
           submodules: true
           ref: ${{ inputs.fastdds-branch }}
 
@@ -139,7 +144,7 @@ jobs:
       - name: Fetch Fast DDS dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastdds/fastdds.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -150,7 +155,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '-DCOMPILE_TOOLS=OFF ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -200,7 +205,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool xmlschema
+          packages: vcstool xmlschema psutil
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -226,7 +231,7 @@ jobs:
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -234,10 +239,10 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
-          cmake_args_default: '${{ env.colcon-build-default-cmake-args }}'
+          cmake_args_default: '${{ env.colcon-build-default-cmake-args }} -DFASTDDS_EXAMPLE_TESTS=ON'
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace: ${{ github.workspace }}
 
@@ -245,11 +250,11 @@ jobs:
         id: test
         uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
-          packages_names: fastrtps
+          packages_names: fastdds
           workspace: ${{ github.workspace }}
           test_report_artifact: ${{ format('test_report_{0}_{1}_{2}', inputs.label, github.job, join(matrix.*, '_')) }}
 
@@ -313,7 +318,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Fast-DDS-python
-          fallback_branch: '1.4.x'
+          fallback_branch: ${{ env.fastdds-python-branch }}
 
       - name: Download Fast DDS Python repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -326,7 +331,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }} --packages-select fastdds_python
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ''
@@ -382,7 +387,7 @@ jobs:
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -396,7 +401,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastrtps/.github/workflows/config/python_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/python_test.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ''
@@ -407,7 +412,7 @@ jobs:
         id: python_test
         uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/python_test.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/python_test.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
@@ -463,7 +468,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool xmlschema
+          packages: vcstool xmlschema psutil
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -476,7 +481,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Fast-DDS-docs
-          fallback_branch: '2.14.x'
+          fallback_branch: ${{ env.fastdds-docs-branch }}
 
       - name: Download Fast DDS documentation repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -489,7 +494,7 @@ jobs:
         if: ${{ inputs.run-tests == true }}
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -503,7 +508,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastrtps/.github/workflows/config/documentation.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/documentation.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_build_type: ${{ matrix.cmake-build-type }}
@@ -514,7 +519,7 @@ jobs:
         if: ${{ inputs.run-tests == true }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/documentation.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/documentation.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
@@ -583,7 +588,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/ShapesDemo
-          fallback_branch: '2.14.x'
+          fallback_branch: ${{ env.shapes-demo-branch }}
 
       - name: Download Shapes Demo repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -607,7 +612,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -650,7 +655,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool xmlschema xmltodict==0.13.0 jsondiff==2.0.0 pandas==1.5.2
+          packages: vcstool xmlschema xmltodict==0.13.0 jsondiff==2.0.0 pandas==1.5.2 psutil
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -663,7 +668,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
         with:
           remote_repository: eProsima/Discovery-Server
-          fallback_branch: '1.2.x'
+          fallback_branch: ${{ env.discovery-server-branch }}
 
       - name: Download Discovery Server repo
         uses: eProsima/eProsima-CI/external/checkout@v0
@@ -675,7 +680,7 @@ jobs:
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -683,7 +688,7 @@ jobs:
         continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastrtps/.github/workflows/config/discovery_server.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/discovery_server.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -695,7 +700,7 @@ jobs:
         if: ${{ inputs.run-tests == true }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/discovery_server.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/discovery_server.meta
           colcon_test_args: ${{ inputs.colcon-args }}
           colcon_test_args_default: --event-handlers=console_direct+
           ctest_args: ${{ inputs.ctest-args }}
@@ -781,8 +786,8 @@ jobs:
       - name: Profilling tests build
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
-          colcon_build_args: ${{ inputs.colcon-args }} --packages-up-to fastrtps
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
+          colcon_build_args: ${{ inputs.colcon-args }} --packages-up-to fastdds
           cmake_args: '-DPROFILING_TESTS=ON ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
           cmake_build_type: ${{ matrix.cmake-build-type }}
@@ -795,10 +800,10 @@ jobs:
           rm -rf build install log src/osrf_testing_tools_cpp
 
       - name: No security colcon build
-        continue-on-error: true
+        continue-on-error: false
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '-DSECURITY=OFF ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -806,17 +811,14 @@ jobs:
           workspace: ${{ github.workspace }}
 
       - name: Clean workspace - No security
-        if: ${{ always() }}
         run: |
           cd ${{ github.workspace }}
           rm -rf build install log
 
       - name: No statistics colcon build
-        continue-on-error: true
-        if: ${{ always() }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '-DFASTDDS_STATISTICS=OFF ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -824,15 +826,12 @@ jobs:
           workspace: ${{ github.workspace }}
 
       - name: Clean workspace - No statistics
-        if: ${{ always() }}
         run: |
           cd ${{ github.workspace }}
           rm -rf build install log
 
       # No .metas file, so FASTDDS_ENFORCE_LOG_INFO is set OFF by default. Missed important args are manually included
       - name: No enforcing log info colcon build
-        continue-on-error: true
-        if: ${{ always() }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
           colcon_meta_file: ''
@@ -843,17 +842,14 @@ jobs:
           workspace: ${{ github.workspace }}
 
       - name: Clean workspace - No enforce log info
-        if: ${{ always() }}
         run: |
           cd ${{ github.workspace }}
           rm -rf build install log
 
       - name: No shared libs colcon build
-        continue-on-error: true
-        if: ${{ always() }}
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_build.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }}
           cmake_args: '-DBUILD_SHARED_LIBS=OFF ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
@@ -864,9 +860,20 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           rm -rf build install log
-          
+
       - name: Vanilla colcon build
         uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
         with:
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace: ${{ github.workspace }}
+
+      - name: Clean workspace - Vanilla build
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf build install log
+
+      - name: GCC latest colcon build
+        run: |
+          cd ${{ github.workspace }}/src/fastdds/.github/workflows/docker/ubuntu/alternative_builds
+          docker build -t fastdds_gcc_latest -f fastdds_gcc_latest.Dockerfile .
+          docker run --rm -v ${{ github.workspace }}:/root fastdds_gcc_latest

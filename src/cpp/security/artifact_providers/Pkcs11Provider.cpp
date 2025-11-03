@@ -18,6 +18,9 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <security/artifact_providers/Pkcs11Provider.hpp>
@@ -34,7 +37,7 @@
 
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -100,7 +103,7 @@ Pkcs11Provider::Pkcs11Provider()
 
     // Load the PIN from the environment
     std::string pin;
-    if (ReturnCode_t::RETCODE_OK == SystemInfo::get_env(FASTDDS_PKCS11_PIN, pin))
+    if (fastdds::dds::RETCODE_OK == SystemInfo::get_env(FASTDDS_PKCS11_PIN, pin))
     {
         if (!ENGINE_ctrl_cmd_string( pkcs11_, "PIN", pin.c_str(), 0))
         {
@@ -167,5 +170,5 @@ EVP_PKEY* Pkcs11Provider::load_private_key(
 } // namespace detail
 } // namespace security
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

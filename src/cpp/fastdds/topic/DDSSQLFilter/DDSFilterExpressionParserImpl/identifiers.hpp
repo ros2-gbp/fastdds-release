@@ -21,8 +21,8 @@
 
 struct CurrentIdentifierState
 {
-    const TypeObject* type_object;
-    const TypeIdentifier* current_type;
+    const std::shared_ptr<xtypes::TypeObject> type_object;
+    std::shared_ptr<xtypes::TypeIdentifier> current_type;
     std::vector<DDSFilterField::FieldAccessor> access_path;
 };
 
@@ -48,46 +48,73 @@ struct identifier_processor
         return process_bound(bound_seq[0]);
     }
 
+    static std::shared_ptr<xtypes::TypeIdentifier> resolve_type(
+            const xtypes::TypeIdentifier& ti,
+            const position& pos)
+    {
+        if (xtypes::EK_COMPLETE != ti._d())
+        {
+            return std::make_shared<xtypes::TypeIdentifier>(ti);
+        }
+
+        std::shared_ptr<xtypes::TypeObject> type_object = std::make_shared<xtypes::TypeObject>();
+        if (RETCODE_OK == DomainParticipantFactory::get_instance()->type_object_registry().get_type_object(
+                    ti, *type_object) && xtypes::EK_COMPLETE == type_object->_d())
+        {
+            if (xtypes::TK_ALIAS == type_object->complete()._d())
+            {
+                const xtypes::TypeIdentifier& aliased_id =
+                        type_object->complete().alias_type().body().common().related_type();
+                return resolve_type(aliased_id, pos);
+            }
+            return std::make_shared<xtypes::TypeIdentifier>(ti);
+        }
+        throw parse_error("could not find type object definition", pos);
+    }
+
     static bool type_should_be_indexed(
-            const TypeIdentifier& ti,
-            const TypeIdentifier*& out_type,
-            size_t& max_size)
+            const xtypes::TypeIdentifier& ti,
+            std::shared_ptr<xtypes::TypeIdentifier>& out_type,
+            size_t& max_size,
+            const position& pos)
     {
         max_size = 0;
 
         switch (ti._d())
         {
-            case TI_PLAIN_ARRAY_SMALL:
-                out_type = ti.array_sdefn().element_identifier();
+            case xtypes::TI_PLAIN_ARRAY_SMALL:
+                out_type = resolve_type(*ti.array_sdefn().element_identifier(), pos);
                 max_size = process_bounds(ti.array_sdefn().array_bound_seq());
                 return true;
 
-            case TI_PLAIN_ARRAY_LARGE:
-                out_type = ti.array_ldefn().element_identifier();
+            case xtypes::TI_PLAIN_ARRAY_LARGE:
+                out_type = resolve_type(*ti.array_ldefn().element_identifier(), pos);
                 max_size = process_bounds(ti.array_ldefn().array_bound_seq());
                 return true;
 
-            case TI_PLAIN_SEQUENCE_SMALL:
-                out_type = ti.seq_sdefn().element_identifier();
+            case xtypes::TI_PLAIN_SEQUENCE_SMALL:
+                out_type = resolve_type(*ti.seq_sdefn().element_identifier(), pos);
                 max_size = process_bound(ti.seq_sdefn().bound());
                 return true;
 
-            case TI_PLAIN_SEQUENCE_LARGE:
-                out_type = ti.seq_ldefn().element_identifier();
+            case xtypes::TI_PLAIN_SEQUENCE_LARGE:
+                out_type = resolve_type(*ti.seq_ldefn().element_identifier(), pos);
                 max_size = process_bound(ti.seq_ldefn().bound());
                 return true;
+
+            default:
+                out_type = std::make_shared<xtypes::TypeIdentifier>(ti);
         }
 
-        out_type = &ti;
         return false;
     }
 
     static void add_member_access(
             std::unique_ptr< ParseNode >& n,
             CurrentIdentifierState& identifier_state,
-            const CompleteTypeObject& complete)
+            const xtypes::CompleteTypeObject& complete)
     {
-        if (TK_STRUCTURE != complete._d())
+        if (xtypes::TK_STRUCTURE != complete._d())
         {
             throw parse_error("trying to access field on a non-struct type", n->begin());
         }
@@ -95,7 +122,7 @@ struct identifier_processor
         const ParseNode& name_node = n->left();
         std::string name = name_node.content();
         size_t member_index;
-        const CompleteStructMemberSeq& members = complete.struct_type().member_seq();
+        const xtypes::CompleteStructMemberSeq& members = complete.struct_type().member_seq();
         for (member_index = 0; member_index < members.size(); ++member_index)
         {
             if (members[member_index].detail().name() == name)
@@ -109,11 +136,11 @@ struct identifier_processor
             throw parse_error("field not found", name_node.begin());
         }
 
-        const TypeIdentifier& ti = members[member_index].common().member_type_id();
+        auto ti = resolve_type(members[member_index].common().member_type_id(), name_node.begin());
         bool has_index = n->children.size() > 1;
         size_t max_size = 0;
         size_t array_index = std::numeric_limits<size_t>::max();
-        if (type_should_be_indexed(ti, identifier_state.current_type, max_size))
+        if (type_should_be_indexed(*ti, identifier_state.current_type, max_size, name_node.begin()))
         {
             if (!has_index)
             {
@@ -138,58 +165,60 @@ struct identifier_processor
     }
 
     static DDSFilterValue::ValueKind get_value_kind(
-            const TypeIdentifier& ti,
+            const xtypes::TypeIdentifier& ti,
             const position& pos)
     {
         switch (ti._d())
         {
-            case TK_BOOLEAN:
+            case xtypes::TK_BOOLEAN:
                 return DDSFilterValue::ValueKind::BOOLEAN;
 
-            case TK_CHAR8:
+            case xtypes::TK_CHAR8:
                 return DDSFilterValue::ValueKind::CHAR;
 
-            case TK_STRING8:
-            case TI_STRING8_SMALL:
-            case TI_STRING8_LARGE:
+            case xtypes::TK_STRING8:
+            case xtypes::TI_STRING8_SMALL:
+            case xtypes::TI_STRING8_LARGE:
                 return DDSFilterValue::ValueKind::STRING;
 
-            case TK_INT16:
-            case TK_INT32:
-            case TK_INT64:
+            case xtypes::TK_INT8:
+            case xtypes::TK_INT16:
+            case xtypes::TK_INT32:
+            case xtypes::TK_INT64:
                 return DDSFilterValue::ValueKind::SIGNED_INTEGER;
 
-            case TK_BYTE:
-            case TK_UINT16:
-            case TK_UINT32:
-            case TK_UINT64:
+            case xtypes::TK_BYTE:
+            case xtypes::TK_UINT8:
+            case xtypes::TK_UINT16:
+            case xtypes::TK_UINT32:
+            case xtypes::TK_UINT64:
                 return DDSFilterValue::ValueKind::UNSIGNED_INTEGER;
 
-            case TK_FLOAT32:
+            case xtypes::TK_FLOAT32:
                 return DDSFilterValue::ValueKind::FLOAT_FIELD;
 
-            case TK_FLOAT64:
+            case xtypes::TK_FLOAT64:
                 return DDSFilterValue::ValueKind::DOUBLE_FIELD;
 
-            case TK_FLOAT128:
+            case xtypes::TK_FLOAT128:
                 return DDSFilterValue::ValueKind::LONG_DOUBLE_FIELD;
 
-            case EK_COMPLETE:
-                const TypeObject* type_object = TypeObjectFactory::get_instance()->get_type_object(&ti);
-                if (TK_ENUM == type_object->complete()._d())
+            case xtypes::EK_COMPLETE:
+            {
+                std::shared_ptr<xtypes::TypeObject> type_object = std::make_shared<xtypes::TypeObject>();
+                if (RETCODE_OK == DomainParticipantFactory::get_instance()->type_object_registry().get_type_object(
+                            ti, *type_object) && xtypes::EK_COMPLETE == type_object->_d())
                 {
-                    return DDSFilterValue::ValueKind::ENUM;
+                    assert(xtypes::TK_ALIAS != type_object->complete()._d()); // should be resolved already at this point
+                    if (xtypes::TK_ENUM == type_object->complete()._d())
+                    {
+                        return DDSFilterValue::ValueKind::ENUM;
+                    }
                 }
-                if (TK_ALIAS == type_object->complete()._d())
-                {
-                    const TypeIdentifier& aliasedId =
-                            type_object->complete().alias_type().body().common().related_type();
-                    return get_value_kind(aliasedId, pos);
-                }
-                break;
+            }
+            break;
 
         }
-
         throw parse_error("type is not primitive", pos);
     }
 
@@ -201,6 +230,11 @@ struct identifier_processor
     {
         if (n->is<fieldname>())
         {
+            if (!state.current_type)
+            {
+                throw parse_error("undefined type identifier", n->begin());
+            }
+
             // Set data for fieldname node
             n->field_kind = get_value_kind(*state.current_type, n->end());
             n->field_access_path = state.access_path;
@@ -208,23 +242,29 @@ struct identifier_processor
 
             // Reset parser state
             state.access_path.clear();
-            state.current_type = nullptr;
+            state.current_type.reset();
         }
         else
         {
-            if (nullptr == state.current_type)
+            if (!state.current_type)
             {
+                if (!state.type_object)
+                {
+                    throw parse_error("undefined type object", n->begin());
+                }
                 add_member_access(n, state, state.type_object->complete());
             }
             else
             {
-                if (EK_COMPLETE != state.current_type->_d())
+                if (xtypes::EK_COMPLETE != state.current_type->_d())
                 {
                     throw parse_error("trying to access field on a non-complete type", n->begin());
                 }
 
-                const TypeObject* type_object = TypeObjectFactory::get_instance()->get_type_object(state.current_type);
-                if (nullptr == type_object)
+                std::shared_ptr<xtypes::TypeObject> type_object = std::make_shared<xtypes::TypeObject>();
+                ReturnCode_t ret = DomainParticipantFactory::get_instance()->type_object_registry().get_type_object(
+                    *state.current_type, *type_object);
+                if (RETCODE_BAD_PARAMETER == ret)
                 {
                     throw parse_error("could not find type object definition", n->begin());
                 }

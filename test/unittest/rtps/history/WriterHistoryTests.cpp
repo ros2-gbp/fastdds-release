@@ -14,14 +14,15 @@
 
 #include <gtest/gtest.h>
 
-#include <fastrtps/rtps/RTPSDomain.h>
-#include <fastrtps/rtps/participant/RTPSParticipant.h>
-#include <fastrtps/rtps/writer/RTPSWriter.h>
-#include <fastrtps/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/RTPSDomain.hpp>
+#include <fastdds/rtps/participant/RTPSParticipant.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.hpp>
+#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
 
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 using namespace testing;
@@ -55,7 +56,7 @@ void cache_change_fragment(
 
     ASSERT_NE(writer, nullptr);
 
-    CacheChange_t* change = writer->new_change(ALIVE);
+    CacheChange_t* change = history->create_change(ALIVE);
     if (expected_fragmentation)
     {
         change->serializedPayload.length = 3 * max_message_size;
@@ -77,6 +78,19 @@ void cache_change_fragment(
     {
         ASSERT_EQ(result, 0);
     }
+}
+
+/**
+ * This test checks the get_max_allowed_payload_size() method of the BaseWriter class.
+ * When setting the RTPS Participant Attribute property fastdds.max_message_size to a value lower than the
+ * message overhead, if the method does not overflow the fragment size will be set.
+ * If the max_message_size is big enough for the overhead, inline_qos and serializedPayload,
+ * then no fragmentation will occur.
+ */
+TEST(WriterHistoryTests, get_max_allowed_payload_size_overflow)
+{
+    cache_change_fragment(100, 0, true);
+    cache_change_fragment(MAX_MESSAGE_SIZE, 0, false);
 }
 
 /**

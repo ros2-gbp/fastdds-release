@@ -17,27 +17,25 @@
  *
  */
 
-#include <fastdds/rtps/builtin/discovery/participant/PDPListener.h>
-
-#include <fastdds/dds/log/Log.hpp>
-
-#include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
-#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
-#include <fastdds/rtps/history/ReaderHistory.h>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
-#include <fastdds/rtps/participant/RTPSParticipantListener.h>
-#include <fastdds/rtps/reader/RTPSReader.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-
-#include <fastrtps/utils/TimeConversion.h>
-
-#include <fastdds/core/policy/ParameterList.hpp>
-#include <rtps/builtin/discovery/participant/PDPEndpoints.hpp>
-#include <rtps/network/utils/external_locators.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/builtin/discovery/participant/PDPListener.h>
 
 #include <mutex>
 
+#include <fastdds/core/policy/ParameterList.hpp>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
+#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.hpp>
+#include <fastdds/rtps/participant/RTPSParticipantListener.hpp>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
+
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/discovery/endpoint/EDP.h>
+#include <rtps/builtin/discovery/participant/PDP.h>
+#include <rtps/builtin/discovery/participant/PDPEndpoints.hpp>
+#include <rtps/network/utils/external_locators.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/resources/TimedEvent.h>
 #ifdef FASTDDS_STATISTICS
 #include <statistics/rtps/monitor-service/interfaces/IConnectionsObserver.hpp>
 #endif //FASTDDS_STATISTICS
@@ -45,17 +43,17 @@
 using ParameterList = eprosima::fastdds::dds::ParameterList;
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 PDPListener::PDPListener(
         PDP* parent)
     : parent_pdp_(parent)
-    , temp_participant_data_(parent->getRTPSParticipant()->getRTPSParticipantAttributes().allocation)
+    , temp_participant_data_(parent->getRTPSParticipant()->get_attributes().allocation)
 {
 }
 
-void PDPListener::onNewCacheChangeAdded(
+void PDPListener::on_new_cache_change_added(
         RTPSReader* reader,
         const CacheChange_t* const change_in)
 {
@@ -106,20 +104,26 @@ void PDPListener::onNewCacheChangeAdded(
         // Load information on temp_participant_data_
         CDRMessage_t msg(change->serializedPayload);
         temp_participant_data_.clear();
-        if (temp_participant_data_.readFromCDRMessage(&msg, true, parent_pdp_->getRTPSParticipant()->network_factory(),
-                parent_pdp_->getRTPSParticipant()->has_shm_transport(), true, change_in->vendor_id))
+        if (temp_participant_data_.read_from_cdr_message(&msg, true,
+                parent_pdp_->getRTPSParticipant()->network_factory(),
+                true, change_in->vendor_id))
         {
             // After correctly reading it
             change->instanceHandle = temp_participant_data_.m_key;
-            guid = temp_participant_data_.m_guid;
+            guid = temp_participant_data_.guid;
 
             if (parent_pdp_->getRTPSParticipant()->is_participant_ignored(guid.guidPrefix))
             {
                 return;
             }
 
+            if (!check_discovery_conditions(temp_participant_data_))
+            {
+                return;
+            }
+
             // Filter locators
-            const auto& pattr = parent_pdp_->getRTPSParticipant()->getAttributes();
+            const auto& pattr = parent_pdp_->getRTPSParticipant()->get_attributes();
             fastdds::rtps::network::external_locators::filter_remote_locators(temp_participant_data_,
                     pattr.builtin.metatraffic_external_unicast_locators, pattr.default_external_unicast_locators,
                     pattr.ignore_non_matching_locators);
@@ -129,7 +133,7 @@ void PDPListener::onNewCacheChangeAdded(
             bool already_processed = false;
             for (ParticipantProxyData* it : parent_pdp_->participant_proxies_)
             {
-                if (guid == it->m_guid)
+                if (guid == it->guid)
                 {
                     pdata = it;
 
@@ -158,7 +162,7 @@ void PDPListener::onNewCacheChangeAdded(
     else if (reader->matched_writer_is_matched(writer_guid))
     {
         reader->getMutex().unlock();
-        if (parent_pdp_->remove_remote_participant(guid, ParticipantDiscoveryInfo::REMOVED_PARTICIPANT))
+        if (parent_pdp_->remove_remote_participant(guid, ParticipantDiscoveryStatus::REMOVED_PARTICIPANT))
         {
 #ifdef FASTDDS_STATISTICS
             //! Removal of a participant proxy should trigger
@@ -187,7 +191,7 @@ void PDPListener::process_alive_data(
         RTPSReader* reader,
         std::unique_lock<std::recursive_mutex>& lock)
 {
-    GUID_t participant_guid = new_data.m_guid;
+    GUID_t participant_guid = new_data.guid;
 
     if (old_data == nullptr)
     {
@@ -203,11 +207,11 @@ void PDPListener::process_alive_data(
             lock.unlock();
 
             // Assigning remote endpoints implies sending a DATA(p) to all matched and fixed readers, since
-            // StatelessWriter::matched_reader_add marks the entire history as unsent if the added reader's
+            // StatelessWriter::matched_reader_add_edp marks the entire history as unsent if the added reader's
             // durability is bigger or equal to TRANSIENT_LOCAL_DURABILITY_QOS (TRANSIENT_LOCAL or TRANSIENT),
             // which is the case of ENTITYID_BUILTIN_SDP_PARTICIPANT_READER (TRANSIENT_LOCAL). If a remote
             // participant is discovered before creating the first DATA(p) change (which happens at the end of
-            // BuiltinProtocols::initBuiltinProtocols), then StatelessWriter::matched_reader_add ends up marking
+            // BuiltinProtocols::initBuiltinProtocols), then StatelessWriter::matched_reader_add_edp ends up marking
             // no changes as unsent (since the history is empty), which is OK because this can only happen if a
             // participant is discovered in the middle of BuiltinProtocols::initBuiltinProtocols, which will
             // create the first DATA(p) upon finishing, thus triggering the sent to all fixed and matched
@@ -222,13 +226,13 @@ void PDPListener::process_alive_data(
     }
     else
     {
-        old_data->updateData(new_data);
-        old_data->isAlive = true;
+        old_data->update_data(new_data);
+        old_data->is_alive = true;
 
         reader->getMutex().unlock();
 
         EPROSIMA_LOG_INFO(RTPS_PDP_DISCOVERY, "Update participant "
-                << old_data->m_guid << " at "
+                << old_data->guid << " at "
                 << "MTTLoc: " << old_data->metatraffic_locators
                 << " DefLoc:" << old_data->default_locators);
 
@@ -238,7 +242,7 @@ void PDPListener::process_alive_data(
         }
 
         // Copy proxy to be passed forward before releasing PDP mutex
-        ParticipantProxyData old_data_copy(*old_data);
+        ParticipantBuiltinTopicData old_proxy_data_copy(*old_data);
 
         lock.unlock();
 
@@ -249,12 +253,11 @@ void PDPListener::process_alive_data(
 
             {
                 std::lock_guard<std::mutex> cb_lock(parent_pdp_->callback_mtx_);
-                ParticipantDiscoveryInfo info(old_data_copy);
-                info.status = ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT;
 
-                listener->onParticipantDiscovery(
+                listener->on_participant_discovery(
                     parent_pdp_->getRTPSParticipant()->getUserRTPSParticipant(),
-                    std::move(info),
+                    ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT,
+                    old_proxy_data_copy,
                     should_be_ignored);
             }
             if (should_be_ignored)
@@ -278,6 +281,26 @@ void PDPListener::process_alive_data(
     reader->getMutex().lock();
 }
 
+bool PDPListener::check_discovery_conditions(
+        ParticipantProxyData& participant_data)
+{
+    bool ret = true;
+    uint32_t remote_participant_domain_id = participant_data.domain_id;
+
+    // In PDPSimple, do not match if the participant is from a different domain.
+    // If the domain id is unknown, it is assumed to be the same domain
+    if (remote_participant_domain_id != parent_pdp_->getRTPSParticipant()->get_domain_id() &&
+            remote_participant_domain_id != fastdds::dds::DOMAIN_ID_UNKNOWN)
+    {
+        EPROSIMA_LOG_INFO(RTPS_PDP_DISCOVERY, "Received participant with different domain id ("
+                << remote_participant_domain_id << ") than ours ("
+                << parent_pdp_->getRTPSParticipant()->get_domain_id() << ")");
+        ret = false;
+    }
+
+    return ret;
+}
+
 bool PDPListener::get_key(
         CacheChange_t* change)
 {
@@ -285,5 +308,5 @@ bool PDPListener::get_key(
 }
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

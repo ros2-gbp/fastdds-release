@@ -17,13 +17,7 @@
  *
  */
 
-#include <fastdds/rtps/writer/StatelessWriter.h>
-#include <fastdds/rtps/writer/WriterListener.h>
-#include <fastdds/rtps/history/WriterHistory.h>
-#include <rtps/participant/RTPSParticipantImpl.h>
-#include <rtps/history/HistoryAttributesExtension.hpp>
-#include <fastdds/rtps/builtin/BuiltinProtocols.h>
-#include <fastdds/rtps/builtin/liveliness/WLP.h>
+#include "StatelessWriter.hpp"
 
 #include <algorithm>
 #include <mutex>
@@ -31,20 +25,31 @@
 #include <vector>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <rtps/history/BasicPayloadPool.hpp>
-#include <rtps/DataSharing/DataSharingPayloadPool.hpp>
-#include <rtps/DataSharing/WriterPool.hpp>
-#include <rtps/DataSharing/DataSharingNotifier.hpp>
-#include <rtps/history/CacheChangePool.h>
-#include <rtps/network/utils/external_locators.hpp>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <fastdds/rtps/builtin/data/SubscriptionBuiltinTopicData.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/reader/ReaderDiscoveryStatus.hpp>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/writer/WriterListener.hpp>
 
 #include "../flowcontrol/FlowController.hpp"
+#include <rtps/builtin/BuiltinProtocols.h>
+#include <rtps/builtin/liveliness/WLP.hpp>
+#include <rtps/DataSharing/DataSharingNotifier.hpp>
+#include <rtps/DataSharing/DataSharingPayloadPool.hpp>
+#include <rtps/DataSharing/WriterPool.hpp>
+#include <rtps/history/BasicPayloadPool.hpp>
+#include <rtps/history/CacheChangePool.h>
+#include <rtps/history/HistoryAttributesExtension.hpp>
+#include <rtps/messages/RTPSMessageGroup.hpp>
+#include <rtps/network/utils/external_locators.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/reader/BaseReader.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/writer/BaseWriter.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
-
 
 /**
  * Loops over all the readers in the vector, applying the given routine.
@@ -146,10 +151,10 @@ StatelessWriter::StatelessWriter(
         RTPSParticipantImpl* impl,
         const GUID_t& guid,
         const WriterAttributes& attributes,
-        fastdds::rtps::FlowController* flow_controller,
+        FlowController* flow_controller,
         WriterHistory* history,
         WriterListener* listener)
-    : RTPSWriter(impl, guid, attributes, flow_controller, history, listener)
+    : BaseWriter(impl, guid, attributes, flow_controller, history, listener)
     , matched_remote_readers_(attributes.matched_readers_allocation)
     , matched_local_readers_(attributes.matched_readers_allocation)
     , matched_datasharing_readers_(attributes.matched_readers_allocation)
@@ -157,43 +162,6 @@ StatelessWriter::StatelessWriter(
     , locator_selector_(*this, attributes.matched_readers_allocation)
 {
     init(impl, attributes);
-}
-
-StatelessWriter::StatelessWriter(
-        RTPSParticipantImpl* impl,
-        const GUID_t& guid,
-        const WriterAttributes& attributes,
-        const std::shared_ptr<IPayloadPool>& payload_pool,
-        fastdds::rtps::FlowController* flow_controller,
-        WriterHistory* history,
-        WriterListener* listener)
-    : RTPSWriter(impl, guid, attributes, payload_pool, flow_controller, history, listener)
-    , matched_remote_readers_(attributes.matched_readers_allocation)
-    , matched_local_readers_(attributes.matched_readers_allocation)
-    , matched_datasharing_readers_(attributes.matched_readers_allocation)
-    , matched_readers_pool_(attributes.matched_readers_allocation)
-    , locator_selector_(*this, attributes.matched_readers_allocation)
-{
-    init(impl, attributes);
-}
-
-StatelessWriter::StatelessWriter(
-        RTPSParticipantImpl* participant,
-        const GUID_t& guid,
-        const WriterAttributes& attributes,
-        const std::shared_ptr<IPayloadPool>& payload_pool,
-        const std::shared_ptr<IChangePool>& change_pool,
-        fastdds::rtps::FlowController* flow_controller,
-        WriterHistory* history,
-        WriterListener* listener)
-    : RTPSWriter(participant, guid, attributes, payload_pool, change_pool, flow_controller, history, listener)
-    , matched_remote_readers_(attributes.matched_readers_allocation)
-    , matched_local_readers_(attributes.matched_readers_allocation)
-    , matched_datasharing_readers_(attributes.matched_readers_allocation)
-    , matched_readers_pool_(attributes.matched_readers_allocation)
-    , locator_selector_(*this, attributes.matched_readers_allocation)
-{
-    init(participant, attributes);
 }
 
 void StatelessWriter::init(
@@ -203,7 +171,7 @@ void StatelessWriter::init(
     get_builtin_guid();
 
     const RemoteLocatorsAllocationAttributes& loc_alloc =
-            participant->getRTPSParticipantAttributes().allocation.locators;
+            participant->get_attributes().allocation.locators;
 
     for (size_t i = 0; i < attributes.matched_readers_allocation.initial; ++i)
     {
@@ -217,7 +185,12 @@ void StatelessWriter::init(
 StatelessWriter::~StatelessWriter()
 {
     EPROSIMA_LOG_INFO(RTPS_WRITER, "StatelessWriter destructor"; );
-    deinit();
+}
+
+void StatelessWriter::local_actions_on_writer_removed()
+{
+    EPROSIMA_LOG_INFO(RTPS_WRITER, "StatelessWriter local_actions_on_writer_removed"; );
+    BaseWriter::local_actions_on_writer_removed();
 }
 
 void StatelessWriter::get_builtin_guid()
@@ -285,7 +258,7 @@ void StatelessWriter::update_reader_info(
 bool StatelessWriter::datasharing_delivery(
         CacheChange_t* change)
 {
-    auto pool = std::dynamic_pointer_cast<WriterPool>(payload_pool_);
+    auto pool = std::dynamic_pointer_cast<WriterPool>(history_->get_payload_pool());
     assert(pool != nullptr);
 
     pool->add_to_shared_history(change);
@@ -307,7 +280,7 @@ void StatelessWriter::unsent_change_added_to_history(
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
     auto payload_length = change->serializedPayload.length;
 
-    if (liveliness_lease_duration_ < c_TimeInfinite)
+    if (liveliness_lease_duration_ < dds::c_TimeInfinite)
     {
         mp_RTPSParticipant->wlp()->assert_liveliness(
             getGuid(),
@@ -323,16 +296,16 @@ void StatelessWriter::unsent_change_added_to_history(
     }
 
     // Now for the rest of readers
-    if (!fixed_locators_.empty() || getMatchedReadersSize() > 0)
+    if (!fixed_locators_.empty() || get_matched_readers_size() > 0)
     {
         flow_controller_->add_new_sample(this, change, max_blocking_time);
     }
     else
     {
         EPROSIMA_LOG_INFO(RTPS_WRITER, "No reader to add change.");
-        if (mp_listener != nullptr)
+        if (listener_ != nullptr)
         {
-            mp_listener->onWriterChangeReceivedByAll(this, change);
+            listener_->on_writer_change_received_by_all(this, change);
         }
     }
 
@@ -353,7 +326,7 @@ bool StatelessWriter::intraprocess_delivery(
         {
             change->write_params.sample_identity(change->write_params.related_sample_identity());
         }
-        return local_reader->processDataMsg(change);
+        return local_reader->process_data_msg(change);
     }
 
     return false;
@@ -372,7 +345,7 @@ bool StatelessWriter::change_removed_by_history(
         // remove from datasharing pool history
         if (is_datasharing_compatible())
         {
-            auto pool = std::dynamic_pointer_cast<WriterPool>(payload_pool_);
+            auto pool = std::dynamic_pointer_cast<WriterPool>(history_->get_payload_pool());
             assert (pool != nullptr);
 
             pool->remove_from_shared_history(change);
@@ -397,23 +370,17 @@ bool StatelessWriter::has_been_fully_delivered(
     // Sequence number has not been generated by this WriterHistory
     {
         std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
-        if (seq_num >= mp_history->next_sequence_number())
+        if (seq_num >= history_->next_sequence_number())
         {
             return false;
         }
     }
 
-    if (getMatchedReadersSize() > 0)
+    if (get_matched_readers_size() > 0)
     {
         return is_acked_by_all(seq_num);
     }
     return true;
-}
-
-bool StatelessWriter::is_acked_by_all(
-        const CacheChange_t* change) const
-{
-    return is_acked_by_all(change->sequenceNumber);
 }
 
 bool StatelessWriter::is_acked_by_all(
@@ -423,11 +390,39 @@ bool StatelessWriter::is_acked_by_all(
     return seq_num.to64long() <= last_sequence_number_sent_;
 }
 
+bool StatelessWriter::wait_for_all_acked(
+        const dds::Duration_t& max_wait)
+{
+    static_cast<void>(max_wait);
+    return true;
+}
+
+bool StatelessWriter::get_disable_positive_acks() const
+{
+    return false;
+}
+
+bool StatelessWriter::matched_readers_guids(
+        std::vector<GUID_t>& guids) const
+{
+    std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
+    guids.clear();
+    guids.reserve(matched_local_readers_.size() + matched_datasharing_readers_.size() + matched_remote_readers_.size());
+    for_matched_readers(matched_local_readers_, matched_datasharing_readers_, matched_remote_readers_,
+            [&guids](const ReaderLocator& reader)
+            {
+                guids.emplace_back(reader.remote_guid());
+                return false;
+            }
+            );
+    return true;
+}
+
 bool StatelessWriter::try_remove_change(
         const std::chrono::steady_clock::time_point&,
         std::unique_lock<RecursiveTimedMutex>&)
 {
-    return mp_history->remove_min_change();
+    return history_->remove_min_change();
 }
 
 bool StatelessWriter::wait_for_acknowledgement(
@@ -448,7 +443,7 @@ bool StatelessWriter::wait_for_acknowledgement(
                 {
                     // If the sequence number has not been sent, stop waiting if it is not present in the history
                     CacheChange_t* change = nullptr;
-                    ret = !mp_history->get_change(seq, m_guid, &change);
+                    ret = !history_->get_change(seq, m_guid, &change);
                 }
                 return ret;
             };
@@ -458,29 +453,29 @@ bool StatelessWriter::wait_for_acknowledgement(
 /*
  *	MATCHED_READER-RELATED METHODS
  */
-bool StatelessWriter::matched_reader_add(
+bool StatelessWriter::matched_reader_add_edp(
         const ReaderProxyData& data)
 {
-    using fastdds::rtps::network::external_locators::filter_remote_locators;
+    using network::external_locators::filter_remote_locators;
 
     std::unique_lock<RecursiveTimedMutex> guard(mp_mutex);
     std::unique_lock<LocatorSelectorSender> locator_selector_guard(locator_selector_);
 
-    assert(data.guid() != c_Guid_Unknown);
+    assert(data.guid != c_Guid_Unknown);
 
     if (for_matched_readers(matched_local_readers_, matched_datasharing_readers_, matched_remote_readers_,
             [this, &data](ReaderLocator& reader)
             {
-                if (reader.remote_guid() == data.guid())
+                if (reader.remote_guid() == data.guid)
                 {
                     EPROSIMA_LOG_WARNING(RTPS_WRITER, "Attempting to add existing reader, updating information.");
-                    if (reader.update(data.remote_locators().unicast,
-                    data.remote_locators().multicast,
-                    data.m_expectsInlineQos))
+                    if (reader.update(data.remote_locators.unicast,
+                    data.remote_locators.multicast,
+                    data.expects_inline_qos))
                     {
                         filter_remote_locators(*reader.general_locator_selector_entry(),
                         m_att.external_unicast_locators, m_att.ignore_non_matching_locators);
-                        mp_RTPSParticipant->createSenderResources(data.remote_locators(), m_att);
+                        mp_RTPSParticipant->createSenderResources(data.remote_locators, m_att);
                         update_reader_info(true);
                     }
                     return true;
@@ -489,12 +484,12 @@ bool StatelessWriter::matched_reader_add(
             }
             ))
     {
-        if (nullptr != mp_listener)
+        if (nullptr != listener_)
         {
             // call the listener without locks taken
             locator_selector_guard.unlock();
             guard.unlock();
-            mp_listener->on_reader_discovery(this, ReaderDiscoveryInfo::CHANGED_QOS_READER, data.guid(), &data);
+            listener_->on_reader_discovery(this, ReaderDiscoveryStatus::CHANGED_QOS_READER, data.guid, &data);
         }
 
 #ifdef FASTDDS_STATISTICS
@@ -514,10 +509,10 @@ bool StatelessWriter::matched_reader_add(
     if (matched_readers_pool_.empty())
     {
         size_t max_readers = matched_readers_pool_.max_size();
-        if (getMatchedReadersSize() + matched_readers_pool_.size() < max_readers)
+        if (get_matched_readers_size() + matched_readers_pool_.size() < max_readers)
         {
             const RemoteLocatorsAllocationAttributes& loc_alloc =
-                    mp_RTPSParticipant->getRTPSParticipantAttributes().allocation.locators;
+                    mp_RTPSParticipant->get_attributes().allocation.locators;
 
             new_reader.reset(new ReaderLocator(
                         this,
@@ -537,11 +532,11 @@ bool StatelessWriter::matched_reader_add(
     }
 
     // Add info of new datareader.
-    new_reader->start(data.guid(),
-            data.remote_locators().unicast,
-            data.remote_locators().multicast,
-            data.m_expectsInlineQos,
-            is_datasharing_compatible_with(data));
+    new_reader->start(data.guid,
+            data.remote_locators.unicast,
+            data.remote_locators.multicast,
+            data.expects_inline_qos,
+            is_datasharing_compatible_with(data.data_sharing));
     filter_remote_locators(*new_reader->general_locator_selector_entry(),
             m_att.external_unicast_locators, m_att.ignore_non_matching_locators);
 
@@ -550,34 +545,34 @@ bool StatelessWriter::matched_reader_add(
     if (new_reader->is_local_reader())
     {
         matched_local_readers_.push_back(std::move(new_reader));
-        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid() << " to " << this->m_guid.entityId
+        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid << " to " << this->m_guid.entityId
                                                         << " as local reader");
     }
     else if (new_reader->is_datasharing_reader())
     {
         matched_datasharing_readers_.push_back(std::move(new_reader));
-        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid() << " to " << this->m_guid.entityId
+        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid << " to " << this->m_guid.entityId
                                                         << " as data sharing");
     }
     else
     {
         matched_remote_readers_.push_back(std::move(new_reader));
-        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid() << " to " << this->m_guid.entityId
+        EPROSIMA_LOG_INFO(RTPS_WRITER, "Adding reader " << data.guid << " to " << this->m_guid.entityId
                                                         << " as remote reader");
     }
 
     // Create sender resources for the case when we send to a single reader
-    mp_RTPSParticipant->createSenderResources(data.remote_locators(), m_att);
+    mp_RTPSParticipant->createSenderResources(data.remote_locators, m_att);
 
     // Create sender resources for the case when we send to all readers
     update_reader_info(true);
 
-    if (nullptr != mp_listener)
+    if (nullptr != listener_)
     {
         // call the listener without locks taken
         locator_selector_guard.unlock();
         guard.unlock();
-        mp_listener->on_reader_discovery(this, ReaderDiscoveryInfo::DISCOVERED_READER, data.guid(), &data);
+        listener_->on_reader_discovery(this, ReaderDiscoveryStatus::DISCOVERED_READER, data.guid, &data);
     }
 
 #ifdef FASTDDS_STATISTICS
@@ -589,13 +584,6 @@ bool StatelessWriter::matched_reader_add(
     }
 #endif //FASTDDS_STATISTICS
 
-    return true;
-}
-
-bool StatelessWriter::set_fixed_locators(
-        const LocatorList_t& locator_list)
-{
-    (void)locator_list;
     return true;
 }
 
@@ -654,13 +642,13 @@ bool StatelessWriter::matched_reader_remove(
         matched_readers_pool_.push_back(std::move(reader));
         update_reader_info(false);
         EPROSIMA_LOG_INFO(RTPS_WRITER, "Reader Proxy removed: " << reader_guid);
-        if (nullptr != mp_listener)
+        if (nullptr != listener_)
         {
             // call the listener without locks taken
             locator_selector_guard.unlock();
             guard.unlock();
 
-            mp_listener->on_reader_discovery(this, ReaderDiscoveryInfo::REMOVED_READER, reader_guid, nullptr);
+            listener_->on_reader_discovery(this, ReaderDiscoveryStatus::REMOVED_READER, reader_guid, nullptr);
         }
 
 #ifdef FASTDDS_STATISTICS
@@ -690,29 +678,65 @@ bool StatelessWriter::matched_reader_is_matched(
                    );
 }
 
-void StatelessWriter::unsent_changes_reset()
+bool StatelessWriter::process_acknack(
+        const GUID_t& writer_guid,
+        const GUID_t& reader_guid,
+        uint32_t ack_count,
+        const SequenceNumberSet_t& sn_set,
+        bool final_flag,
+        bool& result,
+        fastdds::rtps::VendorId_t origin_vendor_id)
 {
+    static_cast<void>(reader_guid);
+    static_cast<void>(ack_count);
+    static_cast<void>(sn_set);
+    static_cast<void>(final_flag);
+    static_cast<void>(origin_vendor_id);
+
+    result = false;
+    return writer_guid == m_guid;
+}
+
+bool StatelessWriter::process_nack_frag(
+        const GUID_t& writer_guid,
+        const GUID_t& reader_guid,
+        uint32_t ack_count,
+        const SequenceNumber_t& seq_num,
+        const FragmentNumberSet_t& fragments_state,
+        bool& result,
+        fastdds::rtps::VendorId_t origin_vendor_id)
+{
+    static_cast<void>(reader_guid);
+    static_cast<void>(ack_count);
+    static_cast<void>(seq_num);
+    static_cast<void>(fragments_state);
+    static_cast<void>(origin_vendor_id);
+
+    result = false;
+    return writer_guid == m_guid;
 }
 
 bool StatelessWriter::send_nts(
-        CDRMessage_t* message,
+        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+        const uint32_t& total_bytes,
         const LocatorSelectorSender& locator_selector,
         std::chrono::steady_clock::time_point& max_blocking_time_point) const
 {
-    if (!RTPSWriter::send_nts(message, locator_selector, max_blocking_time_point))
+    if (!BaseWriter::send_nts(buffers, total_bytes, locator_selector, max_blocking_time_point))
     {
         return false;
     }
 
-    return send_to_fixed_locators(message, max_blocking_time_point);
+    return send_to_fixed_locators(buffers, total_bytes, max_blocking_time_point);
 }
 
 bool StatelessWriter::send_to_fixed_locators(
-        CDRMessage_t* message,
+        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+        const uint32_t& total_bytes,
         std::chrono::steady_clock::time_point& max_blocking_time_point) const
 {
     return fixed_locators_.empty() ||
-           mp_RTPSParticipant->sendSync(message, m_guid,
+           mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid,
                    Locators(fixed_locators_.begin()), Locators(fixed_locators_.end()),
                    max_blocking_time_point);
 }
@@ -747,7 +771,7 @@ DeliveryRetCode StatelessWriter::deliver_sample_nts(
     {
         uint32_t n_fragments = cache_change->getFragmentCount();
 
-        if (m_separateSendingEnabled)
+        if (separate_sending_enabled_)
         {
             if (0 < n_fragments)
             {
@@ -896,9 +920,9 @@ DeliveryRetCode StatelessWriter::deliver_sample_nts(
         last_sequence_number_sent_ = change_sequence_number;
         unsent_changes_cond_.notify_all();
 
-        if (nullptr != mp_listener)
+        if (nullptr != listener_)
         {
-            mp_listener->onWriterChangeReceivedByAll(this, cache_change);
+            listener_->on_writer_change_received_by_all(this, cache_change);
         }
     }
 
@@ -937,7 +961,7 @@ bool StatelessWriter::get_connections(
         for_matched_readers(matched_datasharing_readers_, [&connection, &connection_list](ReaderLocator& reader)
                 {
                     connection.guid(fastdds::statistics::to_statistics_type(reader.remote_guid()));
-                    connection.mode(fastdds::statistics::DATA_SHARING);
+                    connection.mode(fastdds::statistics::ConnectionMode::DATA_SHARING);
                     connection_list.push_back(connection);
 
                     return false;
@@ -971,7 +995,7 @@ bool StatelessWriter::get_connections(
                     });
 
                     connection.guid(fastdds::statistics::to_statistics_type(reader.remote_guid()));
-                    connection.mode(fastdds::statistics::TRANSPORT);
+                    connection.mode(fastdds::statistics::ConnectionMode::TRANSPORT);
                     connection.announced_locators(statistics_locators);
                     connection.used_locators(statistics_locators);
                     connection_list.push_back(connection);
@@ -986,5 +1010,5 @@ bool StatelessWriter::get_connections(
 #endif // ifdef FASTDDS_STATISTICS
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

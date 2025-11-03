@@ -60,7 +60,7 @@ target_compile_definitions(${PROJECT_NAME}
     INTERFACE
     $<$<BOOL:${WIN32}>:${PROJECT_NAME_UPPER}_NO_LIB>
     PUBLIC
-    $<$<STREQUAL:$<TARGET_PROPERTY:${PROJECT_NAME},TYPE>,SHARED_LIBRARY>:${PROJECT_NAME_UPPER}_DYN_LINK>
+    $<$<TARGET_EXISTS:${PROJECT_NAME}>:$<$<STREQUAL:$<TARGET_PROPERTY:${PROJECT_NAME},TYPE>,SHARED_LIBRARY>:${PROJECT_NAME_UPPER}_DYN_LINK>>
     )
 
 # Define public headers
@@ -148,7 +148,7 @@ if(MSVC OR MSVC_IDE)
     if(PDB_FILE)
         get_target_property(PDB_DIR ${PROJECT_NAME} PDB_OUTPUT_DIRECTORY_DEBUG)
         set(PDB_FILE "${PDB_DIR}/${PDB_FILE}.pdb")
-    else()
+    elseif(NOT CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "ccache")
         # fallback to static lib symbols
         get_target_property(PDB_FILE ${PROJECT_NAME} COMPILE_PDB_NAME_DEBUG)
         if(PDB_FILE)

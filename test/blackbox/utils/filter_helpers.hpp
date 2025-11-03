@@ -16,13 +16,26 @@
 #include <fastcdr/FastBuffer.h>
 
 #include <fastdds/dds/core/Entity.hpp>
-#include <fastrtps/rtps/common/Types.h>
+#include <fastdds/rtps/common/Types.hpp>
 
-#include "../types/core/core_typesPubSubTypes.h"
+#include "../types/core/core_typesPubSubTypes.hpp"
 
 namespace eprosima {
 namespace fastdds {
 namespace helpers {
+
+inline rtps::core::HeartBeatSubmessage cdr_parse_heartbeat_submsg(
+        char* serialized_buffer,
+        size_t length)
+{
+    eprosima::fastdds::rtps::core::HeartBeatSubmessage hb_submsg;
+    eprosima::fastcdr::FastBuffer buffer(serialized_buffer, length);
+    eprosima::fastcdr::Cdr cdr(buffer,
+            eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
+            eprosima::fastcdr::XCDRv1);
+    cdr >> hb_submsg;
+    return hb_submsg;
+}
 
 inline rtps::core::AckNackSubmessage cdr_parse_acknack_submsg(
         char* serialized_buffer,
@@ -32,7 +45,7 @@ inline rtps::core::AckNackSubmessage cdr_parse_acknack_submsg(
     eprosima::fastcdr::FastBuffer buffer(serialized_buffer, length);
     eprosima::fastcdr::Cdr cdr(buffer,
             eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::CdrVersion::XCDRv1);
+            eprosima::fastcdr::XCDRv1);
     cdr >> acknack_submsg;
     return acknack_submsg;
 }
@@ -44,7 +57,7 @@ inline uint16_t cdr_parse_u16(
     eprosima::fastcdr::FastBuffer buffer(serialized_buffer, 2);
     eprosima::fastcdr::Cdr cdr(buffer,
             eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::CdrVersion::XCDRv1);
+            eprosima::fastcdr::XCDRv1);
     cdr >> u16;
     return u16;
 }
@@ -56,9 +69,23 @@ inline uint32_t cdr_parse_u32(
     eprosima::fastcdr::FastBuffer buffer(serialized_buffer, 4);
     eprosima::fastcdr::Cdr cdr(buffer,
             eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::CdrVersion::XCDRv1);
+            eprosima::fastcdr::XCDRv1);
     cdr >> u32;
     return u32;
+}
+
+inline fastdds::rtps::EntityId_t cdr_parse_entity_id(
+        char* serialized_buffer)
+{
+    fastdds::rtps::EntityId_t entity_id;
+    eprosima::fastcdr::FastBuffer buffer(serialized_buffer, 4);
+    eprosima::fastcdr::Cdr cdr(buffer,
+            eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
+            eprosima::fastcdr::XCDRv1);
+    std::array<eprosima::fastdds::rtps::octet, 4> array;
+    cdr >> array;
+    memcpy(entity_id.value, array.data(), 4);
+    return entity_id;
 }
 
 } // namespace helpers

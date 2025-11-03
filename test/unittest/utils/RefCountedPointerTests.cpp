@@ -18,12 +18,12 @@
 #include <thread>
 #include <vector>
 
-#include <fastrtps/utils/RefCountedPointer.hpp>
+#include <utils/RefCountedPointer.hpp>
 
 using namespace std;
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 struct EntityMock
 {

@@ -18,16 +18,13 @@
 #include <future>
 #include <thread>
 
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/utils/IPLocator.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using Locator_t = fastrtps::rtps::Locator_t;
-using IPLocator = fastrtps::rtps::IPLocator;
-using octet = fastrtps::rtps::octet;
 using Log = fastdds::dds::Log;
 
 using namespace asio;
@@ -94,13 +91,7 @@ void TCPChannelResourceSecure::connect(
             const auto secure_socket = secure_socket_;
 
             asio::async_connect(secure_socket_->lowest_layer(), endpoints,
-                    [secure_socket, channel_weak_ptr, parent](const std::error_code& error
-#if ASIO_VERSION >= 101200
-                    , ip::tcp::endpoint
-#else
-                    , const tcp::resolver::iterator& /*endpoint*/
-#endif // if ASIO_VERSION >= 101200
-                    )
+                    [secure_socket, channel_weak_ptr, parent](const std::error_code& error, ip::tcp::endpoint)
                     {
                         if (!error)
                         {
@@ -141,18 +132,32 @@ void TCPChannelResourceSecure::connect(
 
 void TCPChannelResourceSecure::disconnect()
 {
-    if (eConnecting < change_status(eConnectionStatus::eDisconnected) && alive())
+    // Go to disconnecting state to protect from concurrent connects and disconnects
+    auto prev_status = change_status(eConnectionStatus::eDisconnecting);
+    if (eConnecting < prev_status && alive())
     {
         auto socket = secure_socket_;
 
         post(context_, [&, socket]()
                 {
                     std::error_code ec;
-                    socket->lowest_layer().close(ec);
                     socket->async_shutdown([&, socket](const std::error_code&)
                     {
                     });
+
+                    // Close the underlying socket after SSL shutdown
+                    // NOTE: the (async) SSL shutdown may not complete before the socket is closed
+                    socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+                    socket->lowest_layer().cancel(ec);
+                    socket->lowest_layer().close(ec);
+
+                    // Change to disconnected state as the last step
+                    this->change_status(eConnectionStatus::eDisconnected);
                 });
+    }
+    else if (eConnectionStatus::eDisconnecting != prev_status || !alive())
+    {
+        change_status(eConnectionStatus::eDisconnected);
     }
 }
 
@@ -163,7 +168,7 @@ uint32_t TCPChannelResourceSecure::read(
 {
     size_t bytes_read = 0;
 
-    if (eConnecting < connection_status_)
+    if (connected())
     {
         std::promise<size_t> read_bytes_promise;
         auto bytes_future = read_bytes_promise.get_future();
@@ -202,27 +207,28 @@ uint32_t TCPChannelResourceSecure::read(
 size_t TCPChannelResourceSecure::send(
         const octet* header,
         size_t header_size,
-        const octet* data,
-        size_t size,
+        const std::vector<NetworkBuffer>& buffers,
+        uint32_t total_bytes,
         asio::error_code& ec)
 {
     size_t bytes_sent = 0;
 
-    if (eConnecting < connection_status_)
+    if (connected())
     {
         if (parent_->configuration()->non_blocking_send &&
-                !check_socket_send_buffer(header_size + size,
+                !check_socket_send_buffer(header_size + total_bytes,
                 secure_socket_->lowest_layer().native_handle()))
         {
             return 0;
         }
 
-        std::vector<asio::const_buffer> buffers;
+        // Use a list of const_buffers to send the message
+        std::vector<asio::const_buffer> asio_buffers;
         if (header_size > 0)
         {
-            buffers.push_back(asio::buffer(header, header_size));
+            asio_buffers.push_back(asio::buffer(header, header_size));
         }
-        buffers.push_back(asio::buffer(data, size));
+        asio_buffers.insert(asio_buffers.end(), buffers.begin(), buffers.end());
 
         // Work around meanwhile
         std::promise<size_t> write_bytes_promise;
@@ -233,7 +239,7 @@ size_t TCPChannelResourceSecure::send(
                 {
                     if (socket->lowest_layer().is_open())
                     {
-                        size_t bytes_transferred = asio::write(*socket, buffers, ec);
+                        size_t bytes_transferred = asio::write(*socket, asio_buffers, ec);
                         if (!ec)
                         {
                             write_bytes_promise.set_value(bytes_transferred);
@@ -280,7 +286,7 @@ asio::ip::tcp::endpoint TCPChannelResourceSecure::local_endpoint(
 void TCPChannelResourceSecure::set_options(
         const TCPTransportDescriptor* options)
 {
-    TCPChannelResource::set_socket_options(secure_socket_->lowest_layer(), options);
+    set_socket_options(secure_socket_->lowest_layer(), options);
 }
 
 void TCPChannelResourceSecure::set_tls_verify_mode(
@@ -341,9 +347,10 @@ void TCPChannelResourceSecure::close()
 void TCPChannelResourceSecure::shutdown(
         asio::socket_base::shutdown_type)
 {
+    // WARNING: This function blocks until receiving the peer’s close_notify (or an error occurs).
     secure_socket_->shutdown();
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

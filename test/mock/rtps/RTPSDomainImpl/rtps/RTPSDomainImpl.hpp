@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _RTPS_RTPSDOMAINIMPL_HPP_
-#define _RTPS_RTPSDOMAINIMPL_HPP_
+#ifndef FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
+#define FASTDDS_RTPS__RTPSDOMAINIMPL_HPP
 
 #include <memory>
 
-#include <fastdds/rtps/RTPSDomain.h>
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/rtps/RTPSDomain.hpp>
+#include <fastdds/xtypes/type_representation/TypeObjectRegistry.hpp>
 
-#include <fastdds/rtps/reader/LocalReaderPointer.hpp>
+#include <rtps/reader/LocalReaderPointer.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
-class RTPSWriter;
+class BaseWriter;
 class IChangePool;
+class RTPSReader;
+class RTPSWriter;
 
 /**
  * @brief Class RTPSDomainImpl, contains the private implementation of the RTPSDomain
@@ -57,7 +61,13 @@ public:
         return false;
     }
 
-    static RTPSWriter* find_local_writer(
+    static RTPSParticipantImpl* find_local_participant(
+            const GUID_t& /* guid */)
+    {
+        return nullptr;
+    }
+
+    static BaseWriter* find_local_writer(
             const GUID_t& /* writer_guid */ )
     {
         return nullptr;
@@ -88,13 +98,10 @@ public:
             RTPSParticipant* p,
             const EntityId_t& entity_id,
             WriterAttributes& watt,
-            const std::shared_ptr<IPayloadPool>& payload_pool,
-            const std::shared_ptr<IChangePool>& change_pool,
             WriterHistory* hist,
-            WriterListener* listen = nullptr)
+            WriterListener* listen)
     {
-        static_cast<void>(change_pool);
-        return RTPSDomain::createRTPSWriter(p, entity_id, watt, payload_pool, hist, listen);
+        return RTPSDomain::createRTPSWriter(p, entity_id, watt, hist, listen);
     }
 
     static RTPSParticipant* clientServerEnvironmentCreationOverride(
@@ -106,6 +113,28 @@ public:
         return RTPSDomain::createParticipant(domain_id, enabled, att, listen);
     }
 
+    static bool get_library_settings(
+            fastdds::LibrarySettings&)
+    {
+        return true;
+    }
+
+    static bool set_library_settings(
+            const fastdds::LibrarySettings&)
+    {
+        return true;
+    }
+
+    static fastdds::dds::xtypes::ITypeObjectRegistry& type_object_registry()
+    {
+        return get_instance()->type_object_registry_;
+    }
+
+    static fastdds::dds::xtypes::TypeObjectRegistry& type_object_registry_observer()
+    {
+        return get_instance()->type_object_registry_;
+    }
+
     static void find_local_reader(
             std::shared_ptr<LocalReaderPointer>& local_reader,
             const GUID_t& reader_guid)
@@ -114,10 +143,12 @@ public:
         static_cast<void>(reader_guid);
     }
 
+    eprosima::fastdds::dds::xtypes::TypeObjectRegistry type_object_registry_;
+
 };
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
-#endif  // _RTPS_RTPSDOMAINIMPL_HPP_
+#endif  // FASTDDS_RTPS__RTPSDOMAINIMPL_HPP

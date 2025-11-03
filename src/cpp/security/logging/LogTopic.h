@@ -23,14 +23,15 @@
 #include <memory>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/security/logging/Logging.h>
-#include <fastdds/rtps/security/logging/BuiltinLoggingType.h>
 
+#include <rtps/security/exceptions/SecurityException.h>
+#include <rtps/security/logging/Logging.h>
+#include <rtps/security/logging/BuiltinLoggingType.h>
 #include <utils/collections/concurrent_queue.h>
 #include <utils/thread.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 
@@ -82,7 +83,7 @@ private:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif // _FASTDDS_RTPS_SECURITY_LOGGING_LOGTOPIC_H_

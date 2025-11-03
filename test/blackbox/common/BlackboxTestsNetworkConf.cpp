@@ -16,17 +16,17 @@
 #include <string>
 
 #include <gtest/gtest.h>
+#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 #include "PubSubParticipant.hpp"
 
-#include <fastrtps/rtps/common/Locator.h>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
-#include <fastrtps/utils/IPFinder.h>
-
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 enum communication_type
 {
@@ -201,8 +201,7 @@ TEST_P(NetworkConfig, sub_unique_network_flows_multiple_locators)
 
     participant.sub_topic_name(TEST_TOPIC_NAME).sub_property_policy(properties);
 
-    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> shm_descriptor =
-            std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+    std::shared_ptr<SharedMemTransportDescriptor> shm_descriptor = std::make_shared<SharedMemTransportDescriptor>();
     // Use only SHM transport in the first participant
     participant.disable_builtin_transport().add_user_transport_to_pparams(shm_descriptor);
 
@@ -288,8 +287,8 @@ TEST_P(NetworkConfig, PubSubOutLocatorSelection)
         reader.disable_builtin_transport().add_user_transport_to_pparams(descriptor_);
     }
 
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
-            history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS).
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
+            history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS).
             resource_limits_allocated_samples(2).
             resource_limits_max_samples(2).init();
 
@@ -297,9 +296,9 @@ TEST_P(NetworkConfig, PubSubOutLocatorSelection)
 
     descriptor_->m_output_udp_socket = static_cast<uint16_t>(locator.port);
 
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_kind(
-        eprosima::fastrtps::KEEP_ALL_HISTORY_QOS).
-            durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS).
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).history_kind(
+        eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS).
+            durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS).
             resource_limits_allocated_samples(20).
             disable_builtin_transport().
             add_user_transport_to_pparams(descriptor_).
@@ -331,14 +330,14 @@ TEST_P(NetworkConfig, PubSubInterfaceWhitelistLocalhost)
 
     descriptor_->interfaceWhiteList.push_back(ip);
 
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_multicast(0).
             disable_builtin_transport().
             add_user_transport_to_pparams(descriptor_).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_multicast(1).
             disable_builtin_transport().
             add_user_transport_to_pparams(descriptor_).init();
@@ -393,15 +392,15 @@ void interface_whitelist_test(
         }
     }
 
-    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> pub_shm_descriptor;
+    std::shared_ptr<SharedMemTransportDescriptor> pub_shm_descriptor;
 
     if (add_shm_descriptor)
     {
-        pub_shm_descriptor = std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+        pub_shm_descriptor = std::make_shared<SharedMemTransportDescriptor>();
     }
 
     // Set the UDP transport descriptor WITH interfaces in the writer
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_builtin_transport().
             add_user_transport_to_pparams(pub_udp_descriptor);
 
@@ -440,15 +439,15 @@ void interface_whitelist_test(
         }
     }
 
-    std::shared_ptr<eprosima::fastdds::rtps::SharedMemTransportDescriptor> sub_shm_descriptor;
+    std::shared_ptr<SharedMemTransportDescriptor> sub_shm_descriptor;
 
     if (add_shm_descriptor)
     {
-        sub_shm_descriptor = std::make_shared<eprosima::fastdds::rtps::SharedMemTransportDescriptor>();
+        sub_shm_descriptor = std::make_shared<SharedMemTransportDescriptor>();
     }
 
     // Set the UDP transport descriptor WITH interfaces in the reader
-    reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).history_depth(10).
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).history_depth(10).
             disable_builtin_transport().
             add_user_transport_to_pparams(sub_udp_descriptor);
 
@@ -761,10 +760,11 @@ TEST_P(NetworkConfig, PubGetSendingLocatorsWhitelist)
     constexpr uint32_t port = 31337u;
 
     descriptor_->m_output_udp_socket = static_cast<uint16_t>(port);
-    for (const auto& interface : interfaces)
+    for (const auto& network_interface : interfaces)
     {
-        std::cout << "Adding interface '" << interface.name << "' (" << interface.name.size() << ")" << std::endl;
-        descriptor_->interfaceWhiteList.push_back(interface.name);
+        std::cout << "Adding interface '" << network_interface.name << "' (" << network_interface.name.size() << ")" <<
+            std::endl;
+        descriptor_->interfaceWhiteList.push_back(network_interface.name);
     }
 
     writer.disable_builtin_transport().

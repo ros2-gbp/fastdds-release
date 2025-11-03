@@ -19,24 +19,37 @@ Contains a package of system test for fastdds tool
 
 usage: test.py <install_path> <test_name>
 
-install_path: Fast-DDS base path installation
+install_path: Fast DDS base path installation
 
 test_name: Test to run.
 
 Available tests:
 
     test_fastdds_installed
+    test_fastdds_version
     test_fastdds_discovery
+    test_fastdds_discovery_run
+    test_fastdds_discovery_help
+    test_fastdds_discovery_examples
     test_fastdds_shm
+    test_fastdds_xml_validate
+    test_ros_discovery
 
 """
-
 import argparse
 import os
+import signal
 import subprocess
+import signal
 import sys
 from pathlib import Path
-
+try: # Try catch for new python dependency
+    import psutil
+except ImportError:
+    print(
+        'psutil module not found. '
+        'Try to install running "pip install psutil"')
+    sys.exit(1)
 
 def setup_script_name():
     """
@@ -62,7 +75,7 @@ def cmd(install_path, setup_script_path=Path(), args=''):
     Build the command line to run for the current platform.
 
     install_path Path:
-        Fast-DDS instalation path.
+        Fast DDS instalation path.
 
     setup_script_path Path:
         Path to the setup script if necessary.
@@ -96,6 +109,27 @@ def test_fastdds_installed(install_path):
         print('test_fastdds_installed FAILED')
         sys.exit(ret)
 
+def test_fastdds_version(install_path):
+    """Test that fastdds version is printed correctly."""
+    args = '-v'
+    try:
+        ret = subprocess.run(cmd(install_path, args=args),
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             text=True,
+                             shell=True,
+                             timeout=5)
+    except subprocess.TimeoutExpired:
+        print('test_fastdds_version FAILED due to timeout')
+        sys.exit(1)
+
+    if 0 != ret.returncode:
+        print('test_fastdds_version FAILED due to return code')
+        sys.exit(ret.returncode)
+
+    if 'Fast DDS version:' not in ret.stdout:
+        print('test_fastdds_version FAILED due to unexpected output')
+        sys.exit(ret.returncode)
 
 def test_fastdds_shm(install_path):
     """Test that shm command runs."""
@@ -106,10 +140,26 @@ def test_fastdds_shm(install_path):
         print('test_fastdds_shm FAILED')
         sys.exit(ret)
 
+def test_fastdds_shm_force(install_path):
+    """Test that shm command runs."""
+    args = ' shm clean -f'
+    ret = subprocess.call(cmd(
+        install_path=install_path, args=args), shell=True)
+    if 0 != ret:
+        print('test_fastdds_shm FAILED')
+        sys.exit(ret)
+
+    args = ' shm clean --force'
+    ret = subprocess.call(cmd(
+        install_path=install_path, args=args), shell=True)
+    if 0 != ret:
+        print('test_fastdds_shm FAILED')
+        sys.exit(ret)
+
 
 def test_fastdds_discovery(install_path, setup_script_path):
     """Test that discovery command runs."""
-    args = ' discovery'
+    args = ' discovery -h'
     ret = subprocess.call(
         cmd(install_path=install_path,
             setup_script_path=setup_script_path,
@@ -120,12 +170,199 @@ def test_fastdds_discovery(install_path, setup_script_path):
         print('test_fastdds_discovery FAILED')
         sys.exit(ret)
 
+def test_fastdds_discovery_help(install_path, setup_script_path):
+    """Test that discovery help command is displayed if present in command."""
+    args = ' discovery -l 127.0.0.1 -p 11811 -h'
+    test_timeout = 5
+    try:
+        if os.name == "nt":
+            # Windows: use CREATE_NEW_PROCESS_GROUP
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # POSIX-specific: use os.setsid
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                preexec_fn=os.setsid)
+        ret = process.wait(timeout=test_timeout)
+    except subprocess.TimeoutExpired:
+        print(f'Timeout {test_timeout} expired.')
+        if os.name == "nt":
+            # Use psutil to end all child processes in Windows
+            parent = psutil.Process(process.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        else:
+            # Use os.killpg to end all child processes in POSIX
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        ret = -1
+
+    if 0 != ret:
+        print('test_fastdds_discovery_help_short FAILED with ret_code: ', ret)
+        sys.exit(ret)
+
+    args = ' discovery -l 127.0.0.1 -p 11811 --help'
+    try:
+        if os.name == "nt":
+            # Windows: use CREATE_NEW_PROCESS_GROUP
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # POSIX-specific: use os.setsid
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                preexec_fn=os.setsid)
+        ret = process.wait(timeout=test_timeout)
+    except subprocess.TimeoutExpired:
+        print(f'Timeout {test_timeout} expired.')
+        if os.name == "nt":
+            # Use psutil to end all child processes in Windows
+            parent = psutil.Process(process.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        else:
+            # Use os.killpg to end all child processes in POSIX
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        ret = -1
+
+    if 0 != ret:
+        print('test_fastdds_discovery_help_short FAILED with ret_code: ', ret)
+        sys.exit(ret)
+
+
+def test_fastdds_discovery_examples(install_path, setup_script_path):
+    """Test that discovery examples command is displayed if present in command."""
+    args = ' discovery -l 127.0.0.1 -p 11811 -e'
+    test_timeout = 5
+    try:
+        if os.name == "nt":
+            # Windows: use CREATE_NEW_PROCESS_GROUP
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # POSIX-specific: use os.setsid
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                preexec_fn=os.setsid)
+        ret = process.wait(timeout=test_timeout)
+    except subprocess.TimeoutExpired:
+        print(f'Timeout {test_timeout} expired.')
+        if os.name == "nt":
+            # Use psutil to end all child processes in Windows
+            parent = psutil.Process(process.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        else:
+            # Use os.killpg to end all child processes in POSIX
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        ret = -1
+
+    if 0 != ret:
+        print('test_fastdds_discovery_examples_short FAILED with ret_code: ', ret)
+        sys.exit(ret)
+
+    args = ' discovery -l 127.0.0.1 -p 11811 --examples'
+    try:
+        if os.name == "nt":
+            # Windows: use CREATE_NEW_PROCESS_GROUP
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # POSIX-specific: use os.setsid
+            process = subprocess.Popen(
+                cmd(install_path=install_path,
+                    setup_script_path=setup_script_path,
+                    args=args),
+                shell=True,
+                preexec_fn=os.setsid)
+        ret = process.wait(timeout=test_timeout)
+    except subprocess.TimeoutExpired:
+        print(f'Timeout {test_timeout} expired.')
+        if os.name == "nt":
+            # Use psutil to end all child processes in Windows
+            parent = psutil.Process(process.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        else:
+            # Use os.killpg to end all child processes in POSIX
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        ret = -1
+
+    if 0 != ret:
+        print('test_fastdds_discovery_examples_long FAILED with ret_code: ', ret)
+        sys.exit(ret)
+
+
+def test_fastdds_discovery_run(install_path, setup_script_path):
+    """Test that discovery command runs."""
+    args = ' discovery -l 127.0.0.1'
+    try:
+        test_timeout = 10
+        process = subprocess.Popen(
+            cmd(install_path=install_path,
+                setup_script_path=setup_script_path,
+                args=args),
+            shell=True)
+        ret = process.wait(timeout=test_timeout)
+        # Manually set the error return code because we need the process to timeout
+        ret = 3
+    except subprocess.TimeoutExpired:
+        print(f'Timeout {test_timeout} expired. Test successful')
+        try:
+            # Need to kill all child processes to properly end the test
+            parent = psutil.Process(process.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+            ret = 0
+        except Exception as e:
+            print(f"Error while ending child processes: {e}")
+
+    if 0 != ret:
+        print('test_fastdds_discovery_run FAILED')
+        sys.exit(ret)
+
 
 def test_ros_discovery(install_path, setup_script_path):
     """Test that discovery command runs."""
+    args = ' -h'
     ret = subprocess.call(
         cmd(install_path=install_path,
-            setup_script_path=setup_script_path),
+            setup_script_path=setup_script_path,
+            args=args),
         shell=True)
 
     if 0 != ret:
@@ -148,7 +385,7 @@ def get_paths(install_path):
     Adjust the install path when --merge-install has been used.
 
     param install_path Path:
-        Path to the Fast-DDS installation path
+        Path to the Fast DDS installation path
 
     return Path:
         Adjusted path to the installation path where fastdds tool
@@ -196,11 +433,20 @@ if __name__ == '__main__':
     tests = {
         'test_fastdds_installed':
         lambda: test_fastdds_installed(fastdds_tool_path),
+        'test_fastdds_version':
+        lambda: test_fastdds_version(fastdds_tool_path),
         'test_fastdds_discovery': lambda: test_fastdds_discovery(
+            fastdds_tool_path, setup_script_path),
+        'test_fastdds_discovery_run': lambda: test_fastdds_discovery_run(
+            fastdds_tool_path, setup_script_path),
+        'test_fastdds_discovery_help': lambda: test_fastdds_discovery_help(
+            fastdds_tool_path, setup_script_path),
+        'test_fastdds_discovery_examples': lambda: test_fastdds_discovery_examples(
             fastdds_tool_path, setup_script_path),
         'test_ros_discovery':
         lambda: test_ros_discovery(ros_disc_tool_path, setup_script_path),
         'test_fastdds_shm': lambda: test_fastdds_shm(fastdds_tool_path),
+        'test_fastdds_shm_force': lambda: test_fastdds_shm_force(fastdds_tool_path),
         'test_fastdds_xml_validate':
         lambda: test_fastdds_xml_validate(fastdds_tool_path)
     }

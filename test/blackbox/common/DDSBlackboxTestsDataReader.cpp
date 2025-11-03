@@ -27,17 +27,18 @@
 #include <fastdds/dds/subscriber/Subscriber.hpp>
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
-#include <fastrtps/transport/test_UDPv4TransportDescriptor.h>
-#include <fastrtps/types/TypesBase.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 
+#include "../utils/filter_helpers.hpp"
 #include "BlackboxTests.hpp"
 #include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 #define INCOMPATIBLE_TEST_TOPIC_NAME std::string( \
         std::string("incompatible_") + TEST_TOPIC_NAME)
@@ -56,12 +57,12 @@ public:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -74,12 +75,12 @@ public:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -92,6 +93,177 @@ public:
 
 };
 
+auto check_qos_in_data_r =
+        [](rtps::CDRMessage_t& msg, std::atomic<uint8_t>& qos_found, std::vector<uint16_t>& expected_qos_pids)
+        {
+            uint32_t qos_size = 0;
+            uint32_t original_pos = msg.pos;
+            bool is_sentinel = false;
+
+            while (!is_sentinel)
+            {
+                msg.pos = original_pos + qos_size;
+
+                uint16_t pid = eprosima::fastdds::helpers::cdr_parse_u16(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 2;
+                uint16_t plength = eprosima::fastdds::helpers::cdr_parse_u16(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 2;
+                bool valid = true;
+
+                // If inline_qos submessage is found we will have an additional Sentinel
+                if (pid == eprosima::fastdds::dds::PID_SENTINEL)
+                {
+                    // PID_SENTINEL is always considered of length 0
+                    plength = 0;
+                    // If the PID is not inline qos, then we need to set the sentinel
+                    // to true, as it is the last PID
+                    is_sentinel = true;
+                }
+
+                qos_size += (4 + plength);
+
+                // Align to 4 byte boundary and prepare for next iteration
+                qos_size = (qos_size + 3) & ~3;
+
+                if (!valid || ((msg.pos + plength) > msg.length))
+                {
+                    return false;
+                }
+                else if (!is_sentinel)
+                {
+                    if (pid == eprosima::fastdds::dds::PID_DURABILITY)
+                    {
+                        std::cout << "Durability found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_DEADLINE)
+                    {
+                        std::cout << "Deadline found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_LATENCY_BUDGET)
+                    {
+                        std::cout << "Latency found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_LIVELINESS)
+                    {
+                        std::cout << "Liveliness found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_RELIABILITY)
+                    {
+                        std::cout << "Reliability found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_LIFESPAN)
+                    {
+                        std::cout << "Lifespan found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_USER_DATA)
+                    {
+                        std::cout << "User data found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_TIME_BASED_FILTER)
+                    {
+                        std::cout << "Time base filter found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_OWNERSHIP)
+                    {
+                        std::cout << "Ownership found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_DESTINATION_ORDER)
+                    {
+                        std::cout << "Destination Order found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_PRESENTATION)
+                    {
+                        std::cout << "Presentation found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_PARTITION)
+                    {
+                        std::cout << "Partition found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_TOPIC_DATA)
+                    {
+                        std::cout << "Topic data found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_DISABLE_POSITIVE_ACKS)
+                    {
+                        std::cout << "Disable positive acks found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_DATASHARING)
+                    {
+                        std::cout << "Data sharing found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_GROUP_DATA)
+                    {
+                        std::cout << "Group data found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_DATA_REPRESENTATION)
+                    {
+                        std::cout << "Data representation found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_HISTORY)
+                    {
+                        std::cout << "History found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_TYPE_CONSISTENCY_ENFORCEMENT)
+                    {
+                        std::cout << "Type consistency enforcement found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_RESOURCE_LIMITS)
+                    {
+                        std::cout << "Optional Resource limits found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_READER_DATA_LIFECYCLE)
+                    {
+                        std::cout << "Optional Reader data lifecycle found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_RTPS_RELIABLE_READER)
+                    {
+                        std::cout << "Optional RTPS reliable reader found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_RTPS_ENDPOINT)
+                    {
+                        std::cout << "Optional RTPS endpoint found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_READER_RESOURCE_LIMITS)
+                    {
+                        std::cout << "Optional Reader resource limits found" << std::endl;
+                        qos_found.fetch_add(1u, std::memory_order_seq_cst);
+                    }
+                    // Delete the PID from the expected list if present
+                    expected_qos_pids.erase(
+                        std::remove(expected_qos_pids.begin(), expected_qos_pids.end(), pid),
+                        expected_qos_pids.end());
+                }
+            }
+
+            // Do not drop the packet in any case
+            return false;
+        };
+
 TEST_P(DDSDataReader, LivelinessChangedStatusGet)
 {
     static constexpr int32_t num_times = 3u;
@@ -101,7 +273,7 @@ TEST_P(DDSDataReader, LivelinessChangedStatusGet)
 
     // Create and start reader that will not invoke listener for liveliness_changed
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
-    reader.liveliness_kind(AUTOMATIC_LIVELINESS_QOS)
+    reader.liveliness_kind(eprosima::fastdds::dds::AUTOMATIC_LIVELINESS_QOS)
             .liveliness_lease_duration(lease_duration)
             .deactivate_status_listener(eprosima::fastdds::dds::StatusMask::liveliness_changed());
     reader.init();
@@ -111,7 +283,7 @@ TEST_P(DDSDataReader, LivelinessChangedStatusGet)
     std::unique_ptr<PubSubParticipant<HelloWorldPubSubType>> writers;
     writers.reset(new PubSubParticipant<HelloWorldPubSubType>(num_times, 0, num_times, 0));
     writers->pub_topic_name(TEST_TOPIC_NAME)
-            .pub_liveliness_kind(AUTOMATIC_LIVELINESS_QOS)
+            .pub_liveliness_kind(eprosima::fastdds::dds::AUTOMATIC_LIVELINESS_QOS)
             .pub_liveliness_announcement_period(announcement_period)
             .pub_liveliness_lease_duration(lease_duration);
     ASSERT_TRUE(writers->init_participant());
@@ -210,7 +382,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     eprosima::fastdds::dds::DataReader& reader = pubsub_reader.get_native_reader();
     eprosima::fastdds::dds::SampleInfo info;
 
-    EXPECT_EQ(ReturnCode_t::RETCODE_NO_DATA, reader.get_first_untaken_info(&info));
+    EXPECT_EQ(eprosima::fastdds::dds::RETCODE_NO_DATA, reader.get_first_untaken_info(&info));
 
     // Wait for discovery.
     pubsub_reader.wait_discovery();
@@ -231,7 +403,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     //! Checks whether total_unread_ is consistent with
     //! the number of unread changes in history
     //! This API call should NOT modify the history
-    EXPECT_EQ(ReturnCode_t::RETCODE_OK, reader.get_first_untaken_info(&info));
+    EXPECT_EQ(eprosima::fastdds::dds::RETCODE_OK, reader.get_first_untaken_info(&info));
 
     HelloWorld msg;
     eprosima::fastdds::dds::SampleInfo sinfo;
@@ -240,7 +412,7 @@ TEST_P(DDSDataReader, ConsistentTotalUnreadAfterGetFirstUntakenInfo)
     auto result = reader.take_next_sample((void*)&msg, &sinfo);
 
     //! Assert last operation
-    ASSERT_EQ(result, ReturnCode_t::RETCODE_OK) << "Reader's unread count is: " << reader.get_unread_count();
+    ASSERT_EQ(result, eprosima::fastdds::dds::RETCODE_OK) << "Reader's unread count is: " << reader.get_unread_count();
 }
 
 //! Regression test for #20706
@@ -256,13 +428,13 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     // The reader should not take nor read any sample in this test
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME, false, false, false);
 
-    auto testTransport_1 = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport_1 = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
 
     EntityId_t writer1_id;
     EntityId_t reader_id;
 
     testTransport_1->drop_data_messages_filter_ =
-            [&writer1_id, &reader_id](eprosima::fastrtps::rtps::CDRMessage_t& msg)-> bool
+            [&writer1_id, &reader_id](eprosima::fastdds::rtps::CDRMessage_t& msg)-> bool
             {
                 uint32_t old_pos = msg.pos;
 
@@ -273,9 +445,17 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
 
                 msg.pos += 2; // flags
                 msg.pos += 2; // octets to inline quos
-                CDRMessage::readEntityId(&msg, &readerID);
-                CDRMessage::readEntityId(&msg, &writerID);
-                CDRMessage::readSequenceNumber(&msg, &sn);
+                readerID = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                writerID = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                sn.high = (int32_t)eprosima::fastdds::helpers::cdr_parse_u32(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos += 4;
+                sn.low = eprosima::fastdds::helpers::cdr_parse_u32(
+                    (char*)&msg.buffer[msg.pos]);
 
                 // restore buffer pos
                 msg.pos = old_pos;
@@ -327,7 +507,7 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     eprosima::fastdds::dds::SampleInfo info;
     for (size_t i = 0; i < 3; i++)
     {
-        ASSERT_NE(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK, reader.get_native_reader().get_first_untaken_info(
+        ASSERT_NE(eprosima::fastdds::dds::RETCODE_OK, reader.get_native_reader().get_first_untaken_info(
                     &info));
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
@@ -338,12 +518,12 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
     reader.block_for_unread_count_of(3);
 
     // get_first_untaken_info() must return OK now
-    ASSERT_EQ(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK,
+    ASSERT_EQ(eprosima::fastdds::dds::RETCODE_OK,
             reader.get_native_reader().get_first_untaken_info(&info));
     eprosima::fastdds::dds::StackAllocatedSequence<HelloWorld, 1> data_values;
     eprosima::fastdds::dds::SampleInfoSeq sample_infos{1};
     // As get_first_untaken_info() returns OK, take() must return OK too
-    ASSERT_EQ(eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK,
+    ASSERT_EQ(eprosima::fastdds::dds::RETCODE_OK,
             reader.get_native_reader().take(data_values, sample_infos));
 }
 
@@ -355,9 +535,9 @@ TEST(DDSDataReader, GetFirstUntakenInfoReturnsTheFirstValidChange)
 TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
 {
     //! Manually set intraprocess
-    LibrarySettingsAttributes library_settings;
-    library_settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_FULL;
-    xmlparser::XMLProfileManager::library_settings(library_settings);
+    eprosima::fastdds::LibrarySettings library_settings;
+    library_settings.intraprocess_delivery = eprosima::fastdds::INTRAPROCESS_FULL;
+    eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
 
     auto participant = DomainParticipantFactory::get_instance()->create_participant(
         (uint32_t)GET_PID() % 230,
@@ -365,7 +545,7 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
         eprosima::fastdds::dds::StatusMask::none());
 
     eprosima::fastdds::dds::TypeSupport t_type{ new HelloWorldPubSubType() };
-    ASSERT_TRUE(t_type.register_type( participant ) == ReturnCode_t::RETCODE_OK);
+    ASSERT_TRUE(t_type.register_type( participant ) == eprosima::fastdds::dds::RETCODE_OK);
 
     auto topic = participant->create_topic( TEST_TOPIC_NAME, t_type.get_type_name(),
                     participant->get_default_topic_qos());
@@ -374,20 +554,20 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
     auto publisher = participant->create_publisher( participant->get_default_publisher_qos());
 
     auto writer_qos = eprosima::fastdds::dds::DATAWRITER_QOS_DEFAULT;
-    writer_qos.durability().kind = DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
-    writer_qos.reliability().kind = ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
+    writer_qos.durability().kind = eprosima::fastdds::dds::DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
+    writer_qos.reliability().kind = eprosima::fastdds::dds::ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
     auto writer = publisher->create_datawriter( topic, writer_qos );
 
     auto data = HelloWorld{};
-    ASSERT_TRUE(writer->write( &data ));
+    ASSERT_EQ(writer->write( &data ), eprosima::fastdds::dds::RETCODE_OK);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     // create a late joiner subscriber and reader
     auto subscriber = participant->create_subscriber( participant->get_default_subscriber_qos());
     auto reader_qos = eprosima::fastdds::dds::DATAREADER_QOS_DEFAULT;
-    reader_qos.durability().kind = DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
-    reader_qos.reliability().kind = ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
+    reader_qos.durability().kind = eprosima::fastdds::dds::DurabilityQosPolicyKind::TRANSIENT_LOCAL_DURABILITY_QOS;
+    reader_qos.reliability().kind = eprosima::fastdds::dds::ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS;
     auto reader = subscriber->create_datareader( topic, reader_qos );
 
     eprosima::fastdds::dds::SubscriptionMatchedStatus status;
@@ -410,8 +590,8 @@ TEST(DDSDataReader, ConsistentReliabilityWhenIntraprocess)
     ASSERT_TRUE(unread_count > 0);
 
     //! Reset back to INTRAPROCESS_OFF
-    library_settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_OFF;
-    xmlparser::XMLProfileManager::library_settings(library_settings);
+    library_settings.intraprocess_delivery = eprosima::fastdds::INTRAPROCESS_OFF;
+    eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
 }
 
 /**
@@ -465,7 +645,7 @@ template<>
 void TestsDataReaderQosCommonUtils::set_representation_qos(
         eprosima::fastdds::dds::DataReaderQos& qos)
 {
-    qos.type_consistency().representation.m_value.push_back(
+    qos.representation().m_value.push_back(
         eprosima::fastdds::dds::DataRepresentationId_t::XCDR2_DATA_REPRESENTATION);
 }
 
@@ -535,6 +715,583 @@ TEST(DDSDataReader, datareader_qos_use_topic_qos)
     ASSERT_EQ(control_qos, test_qos);
 }
 
+bool validate_publication_builtin_topic_data(
+        const eprosima::fastdds::rtps::PublicationBuiltinTopicData& pubdata,
+        const eprosima::fastdds::dds::DataWriter& datawriter)
+{
+    bool ret = true;
+
+    auto dw_qos = datawriter.get_qos();
+    auto pub_qos = datawriter.get_publisher()->get_qos();
+
+    eprosima::fastdds::rtps::BuiltinTopicKey_t dw_key, part_key;
+
+    entity_id_to_builtin_topic_key(dw_key, datawriter.guid().entityId);
+    guid_prefix_to_builtin_topic_key(part_key, datawriter.get_publisher()->get_participant()->guid().guidPrefix);
+
+    ret &= (0 == memcmp(pubdata.key.value, dw_key.value, sizeof(eprosima::fastdds::rtps::BuiltinTopicKey_t)));
+    ret &=
+            (0 ==
+            memcmp(pubdata.participant_key.value, part_key.value,
+            sizeof(eprosima::fastdds::rtps::BuiltinTopicKey_t)));
+
+    ret &= (pubdata.topic_name.to_string() == datawriter.get_topic()->get_name());
+    ret &= (pubdata.type_name.to_string() == datawriter.get_topic()->get_type_name());
+
+    // DataWriter Qos
+    ret &= (pubdata.durability == dw_qos.durability());
+    ret &= (pubdata.durability_service == dw_qos.durability_service());
+    ret &= (pubdata.deadline == dw_qos.deadline());
+    ret &= (pubdata.latency_budget == dw_qos.latency_budget());
+    ret &= (pubdata.liveliness == dw_qos.liveliness());
+    ret &= (pubdata.reliability == dw_qos.reliability());
+    ret &= (pubdata.lifespan == dw_qos.lifespan());
+    ret &= (
+        (pubdata.user_data.size() == dw_qos.user_data().size()) &&
+        (0 == memcmp(pubdata.user_data.data(), dw_qos.user_data().data(), pubdata.user_data.size())));
+    ret &= (pubdata.ownership == dw_qos.ownership());
+    ret &= (pubdata.ownership_strength == dw_qos.ownership_strength());
+    ret &= (pubdata.destination_order == dw_qos.destination_order());
+
+    // Publisher Qos
+    ret &= (pubdata.presentation == pub_qos.presentation());
+    ret &= (pubdata.partition.getNames() == pub_qos.partition().getNames());
+    // topic_data not implemented
+    // group_data too
+
+    return ret;
+}
+
+/**
+ * @test DDS-DR-API-GMPD-01
+ *
+ * get_matched_publication_data() must return RETCODE_BAD_PARAMETER
+ * if the publication is not matched.
+ */
+TEST(DDSDataReader, datareader_get_matched_publication_data_bad_parameter)
+{
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_1(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_2(TEST_TOPIC_NAME);
+
+    eprosima::fastdds::rtps::PublicationBuiltinTopicData pubdata;
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .init();
+
+    writer_1.reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
+            .init();
+    writer_2.ownership_strength(10)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+    ASSERT_TRUE(writer_1.isInitialized());
+    ASSERT_TRUE(writer_2.isInitialized());
+
+    // Reader should not be matched with any writer
+    reader.wait_discovery(std::chrono::seconds(2), 2);
+
+    ASSERT_TRUE(!reader.is_matched());
+
+    auto& native_reader = reader.get_native_reader();
+
+    InstanceHandle_t w1_handle = writer_1.get_native_writer().get_instance_handle();
+    ReturnCode_t ret = native_reader.get_matched_publication_data(pubdata, w1_handle);
+
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_BAD_PARAMETER);
+
+    InstanceHandle_t w2_handle = writer_2.get_native_writer().get_instance_handle();
+    ret = native_reader.get_matched_publication_data(pubdata, w2_handle);
+
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_BAD_PARAMETER);
+}
+
+/**
+ * @test DDS-DR-API-GMPD-02
+ *
+ * The operation must succeed when the publication is matched and correctly
+ * retrieve the publication data. Parameterize the test for different transports.
+ */
+TEST_P(DDSDataReader, datareader_get_matched_publication_data_correctly_behaves)
+{
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_1(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_2(TEST_TOPIC_NAME);
+
+    eprosima::fastdds::rtps::PublicationBuiltinTopicData w1_pubdata, w2_pubdata;
+
+    reader.partition("*")
+            .init();
+
+    writer_1.partition("*")
+            .init();
+    writer_2.user_data({'u', 's', 'e', 'r', 'd', 'a', 't', 'a'})
+            .partition("*")
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+    ASSERT_TRUE(writer_1.isInitialized());
+    ASSERT_TRUE(writer_2.isInitialized());
+
+    // Reader must match with both writers
+    reader.wait_discovery(std::chrono::seconds::zero(), 2);
+
+    ASSERT_EQ(reader.get_matched(), 2u);
+
+    auto& native_reader = reader.get_native_reader();
+
+    InstanceHandle_t w1_handle = writer_1.get_native_writer().get_instance_handle();
+    ReturnCode_t ret = native_reader.get_matched_publication_data(w1_pubdata, w1_handle);
+
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_TRUE(validate_publication_builtin_topic_data(w1_pubdata, writer_1.get_native_writer()));
+
+    InstanceHandle_t w2_handle = writer_2.get_native_writer().get_instance_handle();
+    ret = native_reader.get_matched_publication_data(w2_pubdata, w2_handle);
+
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_TRUE(validate_publication_builtin_topic_data(w2_pubdata, writer_2.get_native_writer()));
+}
+
+/**
+ * @test DDS-DR-API-GMP-01
+ *
+ * get_matched_publications() must return RETCODE_OK
+ * with an empty list if no DataWriters are matched.
+ */
+TEST(DDSDataReader, datareader_get_matched_publications_ok_empty_list)
+{
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_1(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer_2(TEST_TOPIC_NAME);
+
+    std::vector<InstanceHandle_t> pub_handles;
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .init();
+
+    writer_1.reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
+            .init();
+
+    writer_2.ownership_strength(10)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+    ASSERT_TRUE(writer_1.isInitialized());
+    ASSERT_TRUE(writer_2.isInitialized());
+
+    // Reader should not be matched with any writer
+    reader.wait_discovery(std::chrono::seconds(2), 2);
+    ASSERT_FALSE(reader.is_matched());
+
+    auto& native_reader = reader.get_native_reader();
+    ReturnCode_t ret = native_reader.get_matched_publications(pub_handles);
+
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_EQ(pub_handles.size(), 0u);
+}
+
+/**
+ * @test DDS-DR-API-GMP-02
+ *
+ * get_matched_publications() must provide the correct list of matched publication handles.
+ * Parameterize the test for different transports.
+ */
+TEST_P(DDSDataReader, datareader_get_matched_publications_correctly_behaves)
+{
+    const size_t num_writers = 5;
+
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    std::vector<std::unique_ptr<PubSubWriter<HelloWorldPubSubType>>> writers;
+    std::vector<InstanceHandle_t> expected_pub_handles;
+    std::vector<InstanceHandle_t> pub_handles;
+
+    writers.reserve(num_writers);
+    pub_handles.reserve(num_writers);
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+
+    for (size_t i = 0; i < num_writers; ++i)
+    {
+        writers.emplace_back(new PubSubWriter<HelloWorldPubSubType>(TEST_TOPIC_NAME));
+        writers.back()->init();
+        ASSERT_TRUE(writers.back()->isInitialized());
+        expected_pub_handles.emplace_back(writers.back()->get_native_writer().get_instance_handle());
+    }
+
+    // Wait for discovery
+    reader.wait_discovery(std::chrono::seconds::zero(), num_writers);
+    ASSERT_EQ(reader.get_matched(), num_writers);
+
+    auto& native_reader = reader.get_native_reader();
+    ReturnCode_t ret = native_reader.get_matched_publications(pub_handles);
+
+    // Check that the list of matched publication handles is correct
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_EQ(pub_handles.size(), num_writers);
+    ASSERT_TRUE(std::is_permutation(pub_handles.begin(), pub_handles.end(), expected_pub_handles.begin()));
+
+    // Remove two writers and check that the list of matched publication handles is updated
+    writers.pop_back();
+    writers.pop_back();
+    expected_pub_handles.pop_back();
+    expected_pub_handles.pop_back();
+
+    // Wait for undiscovery
+    reader.wait_writer_undiscovery(static_cast<unsigned int>(num_writers - 2));
+
+    pub_handles.clear();
+    ret = native_reader.get_matched_publications(pub_handles);
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_EQ(pub_handles.size(), static_cast<size_t>(num_writers - 2));
+    ASSERT_TRUE(std::is_permutation(pub_handles.begin(), pub_handles.end(), expected_pub_handles.begin()));
+}
+
+/**
+ * @test DDS-DR-API-GMP-03
+ *
+ * The operation must provide the correct list of matched publication handles in multiple
+ * participants scenario. Parameterize the test for different transports.
+ */
+TEST_P(DDSDataReader, datareader_get_matched_publications_multiple_participants_correctly_behave)
+{
+    PubSubParticipant<HelloWorldPubSubType> part_1(1, 1, 1, 1);
+    PubSubParticipant<HelloWorldPubSubType> part_2(1, 1, 1, 1);
+
+    part_1.pub_topic_name(TEST_TOPIC_NAME);
+    part_1.sub_topic_name(TEST_TOPIC_NAME + "_1");
+    part_2.pub_topic_name(TEST_TOPIC_NAME + "_1");
+    part_2.sub_topic_name(TEST_TOPIC_NAME);
+
+    ASSERT_TRUE(part_1.init_participant());
+    ASSERT_TRUE(part_1.init_publisher(0));
+    ASSERT_TRUE(part_1.init_subscriber(0));
+
+    ASSERT_TRUE(part_2.init_participant());
+    ASSERT_TRUE(part_2.init_subscriber(0));
+    ASSERT_TRUE(part_2.init_publisher(0));
+
+    part_1.pub_wait_discovery();
+    part_1.sub_wait_discovery();
+
+    part_2.pub_wait_discovery();
+    part_2.sub_wait_discovery();
+
+    auto& reader_p1 = part_1.get_native_reader(0);
+    auto& reader_p2 = part_2.get_native_reader(0);
+
+    std::vector<InstanceHandle_t> pub_handles_p1;
+    std::vector<InstanceHandle_t> pub_handles_p2;
+
+    ReturnCode_t ret = reader_p1.get_matched_publications(pub_handles_p1);
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_EQ(pub_handles_p1.size(), 1u);
+    ASSERT_EQ(pub_handles_p1[0], part_2.get_native_writer(0).get_instance_handle());
+
+    ret = reader_p2.get_matched_publications(pub_handles_p2);
+    ASSERT_EQ(ret, eprosima::fastdds::dds::RETCODE_OK);
+    ASSERT_EQ(pub_handles_p2.size(), 1u);
+    ASSERT_EQ(pub_handles_p2[0], part_1.get_native_writer(0).get_instance_handle());
+}
+
+// This tests checks that non-default QoS are correctly sent in the Data(r)
+// Only half of the QoS are modified, so the other half should be the default ones and they should not
+// be sent. The opposite scenario will be checked in the following test.
+// QoS that should be sent:
+// - DurabilityQosPolicy
+// - DeadlineQosPolicy
+// - LatencyBudgetQosPolicy
+// - LivelinessQosPolicy
+// - ReliabilityQosPolicy
+// - LifespanQosPolicy
+// - UserDataQosPolicy
+// - TimeBasedFilterQosPolicy
+// - OwnershipQosPolicy
+// - DestinationOrderQosPolicy can NOT be tested, as it is not implemented yet so the default value cannot be modified
+TEST_P(DDSDataReader, datareader_sends_non_default_qos_a)
+{
+    if (TRANSPORT != GetParam())
+    {
+        GTEST_SKIP() << "Only makes sense on TRANSPORT";
+        return;
+    }
+
+    std::atomic<uint8_t> qos_found { 0 };
+    std::vector<uint16_t> expected_qos_pids = {
+        eprosima::fastdds::dds::PID_DURABILITY,
+        eprosima::fastdds::dds::PID_DEADLINE,
+        eprosima::fastdds::dds::PID_LATENCY_BUDGET,
+        eprosima::fastdds::dds::PID_LIVELINESS,
+        eprosima::fastdds::dds::PID_RELIABILITY,
+        eprosima::fastdds::dds::PID_LIFESPAN,
+        eprosima::fastdds::dds::PID_USER_DATA,
+        eprosima::fastdds::dds::PID_TIME_BASED_FILTER,
+        eprosima::fastdds::dds::PID_OWNERSHIP,
+    };
+    const uint8_t expected_qos_size = static_cast<uint8_t>(expected_qos_pids.size());
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    auto test_transport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport->drop_builtin_data_messages_filter_ = [&](rtps::CDRMessage_t& msg)
+            {
+                return check_qos_in_data_r(msg, qos_found, expected_qos_pids);
+            };
+
+    // Modify writer's QoS just to match the reader's
+    eprosima::fastdds::dds::DataWriterQos dw_qos;
+    dw_qos.durability().kind = eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS;
+    dw_qos.deadline().period = { 7, 0 };  // Lower than reader's
+    dw_qos.latency_budget().duration = { 7, 0 };  // Lower than reader's
+    dw_qos.liveliness().lease_duration = { 7, 0 };  // Lower than reader's
+    dw_qos.liveliness().announcement_period = { 5, 0 };  // Lower than writer's lease duration
+    dw_qos.reliability().kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    dw_qos.ownership().kind = eprosima::fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS;
+    dw_qos.data_sharing().off();
+
+    eprosima::fastdds::dds::DataReaderQos dr_qos;
+    dr_qos.durability().kind = eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS;
+    dr_qos.deadline().period = { 42, 0 };
+    dr_qos.latency_budget().duration = { 42, 0 };
+    dr_qos.liveliness().lease_duration = { 42, 0 };
+    dr_qos.liveliness().announcement_period = { 39, 0 };
+    dr_qos.reliability().kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    dr_qos.lifespan().duration = { 42, 0 };
+    std::vector<eprosima::fastdds::rtps::octet> vec;
+    eprosima::fastdds::rtps::octet val = 42;
+    vec.push_back(val);
+    dr_qos.user_data().data_vec(vec);
+    dr_qos.time_based_filter().minimum_separation = { 42, 0 };
+    dr_qos.ownership().kind = eprosima::fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS;
+    dr_qos.destination_order().kind = eprosima::fastdds::dds::BY_RECEPTION_TIMESTAMP_DESTINATIONORDER_QOS;
+    dr_qos.data_sharing().off();
+
+    writer.data_writer_qos(dw_qos);
+    reader.disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .data_reader_qos(dr_qos);
+
+    writer.init();
+    reader.init();
+    ASSERT_TRUE(writer.isInitialized());
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    EXPECT_EQ(qos_found.load(), expected_qos_size);
+    EXPECT_EQ(expected_qos_pids.size(), 0u);
+}
+
+// This tests checks that non-default QoS are correctly sent in the Data(r)
+// Only half of the QoS are modified, so the other half should be the default ones and they should not
+// be sent. The opposite scenario will be checked in the previous test.
+// QoS that should be sent:
+// - DurabilityQosPolicy (always sent)
+// - PresentationQosPolicy
+// - PartitionQosPolicy
+// - GroupDataQosPolicy
+// - DisablePositiveACKsQosPolicy
+// - TypeConsistencyEnforcementQosPolicy
+// - DataSharingQosPolicy
+// - DataRepresentationQosPolicy
+// - HistoryQosPolicy
+TEST_P(DDSDataReader, datareader_sends_non_default_qos_b)
+{
+    if (TRANSPORT != GetParam())
+    {
+        GTEST_SKIP() << "Only makes sense on TRANSPORT";
+        return;
+    }
+
+    std::atomic<uint8_t> qos_found { 0 };
+    std::vector<uint16_t> expected_qos_pids = {
+        eprosima::fastdds::dds::PID_DURABILITY,
+        eprosima::fastdds::dds::PID_PRESENTATION,
+        eprosima::fastdds::dds::PID_PARTITION,
+        eprosima::fastdds::dds::PID_GROUP_DATA,
+        eprosima::fastdds::dds::PID_DISABLE_POSITIVE_ACKS,
+        eprosima::fastdds::dds::PID_TYPE_CONSISTENCY_ENFORCEMENT,
+        eprosima::fastdds::dds::PID_DATASHARING,
+        eprosima::fastdds::dds::PID_DATA_REPRESENTATION,
+        eprosima::fastdds::dds::PID_HISTORY
+    };
+    const uint8_t expected_qos_size = static_cast<uint8_t>(expected_qos_pids.size());
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    auto test_transport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport->drop_builtin_data_messages_filter_ = [&](rtps::CDRMessage_t& msg)
+            {
+                return check_qos_in_data_r(msg, qos_found, expected_qos_pids);
+            };
+
+    // Modify writer's QoS just to match the reader's
+    eprosima::fastdds::dds::PublisherQos pub_qos;
+    pub_qos.partition().push_back("partition_1");
+    eprosima::fastdds::dds::DataWriterQos dw_qos;
+    dw_qos.durability().kind = eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS;
+    dw_qos.reliability().kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    dw_qos.reliable_writer_qos().disable_positive_acks.enabled = true;
+
+    eprosima::fastdds::dds::SubscriberQos sub_qos;
+    sub_qos.presentation().access_scope = eprosima::fastdds::dds::GROUP_PRESENTATION_QOS;
+    sub_qos.partition().push_back("partition_1");
+    std::vector<eprosima::fastdds::rtps::octet> vec;
+    eprosima::fastdds::rtps::octet val = 42;
+    vec.push_back(val);
+    sub_qos.group_data().data_vec(vec);
+    eprosima::fastdds::dds::DataReaderQos dr_qos;
+    dr_qos.reliable_reader_qos().disable_positive_acks.enabled = true;
+    dr_qos.reliable_reader_qos().disable_positive_acks.duration = { 42, 0 };
+    dr_qos.representation().m_value.push_back(eprosima::fastdds::dds::DataRepresentationId_t::XCDR_DATA_REPRESENTATION);
+    dr_qos.type_consistency().m_kind = eprosima::fastdds::dds::DISALLOW_TYPE_COERCION;
+    dr_qos.history().kind = eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS;
+    dr_qos.history().depth = 42;
+
+#ifdef _WIN32
+    dw_qos.data_sharing().on("c:\\programdata\\eprosima\\fastdds_interprocess\\");
+    dr_qos.data_sharing().on("c:\\programdata\\eprosima\\fastdds_interprocess\\");
+#elif __APPLE__
+    dw_qos.data_sharing().on("/private/tmp/boost_interprocess/");
+    dr_qos.data_sharing().on("/private/tmp/boost_interprocess/");
+#elif __linux__
+    dw_qos.data_sharing().on("/dev/shm");
+    dr_qos.data_sharing().on("/dev/shm");
+#else
+    throw std::runtime_error(std::string("Platform not supported"));
+#endif // ifdef _WIN32
+
+    writer.publisher_qos(pub_qos)
+            .data_writer_qos(dw_qos);
+    reader.disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .subscriber_qos(sub_qos)
+            .data_reader_qos(dr_qos);
+
+    writer.init();
+    reader.init();
+    ASSERT_TRUE(writer.isInitialized());
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    EXPECT_EQ(qos_found.load(), expected_qos_size);
+    EXPECT_EQ(expected_qos_pids.size(), 0u);
+}
+
+// This tests checks that non-default optional QoS are correctly sent in the Data(r)
+// QoS that should be sent:
+// - ResourceLimitsQosPolicy
+// - ReaderDataLifecycleQosPolicy
+// - RTPSReliableReaderQos
+// - RTPSEndpointQos
+// - ReaderResourceLimitsQos
+// a) The test is run with the property set to false, so the optional QoS are not serialized.
+// b) The test is run with the property set to true, so the optional QoS are serialized.
+// c) The test is run with the default QoS and the property set to true, so the optional QoS are not serialized.
+TEST_P(DDSDataReader, datareader_sends_non_default_qos_optional)
+{
+    if (TRANSPORT != GetParam())
+    {
+        GTEST_SKIP() << "Only makes sense on TRANSPORT";
+        return;
+    }
+
+    std::atomic<uint8_t> qos_found { 0 };
+    std::vector<uint16_t> expected_qos_pids = {
+        eprosima::fastdds::dds::PID_RESOURCE_LIMITS,
+        eprosima::fastdds::dds::PID_READER_DATA_LIFECYCLE,
+        eprosima::fastdds::dds::PID_RTPS_RELIABLE_READER,
+        eprosima::fastdds::dds::PID_RTPS_ENDPOINT,
+        eprosima::fastdds::dds::PID_READER_RESOURCE_LIMITS,
+    };
+    const uint8_t expected_qos_size = static_cast<uint8_t>(expected_qos_pids.size());
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    auto test_transport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport->drop_builtin_data_messages_filter_ = [&](rtps::CDRMessage_t& msg)
+            {
+                return check_qos_in_data_r(msg, qos_found, expected_qos_pids);
+            };
+
+    // Default writer's QoS
+    eprosima::fastdds::dds::DataWriterQos dw_qos = eprosima::fastdds::dds::DATAWRITER_QOS_DEFAULT;
+    dw_qos.data_sharing().off();
+
+    eprosima::fastdds::dds::DataReaderQos dr_qos;
+    dr_qos.resource_limits().max_samples = 1000;
+    dr_qos.reader_data_lifecycle().autopurge_disposed_samples_delay = { 4, 0 };
+    dr_qos.reliable_reader_qos().times.initial_acknack_delay = { 4, 0 };
+    dr_qos.endpoint().entity_id = 42;
+    dr_qos.reader_resource_limits().matched_publisher_allocation.initial = 1;
+    dr_qos.data_sharing().off();
+
+    writer.data_writer_qos(dw_qos);
+    reader.disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .data_reader_qos(dr_qos);
+
+    // a) Init both entities without setting the property
+    writer.init();
+    reader.init();
+    ASSERT_TRUE(writer.isInitialized());
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    // No optional QoS should be sent. Only PID_DURABILITY as it is always sent
+    EXPECT_EQ(qos_found.load(), 1u);
+    EXPECT_EQ(expected_qos_pids.size(), expected_qos_size);
+
+    // b) Now set the property to serialize optional QoS and re-init the reader
+    reader.destroy();
+    writer.wait_reader_undiscovery();
+    qos_found.store(0);
+
+    eprosima::fastdds::dds::PropertyPolicyQos properties;
+    properties.properties().emplace_back("fastdds.serialize_optional_qos", "true");
+    reader.property_policy(properties);
+
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    // Check that the optional QoS are serialized + PID_DURABILITY as it is always sent
+    EXPECT_EQ(qos_found.load(), expected_qos_size + 1u);
+    EXPECT_EQ(expected_qos_pids.size(), 0u);
+
+    // c) Now re-init the reader with default QoS and the property set
+    reader.destroy();
+    writer.wait_reader_undiscovery();
+    qos_found.store(0);
+
+    dr_qos = eprosima::fastdds::dds::DATAREADER_QOS_DEFAULT;
+    dr_qos.data_sharing().off();
+
+    reader.data_reader_qos(dr_qos)
+            .init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    // Check that no optional QoS are serialized. Only PID_DURABILITY as it is always sent
+    EXPECT_EQ(qos_found.load(), 1u);
+}
+
 // This is a regression test to check the reception time used when Samples are lost and need to be resent.
 TEST(DDSDataReader, reception_timestamp_for_resent_samples)
 {
@@ -587,7 +1344,11 @@ TEST(DDSDataReader, reception_timestamp_for_resent_samples)
                     msg.pos += 2; // Octets to inline QoS
                     msg.pos += 4; // Reader ID
                     msg.pos += 4; // Writer ID
-                    CDRMessage::readSequenceNumber(&msg, &sn);
+                    sn.high = (int32_t)eprosima::fastdds::helpers::cdr_parse_u32(
+                        (char*)&msg.buffer[msg.pos]);
+                    msg.pos += 4;
+                    sn.low = eprosima::fastdds::helpers::cdr_parse_u32(
+                        (char*)&msg.buffer[msg.pos]);
 
                     // Restore buffer pos
                     msg.pos = old_pos;
@@ -599,7 +1360,6 @@ TEST(DDSDataReader, reception_timestamp_for_resent_samples)
                         return true;
                     }
                 }
-                std::cout << "Not blocking Data msg." << std::endl;
                 return false;
             };
 
@@ -617,12 +1377,12 @@ TEST(DDSDataReader, reception_timestamp_for_resent_samples)
     writer.disable_builtin_transport()
             .add_user_transport_to_pparams(test_transport)
             .reliability(ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS)
-            .history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS)
+            .history_kind(KEEP_LAST_HISTORY_QOS)
             .history_depth(3)
             .init();
     reader.setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
             .reliability(ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS)
-            .history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS)
+            .history_kind(KEEP_LAST_HISTORY_QOS)
             .history_depth(3)
             .init();
 
@@ -641,7 +1401,6 @@ TEST(DDSDataReader, reception_timestamp_for_resent_samples)
 
     auto samples_it = data.begin();
     writer.send_sample(*samples_it);
-    std::cout << "First sample sent" << std::endl;
     // Ensure that the sample has not been received yet
     ASSERT_EQ(reader.block_for_all(std::chrono::seconds(1)), 0u);
 

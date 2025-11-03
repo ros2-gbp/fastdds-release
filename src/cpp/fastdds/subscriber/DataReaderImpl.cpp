@@ -23,6 +23,7 @@
 #   include <version>
 #endif // if defined(__has_include) && __has_include(<version>)
 
+#include <fastdds/config.hpp>
 #include <fastdds/core/condition/StatusConditionImpl.hpp>
 #include <fastdds/core/policy/QosPolicyUtils.hpp>
 #include <fastdds/dds/core/StackAllocatedSequence.hpp>
@@ -35,35 +36,36 @@
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/domain/DomainParticipantImpl.hpp>
-#include <fastdds/rtps/common/Time_t.h>
-#include <fastdds/rtps/participant/RTPSParticipant.h>
-#include <fastdds/rtps/reader/RTPSReader.h>
-#include <fastdds/rtps/resources/ResourceEvent.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-#include <fastdds/rtps/RTPSDomain.h>
+#include <fastdds/rtps/builtin/data/TopicDescription.hpp>
+#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/participant/RTPSParticipant.hpp>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/RTPSDomain.hpp>
+#include <fastdds/subscriber/DataReaderImpl.hpp>
 #include <fastdds/subscriber/DataReaderImpl/ReadTakeCommand.hpp>
 #include <fastdds/subscriber/DataReaderImpl/StateFilter.hpp>
 #include <fastdds/subscriber/ReadConditionImpl.hpp>
 #include <fastdds/subscriber/SubscriberImpl.hpp>
 #include <fastdds/topic/ContentFilteredTopicImpl.hpp>
-#include <fastrtps/config.h>
-#include <fastrtps/subscriber/SampleInfo.h>
-#include <fastrtps/utils/TimeConversion.h>
 
+#include <fastdds/utils/TypePropagation.hpp>
 #include <rtps/history/TopicPayloadPoolRegistry.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/resources/ResourceEvent.h>
+#include <rtps/RTPSDomainImpl.hpp>
+#include <utils/TimeConversion.hpp>
+#include <utils/BuiltinTopicKeyConversions.hpp>
 #ifdef FASTDDS_STATISTICS
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
-#include <statistics/types/monitorservice_types.h>
-#endif //FASTDDS_STATISTICS
+#include <statistics/types/monitorservice_types.hpp>
+#endif // FASTDDS_STATISTICS
 
-using eprosima::fastrtps::RecursiveTimedMutex;
-using eprosima::fastrtps::c_TimeInfinite;
+using eprosima::fastdds::RecursiveTimedMutex;
+using eprosima::fastdds::dds::c_TimeInfinite;
 
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds::rtps;
 using namespace std::chrono;
-
-using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -99,7 +101,7 @@ DataReaderImpl::DataReaderImpl(
         TopicDescription* topic,
         const DataReaderQos& qos,
         DataReaderListener* listener,
-        std::shared_ptr<fastrtps::rtps::IPayloadPool> payload_pool)
+        std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool)
     : subscriber_(s)
     , type_(type)
     , topic_(topic)
@@ -115,11 +117,12 @@ DataReaderImpl::DataReaderImpl(
 {
     EndpointAttributes endpoint_attributes;
     endpoint_attributes.endpointKind = READER;
-    endpoint_attributes.topicKind = type_->m_isGetKeyDefined ? WITH_KEY : NO_KEY;
+    endpoint_attributes.topicKind = type_->is_compute_key_provided ? WITH_KEY : NO_KEY;
     endpoint_attributes.setEntityID(qos_.endpoint().entity_id);
     endpoint_attributes.setUserDefinedID(qos_.endpoint().user_defined_id);
     RTPSParticipantImpl::preprocess_endpoint_attributes<READER, 0x04, 0x07>(
-        EntityId_t::unknown(), subscriber_->get_participant_impl()->id_counter(), endpoint_attributes, guid_.entityId);
+        fastdds::rtps::EntityId_t::unknown(),
+        subscriber_->get_participant_impl()->id_counter(), endpoint_attributes, guid_.entityId);
     guid_.guidPrefix = subscriber_->get_participant_impl()->guid().guidPrefix;
 
     if (payload_pool != nullptr)
@@ -167,7 +170,7 @@ ReturnCode_t DataReaderImpl::enable()
     att.endpoint.durabilityKind = qos_.durability().durabilityKind();
     att.endpoint.endpointKind = READER;
     att.endpoint.reliabilityKind = qos_.reliability().kind == RELIABLE_RELIABILITY_QOS ? RELIABLE : BEST_EFFORT;
-    att.endpoint.topicKind = type_->m_isGetKeyDefined ? WITH_KEY : NO_KEY;
+    att.endpoint.topicKind = type_->is_compute_key_provided ? WITH_KEY : NO_KEY;
     att.endpoint.multicastLocatorList = qos_.endpoint().multicast_locator_list;
     att.endpoint.unicastLocatorList = qos_.endpoint().unicast_locator_list;
     att.endpoint.remoteLocatorList = qos_.endpoint().remote_locator_list;
@@ -179,10 +182,10 @@ ReturnCode_t DataReaderImpl::enable()
     att.endpoint.setUserDefinedID(qos_.endpoint().user_defined_id);
     att.times = qos_.reliable_reader_qos().times;
     att.liveliness_lease_duration = qos_.liveliness().lease_duration;
-    att.liveliness_kind_ = qos_.liveliness().kind;
+    att.liveliness_kind = qos_.liveliness().kind;
     att.matched_writers_allocation = qos_.reader_resource_limits().matched_publisher_allocation;
-    att.expectsInlineQos = qos_.expects_inline_qos();
-    att.disable_positive_acks = qos_.reliable_reader_qos().disable_positive_ACKs.enabled;
+    att.expects_inline_qos = qos_.expects_inline_qos();
+    att.disable_positive_acks = qos_.reliable_reader_qos().disable_positive_acks.enabled;
     att.data_sharing_listener_thread = qos_.data_sharing().data_sharing_listener_thread();
 
     // TODO(Ricardo) Remove in future
@@ -214,13 +217,13 @@ ReturnCode_t DataReaderImpl::enable()
         att.endpoint.properties.properties().push_back(std::move(property));
     }
 
-    bool is_datasharing_compatible = false;
-    ReturnCode_t ret_code = check_datasharing_compatible(att, is_datasharing_compatible);
-    if (ret_code != ReturnCode_t::RETCODE_OK)
+    is_data_sharing_compatible_ = false;
+    ReturnCode_t ret_code = check_datasharing_compatible(att, is_data_sharing_compatible_);
+    if (ret_code != RETCODE_OK)
     {
         return ret_code;
     }
-    if (is_datasharing_compatible)
+    if (is_data_sharing_compatible_)
     {
         DataSharingQosPolicy datasharing(qos_.data_sharing());
         if (datasharing.domain_ids().empty())
@@ -248,7 +251,7 @@ ReturnCode_t DataReaderImpl::enable()
     {
         release_payload_pool();
         EPROSIMA_LOG_ERROR(DATA_READER, "Problem creating associated Reader");
-        return ReturnCode_t::RETCODE_ERROR;
+        return RETCODE_ERROR;
     }
 
     auto content_topic = dynamic_cast<ContentFilteredTopicImpl*>(topic_->get_impl());
@@ -260,14 +263,9 @@ ReturnCode_t DataReaderImpl::enable()
 
     reader_ = reader;
 
-    deadline_timer_ = new TimedEvent(subscriber_->get_participant()->get_resource_event(),
-                    [&]() -> bool
-                    {
-                        return deadline_missed();
-                    },
-                    qos_.deadline().period.to_ns() * 1e-6);
+    configure_deadline_timer_();
 
-    lifespan_timer_ = new TimedEvent(subscriber_->get_participant()->get_resource_event(),
+    lifespan_timer_ = new TimedEvent(subscriber_->rtps_participant()->get_resource_event(),
                     [&]() -> bool
                     {
                         return lifespan_expired();
@@ -275,21 +273,16 @@ ReturnCode_t DataReaderImpl::enable()
                     qos_.lifespan().duration.to_ns() * 1e-6);
 
     // Register the reader
-    ReaderQos rqos = qos_.get_readerqos(subscriber_->get_qos());
-    if (!is_datasharing_compatible)
-    {
-        rqos.data_sharing.off();
-    }
-    if (endpoint_partitions)
-    {
-        std::istringstream partition_string(*endpoint_partitions);
-        std::string partition_name;
-        rqos.m_partition.clear();
+    fastdds::rtps::TopicDescription topic_desc;
+    topic_desc.topic_name = topic_->get_impl()->get_rtps_topic_name();
+    topic_desc.type_name = topic_->get_type_name();
+    subscriber_->get_participant_impl()->fill_type_information(type_, topic_desc.type_information);
 
-        while (std::getline(partition_string, partition_name, ';'))
-        {
-            rqos.m_partition.push_back(partition_name.c_str());
-        }
+    SubscriptionBuiltinTopicData subscription_data;
+    if (get_subscription_builtin_topic_data(subscription_data) != RETCODE_OK)
+    {
+        EPROSIMA_LOG_ERROR(DATA_READER, "Error getting subscription data. RTPS Reader not enabled.");
+        return RETCODE_ERROR;
     }
 
     rtps::ContentFilterProperty* filter_property = nullptr;
@@ -297,17 +290,19 @@ ReturnCode_t DataReaderImpl::enable()
     {
         filter_property = &content_topic->filter_property;
     }
-    if (!subscriber_->rtps_participant()->registerReader(reader_, topic_attributes(), rqos, filter_property))
+
+    ReturnCode_t register_reader_code = subscriber_->rtps_participant()->register_reader(reader_, topic_desc,
+                    subscription_data,
+                    filter_property);
+    if (register_reader_code != RETCODE_OK)
     {
         EPROSIMA_LOG_ERROR(DATA_READER, "Could not register reader on discovery protocols");
 
-        reader_->setListener(nullptr);
+        reader_->set_listener(nullptr);
         stop();
-
-        return ReturnCode_t::RETCODE_ERROR;
     }
 
-    return ReturnCode_t::RETCODE_OK;
+    return register_reader_code;
 }
 
 void DataReaderImpl::disable()
@@ -315,7 +310,7 @@ void DataReaderImpl::disable()
     set_listener(nullptr);
     if (reader_ != nullptr)
     {
-        reader_->setListener(nullptr);
+        reader_->set_listener(nullptr);
     }
 }
 
@@ -341,7 +336,7 @@ void DataReaderImpl::stop()
 
 DataReaderImpl::~DataReaderImpl()
 {
-    // assert there are no pending conditions
+    // Assert there are no pending conditions
     assert(read_conditions_.empty());
 
     // Disable the datareader to prevent receiving data in the middle of deleting it
@@ -380,7 +375,7 @@ bool DataReaderImpl::can_be_deleted(
 }
 
 bool DataReaderImpl::wait_for_unread_message(
-        const Duration_t& timeout)
+        const dds::Duration_t& timeout)
 {
     return reader_ ? reader_->wait_for_unread_cache(timeout) : false;
 }
@@ -403,7 +398,7 @@ ReturnCode_t DataReaderImpl::check_collection_preconditions_and_calc_max_samples
     // Properties should be the same on both collections
     if (!collections_have_same_properties(data_values, sample_infos))
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
     // Check if a loan is required
@@ -412,7 +407,7 @@ ReturnCode_t DataReaderImpl::check_collection_preconditions_and_calc_max_samples
         // Loan not required, input collections should not be already loaned
         if (false == data_values.has_ownership())
         {
-            return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+            return RETCODE_PRECONDITION_NOT_MET;
         }
 
         int32_t collection_max = data_values.maximum();
@@ -427,7 +422,7 @@ ReturnCode_t DataReaderImpl::check_collection_preconditions_and_calc_max_samples
         {
             if (max_samples > collection_max)
             {
-                return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+                return RETCODE_PRECONDITION_NOT_MET;
             }
         }
     }
@@ -438,7 +433,7 @@ ReturnCode_t DataReaderImpl::check_collection_preconditions_and_calc_max_samples
         max_samples = qos_.reader_resource_limits().max_samples_per_read;
     }
 
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::prepare_loan(
@@ -449,7 +444,7 @@ ReturnCode_t DataReaderImpl::prepare_loan(
     if (0 < data_values.maximum())
     {
         // A loan was not requested
-        return ReturnCode_t::RETCODE_OK;
+        return RETCODE_OK;
     }
 
     if (max_samples > 0)
@@ -458,7 +453,7 @@ ReturnCode_t DataReaderImpl::prepare_loan(
         size_t num_infos = sample_info_pool_.num_allocated();
         if (num_infos == qos_.reader_resource_limits().sample_infos_allocation.maximum)
         {
-            return ReturnCode_t::RETCODE_OUT_OF_RESOURCES;
+            return RETCODE_OUT_OF_RESOURCES;
         }
 
         // Limit max_samples to available sample_infos
@@ -481,7 +476,7 @@ ReturnCode_t DataReaderImpl::prepare_loan(
         }
         if (num_samples == max_resource_samples)
         {
-            return ReturnCode_t::RETCODE_OUT_OF_RESOURCES;
+            return RETCODE_OUT_OF_RESOURCES;
         }
 
         // Limit max_samples to available samples
@@ -495,12 +490,12 @@ ReturnCode_t DataReaderImpl::prepare_loan(
 
     // Check if there are enough loans
     ReturnCode_t code = loan_manager_.get_loan(data_values, sample_infos);
-    if (!code)
+    if (RETCODE_OK != code)
     {
         return code;
     }
 
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::read_or_take(
@@ -517,11 +512,11 @@ ReturnCode_t DataReaderImpl::read_or_take(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     ReturnCode_t code = check_collection_preconditions_and_calc_max_samples(data_values, sample_infos, max_samples);
-    if (!code)
+    if (RETCODE_OK != code)
     {
         return code;
     }
@@ -533,7 +528,7 @@ ReturnCode_t DataReaderImpl::read_or_take(
 
     if (!lock.try_lock_until(max_blocking_time))
     {
-        return ReturnCode_t::RETCODE_TIMEOUT;
+        return RETCODE_TIMEOUT;
     }
 #else
     std::lock_guard<RecursiveTimedMutex> _(reader_->getMutex());
@@ -546,16 +541,16 @@ ReturnCode_t DataReaderImpl::read_or_take(
     {
         if (exact_instance && !history_.is_instance_present(handle))
         {
-            return ReturnCode_t::RETCODE_BAD_PARAMETER;
+            return RETCODE_BAD_PARAMETER;
         }
         else
         {
-            return ReturnCode_t::RETCODE_NO_DATA;
+            return RETCODE_NO_DATA;
         }
     }
 
     code = prepare_loan(data_values, sample_infos, max_samples);
-    if (!code)
+    if (RETCODE_OK != code)
     {
         return code;
     }
@@ -666,26 +661,26 @@ ReturnCode_t DataReaderImpl::return_loan(
 
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     // Properties should be the same on both collections
     if (!collections_have_same_properties(data_values, sample_infos))
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
-    // They should have a loan
+    // If there is ownership that means there are no loans, case in which we just return OK
     if (data_values.has_ownership() == true)
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_OK;
     }
 
     std::lock_guard<RecursiveTimedMutex> lock(reader_->getMutex());
 
     // Check if they were loaned by this reader
     ReturnCode_t code = loan_manager_.return_loan(data_values, sample_infos);
-    if (!code)
+    if (RETCODE_OK != code)
     {
         return code;
     }
@@ -706,7 +701,7 @@ ReturnCode_t DataReaderImpl::return_loan(
     data_values.unloan();
     sample_infos.unloan();
 
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::read_or_take_next_sample(
@@ -716,12 +711,12 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     if (history_.getHistorySize() == 0)
     {
-        return ReturnCode_t::RETCODE_NO_DATA;
+        return RETCODE_NO_DATA;
     }
 
 #if HAVE_STRICT_REALTIME
@@ -731,7 +726,7 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
 
     if (!lock.try_lock_until(max_blocking_time))
     {
-        return ReturnCode_t::RETCODE_TIMEOUT;
+        return RETCODE_TIMEOUT;
     }
 
 #else
@@ -743,7 +738,7 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
     auto it = history_.lookup_available_instance(HANDLE_NIL, false);
     if (!it.first)
     {
-        return ReturnCode_t::RETCODE_NO_DATA;
+        return RETCODE_NO_DATA;
     }
 
     StackAllocatedSequence<void*, 1> data_values;
@@ -758,7 +753,7 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
     }
 
     ReturnCode_t code = cmd.return_value();
-    if (ReturnCode_t::RETCODE_OK == code)
+    if (RETCODE_OK == code)
     {
         *info = sample_infos[0];
     }
@@ -787,14 +782,14 @@ ReturnCode_t DataReaderImpl::get_first_untaken_info(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     if (history_.get_first_untaken_info(*info))
     {
-        return ReturnCode_t::RETCODE_OK;
+        return RETCODE_OK;
     }
-    return ReturnCode_t::RETCODE_NO_DATA;
+    return RETCODE_NO_DATA;
 }
 
 uint64_t DataReaderImpl::get_unread_count(
@@ -808,7 +803,7 @@ uint64_t DataReaderImpl::get_unread_count(
     return ret_val;
 }
 
-const GUID_t& DataReaderImpl::guid() const
+const fastdds::rtps::GUID_t& DataReaderImpl::guid() const
 {
     return guid_;
 }
@@ -834,7 +829,7 @@ void DataReaderImpl::update_rtps_reader_qos()
             filter_property = &content_topic->filter_property;
         }
         ReaderQos rqos = qos_.get_readerqos(get_subscriber()->get_qos());
-        subscriber_->rtps_participant()->updateReader(reader_, topic_attributes(), rqos, filter_property);
+        subscriber_->rtps_participant()->update_reader(reader_, rqos, filter_property);
         // TODO(eduponz): RTPSReader attributes must be updated here
     }
 }
@@ -853,11 +848,11 @@ ReturnCode_t DataReaderImpl::set_qos(
                 subscriber_->get_participant()->get_qos().allocation().data_limits.max_user_data <
                 qos_to_set.user_data().getValue().size())
         {
-            return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+            return RETCODE_INCONSISTENT_POLICY;
         }
 
         ReturnCode_t check_result = check_qos_including_resource_limits(qos_to_set, type_);
-        if (!check_result)
+        if (RETCODE_OK != check_result)
         {
             return check_result;
         }
@@ -865,8 +860,11 @@ ReturnCode_t DataReaderImpl::set_qos(
 
     if (enabled && !can_qos_be_updated(qos_, qos_to_set))
     {
-        return ReturnCode_t::RETCODE_IMMUTABLE_POLICY;
+        return RETCODE_IMMUTABLE_POLICY;
     }
+
+    // Take a snapshot of the current QoS before mutating it
+    const DataReaderQos old_qos = qos_;
 
     set_qos(qos_, qos_to_set, !enabled);
 
@@ -875,31 +873,29 @@ ReturnCode_t DataReaderImpl::set_qos(
         // NOTIFY THE BUILTIN PROTOCOLS THAT THE READER HAS CHANGED
         update_rtps_reader_qos();
 
-        // Deadline
-        if (qos_.deadline().period != c_TimeInfinite)
+        // If the deadline period actually changed, (re)configure the timer.
+        if (old_qos.deadline().period != qos_.deadline().period)
         {
-            deadline_duration_us_ = duration<double, std::ratio<1, 1000000>>(qos_.deadline().period.to_ns() * 1e-3);
-            deadline_timer_->update_interval_millisec(qos_.deadline().period.to_ns() * 1e-6);
-        }
-        else
-        {
-            deadline_timer_->cancel_timer();
+            configure_deadline_timer_();
         }
 
         // Lifespan
-        if (qos_.lifespan().duration != c_TimeInfinite)
+        if (old_qos.lifespan().duration != qos_.lifespan().duration)
         {
-            lifespan_duration_us_ =
-                    std::chrono::duration<double, std::ratio<1, 1000000>>(qos_.lifespan().duration.to_ns() * 1e-3);
-            lifespan_timer_->update_interval_millisec(qos_.lifespan().duration.to_ns() * 1e-6);
-        }
-        else
-        {
-            lifespan_timer_->cancel_timer();
+            if (qos_.lifespan().duration != dds::c_TimeInfinite)
+            {
+                lifespan_duration_us_ =
+                        std::chrono::duration<double, std::ratio<1, 1000000>>(qos_.lifespan().duration.to_ns() * 1e-3);
+                lifespan_timer_->update_interval_millisec(qos_.lifespan().duration.to_ns() * 1e-6);
+            }
+            else
+            {
+                lifespan_timer_->cancel_timer();
+            }
         }
     }
 
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 const DataReaderQos& DataReaderImpl::get_qos() const
@@ -909,9 +905,9 @@ const DataReaderQos& DataReaderImpl::get_qos() const
 
 void DataReaderImpl::InnerDataReaderListener::on_data_available(
         RTPSReader* /*reader*/,
-        const GUID_t& writer_guid,
-        const SequenceNumber_t& first_sequence,
-        const SequenceNumber_t& last_sequence,
+        const fastdds::rtps::GUID_t& writer_guid,
+        const fastdds::rtps::SequenceNumber_t& first_sequence,
+        const fastdds::rtps::SequenceNumber_t& last_sequence,
         bool& should_notify_individual_changes)
 {
     should_notify_individual_changes = false;
@@ -920,7 +916,7 @@ void DataReaderImpl::InnerDataReaderListener::on_data_available(
     {
         auto user_reader = data_reader_->user_datareader_;
 
-        //First check if we can handle with on_data_on_readers
+        // First check if we can handle with on_data_on_readers
         SubscriberListener* subscriber_listener =
                 data_reader_->subscriber_->get_listener_for(StatusMask::data_on_readers());
         if (subscriber_listener != nullptr)
@@ -941,9 +937,9 @@ void DataReaderImpl::InnerDataReaderListener::on_data_available(
     }
 }
 
-void DataReaderImpl::InnerDataReaderListener::onReaderMatched(
+void DataReaderImpl::InnerDataReaderListener::on_reader_matched(
         RTPSReader* /*reader*/,
-        const SubscriptionMatchedStatus& info)
+        const MatchingInfo& info)
 {
     data_reader_->update_subscription_matched_status(info);
 
@@ -952,7 +948,7 @@ void DataReaderImpl::InnerDataReaderListener::onReaderMatched(
     if (listener != nullptr)
     {
         SubscriptionMatchedStatus callback_status;
-        if (ReturnCode_t::RETCODE_OK == data_reader_->get_subscription_matched_status(callback_status))
+        if (RETCODE_OK == data_reader_->get_subscription_matched_status(callback_status))
         {
             listener->on_subscription_matched(data_reader_->user_datareader_, callback_status);
         }
@@ -970,15 +966,15 @@ void DataReaderImpl::InnerDataReaderListener::on_liveliness_changed(
     if (listener != nullptr)
     {
         LivelinessChangedStatus callback_status;
-        if (data_reader_->get_liveliness_changed_status(callback_status) == ReturnCode_t::RETCODE_OK)
+        if (data_reader_->get_liveliness_changed_status(callback_status) == RETCODE_OK)
         {
             listener->on_liveliness_changed(data_reader_->user_datareader_, callback_status);
         }
     }
 
 #ifdef FASTDDS_STATISTICS
-    notify_status_observer(statistics::LIVELINESS_CHANGED);
-#endif //FASTDDS_STATISTICS
+    notify_status_observer(statistics::StatusKind::LIVELINESS_CHANGED);
+#endif // FASTDDS_STATISTICS
 
     data_reader_->user_datareader_->get_statuscondition().get_impl()->set_status(notify_status, true);
 }
@@ -993,15 +989,15 @@ void DataReaderImpl::InnerDataReaderListener::on_requested_incompatible_qos(
     if (listener != nullptr)
     {
         RequestedIncompatibleQosStatus callback_status;
-        if (data_reader_->get_requested_incompatible_qos_status(callback_status) == ReturnCode_t::RETCODE_OK)
+        if (data_reader_->get_requested_incompatible_qos_status(callback_status) == RETCODE_OK)
         {
             listener->on_requested_incompatible_qos(data_reader_->user_datareader_, callback_status);
         }
     }
 
 #ifdef FASTDDS_STATISTICS
-    notify_status_observer(statistics::INCOMPATIBLE_QOS);
-#endif //FASTDDS_STATISTICS
+    notify_status_observer(statistics::StatusKind::INCOMPATIBLE_QOS);
+#endif // FASTDDS_STATISTICS
 
     data_reader_->user_datareader_->get_statuscondition().get_impl()->set_status(notify_status, true);
 }
@@ -1016,15 +1012,15 @@ void DataReaderImpl::InnerDataReaderListener::on_sample_lost(
     if (listener != nullptr)
     {
         SampleLostStatus callback_status;
-        if (data_reader_->get_sample_lost_status(callback_status) == ReturnCode_t::RETCODE_OK)
+        if (data_reader_->get_sample_lost_status(callback_status) == RETCODE_OK)
         {
             listener->on_sample_lost(data_reader_->user_datareader_, callback_status);
         }
     }
 
 #ifdef FASTDDS_STATISTICS
-    notify_status_observer(statistics::SAMPLE_LOST);
-#endif //FASTDDS_STATISTICS
+    notify_status_observer(statistics::StatusKind::SAMPLE_LOST);
+#endif // FASTDDS_STATISTICS
 
     data_reader_->user_datareader_->get_statuscondition().get_impl()->set_status(notify_status, true);
 }
@@ -1040,7 +1036,7 @@ void DataReaderImpl::InnerDataReaderListener::on_sample_rejected(
     if (listener != nullptr)
     {
         SampleRejectedStatus callback_status;
-        if (data_reader_->get_sample_rejected_status(callback_status) == ReturnCode_t::RETCODE_OK)
+        if (data_reader_->get_sample_rejected_status(callback_status) == RETCODE_OK)
         {
             listener->on_sample_rejected(data_reader_->user_datareader_, callback_status);
         }
@@ -1058,17 +1054,17 @@ void DataReaderImpl::InnerDataReaderListener::notify_status_observer(
     {
         if (!statistics_pp_impl->get_status_observer()->on_local_entity_status_change(data_reader_->guid(), status_id))
         {
-            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not set entity status");
+            EPROSIMA_LOG_ERROR(DATA_READER, "Could not set entity status");
         }
     }
 }
 
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
 bool DataReaderImpl::on_data_available(
-        const GUID_t& writer_guid,
-        const SequenceNumber_t& first_sequence,
-        const SequenceNumber_t& last_sequence)
+        const fastdds::rtps::GUID_t& writer_guid,
+        const fastdds::rtps::SequenceNumber_t& first_sequence,
+        const fastdds::rtps::SequenceNumber_t& last_sequence)
 {
     bool ret_val = false;
 
@@ -1095,20 +1091,21 @@ bool DataReaderImpl::on_new_cache_change_added(
 
     CacheChange_t* new_change = const_cast<CacheChange_t*>(change);
     // Update the reception timestamp when the sample is added to the instance
-    fastrtps::rtps::Time_t::now(new_change->reader_info.receptionTimestamp);
+    rtps::Time_t::now(new_change->reader_info.receptionTimestamp);
     if (!history_.update_instance_nts(new_change))
     {
         history_.remove_change_sub(new_change);
         return false;
     }
 
-    if (qos_.deadline().period != c_TimeInfinite)
+    if (qos_.deadline().period.to_ns() > 0 && qos_.deadline().period != dds::c_TimeInfinite &&
+            deadline_missed_status_.total_count < std::numeric_limits<uint32_t>::max())
     {
         if (!history_.set_next_deadline(
                     change->instanceHandle,
                     steady_clock::now() + duration_cast<steady_clock::duration>(deadline_duration_us_)))
         {
-            EPROSIMA_LOG_ERROR(SUBSCRIBER, "Could not set next deadline in the history");
+            EPROSIMA_LOG_ERROR(DATA_READER, "Could not set next deadline in the history");
         }
         else if (timer_owner_ == change->instanceHandle || timer_owner_ == InstanceHandle_t())
         {
@@ -1120,18 +1117,18 @@ bool DataReaderImpl::on_new_cache_change_added(
         }
     }
 
-    if (qos_.lifespan().duration == c_TimeInfinite)
+    if (qos_.lifespan().duration == dds::c_TimeInfinite)
     {
         return true;
     }
 
-    fastrtps::rtps::Time_t expiration_ts = change->sourceTimestamp + qos_.lifespan().duration;
-    fastrtps::rtps::Time_t current_ts;
-    fastrtps::rtps::Time_t::now(current_ts);
+    fastdds::rtps::Time_t expiration_ts = change->sourceTimestamp + qos_.lifespan().duration;
+    fastdds::rtps::Time_t current_ts;
+    fastdds::rtps::Time_t::now(current_ts);
 
     // The new change could have expired if it arrived too late
     // If so, remove it from the history and return false to avoid notifying the listener
-    if (expiration_ts <= current_ts)
+    if (expiration_ts < current_ts)
     {
         history_.remove_change_sub(new_change);
         return false;
@@ -1150,21 +1147,21 @@ bool DataReaderImpl::on_new_cache_change_added(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SUBSCRIBER, "A change was added to history that could not be retrieved");
+        EPROSIMA_LOG_ERROR(DATA_READER, "A change was added to history that could not be retrieved");
     }
 
     // Update and restart the timer
     // If the timer is already running this will not have any effect
-    fastrtps::rtps::Time_t interval = expiration_ts - current_ts;
+    fastdds::rtps::Time_t interval = expiration_ts - current_ts;
     lifespan_timer_->update_interval_millisec(interval.to_ns() * 1e-6);
     lifespan_timer_->restart_timer();
     return true;
 }
 
 void DataReaderImpl::update_subscription_matched_status(
-        const SubscriptionMatchedStatus& status)
+        const MatchingInfo& status)
 {
-    auto count_change = status.current_count_change;
+    auto count_change = status.status == MATCHED_MATCHING ? 1 : -1;
     subscription_matched_status_.current_count += count_change;
     subscription_matched_status_.current_count_change += count_change;
     if (count_change > 0)
@@ -1172,11 +1169,11 @@ void DataReaderImpl::update_subscription_matched_status(
         subscription_matched_status_.total_count += count_change;
         subscription_matched_status_.total_count_change += count_change;
     }
-    subscription_matched_status_.last_publication_handle = status.last_publication_handle;
+    subscription_matched_status_.last_publication_handle = status.remoteEndpointGuid;
 
     if (count_change < 0)
     {
-        history_.writer_not_alive(iHandle2GUID(status.last_publication_handle));
+        history_.writer_not_alive(status.remoteEndpointGuid);
         try_notify_read_conditions();
     }
 }
@@ -1186,7 +1183,7 @@ ReturnCode_t DataReaderImpl::get_subscription_matched_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1198,19 +1195,63 @@ ReturnCode_t DataReaderImpl::get_subscription_matched_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::subscription_matched(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
+}
+
+ReturnCode_t DataReaderImpl::get_matched_publication_data(
+        PublicationBuiltinTopicData& publication_data,
+        const InstanceHandle_t& publication_handle) const
+{
+    ReturnCode_t ret = RETCODE_BAD_PARAMETER;
+    fastdds::rtps::GUID_t writer_guid = iHandle2GUID(publication_handle);
+
+    if (reader_ && reader_->matched_writer_is_matched(writer_guid))
+    {
+        if (subscriber_)
+        {
+            RTPSParticipant* rtps_participant = subscriber_->rtps_participant();
+            if (rtps_participant &&
+                    rtps_participant->get_publication_info(publication_data, writer_guid))
+            {
+                ret = RETCODE_OK;
+            }
+        }
+    }
+
+    return ret;
+}
+
+ReturnCode_t DataReaderImpl::get_matched_publications(
+        std::vector<InstanceHandle_t>& publication_handles) const
+{
+    ReturnCode_t ret = RETCODE_ERROR;
+    std::vector<rtps::GUID_t> matched_writers_guids;
+    publication_handles.clear();
+
+    if (reader_ && reader_->matched_writers_guids(matched_writers_guids))
+    {
+        for (const rtps::GUID_t& guid : matched_writers_guids)
+        {
+            publication_handles.emplace_back(InstanceHandle_t(guid));
+        }
+        ret = RETCODE_OK;
+    }
+
+    return ret;
 }
 
 bool DataReaderImpl::deadline_timer_reschedule()
 {
-    assert(qos_.deadline().period != c_TimeInfinite);
-
     std::unique_lock<RecursiveTimedMutex> lock(reader_->getMutex());
+
+    assert(qos_.deadline().period != dds::c_TimeInfinite);
+    assert(deadline_timer_ != nullptr);
+    assert(deadline_missed_status_.total_count < std::numeric_limits<uint32_t>::max());
 
     steady_clock::time_point next_deadline_us;
     if (!history_.get_next_deadline(timer_owner_, next_deadline_us))
     {
-        EPROSIMA_LOG_ERROR(SUBSCRIBER, "Could not get the next deadline from the history");
+        EPROSIMA_LOG_ERROR(DATA_READER, "Could not get the next deadline from the history");
         return false;
     }
     auto interval_ms = duration_cast<milliseconds>(next_deadline_us - steady_clock::now());
@@ -1219,15 +1260,55 @@ bool DataReaderImpl::deadline_timer_reschedule()
     return true;
 }
 
-bool DataReaderImpl::deadline_missed()
+void DataReaderImpl::configure_deadline_timer_()
 {
-    assert(qos_.deadline().period != c_TimeInfinite);
-
     std::unique_lock<RecursiveTimedMutex> lock(reader_->getMutex());
 
-    deadline_missed_status_.total_count++;
-    deadline_missed_status_.total_count_change++;
-    deadline_missed_status_.last_instance_handle = timer_owner_;
+    // Create the timer once
+    if (deadline_timer_ == nullptr)
+    {
+        deadline_timer_ = new TimedEvent(
+            subscriber_->rtps_participant()->get_resource_event(),
+            [this]() -> bool
+            {
+                return deadline_missed();
+            },
+            // Park timer with a huge interval (prevents spurious callbacks); we'll arm/cancel explicitly
+            std::numeric_limits<double>::max()
+            );
+    }
+
+    // Handle "infinite" and "zero" outside the callback
+    if (qos_.deadline().period == dds::c_TimeInfinite)
+    {
+        deadline_duration_us_ = std::chrono::duration<double, std::micro>::max();
+        deadline_timer_->cancel_timer();
+        return;
+    }
+
+    deadline_duration_us_ =
+            std::chrono::duration<double, std::ratio<1, 1000000>>(qos_.deadline().period.to_ns() * 1e-3);
+
+    if (qos_.deadline().period.to_ns() == 0)
+    {
+        deadline_timer_->cancel_timer();
+
+        deadline_missed_status_.total_count = std::numeric_limits<uint32_t>::max();
+        deadline_missed_status_.total_count_change = std::numeric_limits<uint32_t>::max();
+        EPROSIMA_LOG_WARNING(
+            DATA_READER,
+            "Deadline period is 0, it will be ignored from now on.");
+
+        // Bump once and notify listener exactly once.
+        notify_deadline_missed_nts_();
+        return;
+    }
+
+    deadline_timer_->update_interval_millisec(qos_.deadline().period.to_ns() * 1e-6);
+}
+
+void DataReaderImpl::notify_deadline_missed_nts_()
+{
     StatusMask notify_status = StatusMask::requested_deadline_missed();
     auto listener = get_listener_for(notify_status);
     if (nullptr != listener)
@@ -1237,16 +1318,38 @@ bool DataReaderImpl::deadline_missed()
     }
 
 #ifdef FASTDDS_STATISTICS
-    reader_listener_.notify_status_observer(statistics::DEADLINE_MISSED);
-#endif //FASTDDS_STATISTICS
+    reader_listener_.notify_status_observer(statistics::StatusKind::DEADLINE_MISSED);
+#endif // FASTDDS_STATISTICS
 
     user_datareader_->get_statuscondition().get_impl()->set_status(notify_status, true);
+}
+
+bool DataReaderImpl::deadline_missed()
+{
+    std::unique_lock<RecursiveTimedMutex> lock(reader_->getMutex());
+
+    assert(qos_.deadline().period != dds::c_TimeInfinite);
+
+    deadline_missed_status_.total_count++;
+    deadline_missed_status_.total_count_change++;
+    deadline_missed_status_.last_instance_handle = timer_owner_;
+
+    notify_deadline_missed_nts_();
+
+    // If we just reached the max -> log ONCE, stop timer, and bail
+    if (deadline_missed_status_.total_count == std::numeric_limits<uint32_t>::max())
+    {
+        EPROSIMA_LOG_WARNING(DATA_READER,
+                "Maximum number of deadline missed messages reached. Stopping deadline timer.");
+        deadline_timer_->cancel_timer();
+        return false; // do not reschedule
+    }
 
     if (!history_.set_next_deadline(
                 timer_owner_,
                 steady_clock::now() + duration_cast<steady_clock::duration>(deadline_duration_us_), true))
     {
-        EPROSIMA_LOG_ERROR(SUBSCRIBER, "Could not set next deadline in the history");
+        EPROSIMA_LOG_ERROR(DATA_READER, "Could not set next deadline in the history");
         return false;
     }
     return deadline_timer_reschedule();
@@ -1257,7 +1360,7 @@ ReturnCode_t DataReaderImpl::get_requested_deadline_missed_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1268,25 +1371,25 @@ ReturnCode_t DataReaderImpl::get_requested_deadline_missed_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::requested_deadline_missed(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 bool DataReaderImpl::lifespan_expired()
 {
     std::unique_lock<RecursiveTimedMutex> lock(reader_->getMutex());
 
-    fastrtps::rtps::Time_t current_ts;
-    fastrtps::rtps::Time_t::now(current_ts);
+    fastdds::rtps::Time_t current_ts;
+    fastdds::rtps::Time_t::now(current_ts);
 
     CacheChange_t* earliest_change;
     while (history_.get_earliest_change(&earliest_change))
     {
-        fastrtps::rtps::Time_t expiration_ts = earliest_change->sourceTimestamp + qos_.lifespan().duration;
+        fastdds::rtps::Time_t expiration_ts = earliest_change->sourceTimestamp + qos_.lifespan().duration;
 
         // Check that the earliest change has expired (the change which started the timer could have been removed from the history)
         if (current_ts < expiration_ts)
         {
-            fastrtps::rtps::Time_t interval = expiration_ts - current_ts;
+            fastdds::rtps::Time_t interval = expiration_ts - current_ts;
             lifespan_timer_->update_interval_millisec(interval.to_ns() * 1e-6);
             return true;
         }
@@ -1305,7 +1408,7 @@ ReturnCode_t DataReaderImpl::set_listener(
 {
     std::lock_guard<std::mutex> _(listener_mutex_);
     listener_ = listener;
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 const DataReaderListener* DataReaderImpl::get_listener() const
@@ -1331,7 +1434,7 @@ ReturnCode_t DataReaderImpl::get_liveliness_changed_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1343,7 +1446,7 @@ ReturnCode_t DataReaderImpl::get_liveliness_changed_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::liveliness_changed(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::get_requested_incompatible_qos_status(
@@ -1351,7 +1454,7 @@ ReturnCode_t DataReaderImpl::get_requested_incompatible_qos_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1362,7 +1465,7 @@ ReturnCode_t DataReaderImpl::get_requested_incompatible_qos_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::requested_incompatible_qos(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::get_sample_lost_status(
@@ -1370,7 +1473,7 @@ ReturnCode_t DataReaderImpl::get_sample_lost_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1381,7 +1484,7 @@ ReturnCode_t DataReaderImpl::get_sample_lost_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::sample_lost(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::get_sample_rejected_status(
@@ -1389,7 +1492,7 @@ ReturnCode_t DataReaderImpl::get_sample_rejected_status(
 {
     if (reader_ == nullptr)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     {
@@ -1400,7 +1503,7 @@ ReturnCode_t DataReaderImpl::get_sample_rejected_status(
     }
 
     user_datareader_->get_statuscondition().get_impl()->set_status(StatusMask::sample_rejected(), false);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 const Subscriber* DataReaderImpl::get_subscriber() const
@@ -1410,7 +1513,7 @@ const Subscriber* DataReaderImpl::get_subscriber() const
 
 /* TODO
    bool DataReaderImpl::wait_for_historical_data(
-        const Duration_t& max_wait) const
+        const dds::Duration_t& max_wait) const
    {
     (void)max_wait;
     // TODO Implement
@@ -1423,7 +1526,7 @@ const TopicDescription* DataReaderImpl::get_topicdescription() const
     return topic_;
 }
 
-TypeSupport DataReaderImpl::type()
+TypeSupport DataReaderImpl::type() const
 {
     return type_;
 }
@@ -1476,8 +1579,8 @@ ReturnCode_t DataReaderImpl::check_qos_including_resource_limits(
         const TypeSupport& type)
 {
     ReturnCode_t check_qos_return = check_qos(qos);
-    if (ReturnCode_t::RETCODE_OK == check_qos_return &&
-            type->m_isGetKeyDefined)
+    if (RETCODE_OK == check_qos_return &&
+            type->is_compute_key_provided)
     {
         check_qos_return = check_allocation_consistency(qos);
     }
@@ -1487,30 +1590,25 @@ ReturnCode_t DataReaderImpl::check_qos_including_resource_limits(
 ReturnCode_t DataReaderImpl::check_qos(
         const DataReaderQos& qos)
 {
-    if (qos.durability().kind == PERSISTENT_DURABILITY_QOS)
-    {
-        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "PERSISTENT Durability not supported");
-        return ReturnCode_t::RETCODE_UNSUPPORTED;
-    }
     if (qos.destination_order().kind == BY_SOURCE_TIMESTAMP_DESTINATIONORDER_QOS)
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "BY SOURCE TIMESTAMP DestinationOrder not supported");
-        return ReturnCode_t::RETCODE_UNSUPPORTED;
+        return RETCODE_UNSUPPORTED;
     }
     if (qos.reader_resource_limits().max_samples_per_read <= 0)
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "max_samples_per_read should be strictly possitive");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+        return RETCODE_INCONSISTENT_POLICY;
     }
     if (qos_has_unique_network_request(qos) && qos_has_specific_locators(qos))
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "unique_network_request cannot be set along specific locators");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+        return RETCODE_INCONSISTENT_POLICY;
     }
     if (qos.history().kind == KEEP_LAST_HISTORY_QOS && qos.history().depth <= 0)
     {
         EPROSIMA_LOG_ERROR(RTPS_QOS_CHECK, "HISTORY DEPTH must be higher than 0 if HISTORY KIND is KEEP_LAST.");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+        return RETCODE_INCONSISTENT_POLICY;
     }
     if (qos.history().kind == KEEP_LAST_HISTORY_QOS && qos.history().depth > 0 &&
             qos.resource_limits().max_samples_per_instance > 0 &&
@@ -1522,7 +1620,7 @@ ReturnCode_t DataReaderImpl::check_qos(
                 "'. Consistency rule: depth <= max_samples_per_instance." <<
                 " Effectively using max_samples_per_instance as depth.");
     }
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::check_allocation_consistency(
@@ -1534,16 +1632,16 @@ ReturnCode_t DataReaderImpl::check_allocation_consistency(
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
                 "max_samples should be greater than max_instances * max_samples_per_instance");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+        return RETCODE_INCONSISTENT_POLICY;
     }
     if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
             (qos.resource_limits().max_samples > 0))
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
                 "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+        return RETCODE_INCONSISTENT_POLICY;
     }
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 bool DataReaderImpl::can_qos_be_updated(
@@ -1621,8 +1719,8 @@ bool DataReaderImpl::can_qos_be_updated(
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
                 "Unique network flows request cannot be changed after the creation of a DataReader.");
     }
-    if (to.reliable_reader_qos().disable_positive_ACKs.enabled !=
-            from.reliable_reader_qos().disable_positive_ACKs.enabled)
+    if (to.reliable_reader_qos().disable_positive_acks.enabled !=
+            from.reliable_reader_qos().disable_positive_acks.enabled)
     {
         updatable = false;
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
@@ -1632,7 +1730,12 @@ bool DataReaderImpl::can_qos_be_updated(
     {
         updatable = false;
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
-                "data_sharing_listener_thread cannot be changed after the DataReader is enabled");
+                "data_sharing_listener_thread cannot be changed after the DataReader is enabled.");
+    }
+    if (to.properties() != from.properties())
+    {
+        updatable = false;
+        EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK, "PropertyPolicyQos cannot be changed after the DataReader is enabled.");
     }
     return updatable;
 }
@@ -1645,57 +1748,46 @@ void DataReaderImpl::set_qos(
     if (first_time && to.durability().kind != from.durability().kind)
     {
         to.durability() = from.durability();
-        to.durability().hasChanged = true;
     }
     if (to.deadline().period != from.deadline().period)
     {
         to.deadline() = from.deadline();
-        to.deadline().hasChanged = true;
     }
     if (to.latency_budget().duration != from.latency_budget().duration)
     {
         to.latency_budget() = from.latency_budget();
-        to.latency_budget().hasChanged = true;
     }
     if (first_time && !(to.liveliness() == from.liveliness()))
     {
         to.liveliness() = from.liveliness();
-        to.liveliness().hasChanged = true;
     }
     if (first_time && !(to.reliability() == from.reliability()))
     {
         to.reliability() = from.reliability();
-        to.reliability().hasChanged = true;
     }
     if (first_time && to.ownership().kind != from.ownership().kind)
     {
         to.ownership() = from.ownership();
-        to.ownership().hasChanged = true;
     }
     if (first_time && to.destination_order().kind != from.destination_order().kind)
     {
         to.destination_order() = from.destination_order();
-        to.destination_order().hasChanged = true;
     }
     if (to.user_data().data_vec() != from.user_data().data_vec())
     {
         to.user_data() = from.user_data();
-        to.user_data().hasChanged = true;
     }
     if (to.time_based_filter().minimum_separation != from.time_based_filter().minimum_separation )
     {
         to.time_based_filter() = from.time_based_filter();
-        to.time_based_filter().hasChanged = true;
     }
     if (first_time || !(to.durability_service() == from.durability_service()))
     {
         to.durability_service() = from.durability_service();
-        to.durability_service().hasChanged = true;
     }
     if (to.lifespan().duration != from.lifespan().duration )
     {
         to.lifespan() = from.lifespan();
-        to.lifespan().hasChanged = true;
     }
     if (first_time && !(to.reliable_reader_qos() == from.reliable_reader_qos()))
     {
@@ -1704,18 +1796,19 @@ void DataReaderImpl::set_qos(
     if (first_time || !(to.type_consistency() == from.type_consistency()))
     {
         to.type_consistency() = from.type_consistency();
-        to.type_consistency().hasChanged = true;
+    }
+    if (first_time || !(to.representation() == from.representation()))
+    {
+        to.representation() = from.representation();
     }
     if (first_time && (to.history().kind != from.history().kind ||
             to.history().depth != from.history().depth))
     {
         to.history() = from.history();
-        to.history().hasChanged = true;
     }
     if (first_time && !(to.resource_limits() == from.resource_limits()))
     {
         to.resource_limits() = from.resource_limits();
-        to.resource_limits().hasChanged = true;
     }
     if (!(to.reader_data_lifecycle() == from.reader_data_lifecycle()))
     {
@@ -1727,7 +1820,7 @@ void DataReaderImpl::set_qos(
         to.expects_inline_qos(from.expects_inline_qos());
     }
 
-    if (first_time && !(to.properties() == from.properties()))
+    if (first_time && (to.properties() != from.properties()))
     {
         to.properties() = from.properties();
     }
@@ -1746,32 +1839,6 @@ void DataReaderImpl::set_qos(
     {
         to.data_sharing() = from.data_sharing();
     }
-}
-
-fastrtps::TopicAttributes DataReaderImpl::topic_attributes() const
-{
-    fastrtps::TopicAttributes topic_att;
-    topic_att.topicKind = type_->m_isGetKeyDefined ? WITH_KEY : NO_KEY;
-    topic_att.topicName = topic_->get_impl()->get_rtps_topic_name();
-    topic_att.topicDataType = topic_->get_type_name();
-    topic_att.historyQos = qos_.history();
-    topic_att.resourceLimitsQos = qos_.resource_limits();
-    if (type_->type_object())
-    {
-        topic_att.type = *type_->type_object();
-    }
-    if (type_->type_identifier())
-    {
-        topic_att.type_id = *type_->type_identifier();
-    }
-    if (type_->type_information())
-    {
-        topic_att.type_information = *type_->type_information();
-    }
-    topic_att.auto_fill_type_object = type_->auto_fill_type_object();
-    topic_att.auto_fill_type_information = type_->auto_fill_type_information();
-
-    return topic_att;
 }
 
 DataReaderListener* DataReaderImpl::get_listener_for(
@@ -1794,9 +1861,9 @@ std::shared_ptr<IPayloadPool> DataReaderImpl::get_payload_pool()
 {
     // Check whether DataReader's type is plain in all its data representations
     bool is_plain = true;
-    if (qos_.type_consistency().representation.m_value.size() > 0)
+    if (qos_.representation().m_value.size() > 0)
     {
-        for (auto data_representation : qos_.type_consistency().representation.m_value)
+        for (auto data_representation : qos_.representation().m_value)
         {
             is_plain = is_plain && type_->is_plain(data_representation);
         }
@@ -1839,8 +1906,8 @@ void DataReaderImpl::release_payload_pool()
     if (!is_custom_payload_pool_)
     {
         PoolConfig config = PoolConfig::from_history_attributes(history_.m_att);
-        std::shared_ptr<fastrtps::rtps::ITopicPayloadPool> topic_payload_pool =
-                std::dynamic_pointer_cast<fastrtps::rtps::ITopicPayloadPool>(payload_pool_);
+        std::shared_ptr<fastdds::rtps::ITopicPayloadPool> topic_payload_pool =
+                std::dynamic_pointer_cast<fastdds::rtps::ITopicPayloadPool>(payload_pool_);
         topic_payload_pool->release_history(config, true);
     }
 
@@ -1857,64 +1924,64 @@ ReturnCode_t DataReaderImpl::check_datasharing_compatible(
     (void) reader_attributes;
 #endif // HAVE_SECURITY
 
-    bool has_key = type_->m_isGetKeyDefined;
+    bool has_key = type_->is_compute_key_provided;
 
     is_datasharing_compatible = false;
     switch (qos_.data_sharing().kind())
     {
         case DataSharingKind::OFF:
-            return ReturnCode_t::RETCODE_OK;
+            return RETCODE_OK;
             break;
         case DataSharingKind::ON:
 #if HAVE_SECURITY
             if (has_security_enabled)
             {
                 EPROSIMA_LOG_ERROR(DATA_READER, "Data sharing cannot be used with security protection.");
-                return ReturnCode_t::RETCODE_NOT_ALLOWED_BY_SECURITY;
+                return RETCODE_NOT_ALLOWED_BY_SECURITY;
             }
 #endif // if HAVE_SECURITY
             if (!type_.is_bounded())
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing cannot be used with unbounded data types");
-                return ReturnCode_t::RETCODE_BAD_PARAMETER;
+                return RETCODE_BAD_PARAMETER;
             }
 
             if (has_key)
             {
                 EPROSIMA_LOG_ERROR(DATA_READER, "Data sharing cannot be used with keyed data types");
-                return ReturnCode_t::RETCODE_BAD_PARAMETER;
+                return RETCODE_BAD_PARAMETER;
             }
 
             is_datasharing_compatible = true;
-            return ReturnCode_t::RETCODE_OK;
+            return RETCODE_OK;
             break;
         case DataSharingKind::AUTO:
 #if HAVE_SECURITY
             if (has_security_enabled)
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing disabled due to security configuration.");
-                return ReturnCode_t::RETCODE_OK;
+                return RETCODE_OK;
             }
 #endif // if HAVE_SECURITY
 
             if (!type_.is_bounded())
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing disabled because data type is not bounded");
-                return ReturnCode_t::RETCODE_OK;
+                return RETCODE_OK;
             }
 
             if (has_key)
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing disabled because data type is keyed");
-                return ReturnCode_t::RETCODE_OK;
+                return RETCODE_OK;
             }
 
             is_datasharing_compatible = true;
-            return ReturnCode_t::RETCODE_OK;
+            return RETCODE_OK;
             break;
         default:
-            EPROSIMA_LOG_ERROR(DATA_WRITER, "Unknown data sharing kind.");
-            return ReturnCode_t::RETCODE_BAD_PARAMETER;
+            EPROSIMA_LOG_ERROR(DATA_READER, "Unknown data sharing kind.");
+            return RETCODE_BAD_PARAMETER;
     }
 }
 
@@ -1930,12 +1997,12 @@ ReturnCode_t DataReaderImpl::get_listening_locators(
 {
     if (nullptr == reader_)
     {
-        return ReturnCode_t::RETCODE_NOT_ENABLED;
+        return RETCODE_NOT_ENABLED;
     }
 
     locators.assign(reader_->getAttributes().unicastLocatorList);
     locators.push_back(reader_->getAttributes().multicastLocatorList);
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 ReturnCode_t DataReaderImpl::delete_contained_entities()
@@ -1945,17 +2012,17 @@ ReturnCode_t DataReaderImpl::delete_contained_entities()
     // Check pending ReadConditions
     for (detail::ReadConditionImpl* impl : read_conditions_)
     {
-        // should be alive
+        // Should be alive
         auto keep_alive = impl->shared_from_this();
         assert((bool)keep_alive);
-        // free ReadConditions
+        // Free ReadConditions
         impl->detach_all_conditions();
     }
 
-    // release the colection
+    // Release the collection
     read_conditions_.clear();
 
-    return ReturnCode_t::RETCODE_OK;
+    return RETCODE_OK;
 }
 
 void DataReaderImpl::filter_has_been_updated()
@@ -1968,9 +2035,9 @@ InstanceHandle_t DataReaderImpl::lookup_instance(
 {
     InstanceHandle_t handle = HANDLE_NIL;
 
-    if (instance && type_->m_isGetKeyDefined)
+    if (instance && type_->is_compute_key_provided)
     {
-        if (type_->getKey(const_cast<void*>(instance), &handle, false))
+        if (type_->compute_key(const_cast<void*>(instance), handle, false))
         {
             if (!history_.is_instance_present(handle))
             {
@@ -2062,12 +2129,12 @@ ReadCondition* DataReaderImpl::create_readcondition(
 
     if (it != read_conditions_.end())
     {
-        // already there
+        // Already there
         impl = (*it)->shared_from_this();
     }
     else
     {
-        // create a new one
+        // Create a new one
         impl = std::make_shared<detail::ReadConditionImpl>(*this, key);
         impl->set_trigger_value(current_mask);
         // Add the implementation object to the collection
@@ -2078,8 +2145,8 @@ ReadCondition* DataReaderImpl::create_readcondition(
     ReadCondition* cond = new ReadCondition();
     auto ret_code = impl->attach_condition(cond);
 
-    // attach cannot fail in this scenario
-    assert(!!ret_code);
+    // Attach cannot fail in this scenario
+    assert(RETCODE_OK == ret_code);
     (void)ret_code;
 
     return cond;
@@ -2090,14 +2157,14 @@ ReturnCode_t DataReaderImpl::delete_readcondition(
 {
     if ( nullptr == a_condition )
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
     detail::ReadConditionImpl* impl = a_condition->get_impl();
 
     if ( nullptr == impl )
     {
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
     std::lock_guard<std::recursive_mutex> _(get_conditions_mutex());
@@ -2108,25 +2175,25 @@ ReturnCode_t DataReaderImpl::delete_readcondition(
     if ( it == read_conditions_.end())
     {
         // The ReadCondition is unknown to this DataReader
-        return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
+        return RETCODE_PRECONDITION_NOT_MET;
     }
 
 #   ifdef __cpp_lib_enable_shared_from_this
     std::weak_ptr<detail::ReadConditionImpl> wp = impl->weak_from_this();
 #   else
-    // remove when C++17 is enforced
+    // Remove when C++17 is enforced
     auto wp = std::weak_ptr<detail::ReadConditionImpl>(impl->shared_from_this());
 #   endif // ifdef __cpp_lib_enable_shared_from_this
 
     // Detach from the implementation object
     auto ret_code = impl->detach_condition(a_condition);
 
-    if (!!ret_code)
+    if (RETCODE_OK == ret_code)
     {
-        // delete the condition
+        // Delete the condition
         delete a_condition;
 
-        // check if we must remove the implementation object
+        // Check if we must remove the implementation object
         if (wp.expired())
         {
             read_conditions_.erase(it);
@@ -2171,7 +2238,7 @@ void DataReaderImpl::try_notify_read_conditions() noexcept
                 last_mask_state_.instance_states & ~old_mask.instance_states;
     }
 
-    // traverse the conditions notifying
+    // Traverse the conditions notifying
     std::lock_guard<std::recursive_mutex> _(get_conditions_mutex());
     for (detail::ReadConditionImpl* impl : read_conditions_)
     {
@@ -2181,6 +2248,99 @@ void DataReaderImpl::try_notify_read_conditions() noexcept
             impl->notify();
         }
     }
+}
+
+ReturnCode_t DataReaderImpl::get_subscription_builtin_topic_data(
+        SubscriptionBuiltinTopicData& subscription_data) const
+{
+    if (nullptr == reader_)
+    {
+        return RETCODE_NOT_ENABLED;
+    }
+
+    // Sanity checks
+    assert(nullptr != subscriber_);
+    assert(nullptr != topic_);
+    assert(nullptr != subscriber_->get_participant());
+
+    subscription_data = SubscriptionBuiltinTopicData{};
+
+    from_entity_id_to_topic_key(guid_.entityId, subscription_data.key.value);
+    from_guid_prefix_to_topic_key(subscriber_->get_participant()->guid().guidPrefix,
+            subscription_data.participant_key.value);
+
+    subscription_data.topic_name = topic_->get_impl()->get_rtps_topic_name();
+    subscription_data.type_name = topic_->get_type_name();
+    subscription_data.topic_kind = type_->is_compute_key_provided ? WITH_KEY : NO_KEY;
+
+    // DataReader qos
+    subscription_data.durability = qos_.durability();
+    subscription_data.deadline = qos_.deadline();
+    subscription_data.latency_budget = qos_.latency_budget();
+    subscription_data.lifespan = qos_.lifespan();
+    subscription_data.liveliness = qos_.liveliness();
+    subscription_data.reliability = qos_.reliability();
+    subscription_data.ownership = qos_.ownership();
+    subscription_data.destination_order = qos_.destination_order();
+    subscription_data.user_data = qos_.user_data();
+    subscription_data.time_based_filter = qos_.time_based_filter();
+
+    // Subscriber qos
+    subscription_data.presentation = subscriber_->qos_.presentation();
+    subscription_data.partition = subscriber_->qos_.partition();
+    subscription_data.group_data = subscriber_->qos_.group_data();
+
+    // X-Types 1.3
+    if (subscriber_->get_participant_impl()->fill_type_information(type_, subscription_data.type_information))
+    {
+        subscription_data.type_consistency = qos_.type_consistency();
+    }
+    subscription_data.representation = qos_.representation();
+
+    // eProsima Extensions
+
+    subscription_data.disable_positive_acks = qos_.reliable_reader_qos().disable_positive_acks;
+    subscription_data.data_sharing = qos_.data_sharing();
+
+    if (subscription_data.data_sharing.kind() != OFF &&
+            subscription_data.data_sharing.domain_ids().empty())
+    {
+        subscription_data.data_sharing.add_domain_id(utils::default_domain_id());
+    }
+
+    subscription_data.guid = guid();
+    subscription_data.participant_guid = subscriber_->get_participant()->guid();
+    qos_.endpoint().unicast_locator_list.copy_to(subscription_data.remote_locators.unicast);
+    qos_.endpoint().multicast_locator_list.copy_to(subscription_data.remote_locators.multicast);
+    subscription_data.expects_inline_qos = qos_.expects_inline_qos();
+
+    if (!is_data_sharing_compatible_)
+    {
+        subscription_data.data_sharing.off();
+    }
+    const std::string* endpoint_partitions = PropertyPolicyHelper::find_property(qos_.properties(), "partitions");
+    if (endpoint_partitions)
+    {
+        std::istringstream partition_string(*endpoint_partitions);
+        std::string partition_name;
+        subscription_data.partition.clear();
+
+        while (std::getline(partition_string, partition_name, ';'))
+        {
+            subscription_data.partition.push_back(partition_name.c_str());
+        }
+    }
+
+    subscription_data.history = qos_.history();
+
+    // Optional QoS
+    subscription_data.resource_limits = qos_.resource_limits();
+    subscription_data.reader_data_lifecycle = qos_.reader_data_lifecycle();
+    subscription_data.rtps_reliable_reader = qos_.reliable_reader_qos();
+    subscription_data.endpoint = qos_.endpoint();
+    subscription_data.reader_resource_limits = qos_.reader_resource_limits();
+
+    return RETCODE_OK;
 }
 
 }  // namespace dds

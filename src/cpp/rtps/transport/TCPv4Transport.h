@@ -20,8 +20,8 @@
 #include <mutex>
 
 #include <asio.hpp>
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 #include <rtps/transport/tcp/RTCPHeader.h>
 
@@ -83,7 +83,7 @@ protected:
     }
 
     virtual bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
 
@@ -95,6 +95,10 @@ protected:
 
     bool is_locator_allowed(
             const Locator& locator) const override;
+
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
 
     //! Checks if the given ip has been included in the white list to use it.
     virtual bool is_interface_allowed(
@@ -122,7 +126,7 @@ protected:
 
 public:
 
-    RTPS_DllAPI TCPv4Transport(
+    FASTDDS_EXPORTED_API TCPv4Transport(
             const TCPv4TransportDescriptor&);
 
     virtual ~TCPv4Transport() override;
