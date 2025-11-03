@@ -96,6 +96,8 @@ target_include_directories(BlackboxTests_RTPS PRIVATE
     ${Asio_INCLUDE_DIR})
 target_link_libraries(BlackboxTests_RTPS fastdds fastcdr foonathan_memory GTest::gtest)
 gtest_discover_tests(BlackboxTests_RTPS
+    PROPERTIES
+            ENVIRONMENT "CERTS_PATH=${PROJECT_SOURCE_DIR}/test/certs"
     TEST_PREFIX "BlackboxTests_RTPS."
     TEST_FILTER ${BLACKBOX_HIGH_LEVEL_IGNORED_TESTS}
     NO_PRETTY_VALUES
@@ -178,6 +180,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/builtin_transports_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/builtin_transports_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/auth_handshake_props_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/auth_handshake_props_profile.xml COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/security_bug_participant_generic_message.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/security_bug_participant_generic_message.xml COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participants_initial_peers_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/discovery_participants_initial_peers_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participants_client_server_profile.xml
@@ -216,7 +220,8 @@ if(FASTDDS_PIM_API_TESTS)
         )
     target_include_directories(BlackboxTests_DDS_PIM PRIVATE
         ${Asio_INCLUDE_DIR}
-        api/dds-pim)
+        api/dds-pim
+        ${PROJECT_SOURCE_DIR}/test/utils)
     target_link_libraries(BlackboxTests_DDS_PIM
         fastdds
         fastcdr
