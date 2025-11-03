@@ -1,4 +1,4 @@
-From 59f403a894bc27493377e195dd06f11b79eae7c1 Mon Sep 17 00:00:00 2001
+From f29dd3b2b3b69381ea76fbc4b85c04239fb3d1b0 Mon Sep 17 00:00:00 2001
 From: Scott K Logan <logans@cottsay.net>
 Date: Wed, 20 Jan 2021 12:08:26 -0800
 Subject: [PATCH] Set CMake flags for Fast-DDS
@@ -9,7 +9,7 @@ Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
  1 file changed, 3 insertions(+)
 
 diff --git a/rpm/template.spec.em b/rpm/template.spec.em
-index 3464a0bc11e1..cac5c33d2efe 100644
+index 3464a0bc..cac5c33d 100644
 --- a/rpm/template.spec.em
 +++ b/rpm/template.spec.em
 @@ -53,6 +53,9 @@ mkdir -p .obj-%{_target_platform} && cd .obj-%{_target_platform}
@@ -23,5 +23,5 @@ index 3464a0bc11e1..cac5c33d2efe 100644
  
  %make_build
 -- 
-2.49.0
+2.43.0
 
