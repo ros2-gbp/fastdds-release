@@ -21,6 +21,8 @@
 #include <fastdds/rtps/RTPSDomain.hpp>
 #include <fastdds/xtypes/type_representation/TypeObjectRegistry.hpp>
 
+#include <rtps/reader/LocalReaderPointer.hpp>
+
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
@@ -57,6 +59,12 @@ public:
             const GUID_t& /* matched_guid */)
     {
         return false;
+    }
+
+    static RTPSParticipantImpl* find_local_participant(
+            const GUID_t& /* guid */)
+    {
+        return nullptr;
     }
 
     static BaseWriter* find_local_writer(
@@ -127,11 +135,12 @@ public:
         return get_instance()->type_object_registry_;
     }
 
-    static RTPSReader* find_local_reader(
+    static void find_local_reader(
+            std::shared_ptr<LocalReaderPointer>& local_reader,
             const GUID_t& reader_guid)
     {
+        static_cast<void>(local_reader);
         static_cast<void>(reader_guid);
-        return nullptr;
     }
 
     eprosima::fastdds::dds::xtypes::TypeObjectRegistry type_object_registry_;

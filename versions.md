@@ -1,6 +1,19 @@
 Forthcoming
 -----------
 
+Version v3.2.3
+--------------
+
+* QoS Policies are now only added to EDP messages if they do not have the default value.
+* HistoryQosPolicy has been included to EDP messages (when non-default value is used).
+* New property to extend EDP messages with eProsima Extensions QoS.
+  * Added optional serialization of `WireProtocolConfigQos` to the `ParticipantDiscoveryData`.
+* Monitor service now serializes all optional QoS in the ProxyDatas.
+* Removed Request-Reply example in favor of the new RPC over DDS example.
+* Bump to asio 1.34.2 release.
+* Support aliases in Content Filtered Topic.
+* Add methods for TypeObject registration of RPC types.
+
 Version v3.2.2
 --------------
 

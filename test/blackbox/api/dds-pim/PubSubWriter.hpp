@@ -183,7 +183,6 @@ class PubSubWriter
         Listener(
                 PubSubWriter& writer)
             : writer_(writer)
-            , times_deadline_missed_(0)
             , times_liveliness_lost_(0)
             , times_unack_sample_removed_(0)
         {
@@ -214,7 +213,8 @@ class PubSubWriter
                 const eprosima::fastdds::dds::OfferedDeadlineMissedStatus& status) override
         {
             static_cast<void>(datawriter);
-            times_deadline_missed_ = status.total_count;
+            std::lock_guard<std::mutex> lk(mutex_);
+            offered_deadline_status_ = status;
         }
 
         void on_offered_incompatible_qos(
@@ -245,7 +245,14 @@ class PubSubWriter
 
         unsigned int missed_deadlines() const
         {
-            return times_deadline_missed_;
+            std::lock_guard<std::mutex> lk(mutex_);
+            return offered_deadline_status_.total_count;
+        }
+
+        unsigned int missed_deadlines_change() const
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            return offered_deadline_status_.total_count_change;
         }
 
         unsigned int times_liveliness_lost() const
@@ -269,9 +276,10 @@ class PubSubWriter
                 const Listener&) = delete;
 
         PubSubWriter& writer_;
+        mutable std::mutex mutex_;
 
-        //! The number of times deadline was missed
-        unsigned int times_deadline_missed_;
+        eprosima::fastdds::dds::OfferedDeadlineMissedStatus offered_deadline_status_{};
+
         //! The number of times liveliness was lost
         unsigned int times_liveliness_lost_;
         //! The number of times a sample has been removed unacknowledged
@@ -746,7 +754,7 @@ public:
     }
 
 #if HAVE_SECURITY
-    void waitAuthorized(
+    void wait_authorized(
             std::chrono::seconds timeout = std::chrono::seconds::zero(),
             unsigned int expected = 1)
     {
@@ -772,16 +780,28 @@ public:
         std::cout << "Writer authorization finished..." << std::endl;
     }
 
-    void waitUnauthorized()
+    void wait_unauthorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Writer is waiting unauthorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return unauthorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
 
         std::cout << "Writer unauthorization finished..." << std::endl;
     }
@@ -1267,7 +1287,7 @@ public:
         return *this;
     }
 
-    PubSubWriter& multicastLocatorList(
+    PubSubWriter& multicast_locator_list(
             const eprosima::fastdds::rtps::LocatorList& multicastLocators)
     {
         datawriter_qos_.endpoint().multicast_locator_list = multicastLocators;
@@ -1725,6 +1745,11 @@ public:
         return listener_.missed_deadlines();
     }
 
+    unsigned int missed_deadlines_change() const
+    {
+        return listener_.missed_deadlines_change();
+    }
+
     unsigned int times_liveliness_lost() const
     {
         return listener_.times_liveliness_lost();
@@ -1836,6 +1861,20 @@ public:
             const std::vector<eprosima::fastdds::dds::DataRepresentationId_t>& values)
     {
         datawriter_qos_.representation().m_value = values;
+        return *this;
+    }
+
+    PubSubWriter& data_writer_qos(
+            const eprosima::fastdds::dds::DataWriterQos& dw_qos)
+    {
+        datawriter_qos_ = dw_qos;
+        return *this;
+    }
+
+    PubSubWriter& publisher_qos(
+            const eprosima::fastdds::dds::PublisherQos& pub_qos)
+    {
+        publisher_qos_ = pub_qos;
         return *this;
     }
 

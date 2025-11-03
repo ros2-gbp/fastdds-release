@@ -2,7 +2,7 @@
 // deferred.hpp
 // ~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -708,7 +708,7 @@ inline auto operator|(Head head, Tail&& tail)
 /**
  * See the documentation for asio::deferred_t for a usage example.
  */
-constexpr deferred_t deferred;
+ASIO_INLINE_VARIABLE constexpr deferred_t deferred;
 
 } // namespace asio
 
