@@ -1,4 +1,4 @@
-From 0af09b1cbac8ec78545faf9a2fc64f7c75e86730 Mon Sep 17 00:00:00 2001
+From 2caedf64ad4b2c05d7a46507994ec2d914423ec9 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Steven!=20Ragnar=C3=B6k?=
  <nuclearsandwich@users.noreply.github.com>
 Date: Sat, 12 Feb 2022 10:38:44 -0500
@@ -10,7 +10,7 @@ Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
  1 file changed, 3 insertions(+)
 
 diff --git a/debian/rules.em b/debian/rules.em
-index 284a07142d7a..a96478593ffc 100755
+index 284a0714..a9647859 100755
 --- a/debian/rules.em
 +++ b/debian/rules.em
 @@ -37,6 +37,9 @@ override_dh_auto_configure:
@@ -24,5 +24,5 @@ index 284a07142d7a..a96478593ffc 100755
  
  override_dh_auto_build:
 -- 
-2.49.0
+2.43.0
 
