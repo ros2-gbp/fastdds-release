@@ -81,6 +81,7 @@ static CacheChange_t* create_change_for_message(
         WriterHistory* history)
 {
     uint32_t cdr_size = static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message));
+    cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
     cdr_size += 4; // Encapsulation
     return history->create_change(cdr_size, ALIVE, c_InstanceHandle_Unknown);
 }
@@ -235,7 +236,8 @@ bool SecurityManager::init(
                                 part_attributes,
                                 participant_->getGuid(),
                                 exception);
-            } while (ret == VALIDATION_PENDING_RETRY && usleep_bool());
+            }
+            while (ret == VALIDATION_PENDING_RETRY && usleep_bool());
 
             if (ret == VALIDATION_OK)
             {
@@ -4245,6 +4247,19 @@ void SecurityManager::resend_handshake_message_token(
                     remote_participant_info->event_->cancel_timer();
                     remote_participant_info->auth_status_ = AUTHENTICATION_FAILED;
                     on_validation_failed(dp_it->second->participant_data(), exception);
+                    if (remote_participant_info->change_sequence_number_ != SequenceNumber_t::unknown())
+                    {
+                        participant_stateless_message_writer_history_->remove_change(
+                            remote_participant_info->change_sequence_number_);
+                        remote_participant_info->change_sequence_number_ = SequenceNumber_t::unknown();
+                        // Return the handshake handle
+                        if (remote_participant_info->handshake_handle_ != nullptr)
+                        {
+                            authentication_plugin_->return_handshake_handle(
+                                remote_participant_info->handshake_handle_, exception);
+                            remote_participant_info->handshake_handle_ = nullptr;
+                        }
+                    }
                 }
             }
             else

@@ -176,7 +176,6 @@ protected:
         Listener(
                 PubSubReader& reader)
             : reader_(reader)
-            , times_deadline_missed_(0)
         {
         }
 
@@ -200,7 +199,8 @@ protected:
                 do
                 {
                     reader_.receive(datareader, ret);
-                } while (ret);
+                }
+                while (ret);
             }
         }
 
@@ -225,8 +225,8 @@ protected:
                 const eprosima::fastdds::dds::RequestedDeadlineMissedStatus& status) override
         {
             (void)datareader;
-
-            times_deadline_missed_ = status.total_count;
+            std::lock_guard<std::mutex> lk(mutex_);
+            requested_deadline_status_ = status;
         }
 
         void on_requested_incompatible_qos(
@@ -277,7 +277,14 @@ protected:
 
         unsigned int missed_deadlines() const
         {
-            return times_deadline_missed_;
+            std::lock_guard<std::mutex> lk(mutex_);
+            return requested_deadline_status_.total_count;
+        }
+
+        unsigned int missed_deadlines_change() const
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            return requested_deadline_status_.total_count_change;
         }
 
     private:
@@ -286,6 +293,9 @@ protected:
                 const Listener&) = delete;
 
         PubSubReader& reader_;
+        mutable std::mutex mutex_;
+
+        eprosima::fastdds::dds::RequestedDeadlineMissedStatus requested_deadline_status_{};
 
         //! Number of times deadline was missed
         unsigned int times_deadline_missed_;
@@ -863,7 +873,7 @@ public:
     }
 
 #if HAVE_SECURITY
-    void waitAuthorized(
+    void wait_authorized(
             std::chrono::seconds timeout = std::chrono::seconds::zero(),
             unsigned int expected = 1)
     {
@@ -889,16 +899,28 @@ public:
         std::cout << "Reader authorization finished..." << std::endl;
     }
 
-    void waitUnauthorized()
+    void wait_unauthorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Reader is waiting unauthorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return unauthorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
 
         std::cout << "Reader unauthorization finished..." << std::endl;
     }
@@ -1262,7 +1284,7 @@ public:
         return *this;
     }
 
-    PubSubReader& multicastLocatorList(
+    PubSubReader& multicast_locator_list(
             const eprosima::fastdds::rtps::LocatorList& multicast_locators)
     {
         datareader_qos_.endpoint().multicast_locator_list = multicast_locators;
@@ -1715,6 +1737,20 @@ public:
         return *this;
     }
 
+    PubSubReader& data_reader_qos(
+            const eprosima::fastdds::dds::DataReaderQos& dr_qos)
+    {
+        datareader_qos_ = dr_qos;
+        return *this;
+    }
+
+    PubSubReader& subscriber_qos(
+            const eprosima::fastdds::dds::SubscriberQos& sub_qos)
+    {
+        subscriber_qos_ = sub_qos;
+        return *this;
+    }
+
     bool update_partition(
             const std::string& partition)
     {
@@ -1793,6 +1829,11 @@ public:
         return listener_.missed_deadlines();
     }
 
+    unsigned int missed_deadlines_change() const
+    {
+        return listener_.missed_deadlines_change();
+    }
+
     void liveliness_lost()
     {
         std::unique_lock<std::mutex> lock(liveliness_mutex_);
@@ -1869,6 +1910,22 @@ public:
         eprosima::fastdds::dds::SampleLostStatus status;
         datareader_->get_sample_lost_status(status);
         return status;
+    }
+
+    bool set_qos()
+    {
+        return (eprosima::fastdds::dds::RETCODE_OK == datareader_->set_qos(datareader_qos_));
+    }
+
+    bool set_qos(
+            const eprosima::fastdds::dds::DataReaderQos& att)
+    {
+        return (eprosima::fastdds::dds::RETCODE_OK == datareader_->set_qos(att));
+    }
+
+    eprosima::fastdds::dds::DataReaderQos get_qos()
+    {
+        return (datareader_->get_qos());
     }
 
     bool is_matched() const
@@ -2363,6 +2420,7 @@ protected:
 
             if (triggered_statuses.is_active(eprosima::fastdds::dds::StatusMask::requested_deadline_missed()))
             {
+                std::cout << "Incompatible qos in reader" << std::endl;
                 eprosima::fastdds::dds::RequestedDeadlineMissedStatus status;
                 reader_.datareader_->get_requested_deadline_missed_status(status);
                 times_deadline_missed_ = status.total_count;
@@ -2405,7 +2463,8 @@ protected:
                     do
                     {
                         reader_.receive(reader_.datareader_, ret);
-                    } while (ret);
+                    }
+                    while (ret);
                 }
             }
 
@@ -2441,7 +2500,8 @@ protected:
                     do
                     {
                         reader_.receive(reader_.datareader_, ret);
-                    } while (ret);
+                    }
+                    while (ret);
                 }
             }
         }
