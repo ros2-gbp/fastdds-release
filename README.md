@@ -28,9 +28,9 @@
     <a href="https://eprosima-fast-rtps.readthedocs.io"><img alt="Documentation badge" src="https://img.shields.io/readthedocs/eprosima-fast-rtps.svg"/></a>
     <br>
     <a href=""><img alt="Status" src="https://nexus.lab.fiware.org/static/badges/statuses/incubating.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-master.yml"><img alt="Fast DDS Ubuntu CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-master.yml/badge.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-master.yml"><img alt="Fast DDS Windows CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-master.yml/badge.svg"/></a>
-    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-master.yml"><img alt="Fast DDS MacOS CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-master.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-3.2.x.yml"><img alt="Fast DDS Ubuntu CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-ubuntu-3.2.x.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-3.2.x.yml"><img alt="Fast DDS Windows CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-windows-3.2.x.yml/badge.svg"/></a>
+    <a href="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-3.2.x.yml"><img alt="Fast DDS MacOS CI (nightly)" src="https://github.com/eProsima/Fast-DDS/actions/workflows/nightly-mac-3.2.x.yml/badge.svg"/></a>
     <a href="http://jenkins.eprosima.com:8080/job/nightly_fastdds_coverage_linux"><img alt="Coverage" src="https://img.shields.io/jenkins/coverage/cobertura.svg?jobUrl=http%3A%2F%2Fjenkins.eprosima.com%3A8080%2Fjob%2Fnightly_fastdds_coverage_linux"/></a>
 </div>
 
@@ -188,14 +188,14 @@ or
 -->
 
 <a href="http://rosin-project.eu">
-  <img src="http://rosin-project.eu/wp-content/uploads/rosin_ack_logo_wide.png"
+  <img src="https://raw.githubusercontent.com/rosin-project/press_kit/master/img/rosin_ack_logo_wide.png"
        alt="rosin_logo" height="60" >
 </a>
 
 Supported by ROSIN - ROS-Industrial Quality-Assured Robot Software Components.
 More information: <a href="http://rosin-project.eu">rosin-project.eu</a>
 
-<img src="http://rosin-project.eu/wp-content/uploads/rosin_eu_flag.jpg"
+<img src="https://raw.githubusercontent.com/rosin-project/press_kit/master/img/rosin_eu_flag.jpg"
      alt="eu_flag" height="45" align="left" >
 
 This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement no. 732287.
