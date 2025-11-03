@@ -26,6 +26,7 @@
 #include <gmock/gmock.h>
 
 // Include first possible mocks (depending on include on CMakeLists.txt)
+#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/builtin/type_lookup_service/TypeLookupManager.hpp>
 #include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
 #include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
@@ -61,6 +62,7 @@ class ReaderProxyData;
 class WriterProxyData;
 class ReaderAttributes;
 class NetworkFactory;
+struct TopicDescription;
 
 #if HAVE_SECURITY
 namespace security {
@@ -141,6 +143,8 @@ public:
 
     MOCK_METHOD0(get_persistence_guid_prefix, GuidPrefix_t());
 
+    MOCK_METHOD0(should_send_optional_qos, bool());
+
 #if HAVE_SECURITY
     MOCK_CONST_METHOD0(security_attributes, const security::ParticipantSecurityAttributes& ());
 
@@ -172,6 +176,17 @@ public:
             bool (RTPSReader** reader, ReaderAttributes& param, ReaderHistory* hist,
             ReaderListener* listen,
             const EntityId_t& entityId, bool isBuiltin, bool enable));
+
+    MOCK_METHOD3(register_writer, eprosima::fastdds::dds::ReturnCode_t(
+            RTPSWriter * Writer,
+            const fastdds::rtps::TopicDescription& topic,
+            const fastdds::rtps::PublicationBuiltinTopicData& pub_builtin_topic_data));
+
+    MOCK_METHOD4(register_reader, eprosima::fastdds::dds::ReturnCode_t(
+            RTPSReader * Reader,
+            const fastdds::rtps::TopicDescription& topic,
+            const fastdds::rtps::SubscriptionBuiltinTopicData& sub_builtin_topic_data,
+            const fastdds::rtps::ContentFilterProperty* content_filter));
     // *INDENT-ON*
 
     bool createWriter(

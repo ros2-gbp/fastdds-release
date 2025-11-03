@@ -2,7 +2,7 @@
 // read_until.hpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -480,7 +480,7 @@ std::size_t read_until(SyncReadStream& s, DynamicBuffer_v1&& buffers,
  * @par Examples
  * To read data into a dynamic buffer sequence until whitespace is encountered:
  * @code typedef asio::buffers_iterator<
- *     asio::const_buffers_1> iterator;
+ *     asio::const_buffer> iterator;
  *
  * std::pair<iterator, bool>
  * match_whitespace(iterator begin, iterator end)
@@ -1418,7 +1418,7 @@ std::size_t read_until(SyncReadStream& s, DynamicBuffer_v2 buffers,
  * @par Examples
  * To read data into a dynamic buffer sequence until whitespace is encountered:
  * @code typedef asio::buffers_iterator<
- *     asio::const_buffers_1> iterator;
+ *     asio::const_buffer> iterator;
  *
  * std::pair<iterator, bool>
  * match_whitespace(iterator begin, iterator end)
@@ -2021,7 +2021,7 @@ inline auto async_read_until(AsyncReadStream& s, DynamicBuffer_v1&& buffers,
  * To asynchronously read data into a @c std::string until whitespace is
  * encountered:
  * @code typedef asio::buffers_iterator<
- *     asio::const_buffers_1> iterator;
+ *     asio::const_buffer> iterator;
  *
  * std::pair<iterator, bool>
  * match_whitespace(iterator begin, iterator end)
@@ -3099,7 +3099,7 @@ inline auto async_read_until(AsyncReadStream& s, DynamicBuffer_v2 buffers,
  * To asynchronously read data into a @c std::string until whitespace is
  * encountered:
  * @code typedef asio::buffers_iterator<
- *     asio::const_buffers_1> iterator;
+ *     asio::const_buffer> iterator;
  *
  * std::pair<iterator, bool>
  * match_whitespace(iterator begin, iterator end)
