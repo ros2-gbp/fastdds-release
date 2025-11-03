@@ -696,7 +696,7 @@ TEST_F(TCPv4Tests, check_TCPv4_interface_whitelist_initialization)
     auto check_whitelist = transportUnderTest.get_interface_whitelist();
     for (auto& ip : mock_interfaces)
     {
-        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::address_v4::from_string(
+        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::make_address_v4(
                     ip)), check_whitelist.end());
     }
 
@@ -1516,47 +1516,36 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     options |= asio::ssl::context::no_compression;
     ssl_context.set_options(options);
 
-    asio::io_service io_service;
-    auto ioServiceFunction = [&]()
+    asio::io_context io_context;
+    auto ioContextFunction = [&]()
             {
-#if ASIO_VERSION >= 101200
-                asio::executor_work_guard<asio::io_service::executor_type> work(io_service.get_executor());
-#else
-                io_service::work work(io_service_);
-#endif // if ASIO_VERSION >= 101200
-                io_service.run();
+                asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context);
+                io_context.run();
             };
-    std::thread ioServiceThread(ioServiceFunction);
+    std::thread ioContextThread(ioContextFunction);
 
     // TCPChannelResourceSecure::connect() like connection
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_service, ssl_context);
+    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_context, ssl_context);
     asio::ssl::verify_mode vm = 0x00;
     vm |= asio::ssl::verify_peer;
     secure_socket->set_verify_mode(vm);
 
-    asio::async_connect(secure_socket->lowest_layer(), endpoints,
-            [secure_socket](const std::error_code& ec
-#if ASIO_VERSION >= 101200
-            , asio::ip::tcp::endpoint
-#else
-            , const tcp::resolver::iterator&     /*endpoint*/
-#endif // if ASIO_VERSION >= 101200
-            )
-            {
-                ASSERT_TRUE(!ec);
-                asio::ssl::stream_base::handshake_type role = asio::ssl::stream_base::client;
-                secure_socket->async_handshake(role,
-                [](const std::error_code& ec)
-                {
-                    ASSERT_TRUE(!ec);
-                });
-            });
+    // Synchronous socket connection
+    std::error_code ec;
+    asio::connect(secure_socket->lowest_layer(), endpoints, ec);
+    ASSERT_TRUE(!ec);
 
+    // Synchronous handshake
+    asio::ssl::stream_base::handshake_type role = asio::ssl::stream_base::client;
+    secure_socket->handshake(role, ec);
+    ASSERT_TRUE(!ec);
+
+    // Wait a bit until server accepts the connection
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     /*
@@ -1573,16 +1562,15 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
         sender_unbound_channel_resources[0]);
 
     // Prepare the message
-    asio::error_code ec;
-    std::vector<octet> message(msg_size * 2, 0);
+    std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
     NetworkBuffer buffers(data, size);
     std::vector<NetworkBuffer> buffer_list;
     buffer_list.push_back(buffers);
 
-    // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
-    // it should be able to send a message of msg_size*2.
+    // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
+    // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
     size_t bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
@@ -1593,8 +1581,9 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     ASSERT_EQ(ec, asio::error_code());
     ASSERT_EQ(bytes_read, size);
 
-    // Now try to send a message that is bigger than the buffer size: (msg_size*2 + 1) + bytes_in_send_buffer(0) > 2*sendBufferSize
-    message.resize(msg_size * 2 + 1);
+    // Now try to send a message whose size surpasses the threshold to discard (sendBufferSize):
+    //  (msg_size + 1) + bytes_in_send_buffer(0) > sendBufferSize
+    message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
     buffer_list.clear();
@@ -1603,8 +1592,8 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     ASSERT_EQ(bytes_sent, 0u);
 
     secure_socket->lowest_layer().close(ec);
-    io_service.stop();
-    ioServiceThread.join();
+    io_context.stop();
+    ioContextThread.join();
 }
 #endif // ifndef _WIN32
 
@@ -1868,7 +1857,7 @@ TEST_F(TCPv4Tests, receive_unordered_data)
     asio::ip::tcp::socket sender(ctx);
     asio::ip::tcp::endpoint destination;
     destination.port(g_default_port);
-    destination.address(asio::ip::address::from_string("127.0.0.1"));
+    destination.address(asio::ip::make_address("127.0.0.1"));
     sender.connect(destination, ec);
     ASSERT_TRUE(!ec) << ec;
 
@@ -2035,6 +2024,7 @@ TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+    EXPECT_GT(receiveTransportUnderTest.get_channel_resources().size(), 2u);
     std::set<std::shared_ptr<TCPChannelResource>> channels_created;
     for (const auto& channel_resource : receiveTransportUnderTest.get_channel_resources())
     {
@@ -2073,28 +2063,19 @@ TEST_F(TCPv4Tests, non_blocking_send)
     IPLocator::setLogicalPort(serverLoc, 7410);
 
     // TCPChannelResourceBasic::connect() like connection
-    asio::io_service io_service;
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::io_context io_context;
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_service);
-    asio::async_connect(
-        socket,
-        endpoints,
-        [](std::error_code ec
-#if ASIO_VERSION >= 101200
-        , asio::ip::tcp::endpoint
-#else
-        , asio::ip::tcp::resolver::iterator
-#endif // if ASIO_VERSION >= 101200
-        )
-        {
-            ASSERT_TRUE(!ec);
-        }
-        );
+    // Synchronous socket connection
+    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_context);
+    std::error_code ec;
+    asio::connect(socket, endpoints, ec);
+    ASSERT_TRUE(!ec);
 
+    // Wait a bit until server accepts the connection
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     /*
@@ -2110,16 +2091,15 @@ TEST_F(TCPv4Tests, non_blocking_send)
         sender_unbound_channel_resources[0]);
 
     // Prepare the message
-    asio::error_code ec;
-    std::vector<octet> message(msg_size * 2, 0);
+    std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
     NetworkBuffer buffers(data, size);
     std::vector<NetworkBuffer> buffer_list;
     buffer_list.push_back(buffers);
 
-    // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
-    // it should be able to send a message of msg_size*2.
+    // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
+    // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
     size_t bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
@@ -2128,8 +2108,9 @@ TEST_F(TCPv4Tests, non_blocking_send)
     size_t bytes_read = asio::read(socket, asio::buffer(buffer, size), asio::transfer_exactly(size), ec);
     ASSERT_EQ(bytes_read, size);
 
-    // Now try to send a message that is bigger than the buffer size: (msg_size*2 + 1) + bytes_in_send_buffer(0) > 2*sendBufferSize
-    message.resize(msg_size * 2 + 1);
+    // Now try to send a message whose size surpasses the threshold to discard (sendBufferSize):
+    //  (msg_size + 1) + bytes_in_send_buffer(0) > sendBufferSize
+    message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
     buffer_list.clear();
@@ -2137,9 +2118,9 @@ TEST_F(TCPv4Tests, non_blocking_send)
     bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
-    socket.shutdown(asio::ip::tcp::socket::shutdown_both);
-    socket.cancel();
-    socket.close();
+    socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+    socket.cancel(ec);
+    socket.close(ec);
 }
 #endif // ifndef _WIN32
 

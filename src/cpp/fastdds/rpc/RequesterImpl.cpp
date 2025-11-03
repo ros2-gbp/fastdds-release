@@ -19,10 +19,13 @@
 #include <fastdds/dds/core/detail/DDSReturnCode.hpp>
 #include <fastdds/dds/core/LoanableCollection.hpp>
 #include <fastdds/dds/core/LoanableSequence.hpp>
+#include <fastdds/dds/core/status/PublicationMatchedStatus.hpp>
 #include <fastdds/dds/core/status/StatusMask.hpp>
+#include <fastdds/dds/core/status/SubscriptionMatchedStatus.hpp>
 #include <fastdds/dds/domain/qos/RequesterQos.hpp>
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/rpc/RequestInfo.hpp>
+#include <fastdds/dds/topic/ContentFilteredTopic.hpp>
 #include <fastdds/rtps/common/Guid.hpp>
 #include <fastdds/rtps/common/SequenceNumber.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
@@ -65,6 +68,12 @@ ReturnCode_t RequesterImpl::send_request(
     if (!enabled_)
     {
         EPROSIMA_LOG_ERROR(REQUESTER, "Trying to send a request with a disabled requester");
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    if (!is_fully_matched())
+    {
+        EPROSIMA_LOG_WARNING(REQUESTER, "Trying to send a request with an unmatched requester");
         return RETCODE_PRECONDITION_NOT_MET;
     }
 
@@ -117,6 +126,7 @@ ReturnCode_t RequesterImpl::take_reply(
         EPROSIMA_LOG_ERROR(REQUESTER, "Trying to take a reply with a disabled requester");
         return RETCODE_PRECONDITION_NOT_MET;
     }
+
     return requester_reader_->take(data, info);
 }
 
@@ -201,15 +211,22 @@ ReturnCode_t RequesterImpl::create_dds_entities(
         return RETCODE_ERROR;
     }
 
-    requester_reader_ =
-            service_->get_subscriber()->create_datareader(
-        service_->get_reply_filtered_topic(), qos.reader_qos, nullptr);
+    ContentFilteredTopic* reply_topic = service_->get_reply_filtered_topic();
+
+    requester_reader_ = service_->get_subscriber()->create_datareader(
+        reply_topic, qos.reader_qos, nullptr);
 
     if (!requester_reader_)
     {
         EPROSIMA_LOG_ERROR(REQUESTER, "Error creating reply reader");
         return RETCODE_ERROR;
     }
+
+    // Set the content filter signature to be different from the one used in other requesters
+    std::stringstream guid;
+    guid << requester_reader_->guid();
+    std::vector<std::string> expression_parameters;
+    reply_topic->set_filter_expression(guid.str(), expression_parameters);
 
     return RETCODE_OK;
 }
@@ -243,6 +260,21 @@ ReturnCode_t RequesterImpl::delete_contained_entities()
     requester_reader_ = nullptr;
 
     return RETCODE_OK;
+}
+
+bool RequesterImpl::is_fully_matched() const
+{
+    PublicationMatchedStatus pub_status;
+    SubscriptionMatchedStatus sub_status;
+
+    if ((RETCODE_OK == requester_reader_->get_subscription_matched_status(sub_status)) &&
+            (RETCODE_OK == requester_writer_->get_publication_matched_status(pub_status)))
+    {
+        return (pub_status.current_count > 0) && (pub_status.current_count == sub_status.current_count);
+    }
+
+    EPROSIMA_LOG_ERROR(REQUESTER, "Error getting matched subscriptions or publications");
+    return false;
 }
 
 } // namespace rpc
