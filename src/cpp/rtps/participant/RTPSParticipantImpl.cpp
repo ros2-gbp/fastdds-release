@@ -26,7 +26,6 @@
 #include <mutex>
 #include <sstream>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/LibrarySettings.hpp>
@@ -976,6 +975,7 @@ bool RTPSParticipantImpl::create_writer(
         if (!m_security_manager.register_local_writer(SWriter->getGuid(),
                 param.endpoint.properties, SWriter->getAttributes().security_attributes()))
         {
+            SWriter->local_actions_on_writer_removed();
             delete(SWriter);
             return false;
         }
@@ -985,6 +985,7 @@ bool RTPSParticipantImpl::create_writer(
         if (!m_security_manager.register_local_builtin_writer(SWriter->getGuid(),
                 SWriter->getAttributes().security_attributes()))
         {
+            SWriter->local_actions_on_writer_removed();
             delete(SWriter);
             return false;
         }
@@ -1112,6 +1113,7 @@ bool RTPSParticipantImpl::create_reader(
         if (!m_security_manager.register_local_reader(SReader->getGuid(),
                 param.endpoint.properties, SReader->getAttributes().security_attributes()))
         {
+            SReader->local_actions_on_reader_removed();
             delete(SReader);
             return false;
         }
@@ -1121,6 +1123,7 @@ bool RTPSParticipantImpl::create_reader(
         if (!m_security_manager.register_local_builtin_reader(SReader->getGuid(),
                 SReader->getAttributes().security_attributes()))
         {
+            SReader->local_actions_on_reader_removed();
             delete(SReader);
             return false;
         }
@@ -1419,6 +1422,17 @@ bool RTPSParticipantImpl::register_writer(
     return this->mp_builtinProtocols->add_writer(rtps_writer, topic, qos);
 }
 
+dds::ReturnCode_t RTPSParticipantImpl::register_writer(
+        RTPSWriter* rtps_writer,
+        const TopicDescription& topic,
+        const PublicationBuiltinTopicData& pub_builtin_topic_data)
+{
+    // Check if optional QoS serialization is enabled in the participant properties.
+    // If so, the optional QoS in the builtin topic data needs to be sent.
+    bool should_send_opt_qos = should_send_optional_qos();
+    return this->mp_builtinProtocols->add_writer(rtps_writer, topic, pub_builtin_topic_data, should_send_opt_qos);
+}
+
 bool RTPSParticipantImpl::register_reader(
         RTPSReader* rtps_reader,
         const TopicDescription& topic,
@@ -1426,6 +1440,40 @@ bool RTPSParticipantImpl::register_reader(
         const ContentFilterProperty* content_filter)
 {
     return this->mp_builtinProtocols->add_reader(rtps_reader, topic, qos, content_filter);
+}
+
+dds::ReturnCode_t RTPSParticipantImpl::register_reader(
+        RTPSReader* rtps_reader,
+        const TopicDescription& topic,
+        const SubscriptionBuiltinTopicData& sub_builtin_topic_data,
+        const ContentFilterProperty* content_filter)
+{
+    // Check if optional QoS serialization is enabled in the participant properties.
+    // If so, the optional QoS in the builtin topic data needs to be sent.
+    bool should_send_opt_qos = should_send_optional_qos();
+    return this->mp_builtinProtocols->add_reader(rtps_reader, topic, sub_builtin_topic_data, should_send_opt_qos,
+                   content_filter);
+}
+
+bool RTPSParticipantImpl::should_send_optional_qos() const
+{
+    if (should_send_optional_qos_ < 0) // not evaluated yet
+    {
+        should_send_optional_qos_ = false;
+        if (m_att.properties.properties().size() > 0)
+        {
+            const Property* const serialize_optional_qos_property =
+                    PropertyPolicyHelper::get_property(m_att.properties,
+                            fastdds::dds::parameter_serialize_optional_qos);
+
+            if (serialize_optional_qos_property != nullptr)
+            {
+                should_send_optional_qos_ = PropertyParser::as_bool(*serialize_optional_qos_property);
+            }
+        }
+    }
+
+    return should_send_optional_qos_ > 0;
 }
 
 void RTPSParticipantImpl::update_attributes(
@@ -2635,6 +2683,13 @@ bool RTPSParticipantImpl::did_mutation_took_place_on_meta(
             if (locals.empty())
             {
                 IPFinder::getIP4Address(&locals);
+                // If no local interfaces found, use localhost
+                if (locals.empty())
+                {
+                    Locator_t loc_lo;
+                    IPLocator::setIPv4(loc_lo, "127.0.0.1");
+                    locals.push_back(loc_lo);
+                }
             }
 
             // add a locator for each local
@@ -2652,7 +2707,8 @@ bool RTPSParticipantImpl::did_mutation_took_place_on_meta(
             // search for the next if any
             ++it;
         }
-    } while (it != UnicastLocatorList.end());
+    }
+    while (it != UnicastLocatorList.end());
 
     // TCP is a special case because physical ports are taken from the TransportDescriptors
     // besides WAN address may be added by the transport
