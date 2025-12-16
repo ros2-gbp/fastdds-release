@@ -29,12 +29,14 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastdds VERSION "3.2.3" LANGUAGES C CXX)
+project(fastdds VERSION "3.4.1.0" LANGUAGES C CXX)
 
 set(PROJECT_NAME_LARGE "Fast DDS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
 
 message(STATUS "Version: ${PROJECT_VERSION}")
+
+set(FASTDDS_BASIC_DIR ${PROJECT_SOURCE_DIR})
 
 ###############################################################################
 # eProsima build options
@@ -89,19 +91,6 @@ else()
     if(EPROSIMA_BUILD)
         string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
     endif()
-endif()
-
-###############################################################################
-# CCache on Windows on CI
-###############################################################################
-if (MSVC AND CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "ccache")
-    foreach(config DEBUG RELWITHDEBINFO)
-        foreach(lang C CXX)
-            set(flags_var "CMAKE_${lang}_FLAGS_${config}")
-            string(REPLACE "/Zi" "/Z7" ${flags_var} "${${flags_var}}")
-            set(${flags_var} "${${flags_var}}")
-        endforeach()
-    endforeach()
 endif()
 
 ###############################################################################

@@ -159,7 +159,8 @@ set(DATAWRITERTESTS_SOURCE DataWriterTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/ResourceEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/RTPSDomain.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomain.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomainExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/ChannelResource.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
@@ -204,6 +205,7 @@ set(DATAWRITERTESTS_SOURCE DataWriterTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
     )
 
@@ -334,10 +336,8 @@ target_include_directories(PublisherTests PRIVATE
     )
 target_link_libraries(PublisherTests fastdds fastcdr foonathan_memory
     GTest::gmock
+    $<$<BOOL:${QNX}>:socket>
     ${CMAKE_DL_LIBS})
-if(QNX)
-    target_link_libraries(PublisherTests socket)
-endif()
 gtest_discover_tests(PublisherTests)
 
 add_executable(DataWriterTests ${DATAWRITERTESTS_SOURCE})
@@ -377,22 +377,10 @@ target_link_libraries(DataWriterTests
     ${TINYXML2_LIBRARY}
     $<$<BOOL:${LINK_SSL}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${QNX}>:socket>
     ${THIRDPARTY_BOOST_LINK_LIBS}
     $<$<BOOL:${LibP11_FOUND}>:eProsima_p11>  # $<TARGET_NAME_IF_EXISTS:eProsima_p11>
     eProsima_atomic
     )
-if(QNX)
-    target_link_libraries(DataWriterTests socket)
-endif()
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(DataWriterTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
-if (APPLE)
-    target_link_libraries(DataWriterTests ${PRIVACY}
-    "-framework CoreFoundation" "-framework IOKit"
-    )
-endif()
 gtest_discover_tests(DataWriterTests
     PROPERTIES ENVIRONMENT "CERTS_PATH=${PROJECT_SOURCE_DIR}/test/certs")

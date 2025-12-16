@@ -62,7 +62,7 @@
 #include <fastdds/utils/QosConverters.hpp>
 #include <fastdds/utils/TypePropagation.hpp>
 #include <rtps/builtin/liveliness/WLP.hpp>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <utils/SystemInfo.hpp>
 #include <xmlparser/attributes/PublisherAttributes.hpp>
 #include <xmlparser/attributes/ReplierAttributes.hpp>
@@ -128,10 +128,11 @@ DomainParticipantImpl::DomainParticipantImpl(
 
     // Pre calculate participant id and generated guid
     participant_id_ = qos_.wire_protocol().participant_id;
-    if (!eprosima::fastdds::rtps::RTPSDomainImpl::create_participant_guid(participant_id_, guid_))
+    if (!eprosima::fastdds::rtps::RTPSDomainImpl::get_instance()->create_participant_guid(participant_id_, guid_))
     {
         EPROSIMA_LOG_ERROR(DOMAIN_PARTICIPANT, "Error generating GUID for participant");
     }
+    handle_ = guid_;
 
     /* Fill physical data properties if they are found and empty */
     std::string* property_value = fastdds::rtps::PropertyPolicyHelper::find_property(
@@ -304,6 +305,7 @@ ReturnCode_t DomainParticipantImpl::enable()
     }
 
     guid_ = part->getGuid();
+    handle_ = guid_;
 
     {
         std::lock_guard<std::mutex> _(mtx_gs_);
@@ -775,7 +777,7 @@ IContentFilterFactory* DomainParticipantImpl::find_content_filter_factory(
 
 const InstanceHandle_t& DomainParticipantImpl::get_instance_handle() const
 {
-    return static_cast<const InstanceHandle_t&>(guid_);
+    return handle_;
 }
 
 const fastdds::rtps::GUID_t& DomainParticipantImpl::guid() const
@@ -2036,7 +2038,12 @@ rpc::Service* DomainParticipantImpl::create_service(
     // that it will use for DDS endpoints creation, if it is necessary
     if (!services_publisher_.second)
     {
-        Publisher* pub = create_publisher(PUBLISHER_QOS_DEFAULT);
+        // Disable automatic enabling of created entities
+        // This is necessary to previously set the related_entity_key
+        PublisherQos pub_qos = PUBLISHER_QOS_DEFAULT;
+        pub_qos.entity_factory().autoenable_created_entities = false;
+
+        Publisher* pub = create_publisher(pub_qos);
         if (!pub)
         {
             EPROSIMA_LOG_ERROR(PARTICIPANT, "Error creating Services publisher.");
@@ -2047,7 +2054,12 @@ rpc::Service* DomainParticipantImpl::create_service(
 
     if (!services_subscriber_.second)
     {
-        Subscriber* sub = create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+        // Disable automatic enabling of created entities
+        // This is necessary to previously set the related_entity_key
+        SubscriberQos sub_qos = SUBSCRIBER_QOS_DEFAULT;
+        sub_qos.entity_factory().autoenable_created_entities = false;
+
+        Subscriber* sub = create_subscriber(sub_qos);
         if (!sub)
         {
             EPROSIMA_LOG_ERROR(PARTICIPANT, "Error creating Services subscriber.");

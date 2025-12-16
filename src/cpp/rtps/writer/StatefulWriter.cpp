@@ -50,7 +50,7 @@
 #include <rtps/reader/LocalReaderPointer.hpp>
 #include <rtps/resources/ResourceEvent.h>
 #include <rtps/resources/TimedEvent.h>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <rtps/writer/BaseWriter.hpp>
 #include <rtps/writer/ReaderProxy.hpp>
 #include <utils/TimeConversion.hpp>
@@ -1604,6 +1604,8 @@ bool StatefulWriter::wait_for_acknowledgement(
 void StatefulWriter::update_attributes(
         const WriterAttributes& att)
 {
+    BaseWriter::update_attributes(att);
+
     this->update_times(att.times);
     if (this->get_disable_positive_acks())
     {
@@ -2083,10 +2085,8 @@ bool StatefulWriter::ack_timer_expired()
         {
             last_sequence_number_++;
         }
-        while (!history_->get_change(
-            last_sequence_number_,
-            getGuid(),
-            &change) && last_sequence_number_ < next_sequence_number());
+        while (!history_->get_change(last_sequence_number_, getGuid(), &change) &&
+        last_sequence_number_ < next_sequence_number());
 
         if (!history_->get_change(
                     last_sequence_number_,

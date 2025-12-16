@@ -39,6 +39,7 @@ namespace rtps {
 class UDPTransportInterface : public TransportInterface
 {
     friend class UDPSenderResource;
+    friend struct TSN_UDPSender;
 
     using TransportInterface::transform_remote_locator;
 
@@ -134,6 +135,7 @@ public:
      * @param only_multicast_purpose multicast network interface
      * @param whitelisted network interface included in the user whitelist
      * @param max_blocking_time_point maximum blocking time.
+     * @param transport_priority Transport priority to be used for the send operation.
      *
      * @pre Open the output channel of each remote locator by invoking \ref OpenOutputChannel function.
      */
@@ -145,7 +147,8 @@ public:
             LocatorsIterator* destination_locators_end,
             bool only_multicast_purpose,
             bool whitelisted,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point);
+            const std::chrono::steady_clock::time_point& max_blocking_time_point,
+            const int32_t transport_priority);
 
     /**
      * Performs the locator selection algorithm for this transport.
@@ -260,6 +263,22 @@ protected:
      * @return Vector of interfaces in string format.
      */
     virtual std::vector<std::string> get_binding_interfaces_list() = 0;
+
+    /**
+     * Set socket options before binding the output socket.
+     *
+     * @param socket Reference to the socket to set options on.
+     */
+    virtual void set_output_pre_bind_options(
+            eProsimaUDPSocket& socket) const;
+
+    /**
+     * Set socket options after binding the output socket.
+     *
+     * @param socket Reference to the socket to set options on.
+     */
+    virtual void set_output_post_bind_options(
+            eProsimaUDPSocket& socket) const;
 
     bool OpenAndBindInputSockets(
             const Locator& locator,
