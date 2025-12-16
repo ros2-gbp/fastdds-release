@@ -44,7 +44,7 @@
 #include <rtps/network/utils/external_locators.hpp>
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/reader/BaseReader.hpp>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <utils/BuiltinTopicKeyConversions.hpp>
 #if HAVE_SECURITY
 #include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
@@ -320,6 +320,7 @@ dds::ReturnCode_t EDP::new_reader_proxy_data(
                     }
                 }
 
+                rpd->related_datawriter_key = sub_builtin_topic_data.related_datawriter_key;
                 rpd->set_qos(sub_builtin_topic_data, true);
                 rpd->user_defined_id(ratt.getUserDefinedID());
                 if (nullptr != content_filter)
@@ -597,7 +598,7 @@ dds::ReturnCode_t EDP::new_writer_proxy_data(
                         }
                     }
                 }
-
+                wpd->related_datareader_key = pub_builtin_topic_data.related_datareader_key;
                 BaseWriter* base_writer = BaseWriter::downcast(rtps_writer);
                 assert(base_writer->get_history() != nullptr);
                 wpd->type_max_serialized(base_writer->get_history()->getTypeMaxSerialized());
