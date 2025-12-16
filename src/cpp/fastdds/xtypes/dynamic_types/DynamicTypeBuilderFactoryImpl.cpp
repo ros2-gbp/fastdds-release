@@ -29,7 +29,7 @@
 #include <fastdds/dds/xtypes/type_representation/TypeObjectUtils.hpp>
 
 #include <fastdds/xtypes/type_representation/TypeObjectRegistry.hpp>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 
 #include "idl_parser/Idl.hpp"
 
@@ -55,6 +55,12 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_type(
         traits<TypeDescriptor>::ref_type descriptor) noexcept
 {
     auto descriptor_impl = traits<TypeDescriptor>::narrow<TypeDescriptorImpl>(descriptor);
+
+    if (!descriptor_impl)
+    {
+        EPROSIMA_LOG_ERROR(DYN_TYPES, "Invalid TypeDescriptor provided to create_type.");
+        return {};
+    }
 
     if (descriptor_impl->is_consistent())
     {
@@ -189,18 +195,42 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_type_
 {
     traits<DynamicTypeBuilder>::ref_type ret_val;
 
-    try
+    auto callback = [type_name, &ret_val](traits<DynamicTypeBuilder>::ref_type builder) -> bool
+            {
+                if (builder && (builder->get_name() == type_name))
+                {
+                    ret_val = builder;
+                    return false;
+                }
+
+                return true;
+            };
+
+    if (RETCODE_OK != for_each_type_w_uri(document_url, include_paths, callback))
     {
-        idlparser::Context context = idlparser::parse_file(document_url, type_name, include_paths, preprocessor_);
-        ret_val = context.builder;
-    }
-    catch (const std::exception& e)
-    {
-        EPROSIMA_LOG_ERROR(IDLPARSER, e.what());
+        EPROSIMA_LOG_ERROR(IDLPARSER, "Error parsing type from: " << document_url);
         ret_val.reset();
     }
 
     return ret_val;
+}
+
+ReturnCode_t DynamicTypeBuilderFactoryImpl::for_each_type_w_uri(
+        const std::string& document_url,
+        const IncludePathSeq& include_paths,
+        std::function<bool(traits<DynamicTypeBuilder>::ref_type)> callback) noexcept
+{
+    try
+    {
+        idlparser::parse_file(document_url, include_paths, preprocessor_, callback);
+    }
+    catch (const std::exception& e)
+    {
+        EPROSIMA_LOG_ERROR(IDLPARSER, e.what());
+        return RETCODE_ERROR;
+    }
+
+    return RETCODE_OK;
 }
 
 //}}}
@@ -1140,7 +1170,7 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_enum_
             MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
             member_descriptor->name(literal.detail().name());
             member_descriptor->type(literal_type);
-            member_descriptor->default_value(std::to_string(literal.common().value()));
+            member_descriptor->literal_value(std::to_string(literal.common().value()));
             member_descriptor->is_default_label(literal.common().flags() & xtypes::IS_DEFAULT);
             if (RETCODE_OK != ret_val->add_member(member_descriptor))
             {
@@ -1187,7 +1217,7 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_enum_
         MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
         member_descriptor->name(get_string_from_name_hash(literal.detail().name_hash()));
         member_descriptor->type(literal_type);
-        member_descriptor->default_value(std::to_string(literal.common().value()));
+        member_descriptor->literal_value(std::to_string(literal.common().value()));
         member_descriptor->is_default_label(literal.common().flags() & xtypes::IS_DEFAULT);
         if (RETCODE_OK != ret_val->add_member(member_descriptor))
         {
@@ -1224,7 +1254,7 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_bitma
             MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
             member_descriptor->name(bitflag.detail().name());
             member_descriptor->type(get_primitive_type(TK_BOOLEAN));
-            member_descriptor->id(bitflag.common().position());
+            member_descriptor->position(bitflag.common().position());
             if (RETCODE_OK != ret_val->add_member(member_descriptor))
             {
                 EPROSIMA_LOG_ERROR(DYN_TYPES, "Error adding bitflag " + member_descriptor->name().to_string());
@@ -1258,7 +1288,7 @@ traits<DynamicTypeBuilder>::ref_type DynamicTypeBuilderFactoryImpl::create_bitma
         MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
         member_descriptor->name(get_string_from_name_hash(bitflag.detail().name_hash()));
         member_descriptor->type(get_primitive_type(TK_BOOLEAN));
-        member_descriptor->id(bitflag.common().position());
+        member_descriptor->position(bitflag.common().position());
         if (RETCODE_OK != ret_val->add_member(member_descriptor))
         {
             EPROSIMA_LOG_ERROR(DYN_TYPES, "Error adding bitflag " + member_descriptor->name().to_string());

@@ -763,7 +763,7 @@ TEST_F(SHMTransportTests, send_and_receive_between_ports)
                 Locators locators_end(locator_list.end());
 
                 EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin, &locators_end,
-                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
             };
 
     std::unique_ptr<std::thread> sender_thread;
@@ -827,7 +827,7 @@ TEST_F(SHMTransportTests, port_and_segment_overflow_discard)
         buffer_list_big.emplace_back(message_big, 4096);
 
         EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list_big, sizeof(message_big), &locators_begin, &locators_end,
-                (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
     }
 
     // At least 4 msgs of 4 bytes are allowed
@@ -838,7 +838,7 @@ TEST_F(SHMTransportTests, port_and_segment_overflow_discard)
 
         // At least 4 msgs of 4 bytes are allowed
         EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, sizeof(message), &locators_begin, &locators_end,
-                (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
     }
 
     // Wait until the receiver get the first message
@@ -856,7 +856,7 @@ TEST_F(SHMTransportTests, port_and_segment_overflow_discard)
         Locators locators_end(locator_list.end());
 
         EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, sizeof(message), &locators_begin, &locators_end,
-                (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
     }
 
     // Push a 5th will not cause overflow
@@ -865,7 +865,7 @@ TEST_F(SHMTransportTests, port_and_segment_overflow_discard)
         Locators locators_end(locator_list.end());
 
         EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, sizeof(message), &locators_begin, &locators_end,
-                (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
     }
 
     sem.disable();
@@ -2119,7 +2119,7 @@ TEST_F(SHMTransportTests, dump_file)
                     Locators locators_end(locator_list.end());
 
                     EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin, &locators_end,
-                            (std::chrono::steady_clock::now() + std::chrono::microseconds(1000))));
+                            (std::chrono::steady_clock::now() + std::chrono::microseconds(1000)), 0));
                 };
 
         std::unique_ptr<std::thread> sender_thread;
