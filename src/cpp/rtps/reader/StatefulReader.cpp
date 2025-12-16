@@ -31,7 +31,7 @@
 #include <fastdds/rtps/writer/WriterDiscoveryStatus.hpp>
 
 #include "reader_utils.hpp"
-#include "rtps/RTPSDomainImpl.hpp"
+#include "rtps/domain/RTPSDomainImpl.hpp"
 #include <rtps/builtin/BuiltinProtocols.h>
 #include <rtps/builtin/liveliness/WLP.hpp>
 #include <rtps/DataSharing/DataSharingListener.hpp>
@@ -738,7 +738,7 @@ bool StatefulReader::process_data_frag_msg(
             if (!history_->get_change(change_to_add->sequenceNumber, change_to_add->writerGUID, &work_change))
             {
                 // A new change should be reserved
-                if (reserve_cache(sampleSize, work_change))
+                if (reserve_cache(sampleSize, change_to_add->getFragmentSize(), work_change))
                 {
                     if (work_change->serializedPayload.max_size < sampleSize)
                     {
@@ -929,47 +929,23 @@ bool StatefulReader::process_gap_msg(
 
     if (acceptMsgFrom(writerGUID, &pWP) && pWP)
     {
-        // TODO (Miguel C): Refactor this inside WriterProxy
-        SequenceNumber_t auxSN;
-        SequenceNumber_t finalSN = gapList.base();
         History::const_iterator history_iterator = history_->changesBegin();
-        for (auxSN = gapStart; auxSN < finalSN; auxSN++)
-        {
-            if (pWP->irrelevant_change_set(auxSN))
-            {
-                CacheChange_t* to_remove = nullptr;
-                auto ret_iterator = find_cache_in_fragmented_process(auxSN, pWP->guid(), to_remove, history_iterator);
-                if (to_remove != nullptr)
-                {
-                    // we called the History version to avoid callbacks
-                    history_iterator = history_->History::remove_change_nts(ret_iterator);
-                }
-                else if (ret_iterator != history_->changesEnd())
-                {
-                    history_iterator = ret_iterator;
-                }
-            }
-        }
-
-        gapList.for_each(
-            [&](SequenceNumber_t it)
-            {
-                if (pWP->irrelevant_change_set(it))
+        auto remove_fn = [this, &writerGUID, &history_iterator](const SequenceNumber_t& seq)
                 {
                     CacheChange_t* to_remove = nullptr;
-                    auto ret_iterator =
-                    find_cache_in_fragmented_process(auxSN, pWP->guid(), to_remove, history_iterator);
+                    auto ret_iterator = find_cache_in_fragmented_process(seq, writerGUID, to_remove, history_iterator);
                     if (to_remove != nullptr)
                     {
-                        // we called the History version to avoid callbacks
+                        // we call the History version to avoid callbacks
                         history_iterator = history_->History::remove_change_nts(ret_iterator);
                     }
                     else if (ret_iterator != history_->changesEnd())
                     {
                         history_iterator = ret_iterator;
                     }
-                }
-            });
+                };
+
+        pWP->process_gap(gapStart, gapList, remove_fn);
 
         // Maybe now we have to notify user from new CacheChanges.
         NotifyChanges(pWP);
@@ -1236,7 +1212,12 @@ void StatefulReader::NotifyChanges(
         assert(false == aux_ch->isRead);
         new_data_available = true;
         ++total_unread_;
-        on_data_notify(proxGUID, aux_ch->sourceTimestamp);
+
+        // Statistics callback is called with the original writer GUID if it is set
+        auto statistics_source_guid = aux_ch->write_params.original_writer_info() != OriginalWriterInfo::unknown() ?
+                aux_ch->write_params.original_writer_info().original_writer_guid() : proxGUID;
+
+        on_data_notify(statistics_source_guid, aux_ch->sourceTimestamp);
 
         ++it;
         do
@@ -1664,7 +1645,7 @@ bool StatefulReader::send_sync_nts(
         std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
     return mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid, locators_begin, locators_end,
-                   max_blocking_time_point);
+                   max_blocking_time_point, 0);
 }
 
 } // namespace rtps

@@ -29,8 +29,10 @@ set(FLOWCONTROLLER_COMMON_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/writer/LocatorSelectorSender.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
@@ -61,12 +63,8 @@ target_link_libraries(FlowControllerFactoryTests
     fastcdr
     fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerFactoryTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerFactoryTests)
 
 set(FLOWCONTROLLERPUBLISHMODESTESTS_SOURCE
@@ -99,12 +97,8 @@ target_link_libraries(FlowControllerPublishModesTests
     fastcdr
     fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerPublishModesTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerPublishModesTests)
 
 set(FLOWCONTROLLERSCHEDULERSTESTS_SOURCE
@@ -133,10 +127,6 @@ target_link_libraries(FlowControllerSchedulersTests
     fastcdr
     fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerSchedulersTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerSchedulersTests)
