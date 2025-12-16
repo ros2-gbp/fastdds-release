@@ -784,7 +784,7 @@ TEST(DataWriterTests, Write)
     data.message("HelloWorld");
     ASSERT_FALSE(datawriter->write(nullptr, HANDLE_NIL) == RETCODE_OK);
     ASSERT_TRUE(datawriter->write(&data, HANDLE_NIL) == RETCODE_OK);
-    ASSERT_TRUE(datawriter->write(&data, participant->get_instance_handle()) ==
+    ASSERT_TRUE(datawriter->write(&data, datawriter->get_instance_handle()) ==
             RETCODE_PRECONDITION_NOT_MET);
 
     ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
@@ -825,7 +825,7 @@ TEST(DataWriterTests, WriteWithTimestamp)
             datawriter->write_w_timestamp(&data, HANDLE_NIL, fastdds::dds::c_TimeInvalid));
     // 3. Calling write with a wrong instance handle returns RETCODE_PRECONDITION_NOT_MET
     ASSERT_EQ(RETCODE_PRECONDITION_NOT_MET,
-            datawriter->write_w_timestamp(&data, participant->get_instance_handle(), ts));
+            datawriter->write_w_timestamp(&data, datawriter->get_instance_handle(), ts));
     // 4. Correct case
     ASSERT_EQ(RETCODE_OK, datawriter->write_w_timestamp(&data, HANDLE_NIL, ts));
 
@@ -2207,6 +2207,79 @@ TEST(DataWriterTests, data_type_is_plain_data_representation)
     /* Tear down */
     participant->delete_contained_entities();
     DomainParticipantFactory::get_instance()->delete_participant(participant);
+}
+
+TEST(DataWriterTests, set_related_datareader)
+{
+    // Create entities
+    DomainParticipant* participant =
+            DomainParticipantFactory::get_instance()->create_participant(0, PARTICIPANT_QOS_DEFAULT);
+    ASSERT_NE(participant, nullptr);
+
+    Publisher* publisher = participant->create_publisher(PUBLISHER_QOS_DEFAULT);
+    ASSERT_NE(publisher, nullptr);
+
+    Subscriber* subscriber = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+    ASSERT_NE(subscriber, nullptr);
+
+    TypeSupport type(new TopicDataTypeMock());
+    type.register_type(participant);
+
+    Topic* topic = participant->create_topic("footopic", type.get_type_name(), TOPIC_QOS_DEFAULT);
+    ASSERT_NE(topic, nullptr);
+
+    DataWriter* datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
+    ASSERT_NE(datawriter, nullptr);
+
+    DataReader* datareader = subscriber->create_datareader(topic, DATAREADER_QOS_DEFAULT);
+    ASSERT_NE(datareader, nullptr);
+
+    // Assert set_related_datareader returns error on an enabled entity
+    ASSERT_TRUE(datawriter->is_enabled());
+    ASSERT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->set_related_datareader(datareader));
+
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
+
+    // Disable autoenable_created_entities
+    PublisherQos publisher_qos;
+    publisher_qos.entity_factory().autoenable_created_entities = false;
+
+    publisher = participant->create_publisher(publisher_qos);
+    ASSERT_NE(publisher, nullptr);
+    datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
+    ASSERT_NE(datawriter, nullptr);
+
+    ASSERT_FALSE(datawriter->is_enabled());
+    // Assert set_related_datareader returns error on a nullptr entity
+    ASSERT_EQ(RETCODE_BAD_PARAMETER, datawriter->set_related_datareader(nullptr));
+
+    DomainParticipant* another_participant =
+            DomainParticipantFactory::get_instance()->create_participant(0, PARTICIPANT_QOS_DEFAULT);
+    ASSERT_NE(participant, nullptr);
+
+    type.register_type(another_participant);
+
+    Subscriber* another_subscriber = another_participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+    ASSERT_NE(another_subscriber, nullptr);
+
+    Topic* another_topic = another_participant->create_topic("another_footopic",
+                    type.get_type_name(), TOPIC_QOS_DEFAULT);
+
+    DataReader* another_datareader =
+            another_subscriber->create_datareader(another_topic, DATAREADER_QOS_DEFAULT);
+    ASSERT_NE(another_datareader, nullptr);
+
+    // Assert set_related_datareader returns error on a different participant
+    ASSERT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->set_related_datareader(another_datareader));
+    // Assert set_related_datareader returns OK when reader in the same participant
+    ASSERT_EQ(RETCODE_OK, datawriter->set_related_datareader(datareader));
+
+    // Tear down
+    participant->delete_contained_entities();
+    another_participant->delete_contained_entities();
+    DomainParticipantFactory::get_instance()->delete_participant(participant);
+    DomainParticipantFactory::get_instance()->delete_participant(another_participant);
 }
 
 } // namespace dds

@@ -139,7 +139,7 @@ namespace xmlparser {
 using namespace eprosima::fastdds::xml::detail;
 using namespace eprosima::fastdds::rtps;
 
-static XMLP_ret parseXMLOctetVector(
+XMLP_ret XMLParser::parseXMLOctetVector(
         tinyxml2::XMLElement* elem,
         std::vector<octet>& octet_vector,
         bool allow_empty)
@@ -1389,6 +1389,7 @@ XMLP_ret XMLParser::getXMLWriterQosPolicies(
                 <xs:element name="data_sharing" type="dataSharingQosPolicyType" minOccurs="0"/>
                 <xs:element name="disablePositiveAcks" type="disablePositiveAcksQosPolicyType" minOccurs="0"/>
                 <xs:element name="disable_heartbeat_piggyback" type="boolType" minOccurs="0"/>
+                <xs:element name="transport_priority" type="boolType" minOccurs="0"/>
             </xs:all>
         </xs:complexType>
      */
@@ -1533,6 +1534,14 @@ XMLP_ret XMLParser::getXMLWriterQosPolicies(
         {
             // userData
             if (XMLP_ret::XML_OK != getXMLOctetVector(p_aux0, qos.m_groupData.data_vec(), ident))
+            {
+                return XMLP_ret::XML_ERROR;
+            }
+        }
+        else if (strcmp(name, "transport_priority") == 0)
+        {
+            // transport_priority - int32
+            if (XMLP_ret::XML_OK != getXMLInt(p_aux0, &qos.transport_priority.value, ident))
             {
                 return XMLP_ret::XML_ERROR;
             }
@@ -3490,6 +3499,7 @@ XMLP_ret XMLParser::getXMLLocatorList(
                     <xs:element name="udpv6" type="udpv6LocatorType"/>
                     <xs:element name="tcpv4" type="tcpv4LocatorType"/>
                     <xs:element name="tcpv6" type="tcpv6LocatorType"/>
+                    <xs:element name="ethernet" type="ethernetLocatorType"/>
                 </xs:choice>
             </xs:complexType>
          */
@@ -3522,9 +3532,21 @@ XMLP_ret XMLParser::getXMLLocatorList(
                 return XMLP_ret::XML_ERROR;
             }
         }
+        else if (nullptr != (p_aux1 = p_aux0->FirstChildElement(ETH_LOCATOR)))
+        {
+            if (XMLP_ret::XML_OK != get_xml_locator_ethernet(p_aux1, loc, ident + 1))
+            {
+                return XMLP_ret::XML_ERROR;
+            }
+        }
         else if (nullptr != (p_aux1 = p_aux0->FirstChildElement()))
         {
             EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid element found into 'locatorType'. Name: " << p_aux1->Name());
+            return XMLP_ret::XML_ERROR;
+        }
+        else
+        {
+            EPROSIMA_LOG_ERROR(XMLPARSER, "Node '" << LOCATOR << "' without content");
             return XMLP_ret::XML_ERROR;
         }
 

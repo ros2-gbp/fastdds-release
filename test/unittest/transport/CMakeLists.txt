@@ -345,16 +345,10 @@ target_link_libraries(UDPv4Tests
     fastdds::log
     GTest::gtest
     ${MOCKS}
-    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>)
-if(QNX)
-    target_link_libraries(UDPv4Tests socket)
-endif()
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(UDPv4Tests ${PRIVACY} iphlpapi Shlwapi )
-endif()
-if (APPLE)
-    target_link_libraries(UDPv4Tests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-endif()
+    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${QNX}>:socket>
+)
 gtest_discover_tests(UDPv4Tests)
 
 ##########################
@@ -385,16 +379,10 @@ if(NOT DISABLE_UDPV6_TESTS)
         fastdds::log
         GTest::gtest
         ${MOCKS}
-        $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>)
-    if(QNX)
-        target_link_libraries(UDPv6Tests socket)
-    endif()
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(UDPv6Tests ${PRIVACY} iphlpapi Shlwapi )
-    endif()
-    if (APPLE)
-        target_link_libraries(UDPv6Tests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-    endif()
+        $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+        $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+        $<$<BOOL:${QNX}>:socket>
+    )
     gtest_discover_tests(UDPv6Tests)
 
     ##########################
@@ -422,17 +410,10 @@ if(NOT DISABLE_UDPV6_TESTS)
         fastdds::log
         GTest::gtest
         ${MOCKS}
-        $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>)
-    if(QNX)
-        target_link_libraries(TCPv6Tests socket)
-    endif()
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr iphlpapi Shlwapi)
-    elseif(APPLE)
-        target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
-    else()
-        target_link_libraries(TCPv6Tests ${PRIVACY} fastcdr)
-    endif()
+        $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+        $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+        $<$<BOOL:${QNX}>:socket>
+    )
     gtest_discover_tests(TCPv6Tests)
 endif()
 
@@ -461,17 +442,10 @@ target_link_libraries(TCPv4Tests
     fastdds::log
     GTest::gtest
     ${MOCKS}
-    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>)
-if(QNX)
-    target_link_libraries(TCPv4Tests socket)
-endif()
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr iphlpapi Shlwapi)
-elseif(APPLE)
-    target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr "-framework CoreFoundation" "-framework IOKit")
-else()
-    target_link_libraries(TCPv4Tests ${PRIVACY} fastcdr)
-endif()
+    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${QNX}>:socket>
+)
 gtest_discover_tests(TCPv4Tests)
 
 ##########################
@@ -504,19 +478,11 @@ if(IS_THIRDPARTY_BOOST_OK)
         GTest::gtest
         ${MOCKS}
         $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+        $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+        $<$<BOOL:${QNX}>:socket>
         ${THIRDPARTY_BOOST_LINK_LIBS}
         eProsima_atomic
         )
-    if(QNX)
-        target_link_libraries(SharedMemTests socket)
-    endif()
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(SharedMemTests ${PRIVACY} iphlpapi Shlwapi )
-    elseif(APPLE)
-        target_link_libraries(SharedMemTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-    else()
-        target_link_libraries(SharedMemTests ${PRIVACY} )
-    endif()
     gtest_discover_tests(SharedMemTests)
 endif()
 
@@ -577,14 +543,8 @@ target_link_libraries(AsioHelpersTests
     fastdds::log
     GTest::gtest
     ${MOCKS}
-    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>)
-if(QNX)
-    target_link_libraries(AsioHelpersTests socket)
-endif()
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(AsioHelpersTests ${PRIVACY} iphlpapi Shlwapi )
-endif()
-if (APPLE)
-    target_link_libraries(AsioHelpersTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-endif()
+    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${QNX}>:socket>
+)
 gtest_discover_tests(AsioHelpersTests)
