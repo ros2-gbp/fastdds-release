@@ -23,7 +23,6 @@
 
 #include <fastdds/rtps/common/all_common.h>
 #include <fastdds/rtps/common/Token.h>
-#include <fastdds/rtps/messages/CDRMessage.h>
 
 #include <fastrtps/utils/fixed_size_string.hpp>
 
@@ -153,6 +152,9 @@ enum ParameterId_t : uint16_t
     PID_RELATED_SAMPLE_IDENTITY             = 0x800f,
     PID_DISABLE_POSITIVE_ACKS               = 0x8005,
     PID_DATASHARING                         = 0x8006,
+
+    /* eProsima Safe DDS extensions */
+    PID_SAFE_DDS_SIGNATURE                  = 0x9000,
 };
 
 /*!
