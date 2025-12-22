@@ -678,7 +678,7 @@ bool StatefulReader::processDataFragMsg(
             if (!mp_history->get_change(change_to_add->sequenceNumber, change_to_add->writerGUID, &work_change))
             {
                 // A new change should be reserved
-                if (reserveCache(&work_change, sampleSize))
+                if (reserve_cache(sampleSize, change_to_add->getFragmentSize(), work_change))
                 {
                     if (work_change->serializedPayload.max_size < sampleSize)
                     {
@@ -830,47 +830,23 @@ bool StatefulReader::processGapMsg(
 
     if (acceptMsgFrom(writerGUID, &pWP) && pWP)
     {
-        // TODO (Miguel C): Refactor this inside WriterProxy
-        SequenceNumber_t auxSN;
-        SequenceNumber_t finalSN = gapList.base();
         History::const_iterator history_iterator = mp_history->changesBegin();
-        for (auxSN = gapStart; auxSN < finalSN; auxSN++)
-        {
-            if (pWP->irrelevant_change_set(auxSN))
-            {
-                CacheChange_t* to_remove = nullptr;
-                auto ret_iterator = findCacheInFragmentedProcess(auxSN, pWP->guid(), &to_remove, history_iterator);
-                if (to_remove != nullptr)
-                {
-                    // we called the History version to avoid callbacks
-                    history_iterator = mp_history->History::remove_change_nts(ret_iterator);
-                }
-                else if (ret_iterator != mp_history->changesEnd())
-                {
-                    history_iterator = ret_iterator;
-                }
-            }
-        }
-
-        gapList.for_each(
-            [&](SequenceNumber_t it)
-            {
-                if (pWP->irrelevant_change_set(it))
+        auto remove_fn = [this, &writerGUID, &history_iterator](const SequenceNumber_t& seq)
                 {
                     CacheChange_t* to_remove = nullptr;
-                    auto ret_iterator =
-                    findCacheInFragmentedProcess(auxSN, pWP->guid(), &to_remove, history_iterator);
+                    auto ret_iterator = findCacheInFragmentedProcess(seq, writerGUID, &to_remove, history_iterator);
                     if (to_remove != nullptr)
                     {
-                        // we called the History version to avoid callbacks
+                        // we call the History version to avoid callbacks
                         history_iterator = mp_history->History::remove_change_nts(ret_iterator);
                     }
                     else if (ret_iterator != mp_history->changesEnd())
                     {
                         history_iterator = ret_iterator;
                     }
-                }
-            });
+                };
+
+        pWP->process_gap(gapStart, gapList, remove_fn);
 
         // Maybe now we have to notify user from new CacheChanges.
         NotifyChanges(pWP);
@@ -1015,9 +991,10 @@ bool StatefulReader::change_received(
                         // initialized using this SequenceNumber_t. Note that on a SERVER the own DATA(p) may be in any
                         // position within the WriterHistory preventing effective data exchange.
                         update_last_notified(a_change->writerGUID, SequenceNumber_t(0, 1));
-                        if (getListener() != nullptr)
+                        auto listener = getListener();
+                        if (listener != nullptr)
                         {
-                            getListener()->onNewCacheChangeAdded((RTPSReader*)this, a_change);
+                            listener->onNewCacheChangeAdded(this, a_change);
                         }
 
                         return true;
@@ -1076,38 +1053,57 @@ bool StatefulReader::change_received(
 void StatefulReader::NotifyChanges(
         WriterProxy* prox)
 {
+    CacheChange_t* aux_ch = nullptr;
     GUID_t proxGUID = prox->guid();
-    update_last_notified(proxGUID, prox->available_changes_max());
-    SequenceNumber_t nextChangeToNotify = prox->next_cache_change_to_be_notified();
+    SequenceNumber_t max_seq = prox->available_changes_max();
+    SequenceNumber_t first_seq = prox->next_cache_change_to_be_notified();
 
-    while (nextChangeToNotify != SequenceNumber_t::unknown())
+    bool new_data_available = false;
+
+    // Update state before notifying
+    update_last_notified(proxGUID, max_seq);
+    History::const_iterator it = mp_history->changesBegin();
+    SequenceNumber_t next_seq = first_seq;
+    while (next_seq != c_SequenceNumber_Unknown &&
+            mp_history->changesEnd() != (it = mp_history->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
+            (*it)->sequenceNumber <= max_seq)
     {
-        CacheChange_t* ch_to_give = nullptr;
+        aux_ch = *it;
+        assert(false == aux_ch->isRead);
+        new_data_available = true;
+        ++total_unread_;
+        on_data_notify(proxGUID, aux_ch->sourceTimestamp);
 
-        if (mp_history->get_change(nextChangeToNotify, proxGUID, &ch_to_give))
+        ++it;
+        do
         {
-            if (!ch_to_give->isRead)
-            {
-                ++total_unread_;
-
-                on_data_notify(ch_to_give->writerGUID, ch_to_give->sourceTimestamp);
-
-                if (getListener() != nullptr)
-                {
-                    getListener()->onNewCacheChangeAdded((RTPSReader*)this, ch_to_give);
-                }
-
-                new_notification_cv_.notify_all();
-            }
+            next_seq = prox->next_cache_change_to_be_notified();
         }
+        while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
+    }
+    // Ensure correct state of proxy when max_seq is not present in history
+    prox->consider_all_notified();
 
-        // Search again the WriterProxy because could be removed after the unlock.
-        if (!findWriterProxy(proxGUID, &prox))
+    // Notify listener if new data is available
+    auto listener = getListener();
+    if (new_data_available && (nullptr != listener))
+    {
+        it = mp_history->changesBegin();
+        next_seq = first_seq;
+        while (next_seq <= max_seq &&
+                mp_history->changesEnd() != (it = mp_history->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
+                (*it)->sequenceNumber <= max_seq)
         {
-            break;
+            aux_ch = *it;
+            next_seq = aux_ch->sequenceNumber + 1;
+            listener->onNewCacheChangeAdded(this, aux_ch);
         }
+    }
 
-        nextChangeToNotify = prox->next_cache_change_to_be_notified();
+    // Notify in case someone is waiting for unread messages
+    if (new_data_available)
+    {
+        new_notification_cv_.notify_all();
     }
 }
 
