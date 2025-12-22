@@ -17,12 +17,12 @@
  *
  */
 
-#include <fastdds/rtps/Endpoint.hpp>
-#include <fastdds/rtps/participant/RTPSParticipant.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <fastdds/rtps/Endpoint.h>
+#include <fastdds/rtps/participant/RTPSParticipant.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 RTPSParticipant::RTPSParticipant(
@@ -75,38 +75,21 @@ uint32_t RTPSParticipant::getRTPSParticipantID() const
     return mp_impl->getRTPSParticipantID();
 }
 
-bool RTPSParticipant::register_writer(
-        RTPSWriter* writer,
-        const TopicDescription& topic,
-        const fastdds::dds::WriterQos& qos)
+bool RTPSParticipant::registerWriter(
+        RTPSWriter* Writer,
+        const TopicAttributes& topicAtt,
+        const WriterQos& wqos)
 {
-    return mp_impl->register_writer(writer, topic, qos);
+    return mp_impl->registerWriter(Writer, topicAtt, wqos);
 }
 
-dds::ReturnCode_t RTPSParticipant::register_writer(
-        RTPSWriter* rtps_writer,
-        const TopicDescription& topic,
-        const PublicationBuiltinTopicData& pub_builtin_topic_data)
+bool RTPSParticipant::registerReader(
+        RTPSReader* Reader,
+        const TopicAttributes& topicAtt,
+        const ReaderQos& rqos,
+        const fastdds::rtps::ContentFilterProperty* content_filter)
 {
-    return mp_impl->register_writer(rtps_writer, topic, pub_builtin_topic_data);
-}
-
-bool RTPSParticipant::register_reader(
-        RTPSReader* reader,
-        const TopicDescription& topic,
-        const fastdds::dds::ReaderQos& qos,
-        const ContentFilterProperty* content_filter)
-{
-    return mp_impl->register_reader(reader, topic, qos, content_filter);
-}
-
-dds::ReturnCode_t RTPSParticipant::register_reader(
-        RTPSReader* reader,
-        const TopicDescription& topic,
-        const SubscriptionBuiltinTopicData& sub_builtin_topic_data,
-        const ContentFilterProperty* content_filter)
-{
-    return mp_impl->register_reader(reader, topic, sub_builtin_topic_data, content_filter);
+    return mp_impl->registerReader(Reader, topicAtt, rqos, content_filter);
 }
 
 void RTPSParticipant::update_attributes(
@@ -115,19 +98,21 @@ void RTPSParticipant::update_attributes(
     mp_impl->update_attributes(patt);
 }
 
-bool RTPSParticipant::update_writer(
-        RTPSWriter* writer,
-        const fastdds::dds::WriterQos& wqos)
+bool RTPSParticipant::updateWriter(
+        RTPSWriter* Writer,
+        const TopicAttributes& topicAtt,
+        const WriterQos& wqos)
 {
-    return mp_impl->update_writer(writer, wqos);
+    return mp_impl->updateLocalWriter(Writer, topicAtt, wqos);
 }
 
-bool RTPSParticipant::update_reader(
-        RTPSReader* reader,
-        const fastdds::dds::ReaderQos& rqos,
-        const ContentFilterProperty* content_filter)
+bool RTPSParticipant::updateReader(
+        RTPSReader* Reader,
+        const TopicAttributes& topicAtt,
+        const ReaderQos& rqos,
+        const fastdds::rtps::ContentFilterProperty* content_filter)
 {
-    return mp_impl->update_reader(reader, rqos, content_filter);
+    return mp_impl->updateLocalReader(Reader, topicAtt, rqos, content_filter);
 }
 
 std::vector<std::string> RTPSParticipant::getParticipantNames() const
@@ -135,9 +120,9 @@ std::vector<std::string> RTPSParticipant::getParticipantNames() const
     return mp_impl->getParticipantNames();
 }
 
-const RTPSParticipantAttributes& RTPSParticipant::get_attributes() const
+const RTPSParticipantAttributes& RTPSParticipant::getRTPSParticipantAttributes() const
 {
-    return mp_impl->get_attributes();
+    return mp_impl->getRTPSParticipantAttributes();
 }
 
 uint32_t RTPSParticipant::getMaxMessageSize() const
@@ -158,6 +143,11 @@ ResourceEvent& RTPSParticipant::get_resource_event() const
 WLP* RTPSParticipant::wlp() const
 {
     return mp_impl->wlp();
+}
+
+fastdds::dds::builtin::TypeLookupManager* RTPSParticipant::typelookup_manager() const
+{
+    return mp_impl->typelookup_manager();
 }
 
 bool RTPSParticipant::get_new_entity_id(
@@ -186,43 +176,6 @@ uint32_t RTPSParticipant::get_domain_id() const
 void RTPSParticipant::enable()
 {
     mp_impl->enable();
-}
-
-bool RTPSParticipant::ignore_participant(
-        const GuidPrefix_t& participant_guid)
-{
-    return mp_impl->ignore_participant(participant_guid);
-}
-
-bool RTPSParticipant::ignore_writer(
-        const GUID_t& /*writer_guid*/)
-{
-    return false;
-}
-
-bool RTPSParticipant::ignore_reader(
-        const GUID_t& /*reader_guid*/)
-{
-    return false;
-}
-
-std::vector<TransportNetmaskFilterInfo> RTPSParticipant::get_netmask_filter_info() const
-{
-    return mp_impl->get_netmask_filter_info();
-}
-
-bool RTPSParticipant::get_publication_info(
-        PublicationBuiltinTopicData& data,
-        const GUID_t& writer_guid) const
-{
-    return mp_impl->get_publication_info(data, writer_guid);
-}
-
-bool RTPSParticipant::get_subscription_info(
-        SubscriptionBuiltinTopicData& data,
-        const GUID_t& reader_guid) const
-{
-    return mp_impl->get_subscription_info(data, reader_guid);
 }
 
 #if HAVE_SECURITY
@@ -257,62 +210,9 @@ bool RTPSParticipant::remove_statistics_listener(
     return mp_impl->remove_statistics_listener(listener, kind);
 }
 
-void RTPSParticipant::set_enabled_statistics_writers_mask(
-        uint32_t enabled_writers)
-{
-    mp_impl->set_enabled_statistics_writers_mask(enabled_writers);
-}
-
-const fastdds::statistics::rtps::IStatusObserver* RTPSParticipant::create_monitor_service(
-        fastdds::statistics::rtps::IStatusQueryable& sq)
-{
-    return mp_impl->create_monitor_service(sq);
-}
-
-bool RTPSParticipant::create_monitor_service()
-{
-    return mp_impl->create_monitor_service();
-}
-
-bool RTPSParticipant::is_monitor_service_created() const
-{
-    return mp_impl->is_monitor_service_created();
-}
-
-bool RTPSParticipant::enable_monitor_service() const
-{
-    return mp_impl->enable_monitor_service();
-}
-
-bool RTPSParticipant::disable_monitor_service() const
-{
-    return mp_impl->disable_monitor_service();
-}
-
-bool RTPSParticipant::fill_discovery_data_from_cdr_message(
-        ParticipantBuiltinTopicData& data,
-        const fastdds::statistics::MonitorServiceStatusData& msg)
-{
-    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
-}
-
-bool RTPSParticipant::fill_discovery_data_from_cdr_message(
-        PublicationBuiltinTopicData& data,
-        const fastdds::statistics::MonitorServiceStatusData& msg)
-{
-    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
-}
-
-bool RTPSParticipant::fill_discovery_data_from_cdr_message(
-        SubscriptionBuiltinTopicData& data,
-        const fastdds::statistics::MonitorServiceStatusData& msg)
-{
-    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
-}
-
 #endif // FASTDDS_STATISTICS
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 

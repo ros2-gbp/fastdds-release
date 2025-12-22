@@ -15,9 +15,8 @@
 #ifndef _FASTDDS_TEST_SHAREDMEM_TRANSPORT_H_
 #define _FASTDDS_TEST_SHAREDMEM_TRANSPORT_H_
 
-#include <fastdds/rtps/transport/shared_mem/test_SharedMemTransportDescriptor.hpp>
-
 #include <rtps/transport/shared_mem/SharedMemTransport.h>
+#include <rtps/transport/shared_mem/test_SharedMemTransportDescriptor.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -27,16 +26,15 @@ class test_SharedMemTransport : public SharedMemTransport
 {
 public:
 
-    FASTDDS_EXPORTED_API test_SharedMemTransport(
+    RTPS_DllAPI test_SharedMemTransport(
             const test_SharedMemTransportDescriptor&);
 
     bool send(
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
-            LocatorsIterator* destination_locators_begin,
-            LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point,
-            const int32_t transport_priority) override;
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
+            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
+            fastrtps::rtps::LocatorsIterator* destination_locators_end,
+            const std::chrono::steady_clock::time_point& max_blocking_time_point) override;
 
     SharedMemChannelResource* CreateInputChannelResource(
             const Locator& locator,

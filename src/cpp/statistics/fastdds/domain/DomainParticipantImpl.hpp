@@ -19,13 +19,12 @@
 #ifndef _FASTDDS_STADISTICS_FASTDDS_DOMAIN_DOMAINPARTICIPANTIMPL_HPP_
 #define _FASTDDS_STADISTICS_FASTDDS_DOMAIN_DOMAINPARTICIPANTIMPL_HPP_
 
-#include <fastdds/config.hpp>
+#include <fastrtps/config.h>
 
 #ifdef FASTDDS_STATISTICS
 
 #include <string>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
@@ -35,75 +34,60 @@
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TopicDescription.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/domain/DomainParticipantImpl.hpp>
 
 #include "DomainParticipantStatisticsListener.hpp"
-#include <statistics/rtps/monitor-service/Interfaces.hpp>
 
 namespace efd = eprosima::fastdds::dds;
+
+using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
 namespace statistics {
 
-class MonitorServiceStatusData;
+enum EventKind : uint32_t;
 
 namespace dds {
 
 class PublisherImpl;
 
-class DomainParticipantImpl : public efd::DomainParticipantImpl,
-    public rtps::IStatusQueryable
+class DomainParticipantImpl : public efd::DomainParticipantImpl
 {
 public:
 
     /**
      * @brief This operation enables a Statistics DataWriter
-     *
-     * @param [in] topic_name Name of the topic associated to the Statistics DataWriter
-     * @param [in] dwqos DataWriterQos to be set
-     * @return RETCODE_BAD_PARAMETER if the topic name provided does not correspond to any Statistics DataWriter,
+     * @param topic_name Name of the topic associated to the Statistics DataWriter
+     * @param dwqos DataWriterQos to be set
+     * @return RETCODE_UNSUPPORTED if the FASTDDS_STATISTICS CMake option has not been set,
+     * RETCODE_BAD_PARAMETER if the topic name provided does not correspond to any Statistics DataWriter,
      * RETCODE_INCONSISTENT_POLICY if the DataWriterQos provided is inconsistent,
      * RETCODE_OK if the DataWriter has been created or if it has been created previously,
      * and RETCODE_ERROR otherwise
      */
-    efd::ReturnCode_t enable_statistics_datawriter(
+    ReturnCode_t enable_statistics_datawriter(
             const std::string& topic_name,
             const efd::DataWriterQos& dwqos);
 
     /**
-     * @brief This operation enables a Statistics DataWriter from a provided XML defined profile
-     *
-     * @param [in] profile_name Name for the profile to be used to fill the QoS structure.
-     * @param [in] topic_name Name of the statistics topic to be enabled.
-     * @return RETCODE_BAD_PARAMETER if the topic name provided does not correspond to any Statistics DataWriter,
-     * RETCODE_INCONSISTENT_POLICY if the DataWriterQos provided is inconsistent,
-     * RETCODE_OK if the DataWriter has been created or if it has been created previously,
-     * and RETCODE_ERROR otherwise
-     */
-    efd::ReturnCode_t enable_statistics_datawriter_with_profile(
-            const std::string& profile_name,
-            const std::string& topic_name);
-
-    /**
      * @brief This operation disables a Statistics DataWriter
-     *
-     * @param [in] topic_name Name of the topic associated to the Statistics DataWriter
+     * @param topic_name Name of the topic associated to the Statistics DataWriter
      * @return RETCODE_UNSUPPORTED if the FASTDDS_STATISTICS CMake option has not been set,
      * RETCODE_BAD_PARAMETER if the topic name provided does not correspond to any Statistics DataWriter,
      * RETCODE_OK if the DataWriter has been correctly deleted or does not exist,
      * and RETCODE_ERROR otherwise
      */
-    efd::ReturnCode_t disable_statistics_datawriter(
+    ReturnCode_t disable_statistics_datawriter(
             const std::string& topic_name);
 
     /**
      * @brief This operation enables the DomainParticipantImpl
-     *
      * @return RETCODE_OK if successful
      */
-    efd::ReturnCode_t enable() override;
+    ReturnCode_t enable() override;
 
     void disable() override;
 
@@ -122,78 +106,7 @@ public:
      * @note This method is meant to be used followed by a deletion of the participant as it implies
      * the deletion of the builtin statistics publishers.
      */
-    efd::ReturnCode_t delete_contained_entities() override;
-
-    /**
-     * Enables the monitor service in this DomainParticipant.
-     *
-     * @return RETCODE_OK if the monitor service could be correctly enabled.
-     * @return RETCODE_ERROR if the monitor service could not be enabled properly.
-     * @return RETCODE_UNSUPPORTED if FASTDDS_STATISTICS is not enabled.
-     *
-     */
-    efd::ReturnCode_t enable_monitor_service();
-
-    /**
-     * Disables the monitor service in this DomainParticipant. Does nothing if the service was not enabled before.
-     *
-     * @return RETCODE_OK if the monitor service could be correctly disabled.
-     * @return RETCODE_NOT_ENABLED if the monitor service was not previously enabled.
-     * @return RETCODE_ERROR if the service could not be properly disabled.
-     * @return RETCODE_UNSUPPORTED if FASTDDS_STATISTICS is not enabled.
-     *
-     */
-    efd::ReturnCode_t disable_monitor_service();
-
-    /**
-     * fills in the ParticipantBuiltinTopicData from a MonitorService Message
-     *
-     * @param [out] data Proxy to fill
-     * @param [in] msg MonitorService Message to get the proxy information from.
-     *
-     * @return RETCODE_OK if the operation succeeds.
-     * @return RETCODE_ERROR if the  operation fails.
-     */
-    efd::ReturnCode_t fill_discovery_data_from_cdr_message(
-            fastdds::rtps::ParticipantBuiltinTopicData& data,
-            const fastdds::statistics::MonitorServiceStatusData& msg);
-
-    /**
-     * fills in the WriterProxyData from a MonitorService Message
-     *
-     * @param [out] data Proxy to fill.
-     * @param [in] msg MonitorService Message to get the proxy information from.
-     *
-     * @return RETCODE_OK if the operation succeeds.
-     * @return RETCODE_ERROR if the  operation fails.
-     */
-    efd::ReturnCode_t fill_discovery_data_from_cdr_message(
-            fastdds::dds::PublicationBuiltinTopicData& data,
-            const fastdds::statistics::MonitorServiceStatusData& msg);
-
-    /**
-     * fills in the SubscriptionBuiltinTopicData from a MonitorService Message
-     *
-     * @param [out] data Proxy to fill.
-     * @param [in] msg MonitorService Message to get the proxy information from.
-     *
-     * @return RETCODE_OK if the operation succeeds.
-     * @return RETCODE_ERROR if the  operation fails.
-     */
-    efd::ReturnCode_t fill_discovery_data_from_cdr_message(
-            fastdds::dds::SubscriptionBuiltinTopicData& data,
-            const fastdds::statistics::MonitorServiceStatusData& msg);
-
-    /**
-     * Gets the status observer for that entity
-     *
-     * @return status observer
-     */
-
-    const rtps::IStatusObserver* get_status_observer()
-    {
-        return status_observer_.load();
-    }
+    ReturnCode_t delete_contained_entities() override;
 
 protected:
 
@@ -246,14 +159,14 @@ protected:
     bool transform_and_check_topic_name(
             const std::string& topic_name_or_alias,
             std::string& topic_name,
-            uint32_t& event_kind) noexcept;
+            EventKind& event_kind) noexcept;
 
     /**
      * Auxiliary function to register the statistics type depending on the statistics topic name.
      * It also creates the topic (or finds it if already created) and returns the pointer.
-     * @param [out] topic pointer to the created topic pointer.
+     * @param[out] topic pointer to the created topic pointer.
      * If the method returns false the parameter is not modified.
-     * @param [in] topic_name string with the statistics topic name.
+     * @param[in] topic_name string with the statistics topic name.
      * @return true if successful.
      * false in case there is incompatibility between the type associated to the Topic and the expected type.
      */
@@ -265,9 +178,9 @@ protected:
      * Auxiliary function that checks if the topic is already created within the domain participant.
      * If it is not, it creates the topic and registers the type. It also checks if the type can be registered.
      * If succesfull, it returns the pointer to the found or created topic.
-     * @param [out] topic pointer to the found or created topic pointer.
-     * @param [in] topic_name string with the topic name to find or create.
-     * @param [in] type TypeSupport to register.
+     * @param[out] topic pointer to the found or created topic pointer.
+     * @param[in] topic_name string with the topic name to find or create.
+     * @param[in] type TypeSupport to register.
      * @return false if the topic is found but uses another type different from the expected one or if register_type
      * fails because there is another TypeSupport using the same name. true otherwise.
      */
@@ -285,17 +198,9 @@ protected:
     bool delete_topic_and_type(
             const std::string& topic_name) noexcept;
 
-    /**
-     * @brief Implementation of the IStatusQueryable interface.
-     */
-    bool get_monitoring_status(
-            const fastdds::rtps::GUID_t& entity_guid,
-            eprosima::fastdds::statistics::MonitorServiceData&) override;
-
     efd::Publisher* builtin_publisher_ = nullptr;
     PublisherImpl* builtin_publisher_impl_ = nullptr;
     std::shared_ptr<DomainParticipantStatisticsListener> statistics_listener_;
-    std::atomic<const rtps::IStatusObserver*> status_observer_{nullptr};
 
     friend class efd::DomainParticipantFactory;
 };

@@ -17,26 +17,27 @@
  *
  */
 
-#include <rtps/builtin/discovery/participant/PDPServerListener.hpp>
-
 #include <memory>
 
+#include <rtps/builtin/discovery/participant/PDPServerListener.hpp>
+
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
-#include <fastdds/rtps/history/ReaderHistory.hpp>
-#include <fastdds/rtps/participant/RTPSParticipantListener.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
+
+#include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
+#include <fastdds/rtps/history/ReaderHistory.h>
+#include <fastdds/rtps/participant/RTPSParticipantListener.h>
+#include <fastdds/rtps/reader/RTPSReader.h>
 
 #include <rtps/builtin/discovery/database/DiscoveryParticipantChangeData.hpp>
-#include <rtps/builtin/discovery/endpoint/EDP.h>
-#include <rtps/builtin/discovery/participant/DS/DiscoveryServerPDPEndpoints.hpp>
 #include <rtps/builtin/discovery/participant/PDPServer.hpp>
-#include <rtps/network/utils/external_locators.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/builtin/discovery/participant/DS/DiscoveryServerPDPEndpoints.hpp>
+#include <rtps/participant/RTPSParticipantImpl.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
+
+using namespace eprosima::fastrtps::rtps;
 
 PDPServerListener::PDPServerListener(
         PDPServer* in_PDP)
@@ -49,16 +50,16 @@ PDPServer* PDPServerListener::pdp_server()
     return static_cast<PDPServer*>(parent_pdp_);
 }
 
-void PDPServerListener::on_new_cache_change_added(
+void PDPServerListener::onNewCacheChangeAdded(
         RTPSReader* reader,
         const CacheChange_t* const change_in)
 {
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "");
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER START ------------------");
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER,
+    logInfo(RTPS_PDP_LISTENER, "");
+    logInfo(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER START ------------------");
+    logInfo(RTPS_PDP_LISTENER,
             "-------------------- " << pdp_server()->mp_RTPSParticipant->getGuid() <<
             " --------------------");
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "PDP Server Message received: " << change_in->instanceHandle);
+    logInfo(RTPS_PDP_LISTENER, "PDP Server Message received: " << change_in->instanceHandle);
 
     auto endpoints = static_cast<fastdds::rtps::DiscoveryServerPDPEndpoints*>(pdp_server()->builtin_endpoints_.get());
     // Get PDP reader history
@@ -86,9 +87,9 @@ void PDPServerListener::on_new_cache_change_added(
     if (change->instanceHandle == c_InstanceHandle_Unknown
             && !this->get_key(change.get()))
     {
-        EPROSIMA_LOG_WARNING(RTPS_PDP_LISTENER, "Problem getting the key of the change, removing");
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "");
+        logWarning(RTPS_PDP_LISTENER, "Problem getting the key of the change, removing");
+        logInfo(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
+        logInfo(RTPS_PDP_LISTENER, "");
         return;
     }
 
@@ -98,9 +99,9 @@ void PDPServerListener::on_new_cache_change_added(
     // DATA(p|Up) sample identity should not be unknown
     if (change->write_params.sample_identity() == SampleIdentity::unknown())
     {
-        EPROSIMA_LOG_WARNING(RTPS_PDP_LISTENER, "CacheChange_t is not properly identified for client-server operation");
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "");
+        logWarning(RTPS_PDP_LISTENER, "CacheChange_t is not properly identified for client-server operation");
+        logInfo(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
+        logInfo(RTPS_PDP_LISTENER, "");
         return;
     }
 
@@ -123,9 +124,9 @@ void PDPServerListener::on_new_cache_change_added(
         if (guid == pdp_server()->getRTPSParticipant()->getGuid())
         {
             // Observation: It never reaches this point
-            EPROSIMA_LOG_WARNING(RTPS_PDP_LISTENER, "Message from own RTPSParticipant, ignoring");
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "");
+            logWarning(RTPS_PDP_LISTENER, "Message from own RTPSParticipant, ignoring");
+            logInfo(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
+            logInfo(RTPS_PDP_LISTENER, "");
             return;
         }
 
@@ -134,31 +135,99 @@ void PDPServerListener::on_new_cache_change_added(
         temp_participant_data_.clear();
         auto participant_data = temp_participant_data_;
 
-        if (participant_data.read_from_cdr_message(
+        if (participant_data.readFromCDRMessage(
                     &msg,
                     true,
                     pdp_server()->getRTPSParticipant()->network_factory(),
-                    true,
-                    change_in->vendor_id))
+                    pdp_server()->getRTPSParticipant()->has_shm_transport()))
         {
-            if (parent_pdp_->getRTPSParticipant()->is_participant_ignored(participant_data.guid.guidPrefix))
+            /* Check PID_VENDOR_ID */
+            if (participant_data.m_VendorId != fastrtps::rtps::c_VendorId_eProsima)
             {
+                logInfo(RTPS_PDP_LISTENER,
+                        "DATA(p|Up) from different vendor is not supported for Discover-Server operation");
                 return;
             }
 
-            std::string participant_type_str;
-            auto ret = check_server_discovery_conditions(participant_data, participant_type_str);
-            if (!ret.first)
-            {
-                return;
-            }
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "Participant type " << participant_type_str);
-            bool is_client = ret.second;
+            fastrtps::ParameterPropertyList_t properties = participant_data.m_properties;
 
-            const auto& pattr = pdp_server()->getRTPSParticipant()->get_attributes();
-            fastdds::rtps::network::external_locators::filter_remote_locators(participant_data,
-                    pattr.builtin.metatraffic_external_unicast_locators, pattr.default_external_unicast_locators,
-                    pattr.ignore_non_matching_locators);
+            /* Check DS_VERSION */
+            auto ds_version = std::find_if(
+                properties.begin(),
+                properties.end(),
+                [](const dds::ParameterProperty_t& property)
+                {
+                    return property.first() == dds::parameter_property_ds_version;
+                });
+
+            if (ds_version != properties.end())
+            {
+                if (std::stof(ds_version->second()) < 1.0)
+                {
+                    logError(RTPS_PDP_LISTENER, "Minimum " << dds::parameter_property_ds_version
+                                                           << " is 1.0, found: " << ds_version->second());
+                    return;
+                }
+                logInfo(RTPS_PDP_LISTENER, "Participant " << dds::parameter_property_ds_version << ": "
+                                                          << ds_version->second());
+            }
+            else
+            {
+                logInfo(RTPS_PDP_LISTENER, dds::parameter_property_ds_version << " is not set. Assuming 1.0");
+            }
+
+            /* Check PARTICIPANT_TYPE */
+            bool is_client = true;
+            auto participant_type = std::find_if(
+                properties.begin(),
+                properties.end(),
+                [](const dds::ParameterProperty_t& property)
+                {
+                    return property.first() == dds::parameter_property_participant_type;
+                });
+
+            if (participant_type != properties.end())
+            {
+                if (participant_type->second() == ParticipantType::SERVER ||
+                        participant_type->second() == ParticipantType::BACKUP ||
+                        participant_type->second() == ParticipantType::SUPER_CLIENT)
+                {
+                    is_client = false;
+                }
+                else if (participant_type->second() == ParticipantType::SIMPLE)
+                {
+                    logInfo(RTPS_PDP_LISTENER, "Ignoring " << dds::parameter_property_participant_type << ": "
+                                                           << participant_type->second());
+                    return;
+                }
+                else if (participant_type->second() != ParticipantType::CLIENT)
+                {
+                    logError(RTPS_PDP_LISTENER, "Wrong " << dds::parameter_property_participant_type << ": "
+                                                         << participant_type->second());
+                    return;
+                }
+                logInfo(RTPS_PDP_LISTENER, "Participant type " << participant_type->second());
+            }
+            else
+            {
+                logInfo(RTPS_PDP_LISTENER, dds::parameter_property_participant_type << " is not set");
+                // Fallback to checking whether participant is a SERVER looking for the persistence GUID
+                auto persistence_guid = std::find_if(
+                    properties.begin(),
+                    properties.end(),
+                    [](const dds::ParameterProperty_t& property)
+                    {
+                        return property.first() == dds::parameter_property_persistence_guid;
+                    });
+                // The presence of persistence GUID property suggests a SERVER. This assumption is made to keep
+                // backwards compatibility with Discovery Server v1.0. However, any participant that has been configured
+                // as persistent will have this property.
+                if (persistence_guid != properties.end())
+                {
+                    is_client = false;
+                }
+                logInfo(RTPS_PDP_LISTENER, "Participant is client: " << std::boolalpha << is_client);
+            }
 
             // Check whether the participant is a client/server of this server or if it has been forwarded from
             //  another entity (server).
@@ -172,11 +241,7 @@ void PDPServerListener::on_new_cache_change_added(
             // If the instance handle is different from the writer GUID, then the change has been relayed
             if (iHandle2GUID(change->instanceHandle).guidPrefix != change->writerGUID.guidPrefix)
             {
-                // Servers are always local because we are connected to them in a mesh topology
-                if (participant_type_str != ParticipantType::SERVER && participant_type_str != ParticipantType::BACKUP)
-                {
-                    is_local = false;
-                }
+                is_local = false;
             }
             else
             {
@@ -192,8 +257,7 @@ void PDPServerListener::on_new_cache_change_added(
                             ddb::DiscoveryParticipantChangeData(
                                 participant_data.metatraffic_locators,
                                 is_client,
-                                is_local,
-                                participant_type_str == ParticipantType::SUPER_CLIENT)))
+                                is_local)))
                 {
                     // Remove change from PDP reader history, but do not return it to the pool. From here on, the discovery
                     // database takes ownership of the CacheChange_t. Henceforth there are no references to the change.
@@ -211,7 +275,7 @@ void PDPServerListener::on_new_cache_change_added(
                 else
                 {
                     // If the database doesn't take the ownership, then return the CacheChante_t to the pool.
-                    pdp_reader->release_cache(change.release());
+                    pdp_reader->releaseCache(change.release());
                 }
 
             }
@@ -231,7 +295,7 @@ void PDPServerListener::on_new_cache_change_added(
             ParticipantProxyData* pdata = nullptr;
             for (ParticipantProxyData* it : pdp_server()->participant_proxies_)
             {
-                if (guid == it->guid)
+                if (guid == it->m_guid)
                 {
                     pdata = it;
                     break;
@@ -239,15 +303,15 @@ void PDPServerListener::on_new_cache_change_added(
             }
 
             // Store whether the participant is new or updated
-            auto status = (pdata == nullptr) ? ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT :
-                    ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT;
+            auto status = (pdata == nullptr) ? ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT :
+                    ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT;
 
             // New participant case
-            if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
+            if (status == ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
             {
                 // TODO: pending avoid builtin connections on client info relayed by other server
 
-                EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "Registering a new participant: " << guid);
+                logInfo(RTPS_PDP_LISTENER, "Registering a new participant: " << guid);
 
                 // Create a new participant proxy entry
                 pdata = pdp_server()->createParticipantProxyData(participant_data, writer_guid);
@@ -255,13 +319,13 @@ void PDPServerListener::on_new_cache_change_added(
                 lock.unlock();
 
                 // All local builtins are connected, the database will avoid any EDP DATA to be send before having PDP
-                // DATA acknowledgement. Non-local SERVERs will also be connected
-                if (pdata && (is_local || (!is_client && participant_type_str != ParticipantType::SUPER_CLIENT)))
+                // DATA acknowledgement
+                if (pdata && is_local)
                 {
                     pdp_server()->assignRemoteEndpoints(pdata);
                 }
             }
-            // Case ParticipantProxyData already exists but was known remotely and now must be local
+            // Case ParticipantProxyData already exists but was known remotly and now must be local
             else if (is_local && !was_local)
             {
                 // Realease PDP mutex
@@ -273,8 +337,8 @@ void PDPServerListener::on_new_cache_change_added(
             else
             {
                 // Update proxy
-                pdata->update_data(participant_data);
-                pdata->is_alive = true;
+                pdata->updateData(participant_data);
+                pdata->isAlive = true;
                 // Realease PDP mutex
                 lock.unlock();
 
@@ -293,18 +357,13 @@ void PDPServerListener::on_new_cache_change_added(
                 RTPSParticipantListener* listener = pdp_server()->getRTPSParticipant()->getListener();
                 if (listener != nullptr)
                 {
-                    bool should_be_ignored = false;
-                    {
-                        std::lock_guard<std::mutex> cb_lock(pdp_server()->callback_mtx_);
+                    std::lock_guard<std::mutex> cb_lock(pdp_server()->callback_mtx_);
+                    ParticipantDiscoveryInfo info(*pdata);
+                    info.status = status;
 
-                        listener->on_participant_discovery(
-                            pdp_server()->getRTPSParticipant()->getUserRTPSParticipant(),
-                            status, std::move(*pdata), should_be_ignored);
-                    }
-                    if (should_be_ignored)
-                    {
-                        parent_pdp_->getRTPSParticipant()->ignore_participant(guid.guidPrefix);
-                    }
+                    listener->onParticipantDiscovery(
+                        pdp_server()->getRTPSParticipant()->getUserRTPSParticipant(),
+                        std::move(info));
                 }
             }
 
@@ -337,7 +396,7 @@ void PDPServerListener::on_new_cache_change_added(
 
         // Remove participant from proxies
         reader->getMutex().unlock();
-        pdp_server()->remove_remote_participant(guid, ParticipantDiscoveryStatus::REMOVED_PARTICIPANT);
+        pdp_server()->remove_remote_participant(guid, ParticipantDiscoveryInfo::REMOVED_PARTICIPANT);
         reader->getMutex().lock();
     }
 
@@ -358,89 +417,11 @@ void PDPServerListener::on_new_cache_change_added(
     // unique pointer destruction grants it. If the ownership has been taken away from the unique pointer, then nothing
     // happens at this point
 
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER,
+    logInfo(RTPS_PDP_LISTENER,
             "-------------------- " << pdp_server()->mp_RTPSParticipant->getGuid() <<
             " --------------------");
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
-    EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "");
-}
-
-std::pair<bool, bool> PDPServerListener::check_server_discovery_conditions(
-        const ParticipantProxyData& participant_data,
-        std::string& participant_type_str)
-{
-    // is_valid, is_client
-    std::pair<bool, bool> ret{true, true};
-
-    /* Check PID_VENDOR_ID */
-    if (participant_data.vendor_id != fastdds::rtps::c_VendorId_eProsima)
-    {
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER,
-                "DATA(p|Up) from different vendor is not supported for Discover-Server operation");
-        ret.first = false;
-    }
-
-    // In Discovery Server we don't impose
-    // domain ids to be the same
-    /* Do not check PID_DOMAIN_ID */
-
-    fastdds::dds::ParameterPropertyList_t properties = participant_data.properties;
-
-    /* Check DS_VERSION */
-    if (ret.first)
-    {
-        auto ds_version = std::find_if(
-            properties.begin(),
-            properties.end(),
-            [](const dds::ParameterProperty_t& property)
-            {
-                return property.first() == dds::parameter_property_ds_version;
-            });
-
-        if (ds_version != properties.end())
-        {
-            if (std::stof(ds_version->second()) < 1.0)
-            {
-                EPROSIMA_LOG_ERROR(RTPS_PDP_LISTENER, "Minimum " << dds::parameter_property_ds_version
-                                                                 << " is 1.0, found: " << ds_version->second());
-                ret.first = false;
-            }
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "Participant " << dds::parameter_property_ds_version << ": "
-                                                                << ds_version->second());
-        }
-        else
-        {
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, dds::parameter_property_ds_version << " is not set. Assuming 1.0");
-        }
-    }
-
-    /* Check PARTICIPANT_TYPE */
-    if (ret.first)
-    {
-        participant_type_str = parent_pdp_->check_participant_type(properties);
-
-        if (participant_type_str == ParticipantType::SERVER ||
-                participant_type_str == ParticipantType::BACKUP ||
-                participant_type_str == ParticipantType::SUPER_CLIENT)
-        {
-            ret.second = false;
-        }
-        else if (participant_type_str == ParticipantType::SIMPLE)
-        {
-            EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "Ignoring " << dds::parameter_property_participant_type << ": "
-                                                             << participant_type_str);
-            ret.first = false;
-        }
-        else if (participant_type_str != ParticipantType::CLIENT)
-        {
-            EPROSIMA_LOG_ERROR(RTPS_PDP_LISTENER, "Wrong " << dds::parameter_property_participant_type << ": "
-                                                           << participant_type_str);
-            ret.first = false;
-        }
-        EPROSIMA_LOG_INFO(RTPS_PDP_LISTENER, "Participant type " << participant_type_str);
-    }
-
-    return ret;
+    logInfo(RTPS_PDP_LISTENER, "------------------ PDP SERVER LISTENER END ------------------");
+    logInfo(RTPS_PDP_LISTENER, "");
 }
 
 } /* namespace rtps */

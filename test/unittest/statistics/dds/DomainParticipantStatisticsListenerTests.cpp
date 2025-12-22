@@ -20,7 +20,7 @@
 #include <fastdds/dds/publisher/DataWriter.hpp>
 
 #include <statistics/fastdds/domain/DomainParticipantStatisticsListener.hpp>
-#include <statistics/types/types.hpp>
+#include <statistics/types/types.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -134,7 +134,7 @@ protected:
     }
 
     void write_all_data_except(
-            uint32_t kind)
+            EventKind kind)
     {
         for (const Data& data : data_)
         {
@@ -156,7 +156,7 @@ protected:
     std::array<testing::StrictMock<DataWriter>, 17> writers_;
     std::array<void*, 17> data_to_check_;
     std::array<Data, 17> data_;
-    std::array<uint32_t, 17> kinds_ =
+    std::array<EventKind, 17> kinds_ =
     {
         EventKind::HISTORY2HISTORY_LATENCY,
         EventKind::NETWORK_LATENCY,

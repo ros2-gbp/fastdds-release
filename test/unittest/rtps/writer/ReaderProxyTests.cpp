@@ -15,13 +15,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
+#include <fastrtps/rtps/writer/ReaderProxy.h>
+#include <fastrtps/rtps/writer/StatefulWriter.h>
 #include <rtps/messages/RTPSGapBuilder.hpp>
-#include <rtps/writer/ReaderProxy.hpp>
-#include <rtps/writer/StatefulWriter.hpp>
 
+//using namespace eprosima::fastrtps::rtps;
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 TEST(ReaderProxyTests, find_change_test)
@@ -113,7 +113,6 @@ TEST(ReaderProxyTests, find_change_removed_test)
 }
 
 // Regression test for #13556 (Github #2423)
-#ifndef __QNXNTO__
 TEST(ReaderProxyTests, requested_changes_set_test)
 {
     StatefulWriter writerMock;
@@ -128,7 +127,7 @@ TEST(ReaderProxyTests, requested_changes_set_test)
     RTPSGapBuilder gap_builder(message_group);
 
     ReaderProxyData reader_attributes(0, 0);
-    reader_attributes.reliability.kind = fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    reader_attributes.m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
     rproxy.start(reader_attributes);
 
 
@@ -148,7 +147,6 @@ TEST(ReaderProxyTests, requested_changes_set_test)
 
     rproxy.requested_changes_set(set, gap_builder, {0, 1});
 }
-#endif // __QNXNTO__
 
 FragmentNumber_t mark_next_fragment_sent(
         ReaderProxy& rproxy,
@@ -188,7 +186,7 @@ TEST(ReaderProxyTests, process_nack_frag_single_fragment_different_windows_test)
     RTPSGapBuilder gap_builder(message_group);
 
     ReaderProxyData reader_attributes(0, 0);
-    reader_attributes.reliability.kind = fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    reader_attributes.m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
     rproxy.start(reader_attributes);
 
     ChangeForReader_t change(&seq);
@@ -257,7 +255,7 @@ TEST(ReaderProxyTests, process_nack_frag_multiple_fragments_different_windows_te
     RTPSGapBuilder gap_builder(message_group);
 
     ReaderProxyData reader_attributes(0, 0);
-    reader_attributes.reliability.kind = fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    reader_attributes.m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
     rproxy.start(reader_attributes);
 
     ChangeForReader_t change(&seq);
@@ -333,55 +331,6 @@ TEST(ReaderProxyTests, process_nack_frag_multiple_fragments_different_windows_te
             TOTAL_NUMBER_OF_FRAGMENTS + 1u), TOTAL_NUMBER_OF_FRAGMENTS + 1u);
 }
 
-TEST(ReaderProxyTests, has_been_delivered_test)
-{
-    StatefulWriter writer_mock;
-    WriterTimes w_times;
-    RemoteLocatorsAllocationAttributes alloc;
-    ReaderProxy rproxy(w_times, alloc, &writer_mock);
-
-    CacheChange_t seq1;
-    CacheChange_t seq2;
-    seq1.sequenceNumber = {0, 1};
-    seq2.sequenceNumber = {0, 2};
-
-    ReaderProxyData reader_attributes(0, 0);
-    reader_attributes.reliability.kind = fastdds::dds::RELIABLE_RELIABILITY_QOS;
-    rproxy.start(reader_attributes);
-
-    auto expect_result = [&rproxy](SequenceNumber_t seq, bool delivered, bool should_be_found)
-            {
-                bool found = false;
-                EXPECT_EQ(delivered, rproxy.has_been_delivered(seq, found));
-                EXPECT_EQ(should_be_found, found);
-            };
-
-    // Add changes 1 and 2
-    rproxy.add_change(ChangeForReader_t(&seq1), true, false);
-    rproxy.add_change(ChangeForReader_t(&seq2), true, false);
-
-    // None of them has been delivered
-    expect_result(seq1.sequenceNumber, false, true);
-    expect_result(seq2.sequenceNumber, false, true);
-
-    // Change 1 is sent
-    rproxy.from_unsent_to_status(seq1.sequenceNumber, UNACKNOWLEDGED, false, true);
-
-    // Only change 1 has been delivered. Both are found
-    expect_result(seq1.sequenceNumber, true, true);
-    expect_result(seq2.sequenceNumber, false, true);
-
-    // Change 1 is acknowledged
-    rproxy.acked_changes_set(seq1.sequenceNumber + 1);
-
-    // Only change 1 has been delivered. Only change 2 is found
-    expect_result(seq1.sequenceNumber, true, false);
-    expect_result(seq2.sequenceNumber, false, true);
-
-    // Change in the future should return not delivered and not found
-    expect_result({0, 3}, false, false);
-}
-
 // Test expectations regarding acknack count.
 // Serves as a regression test for redmine issue #20729.
 TEST(ReaderProxyTests, acknack_count)
@@ -392,7 +341,7 @@ TEST(ReaderProxyTests, acknack_count)
     ReaderProxy rproxy(w_times, alloc, &writer_mock);
 
     ReaderProxyData reader_attributes(0, 0);
-    reader_attributes.reliability.kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
+    reader_attributes.m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
     rproxy.start(reader_attributes);
 
     // Check that the initial acknack count is 0.
@@ -415,7 +364,7 @@ TEST(ReaderProxyTests, acknack_count)
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 int main(

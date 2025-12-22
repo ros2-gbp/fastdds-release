@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"  ?>
-<dds xmlns="http://www.eprosima.com">
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
     <profiles>
         <transport_descriptors>
             <transport_descriptor>
@@ -71,51 +71,11 @@
             </rtps>
         </participant>
 
-        <participant profile_name="participant_largedata_max_msg_size">
-            <domainId>0</domainId>
-            <rtps>
-                <name>Participant.builtin_transports_largedata_max_msg_size</name>
-                <builtinTransports max_msg_size="70000" sockets_size="70000">LARGE_DATA</builtinTransports>
-            </rtps>
-        </participant>
-
-        <participant profile_name="participant_largedata_non_blocking_send">
-            <domainId>0</domainId>
-            <rtps>
-                <name>Participant.builtin_transports_largedata_non_blocking_send</name>
-                <builtinTransports non_blocking="true">LARGE_DATA</builtinTransports>
-            </rtps>
-        </participant>
-
-        <participant profile_name="participant_largedata_tcp_negotiation_timeout">
-            <domainId>0</domainId>
-            <rtps>
-                <name>Participant.builtin_transports_largedata_tcp_negotiation_timeout</name>
-                <builtinTransports tcp_negotiation_timeout="50">LARGE_DATA</builtinTransports>
-            </rtps>
-        </participant>
-
-        <participant profile_name="participant_largedata_all_options">
-            <domainId>0</domainId>
-            <rtps>
-                <name>Participant.builtin_transports_largedata_all_options</name>
-                <builtinTransports max_msg_size="70000" sockets_size="70000" non_blocking="true" tcp_negotiation_timeout="50">LARGE_DATA</builtinTransports>
-            </rtps>
-        </participant>
-
         <participant profile_name="participant_largedatav6">
             <domainId>0</domainId>
             <rtps>
                 <name>Participant.builtin_transports_largedatav6</name>
                 <builtinTransports>LARGE_DATAv6</builtinTransports>
-            </rtps>
-        </participant>
-
-        <participant profile_name="participant_p2p">
-            <domainId>0</domainId>
-            <rtps>
-                <name>Participant.builtin_transports_p2p</name>
-                <builtinTransports>P2P</builtinTransports>
             </rtps>
         </participant>
 

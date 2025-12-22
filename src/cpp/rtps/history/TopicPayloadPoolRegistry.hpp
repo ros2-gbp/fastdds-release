@@ -27,7 +27,7 @@
 #include <string>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 namespace detail {
@@ -49,7 +49,7 @@ public:
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_HISTORY_TOPICPAYLOADPOOLREGISTRY_HPP

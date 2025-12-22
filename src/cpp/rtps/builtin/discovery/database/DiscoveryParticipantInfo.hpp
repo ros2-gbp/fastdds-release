@@ -22,13 +22,13 @@
 
 #include <vector>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
 #include <fastdds/rtps/common/GuidPrefix_t.hpp>
 
 #include <rtps/builtin/discovery/database/DiscoverySharedInfo.hpp>
 #include <rtps/builtin/discovery/database/DiscoveryParticipantChangeData.hpp>
 
-#include <nlohmann/json.hpp>
+#include <json.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -45,8 +45,8 @@ class DiscoveryParticipantInfo : public DiscoverySharedInfo
 public:
 
     DiscoveryParticipantInfo(
-            CacheChange_t* change,
-            const GuidPrefix_t& known_participant,
+            eprosima::fastrtps::rtps::CacheChange_t* change,
+            const eprosima::fastrtps::rtps::GuidPrefix_t& known_participant,
             DiscoveryParticipantChangeData participant_change_data)
         : DiscoverySharedInfo(change, known_participant)
         , participant_change_data_(participant_change_data)
@@ -57,47 +57,42 @@ public:
     {
     }
 
-    CacheChange_t* update(
-            CacheChange_t* change,
+    eprosima::fastrtps::rtps::CacheChange_t* update(
+            eprosima::fastrtps::rtps::CacheChange_t* change,
             DiscoveryParticipantChangeData participant_change_data);
 
-    CacheChange_t* update(
-            CacheChange_t* change)
+    eprosima::fastrtps::rtps::CacheChange_t* update(
+            eprosima::fastrtps::rtps::CacheChange_t* change)
     {
         return DiscoverySharedInfo::update(change);
     }
 
-    CacheChange_t* update_and_unmatch(
-            CacheChange_t* change,
+    eprosima::fastrtps::rtps::CacheChange_t* update_and_unmatch(
+            eprosima::fastrtps::rtps::CacheChange_t* change,
             DiscoveryParticipantChangeData participant_change_data);
 
-    CacheChange_t* update_and_unmatch(
-            CacheChange_t* change)
+    eprosima::fastrtps::rtps::CacheChange_t* update_and_unmatch(
+            eprosima::fastrtps::rtps::CacheChange_t* change)
     {
         return DiscoverySharedInfo::update_and_unmatch(change);
     }
 
     // populate functions
     void add_reader(
-            const GUID_t& guid);
+            const eprosima::fastrtps::rtps::GUID_t& guid);
 
     void remove_reader(
-            const GUID_t& guid);
+            const eprosima::fastrtps::rtps::GUID_t& guid);
 
     void add_writer(
-            const GUID_t& guid);
+            const eprosima::fastrtps::rtps::GUID_t& guid);
 
     void remove_writer(
-            const GUID_t& guid);
+            const eprosima::fastrtps::rtps::GUID_t& guid);
 
     bool is_client() const
     {
         return participant_change_data_.is_client();
-    }
-
-    bool is_superclient() const
-    {
-        return participant_change_data_.is_superclient();
     }
 
     bool is_local() const
@@ -116,17 +111,17 @@ public:
         return (!is_local());
     }
 
-    fastdds::rtps::RemoteLocatorList metatraffic_locators()
+    fastrtps::rtps::RemoteLocatorList metatraffic_locators()
     {
         return participant_change_data_.metatraffic_locators();
     }
 
-    std::vector<GUID_t> readers()
+    std::vector<eprosima::fastrtps::rtps::GUID_t> readers()
     {
         return readers_;
     }
 
-    std::vector<GUID_t> writers()
+    std::vector<eprosima::fastrtps::rtps::GUID_t> writers()
     {
         return writers_;
     }
@@ -136,9 +131,9 @@ public:
 
 private:
 
-    std::vector<GUID_t> readers_;
+    std::vector<eprosima::fastrtps::rtps::GUID_t> readers_;
 
-    std::vector<GUID_t> writers_;
+    std::vector<eprosima::fastrtps::rtps::GUID_t> writers_;
 
     DiscoveryParticipantChangeData participant_change_data_;
 

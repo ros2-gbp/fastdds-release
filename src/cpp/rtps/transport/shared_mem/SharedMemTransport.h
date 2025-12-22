@@ -15,14 +15,13 @@
 #ifndef _FASTDDS_SHAREDMEM_TRANSPORT_H_
 #define _FASTDDS_SHAREDMEM_TRANSPORT_H_
 
-#include <fastdds/rtps/transport/TransportInterface.hpp>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TransportInterface.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
 #include <rtps/transport/shared_mem/SharedMemLog.hpp>
 
 #include <map>
-#include <asio.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -46,14 +45,13 @@ class SharedMemTransport : public TransportInterface
 {
 public:
 
-    FASTDDS_EXPORTED_API SharedMemTransport(
+    RTPS_DllAPI SharedMemTransport(
             const SharedMemTransportDescriptor&);
 
     const SharedMemTransportDescriptor* configuration() const;
 
     bool init(
-            const PropertyPolicy* properties = nullptr,
-            const uint32_t& max_msg_size_no_frag = 0) override;
+            const fastrtps::rtps::PropertyPolicy* properties = nullptr) override;
 
     ~SharedMemTransport() override;
 
@@ -89,18 +87,6 @@ public:
             const Locator&) override;
 
     /**
-     * Opens a socket on the locators provided by the given locator_selector_entry.
-     *
-     * @param sender_resource_list Participant's send resource list.
-     * @param locator_selector_entry Locator selector entry with the remote entity locators.
-     *
-     * @return true if the socket was correctly opened or if finding an already opened one.
-     */
-    bool OpenOutputChannels(
-            SendResourceList& sender_resource_list,
-            const LocatorSelectorEntry& locator_selector_entry) override;
-
-    /**
      * Converts a given remote locator (that is, a locator referring to a remote
      * destination) to the main local locator whose channel can write to that
      * destination. In this case it will return a 0.0.0.0 address on that port.
@@ -112,28 +98,22 @@ public:
      * Transforms a remote locator into a locator optimized for local communications.
      *
      * If the remote locator corresponds to one of the local interfaces, it is converted
-     * to the corresponding local address if allowed by both local and remote transports.
+     * to the corresponding local address.
      *
      * @param [in]  remote_locator Locator to be converted.
      * @param [out] result_locator Converted locator.
-     * @param [in]  allowed_remote_localhost Whether localhost is allowed (and hence used) in the remote transport.
-     * @param [in]  allowed_local_localhost Whether localhost is allowed locally (by this or other transport).
      *
      * @return false if the input locator is not supported/allowed by this transport, true otherwise.
      */
     bool transform_remote_locator(
             const Locator& remote_locator,
-            Locator& result_locator,
-            bool allowed_remote_localhost,
-            bool allowed_local_localhost) const override;
+            Locator& result_locator) const override;
 
     LocatorList NormalizeLocator(
             const Locator& locator) override;
 
     bool is_local_locator(
             const Locator& locator) const override;
-
-    bool is_localhost_allowed() const override;
 
     TransportDescriptorInterface* get_configuration() override
     {
@@ -158,22 +138,20 @@ public:
     /**
      * Blocking Send through the specified channel. In both modes, using a localLocator of 0.0.0.0 will
      * send through all whitelisted interfaces provided the channel is open.
-     * @param buffers Vector of buffers to send.
-     * @param send_buffer_size Total amount of bytes to send. It will be used as a bounds check for the previous
-     * argument. It must not exceed the send_buffer_size fed to this class during construction.
+     * @param send_buffer Slice into the raw data to send.
+     * @param send_buffer_size Size of the raw data. It will be used as a bounds check for the previous argument.
+     * It must not exceed the send_buffer_size fed to this class during construction.
      * @param socket channel we're sending from.
      * @param remote_locator Locator describing the remote destination we're sending to.
      * @param only_multicast_purpose
      * @param timeout Maximum time this function will block
-     * @param transport_priority Transport priority to use for this send.
      */
     virtual bool send(
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
-            LocatorsIterator* destination_locators_begin,
-            LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point,
-            const int32_t transport_priority);
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
+            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
+            fastrtps::rtps::LocatorsIterator* destination_locators_end,
+            const std::chrono::steady_clock::time_point& max_blocking_time_point);
 
     /**
      * Performs the locator selection algorithm for this transport.
@@ -189,7 +167,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            LocatorSelector& selector) const override;
+            fastrtps::rtps::LocatorSelector& selector) const override;
 
     bool fillMetatrafficMulticastLocator(
             Locator& locator,
@@ -201,7 +179,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator& locator,
-            const PortParameters& port_params,
+            const fastrtps::rtps::PortParameters& port_params,
             uint32_t domainId,
             LocatorList& list) const override;
 
@@ -216,8 +194,6 @@ public:
 
 private:
 
-    using TransportInterface::transform_remote_locator;
-
     //! Constructor with no descriptor is necessary for implementations derived from this class.
     SharedMemTransport();
 
@@ -227,10 +203,6 @@ private:
     bool is_locator_allowed(
             const Locator&) const override;
 
-    //! Checks for whether locator is reachable.
-    bool is_locator_reachable(
-            const Locator_t&) override;
-
 protected:
 
     std::shared_ptr<SharedMemManager> shared_mem_manager_;
@@ -238,8 +210,6 @@ protected:
 private:
 
     void clean_up();
-
-    mutable std::mutex opened_ports_mutex_;
 
     std::map<uint32_t, std::shared_ptr<SharedMemManager::Port>> opened_ports_;
 
@@ -268,15 +238,9 @@ protected:
 
 private:
 
-    /**
-     * Copies a Vector of buffers into the shared_buffer.
-     * @param buffers Vector of buffers to copy.
-     * @param total_bytes Total amount of bytes of the whole list of buffers.
-     * @param max_blocking_time_point Maximum time this function will block.
-     */
     std::shared_ptr<SharedMemManager::Buffer> copy_to_shared_buffer(
-            const std::vector<NetworkBuffer>& buffers,
-            const uint32_t total_bytes,
+            const fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
             const std::chrono::steady_clock::time_point& max_blocking_time_point);
 
     bool send(

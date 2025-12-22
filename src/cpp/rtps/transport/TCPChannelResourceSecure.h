@@ -15,9 +15,6 @@
 #ifndef _FASTDDS_TCP_CHANNEL_RESOURCE_SECURE_
 #define _FASTDDS_TCP_CHANNEL_RESOURCE_SECURE_
 
-#ifdef OPENSSL_API_COMPAT
-#undef OPENSSL_API_COMPAT
-#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <asio.hpp>
@@ -36,7 +33,7 @@ public:
     // Constructor called when trying to connect to a remote server (secure version)
     TCPChannelResourceSecure(
             TCPTransportInterface* parent,
-            asio::io_context& context,
+            asio::io_service& service,
             asio::ssl::context& ssl_context,
             const Locator& locator,
             uint32_t maxMsgSize);
@@ -44,7 +41,7 @@ public:
     // Constructor called when local server accepted connection (secure version)
     TCPChannelResourceSecure(
             TCPTransportInterface* parent,
-            asio::io_context& context,
+            asio::io_service& service,
             asio::ssl::context& ssl_context,
             std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket,
             uint32_t maxMsgSize);
@@ -57,15 +54,15 @@ public:
     void disconnect() override;
 
     uint32_t read(
-            octet* buffer,
+            fastrtps::rtps::octet* buffer,
             std::size_t size,
             asio::error_code& ec) override;
 
     size_t send(
-            const octet* header,
+            const fastrtps::rtps::octet* header,
             size_t header_size,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* data,
+            size_t size,
             asio::error_code& ec) override;
 
     // Throwing asio calls
@@ -82,9 +79,6 @@ public:
             const TCPTransportDescriptor* options) override;
 
     void set_tls_verify_mode(
-            const TCPTransportDescriptor* options);
-
-    void set_tls_sni(
             const TCPTransportDescriptor* options);
 
     void cancel() override;
@@ -104,10 +98,10 @@ private:
     TCPChannelResourceSecure& operator =(
             const TCPChannelResource&) = delete;
 
-    asio::io_context& context_;
+    asio::io_service& service_;
     asio::ssl::context& ssl_context_;
-    asio::strand<asio::io_context::executor_type> strand_read_;
-    asio::strand<asio::io_context::executor_type> strand_write_;
+    asio::io_service::strand strand_read_;
+    asio::io_service::strand strand_write_;
     std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> secure_socket_;
 };
 

@@ -19,22 +19,30 @@
 #include <thread>
 #include <vector>
 
-#include <fastdds/dds/common/InstanceHandle.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/subscriber/DataReader.hpp>
-#include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
-#include <fastdds/dds/subscriber/Subscriber.hpp>
-#include <fastdds/LibrarySettings.hpp>
-#include <fastdds/rtps/common/CDRMessage_t.hpp>
-#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 #include <gtest/gtest.h>
 
-#include "../types/HelloWorldTypeObjectSupport.hpp"
-#include "../types/TestRegression3361PubSubTypes.hpp"
-#include "../types/TestRegression3361TypeObjectSupport.hpp"
-#include "../utils/filter_helpers.hpp"
+#include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
+#include <fastdds/dds/subscriber/qos/SubscriberQos.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/subscriber/Subscriber.hpp>
+#include <fastdds/dds/topic/qos/TopicQos.hpp>
+#include <fastdds/dds/topic/Topic.hpp>
+#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.h>
+#include <fastrtps/attributes/LibrarySettingsAttributes.h>
+#include <fastrtps/types/DynamicData.h>
+#include <fastrtps/types/DynamicPubSubType.h>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
+
+#include "../types/dynamic_types_traits.hpp"
+#include "../types/HelloWorldTypeObject.h"
+#include "../types/TestRegression3361PubSubTypes.h"
+#include "../types/TestRegression3361TypeObject.h"
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
@@ -42,6 +50,8 @@
 namespace eprosima {
 namespace fastdds {
 namespace dds {
+
+using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
 
 struct ContentFilterInfoCounter
 {
@@ -57,7 +67,7 @@ struct ContentFilterInfoCounter
         , transport(std::make_shared<rtps::test_UDPv4TransportDescriptor>())
     {
         transport->interfaceWhiteList.push_back("127.0.0.1");
-        transport->drop_data_messages_filter_ = [this](fastdds::rtps::CDRMessage_t& msg) -> bool
+        transport->drop_data_messages_filter_ = [this](fastrtps::rtps::CDRMessage_t& msg) -> bool
                 {
                     // Check if it has inline_qos
                     uint8_t flags = msg.buffer[msg.pos - 3];
@@ -65,16 +75,14 @@ struct ContentFilterInfoCounter
 
                     // Skip extraFlags, read octetsToInlineQos, and calculate inline qos position.
                     msg.pos += 2;
-                    uint16_t to_inline_qos = eprosima::fastdds::helpers::cdr_parse_u16(
-                        (char*)&msg.buffer[msg.pos]);
-                    msg.pos += 2;
+                    uint16_t to_inline_qos = 0;
+                    fastrtps::rtps::CDRMessage::readUInt16(&msg, &to_inline_qos);
                     uint32_t inline_qos_pos = msg.pos + to_inline_qos;
 
                     // Read writerId, and skip if built-in.
                     msg.pos += 4;
-                    fastdds::rtps::GUID_t writer_guid;
-                    writer_guid.entityId = eprosima::fastdds::helpers::cdr_parse_entity_id(
-                        (char*)&msg.buffer[msg.pos]);
+                    fastrtps::rtps::GUID_t writer_guid;
+                    fastrtps::rtps::CDRMessage::readEntityId(&msg, &writer_guid.entityId);
                     msg.pos = old_pos;
 
                     if (writer_guid.is_builtin())
@@ -89,12 +97,11 @@ struct ContentFilterInfoCounter
                         msg.pos = inline_qos_pos;
                         while (msg.pos < msg.length)
                         {
-                            uint16_t pid = eprosima::fastdds::helpers::cdr_parse_u16(
-                                (char*)&msg.buffer[msg.pos]);
-                            msg.pos += 2;
-                            uint16_t plen = eprosima::fastdds::helpers::cdr_parse_u16(
-                                (char*)&msg.buffer[msg.pos]);
-                            msg.pos += 2;
+                            uint16_t pid = 0;
+                            uint16_t plen = 0;
+
+                            fastrtps::rtps::CDRMessage::readUInt16(&msg, &pid);
+                            fastrtps::rtps::CDRMessage::readUInt16(&msg, &plen);
                             uint32_t next_pos = msg.pos + plen;
 
                             if (pid == PID_CONTENT_FILTER_INFO)
@@ -105,15 +112,13 @@ struct ContentFilterInfoCounter
                                 if (plen >= 4 + 4 + 4 + 16)
                                 {
                                     // Read numBitmaps and skip bitmaps
-                                    uint32_t num_bitmaps = eprosima::fastdds::helpers::cdr_parse_u32(
-                                        (char*)&msg.buffer[msg.pos]);
-                                    msg.pos += 4;
+                                    uint32_t num_bitmaps = 0;
+                                    fastrtps::rtps::CDRMessage::readUInt32(&msg, &num_bitmaps);
                                     msg.pos += 4 * num_bitmaps;
 
                                     // Read numSignatures and keep maximum
-                                    uint32_t num_signatures = eprosima::fastdds::helpers::cdr_parse_u32(
-                                        (char*)&msg.buffer[msg.pos]);
-                                    msg.pos += 4;
+                                    uint32_t num_signatures = 0;
+                                    fastrtps::rtps::CDRMessage::readUInt32(&msg, &num_signatures);
                                     if (max_filter_signature_number < num_signatures)
                                     {
                                         max_filter_signature_number = num_signatures;
@@ -151,16 +156,16 @@ public:
 
     void SetUp() override
     {
-        using namespace eprosima::fastdds;
+        using namespace eprosima::fastrtps;
 
         enable_datasharing = false;
 
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case communication_type::INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case communication_type::DATASHARING:
                 enable_datasharing = true;
@@ -171,18 +176,19 @@ public:
         }
 
         using_transport_communication_ = (communication_type::TRANSPORT == GetParam());
+        registerHelloWorldTypes();
     }
 
     void TearDown() override
     {
-        using namespace eprosima::fastdds;
+        using namespace eprosima::fastrtps;
 
-        eprosima::fastdds::LibrarySettings library_settings;
+        LibrarySettingsAttributes library_settings;
         switch (GetParam())
         {
             case communication_type::INTRAPROCESS:
-                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                xmlparser::XMLProfileManager::library_settings(library_settings);
                 break;
             case communication_type::DATASHARING:
                 break;
@@ -211,13 +217,13 @@ protected:
         {
             if (participant_ && subscriber_)
             {
-                EXPECT_EQ(RETCODE_OK, subscriber_->delete_contained_entities());
-                EXPECT_EQ(RETCODE_OK, participant_->delete_subscriber(subscriber_));
+                EXPECT_EQ(ReturnCode_t::RETCODE_OK, subscriber_->delete_contained_entities());
+                EXPECT_EQ(ReturnCode_t::RETCODE_OK, participant_->delete_subscriber(subscriber_));
             }
 
             if (participant_ && filtered_topic_)
             {
-                EXPECT_EQ(RETCODE_OK, participant_->delete_contentfilteredtopic(filtered_topic_));
+                EXPECT_EQ(ReturnCode_t::RETCODE_OK, participant_->delete_contentfilteredtopic(filtered_topic_));
             }
         }
 
@@ -227,7 +233,7 @@ protected:
         void init(
                 bool writer_side_filtering,
                 const std::shared_ptr<rtps::TransportDescriptorInterface>& transport,
-                fastdds::ResourceLimitedContainerConfig filter_limits)
+                fastrtps::ResourceLimitedContainerConfig filter_limits)
         {
             writer_side_filter_ = writer_side_filtering && filter_limits.maximum > 0;
 
@@ -237,7 +243,7 @@ protected:
             ASSERT_TRUE(writer.isInitialized());
 
             // Ensure the direct reader always receives DATA messages using the test transport
-            fastdds::rtps::GuidPrefix_t custom_prefix;
+            fastrtps::rtps::GuidPrefix_t custom_prefix;
             memset(custom_prefix.value, 0xee, custom_prefix.size);
             direct_reader.datasharing_off().guid_prefix(custom_prefix);
             direct_reader.disable_builtin_transport().add_user_transport_to_pparams(transport);
@@ -282,8 +288,7 @@ protected:
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     reader->get_subscription_matched_status(status);
-                }
-                while (status.current_count < 1);
+                } while (status.current_count < 1);
             }
 
             return reader;
@@ -292,14 +297,14 @@ protected:
         void delete_reader(
                 DataReader* reader)
         {
-            EXPECT_EQ(RETCODE_OK, subscriber_->delete_datareader(reader));
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK, subscriber_->delete_datareader(reader));
         }
 
         void set_filter_expression(
                 const std::string& filter_expression,
                 const std::vector<std::string>& expression_parameters)
         {
-            EXPECT_EQ(RETCODE_OK,
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK,
                     filtered_topic_->set_filter_expression(filter_expression, expression_parameters));
             // Avoid discovery race condition
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
@@ -308,7 +313,7 @@ protected:
         void set_expression_parameters(
                 const std::vector<std::string>& expression_parameters)
         {
-            EXPECT_EQ(RETCODE_OK, filtered_topic_->set_expression_parameters(expression_parameters));
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK, filtered_topic_->set_expression_parameters(expression_parameters));
             // Avoid discovery race condition
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
@@ -358,7 +363,7 @@ protected:
             SampleInfoSeq recv_info;
 
             ReturnCode_t expected_ret;
-            expected_ret = expected_samples == 0 ? RETCODE_NO_DATA : RETCODE_OK;
+            expected_ret = expected_samples == 0 ? ReturnCode_t::RETCODE_NO_DATA : ReturnCode_t::RETCODE_OK;
             EXPECT_EQ(expected_ret, reader->take(recv_data, recv_info));
             EXPECT_EQ(recv_data.length(), expected_samples);
             for (HelloWorldSeq::size_type i = 0;
@@ -369,7 +374,7 @@ protected:
             }
             if (expected_samples > 0)
             {
-                EXPECT_EQ(RETCODE_OK, reader->return_loan(recv_data, recv_info));
+                EXPECT_EQ(ReturnCode_t::RETCODE_OK, reader->return_loan(recv_data, recv_info));
             }
 
             // Ensure writer ends in clean state
@@ -384,7 +389,7 @@ protected:
             }
             else
             {
-                EXPECT_EQ(filter_counter.content_filter_info_count, 0u);
+                EXPECT_EQ(filter_counter.content_filter_info_count, 0);
                 EXPECT_EQ(filter_counter.max_filter_signature_number, 0u);
             }
         }
@@ -415,7 +420,7 @@ protected:
             HelloWorldSeq recv_data;
             SampleInfoSeq recv_info;
 
-            while (RETCODE_OK == reader.take(recv_data, recv_info))
+            while (ReturnCode_t::RETCODE_OK == reader.take(recv_data, recv_info))
             {
                 reader.return_loan(recv_data, recv_info);
             }
@@ -429,7 +434,7 @@ protected:
 
     DataReader* prepare_test(
             TestState& state,
-            fastdds::ResourceLimitedContainerConfig filter_limits,
+            fastrtps::ResourceLimitedContainerConfig filter_limits,
             uint32_t nb_of_additional_filter_readers)
     {
         state.init(using_transport_communication_, filter_counter.transport, filter_limits);
@@ -523,7 +528,7 @@ TEST_P(DDSContentFilter, WithLimitsSeveralReaders)
 
     TestState state;
 
-    auto reader = prepare_test(state, fastdds::ResourceLimitedContainerConfig::fixed_size_configuration(2u), 3u);
+    auto reader = prepare_test(state, fastrtps::ResourceLimitedContainerConfig::fixed_size_configuration(2u), 3u);
     ASSERT_NE(nullptr, reader);
 
     test_run(reader, state, 2u);
@@ -540,7 +545,7 @@ TEST_P(DDSContentFilter, WithLimitsDynamicReaders)
     TestState state;
 
     // Only one filtered reader created
-    auto reader = prepare_test(state, fastdds::ResourceLimitedContainerConfig::fixed_size_configuration(2u), 0u);
+    auto reader = prepare_test(state, fastrtps::ResourceLimitedContainerConfig::fixed_size_configuration(2u), 0u);
     ASSERT_NE(nullptr, reader);
 
     // We want a single filter to be applied, and check only for reader discovery changes
@@ -590,6 +595,8 @@ TEST_P(DDSContentFilter, WithLimitsDynamicReaders)
 //! Correctly resolve an alias defined in another header
 TEST(DDSContentFilter, CorrectlyHandleAliasOtherHeader)
 {
+    registerTestRegression3361Types();
+
     auto dpf = DomainParticipantFactory::get_instance();
 
     auto participant = dpf->create_participant(0, PARTICIPANT_QOS_DEFAULT);
@@ -598,18 +605,12 @@ TEST(DDSContentFilter, CorrectlyHandleAliasOtherHeader)
 
     auto ret = type.register_type(participant);
 
-    if (ret != RETCODE_OK)
+    if (ret != ReturnCode_t::RETCODE_OK)
     {
         throw std::runtime_error("Failed to register type");
     }
 
-    auto sub = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT, nullptr);
-    if (sub == nullptr)
-    {
-        throw std::runtime_error("Failed to create subscriber");
-    }
-
-    auto topic = participant->create_topic("TestTopic", type->get_name(), TOPIC_QOS_DEFAULT);
+    auto topic = participant->create_topic("TestTopic", type->getName(), TOPIC_QOS_DEFAULT);
     if (topic == nullptr)
     {
         throw std::runtime_error("Failed to create topic");
@@ -622,62 +623,96 @@ TEST(DDSContentFilter, CorrectlyHandleAliasOtherHeader)
         "FilteredTestTopic", topic, expression, parameters);
 
     EXPECT_NE(nullptr, filtered_topic);
+
+    participant->delete_contentfilteredtopic(filtered_topic);
+    participant->delete_topic(topic);
+    dpf->delete_participant(participant);
 }
+
+/**
+ * @brief PubSubReader specialization for using a DynamicPubSubType with content filtering,
+ * overriding postprocess_sample to count valid and invalid samples.
+ *
+ * @tparam TypeTraits TypeTraits to be used.
+ */
+template<typename TypeTraits>
+class CFTDynamicPubSubReader : public PubSubReader<fastrtps::types::DynamicPubSubType, TypeTraits>
+{
+public:
+
+    /**
+     * @brief Construct a new CFTDynamicPubSubReader object
+     *
+     * @param topic_name Name of the topic to be used
+     * @param filter_expression Content filter expression
+     * @param expression_parameters Content filter expression parameters
+     */
+    CFTDynamicPubSubReader(
+            const std::string& topic_name,
+            const std::string& filter_expression,
+            const std::vector<std::string>& expression_parameters)
+        : PubSubReader<fastrtps::types::DynamicPubSubType, TypeTraits>(
+            topic_name,
+            filter_expression,
+            expression_parameters)
+    {
+    }
+
+    /**
+     * @brief Count of valid samples received
+     */
+    std::atomic<uint16_t> valid_samples{0};
+
+    /**
+     * @brief Count of invalid samples received
+     */
+    std::atomic<uint16_t> invalid_samples{0};
+
+private:
+
+    /**
+     * @brief Postprocess the received samples, counting valid and invalid ones
+     *
+     * @param sample Sample to be postprocessed
+     * @param info SampleInfo of the sample
+     */
+    void postprocess_sample(
+            const fastrtps::types::DynamicPubSubType::type& /* sample */,
+            const SampleInfo& info) override final
+    {
+        if (info.valid_data)
+        {
+            ++valid_samples;
+        }
+        else
+        {
+            ++invalid_samples;
+        }
+    }
+
+};
 
 /*
  * Regression test for https://eprosima.easyredmine.com/issues/20815
  * Check that the content filter is only applied to alive changes.
  * The test creates a reliable writer and a reader with a content filter that only accepts messages with a specific
- * string. After discovery, the writer sends 10 samples which pass the filer in 10 different instances, with the
+ * string. After discovery, the writer sends 10 samples which pass the filter in 10 different instances, with the
  * particularity that after each write, the instance is unregistered.
  * The DATA(u) generated would not pass the filter if it was applied. To check that the filter is only applied to
  * ALIVE changes (not unregister or disposed), the test checks that the reader receives 10 valid samples (one per
- * sample sent) and 10 invalid samples (one per unregister). Furthermore, it also checks that no samples are lost.writer
+ * sample sent) and 10 invalid samples (one per unregister). Furthermore, it also checks that no samples are lost.
  */
 TEST(DDSContentFilter, OnlyFilterAliveChanges)
 {
-    /* PuBSubReader class to check reception of UNREGISTER samples */
-    class CustomPubSubReader : public PubSubReader<KeyedHelloWorldPubSubType>
-    {
-    public:
-
-        CustomPubSubReader(
-                const std::string& topic_name,
-                const std::string& filter_expression,
-                const std::vector<std::string>& expression_parameters)
-            : PubSubReader(topic_name, filter_expression, expression_parameters)
-        {
-        }
-
-        std::atomic<uint16_t> valid_samples{0};
-        std::atomic<uint16_t> invalid_samples{0};
-
-    private:
-
-        void postprocess_sample(
-                const type& /* sample */,
-                const SampleInfo& info) override final
-        {
-            if (info.valid_data)
-            {
-                ++valid_samples;
-            }
-            else
-            {
-                ++invalid_samples;
-            }
-        }
-
-    };
 
     /* Create reader with CFT */
     std::string expression = "index = 1";
-    CustomPubSubReader reader("TestTopic", expression, {});
+    CFTDynamicPubSubReader<DynamicKeyedHelloworldTypeTraits> reader("TestTopic", expression, {});
     reader.reliability(RELIABLE_RELIABILITY_QOS).history_depth(2).init();
     ASSERT_TRUE(reader.isInitialized());
 
     /* Create writer */
-    PubSubWriter<KeyedHelloWorldPubSubType> writer("TestTopic");
+    PubSubWriter<fastrtps::types::DynamicPubSubType, DynamicKeyedHelloworldTypeTraits> writer("TestTopic");
     writer.reliability(RELIABLE_RELIABILITY_QOS).history_depth(2).init();
     ASSERT_TRUE(writer.isInitialized());
 
@@ -691,13 +726,22 @@ TEST(DDSContentFilter, OnlyFilterAliveChanges)
 
     for (size_t i = 0; i < num_samples; ++i)
     {
-        KeyedHelloWorld data;
-        data.key(static_cast<uint16_t>(i));
-        data.index(1u);  // All samples pass the filter
-        InstanceHandle_t handle = writer.register_instance(data);
+        DynamicData* data = static_cast<DynamicData*>(writer.get_type_support().create_data());
+
+        data->set_uint16_value(
+            static_cast<uint16_t>(i),
+            static_cast<fastrtps::types::MemberId>(DynamicKeyedHelloworldTypeTraits::KeyedHelloWorldMembers::KEY));
+
+        data->set_uint16_value(
+            1u,
+            static_cast<fastrtps::types::MemberId>(DynamicKeyedHelloworldTypeTraits::KeyedHelloWorldMembers::INDEX));
+
+        InstanceHandle_t handle = writer.register_instance(*data);
         ASSERT_NE(HANDLE_NIL, handle);
-        ASSERT_EQ(RETCODE_OK, writer.send_sample(data, handle));
-        ASSERT_EQ(true, writer.unregister_instance(data, handle));
+        ASSERT_EQ(ReturnCode_t::RETCODE_OK, writer.send_sample(*data, handle));
+        ASSERT_EQ(true, writer.unregister_instance(*data, handle));
+
+        writer.get_type_support().delete_data(data);
     }
 
     // Wait until all samples are acknowledged
@@ -707,129 +751,6 @@ TEST(DDSContentFilter, OnlyFilterAliveChanges)
     ASSERT_EQ(reader.valid_samples.load(), 10u);
     ASSERT_EQ(reader.invalid_samples.load(), 10u);
     ASSERT_EQ(reader.get_sample_lost_status().total_count, 0);
-}
-
-/**
- * @test DataWriter Sample prefilter feature
- *
- * This test asserts that prefiltering with an active content filter works correctly.
- * It creates a ContentFilteredTopic an expression that only accepts samples with index <= 6.
- * On its side, the prefilter is set to only accept samples with 4 < index < 8
- */
-TEST_P(DDSContentFilter, filter_with_prefilter)
-{
-    // TODO(Mario-DL): Remove when multiple filtering readers case is fixed for data-sharing
-    if (enable_datasharing)
-    {
-        GTEST_SKIP() << "Several filtering readers not correctly working on data sharing";
-    }
-
-    struct CustomUserWriteData : public rtps::WriteParams::UserWriteData
-    {
-        CustomUserWriteData(
-                const uint16_t& upper_bound_idx,
-                const uint16_t& lower_bound_idx )
-            : upper_bound_idx_(upper_bound_idx)
-            , lower_bound_idx_(lower_bound_idx)
-        {
-        }
-
-        uint16_t upper_bound_idx_;
-        uint16_t lower_bound_idx_;
-    };
-
-    struct CustomPreFilter : public eprosima::fastdds::dds::IContentFilter
-    {
-        ~CustomPreFilter() override = default;
-
-        //! Custom filter for the HelloWorld example
-        bool evaluate(
-                const SerializedPayload& payload,
-                const FilterSampleInfo& filter_sample_info,
-                const rtps::GUID_t&) const override
-        {
-            HelloWorldPubSubType hello_world_type_support;
-            HelloWorld hello_world_sample;
-            hello_world_type_support.deserialize(*const_cast<SerializedPayload*>(&payload), &hello_world_sample);
-
-            bool sample_should_be_sent = true;
-
-            auto custom_write_data =
-                    std::static_pointer_cast<CustomUserWriteData>(filter_sample_info.user_write_data);
-
-            // Filter out samples
-            if (hello_world_sample.index() > custom_write_data->upper_bound_idx_ ||
-                    hello_world_sample.index() < custom_write_data->lower_bound_idx_)
-            {
-                sample_should_be_sent = false;
-            }
-            return sample_should_be_sent;
-        }
-
-    };
-
-    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
-    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME, "index <= %0", {"6"}, true, false, false);
-
-    // Initialize writer and the filtered reader
-    TestState state;
-    writer.init();
-    ASSERT_TRUE(writer.isInitialized());
-    reader.init();
-    ASSERT_TRUE(reader.isInitialized());
-
-    // wait for discovery between writer and filtered reader
-    writer.wait_discovery();
-    reader.wait_discovery();
-
-    // Set a prefilter on the filtered reader
-    ASSERT_EQ(writer.set_sample_prefilter(
-                std::make_shared<CustomPreFilter>()),
-            eprosima::fastdds::dds::RETCODE_OK);
-
-    // Set a user write data on the writer to filter out samples 4 < index < 8
-    rtps::WriteParams write_params;
-    write_params.user_write_data(std::make_shared<CustomUserWriteData>(
-                (uint16_t)8u, (uint16_t)4u));
-
-    auto data = default_helloworld_data_generator();
-
-    reader.startReception(data);
-
-    writer.send(data, 50, &write_params);
-
-    // Reader should have received 3 samples
-    ASSERT_EQ(reader.block_for_all(std::chrono::seconds(1)), 3u);
-}
-
-/*
- * Regression test for https://eprosima.easyredmine.com/issues/23265
- *
- * This test checks that a DDSSQL content filter can be created with a type name that is different from the one
- * in the generated type support.
- */
-TEST(DDSContentFilter, filter_other_type_name)
-{
-    using namespace eprosima::fastdds;
-
-    // Create a DomainParticipant
-    DomainParticipant* participant =
-            dds::DomainParticipantFactory::get_instance()->create_participant(0, PARTICIPANT_QOS_DEFAULT);
-    ASSERT_NE(participant, nullptr);
-
-    // Create a ContentFilteredTopic with a different type name
-    dds::TypeSupport type_support(new HelloWorldPubSubType());
-    ASSERT_EQ(type_support.register_type(participant, "CustomType"), RETCODE_OK);
-    dds::Topic* topic = participant->create_topic(
-        "TestTopic", "CustomType", TOPIC_QOS_DEFAULT);
-    ASSERT_NE(topic, nullptr);
-    dds::ContentFilteredTopic* filtered_topic = participant->create_contentfilteredtopic(
-        "FilteredTopic", topic, "index <= %0", { "6" });
-    ASSERT_NE(filtered_topic, nullptr);
-
-    // Delete all entities
-    ASSERT_EQ(participant->delete_contained_entities(), RETCODE_OK);
-    ASSERT_EQ(dds::DomainParticipantFactory::get_instance()->delete_participant(participant), RETCODE_OK);
 }
 
 #ifdef INSTANTIATE_TEST_SUITE_P

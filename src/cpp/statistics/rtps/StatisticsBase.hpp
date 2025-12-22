@@ -19,31 +19,32 @@
 #ifndef _STATISTICS_RTPS_STATISTICSBASE_HPP_
 #define _STATISTICS_RTPS_STATISTICSBASE_HPP_
 
-#include <atomic>
-#include <cstdint>
-#include <map>
 #include <mutex>
 #include <set>
 
-#include <fastdds/config.hpp>
-#include <fastdds/dds/core/policy/ParameterTypes.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/SampleIdentity.hpp>
+#include <fastrtps/config.h>
+
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/SampleIdentity.h>
 #include <fastdds/statistics/rtps/StatisticsCommon.hpp>
+#include <fastrtps/qos/ParameterTypes.h>
 #include <statistics/rtps/GuidUtils.hpp>
 #include <statistics/rtps/messages/RTPSStatisticsMessages.hpp>
-#include <statistics/types/types.hpp>
+#include <statistics/types/types.h>
+
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class MessageReceiver;
 class PDP;
 
 } // rtps
+} // fastrtps
 
+namespace fastdds {
 namespace statistics {
 
 #ifdef FASTDDS_STATISTICS
@@ -52,7 +53,6 @@ namespace statistics {
 struct StatisticsAncillary
 {
     std::set<std::shared_ptr<IListener>> listeners;
-    std::atomic<uint32_t> enabled_writers_mask{0};
     virtual ~StatisticsAncillary() = default;
 };
 
@@ -77,12 +77,12 @@ Function StatisticsListenersImpl::for_each_listener(
         Function f)
 {
     // Use a collection copy to prevent locking on traversal
-    std::unique_lock<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+    std::unique_lock<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
+    auto listeners = members_->listeners;
+    lock.unlock();
+
     if (members_)
     {
-        auto listeners = members_->listeners;
-        lock.unlock();
-
         for (auto& listener : listeners)
         {
             f(listener);
@@ -94,15 +94,15 @@ Function StatisticsListenersImpl::for_each_listener(
 
 class StatisticsParticipantImpl
 {
-    friend class fastdds::rtps::PDP;
-    friend class fastdds::rtps::MessageReceiver;
+    friend class fastrtps::rtps::PDP;
+    friend class fastrtps::rtps::MessageReceiver;
 
     // statistics members protection only
     std::recursive_mutex statistics_mutex_;
 
 public:
 
-    using GUID_t = fastdds::rtps::GUID_t;
+    using GUID_t = fastrtps::rtps::GUID_t;
 
 private:
 
@@ -113,10 +113,10 @@ private:
         unsigned long long byte_count = {};
     };
 
-    std::map<fastdds::rtps::Locator_t, rtps_sent_data> traffic_;
+    std::map<fastrtps::rtps::Locator_t, rtps_sent_data> traffic_;
 
     // RTPS_LOST ancillary
-    using lost_traffic_key = std::pair<fastdds::rtps::GuidPrefix_t, fastdds::rtps::Locator_t>;
+    using lost_traffic_key = std::pair<fastrtps::rtps::GuidPrefix_t, fastrtps::rtps::Locator_t>;
     struct lost_traffic_value
     {
         uint64_t first_sequence = 0;
@@ -129,9 +129,6 @@ private:
     unsigned long long pdp_counter_ = {};
     // EDP_PACKETS ancillary
     unsigned long long edp_counter_ = {};
-
-    // Mask of enabled statistics writers
-    std::atomic<uint32_t> enabled_writers_mask_{0};
 
     /*
      * Retrieve the GUID_t from derived class
@@ -195,15 +192,6 @@ protected:
 
     // retrieve the participant mutex
     std::recursive_mutex& get_statistics_mutex();
-
-    /**
-     * @brief Check whether the statistics writers in the input mask are enabled
-     *
-     * @param checked_enabled_writers The mask of writers to check
-     * @return True if all enabled, false otherwise
-     */
-    bool are_statistics_writers_enabled(
-            uint32_t checked_enabled_writers);
 
     /** Register a listener in participant RTPSWriter entities.
      * @param listener smart pointer to the listener interface to register
@@ -280,9 +268,9 @@ protected:
      * @param [in] datagram_size The size in bytes of the received datagram.
      */
     void on_network_statistics(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& source_locator,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& source_locator,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData& data,
             uint64_t datagram_size);
 
@@ -293,8 +281,8 @@ protected:
      * @param [in] ts The timestamp of the statistics submessage received.
      */
     void process_network_timestamp(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData::TimeStamp& ts);
 
     /*
@@ -305,8 +293,8 @@ protected:
      * @param [in] datagram_size The size in bytes of the received datagram.
      */
     void process_network_sequence(
-            const fastdds::rtps::GuidPrefix_t& source_participant,
-            const fastdds::rtps::Locator_t& reception_locator,
+            const fastrtps::rtps::GuidPrefix_t& source_participant,
+            const fastrtps::rtps::Locator_t& reception_locator,
             const rtps::StatisticsSubmessageData::Sequence& seq,
             uint64_t datagram_size);
 
@@ -316,7 +304,7 @@ protected:
      * @param payload_size size of the current message
      */
     void on_rtps_sent(
-            const fastdds::rtps::Locator_t& loc,
+            const fastrtps::rtps::Locator_t& loc,
             unsigned long payload_size);
 
     /*
@@ -421,7 +409,7 @@ protected:
 
 public:
 
-    /**
+    /*
      * Registers a listener in participant's statistics callback queue
      * @param listener smart pointer to the listener being registered
      * @param kind combination of fastdds::statistics::EventKind flags used as a mask
@@ -431,7 +419,7 @@ public:
             std::shared_ptr<fastdds::statistics::IListener> listener,
             uint32_t kind);
 
-    /**
+    /*
      * Unregisters a listener in participant's statistics callback queue
      * @param listener smart pointer to the listener being unregistered
      * @param kind combination of fastdds::statistics::EventKind flags used as a mask
@@ -440,32 +428,12 @@ public:
     bool remove_statistics_listener(
             std::shared_ptr<fastdds::statistics::IListener> listener,
             uint32_t kind);
-
-    /**
-     * @brief Set the enabled statistics writers mask
-     *
-     * @param enabled_writers The new mask to set
-     */
-    virtual void set_enabled_statistics_writers_mask(
-            uint32_t enabled_writers);
-
-    /**
-     * @brief Get the enabled statistics writers mask
-     *
-     * @return The mask of enabled writers
-     */
-    virtual uint32_t get_enabled_statistics_writers_mask();
 };
 
 // auxiliary conversion functions
-// TODO(jlbueno): private headers shall not export API
-FASTDDS_EXPORTED_API detail::Locator_s to_statistics_type(fastdds::rtps::Locator_t);
-FASTDDS_EXPORTED_API fastdds::rtps::Locator_t to_fastdds_type(
-        detail::Locator_s);
-FASTDDS_EXPORTED_API detail::GUID_s to_statistics_type(fastdds::rtps::GUID_t);
-FASTDDS_EXPORTED_API fastdds::rtps::GUID_t to_fastdds_type(
-        detail::GUID_s);
-FASTDDS_EXPORTED_API detail::SampleIdentity_s to_statistics_type(fastdds::rtps::SampleIdentity);
+detail::Locator_s to_statistics_type(fastrtps::rtps::Locator_t);
+detail::GUID_s to_statistics_type(fastrtps::rtps::GUID_t);
+detail::SampleIdentity_s to_statistics_type(fastrtps::rtps::SampleIdentity);
 
 #else // dummy implementation
 
@@ -473,7 +441,7 @@ struct StatisticsAncillary {};
 
 class StatisticsParticipantImpl
 {
-    friend class fastdds::rtps::PDP;
+    friend class fastrtps::rtps::PDP;
 
 protected:
 
@@ -488,9 +456,9 @@ protected:
      * @param [in] The size in bytes of the received datagram.
      */
     inline void on_network_statistics(
-            const fastdds::rtps::GuidPrefix_t&,
-            const fastdds::rtps::Locator_t&,
-            const fastdds::rtps::Locator_t&,
+            const fastrtps::rtps::GuidPrefix_t&,
+            const fastrtps::rtps::Locator_t&,
+            const fastrtps::rtps::Locator_t&,
             const rtps::StatisticsSubmessageData&,
             uint64_t)
     {
@@ -505,7 +473,7 @@ protected:
      */
     template<class LocatorIteratorT>
     inline void on_rtps_send(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const LocatorIteratorT&,
             const LocatorIteratorT&,
             unsigned long)
@@ -519,7 +487,7 @@ protected:
      * @param properties The property list of the discoved entity
      */
     inline void on_entity_discovery(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const fastdds::dds::ParameterPropertyList_t&)
     {
     }
@@ -533,7 +501,7 @@ protected:
      */
     template<class LocatorIteratorT>
     inline void on_discovery_packet(
-            const fastdds::rtps::GUID_t&,
+            const fastrtps::rtps::GUID_t&,
             const LocatorIteratorT&,
             const LocatorIteratorT&)
     {

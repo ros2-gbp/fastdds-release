@@ -16,11 +16,11 @@
  * @file DataSharingPayloadPool.hpp
  */
 
-#ifndef FASTDDS_RTPS_DATASHARING__DATASHARINGPAYLOADPOOL_HPP
-#define FASTDDS_RTPS_DATASHARING__DATASHARINGPAYLOADPOOL_HPP
+#ifndef RTPS_DATASHARING_DATASHARINGPAYLOADPOOL_HPP
+#define RTPS_DATASHARING_DATASHARINGPAYLOADPOOL_HPP
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/history/IPayloadPool.h>
 #include <fastdds/dds/log/Log.hpp>
 #include <rtps/history/PoolConfig.h>
 #include <utils/shared_memory/SharedDir.hpp>
@@ -29,7 +29,7 @@
 #include <memory>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSWriter;
@@ -53,7 +53,7 @@ public:
     ~DataSharingPayloadPool() = default;
 
     virtual bool release_payload(
-            SerializedPayload_t& payload) override;
+            CacheChange_t& cache_change) override;
 
     static std::shared_ptr<DataSharingPayloadPool> get_reader_pool(
             bool is_reader_volatile);
@@ -150,7 +150,7 @@ protected:
         public:
 
             PayloadNodeMetaData()
-                : status(fastdds::rtps::ChangeKind_t::ALIVE)
+                : status(fastrtps::rtps::ChangeKind_t::ALIVE)
                 , has_been_removed(0)
                 , data_length(0)
                 , sequence_number(c_SequenceNumber_Unknown)
@@ -186,7 +186,7 @@ protected:
             InstanceHandle_t instance_handle;
 
             // Related sample identity for the change
-            fastdds::rtps::SampleIdentity related_sample_identity;
+            fastrtps::rtps::SampleIdentity related_sample_identity;
 
             // Mutex for shared read / exclusive write access to the payload
             sharable_mutex mutex;
@@ -207,12 +207,12 @@ protected:
         {
             // Reset the sequence number first, it signals the data is not valid anymore
             metadata_.sequence_number.store(c_SequenceNumber_Unknown, std::memory_order_relaxed);
-            metadata_.status = fastdds::rtps::ChangeKind_t::ALIVE;
+            metadata_.status = fastrtps::rtps::ChangeKind_t::ALIVE;
             metadata_.has_been_removed = 0;
             metadata_.data_length = 0;
             metadata_.writer_GUID = c_Guid_Unknown;
             metadata_.instance_handle = c_InstanceHandle_Unknown;
-            metadata_.related_sample_identity = fastdds::rtps::SampleIdentity();
+            metadata_.related_sample_identity = fastrtps::rtps::SampleIdentity();
         }
 
         static const PayloadNode* get_from_data(
@@ -321,13 +321,13 @@ protected:
             metadata_.has_been_removed = removed ? 1 : 0;
         }
 
-        fastdds::rtps::SampleIdentity related_sample_identity() const
+        fastrtps::rtps::SampleIdentity related_sample_identity() const
         {
             return metadata_.related_sample_identity;
         }
 
         void related_sample_identity(
-                fastdds::rtps::SampleIdentity identity)
+                fastrtps::rtps::SampleIdentity identity)
         {
             metadata_.related_sample_identity = identity;
         }
@@ -380,7 +380,7 @@ protected:
 
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
-#endif  // FASTDDS_RTPS_DATASHARING__DATASHARINGPAYLOADPOOL_HPP
+#endif  // RTPS_DATASHARING_DATASHARINGPAYLOADPOOL_HPP

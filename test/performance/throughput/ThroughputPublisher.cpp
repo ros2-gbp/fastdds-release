@@ -19,10 +19,9 @@
 
 #include "ThroughputPublisher.hpp"
 
-#include <chrono>
-#include <fstream>
 #include <map>
-#include <thread>
+#include <fstream>
+#include <chrono>
 
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -32,16 +31,14 @@
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
 #include <fastdds/dds/subscriber/DataReader.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicPubSubType.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilder.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilderFactory.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/MemberDescriptor.hpp>
-#include <fastdds/dds/xtypes/dynamic_types/TypeDescriptor.hpp>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastrtps/utils/TimeConversion.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::types;
 
 // *******************************************************************************************
 // ********************************* DATA WRITER LISTENER ************************************
@@ -52,9 +49,8 @@ void ThroughputPublisher::DataWriterListener::on_publication_matched(
 {
     if (1 == info.current_count)
     {
-        EPROSIMA_LOG_INFO(THROUGHPUTPUBLISHER, C_RED << "Pub: DATA Pub Matched "
-                                                     << info.total_count << "/" << throughput_publisher_.subscribers_ <<
-                C_DEF);
+        logInfo(THROUGHPUTPUBLISHER, C_RED << "Pub: DATA Pub Matched "
+                                           << info.total_count << "/" << throughput_publisher_.subscribers_ << C_DEF);
     }
 
     matched_ = info.total_count;
@@ -78,8 +74,8 @@ void ThroughputPublisher::CommandReaderListener::on_subscription_matched(
 {
     if (1 == info.current_count)
     {
-        EPROSIMA_LOG_INFO(THROUGHPUTPUBLISHER, C_RED << "Pub: COMMAND Sub Matched "
-                                                     << info.total_count << "/" << throughput_publisher_.subscribers_ * 2 <<
+        logInfo(THROUGHPUTPUBLISHER, C_RED << "Pub: COMMAND Sub Matched "
+                                           << info.total_count << "/" << throughput_publisher_.subscribers_ * 2 <<
                 C_DEF);
     }
 
@@ -96,8 +92,8 @@ void ThroughputPublisher::CommandWriterListener::on_publication_matched(
 {
     if (1 == info.current_count)
     {
-        EPROSIMA_LOG_INFO(THROUGHPUTPUBLISHER, C_RED << "Pub: COMMAND Pub Matched "
-                                                     << info.total_count << "/" << throughput_publisher_.subscribers_ * 2 <<
+        logInfo(THROUGHPUTPUBLISHER, C_RED << "Pub: COMMAND Pub Matched "
+                                           << info.total_count << "/" << throughput_publisher_.subscribers_ * 2 <<
                 C_DEF);
     }
 
@@ -120,8 +116,8 @@ bool ThroughputPublisher::init(
         uint32_t pid,
         bool hostname,
         const std::string& export_csv,
-        const eprosima::fastdds::rtps::PropertyPolicy& part_property_policy,
-        const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& part_property_policy,
+        const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
         const std::string& xml_config_file,
         const std::string& demands_file,
         const std::string& recoveries_file,
@@ -157,7 +153,7 @@ bool ThroughputPublisher::init(
     // Load XML configuration
     if (xml_config_file_.length() > 0)
     {
-        if ( RETCODE_OK !=
+        if ( ReturnCode_t::RETCODE_OK !=
                 DomainParticipantFactory::get_instance()->
                         get_participant_qos_from_profile(
                     participant_profile_name,
@@ -205,7 +201,7 @@ bool ThroughputPublisher::init(
 
     if (participant_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating participant");
+        logError(THROUGHPUTPUBLISHER, "ERROR creating participant");
         ready_ = false;
         return false;
     }
@@ -214,10 +210,10 @@ bool ThroughputPublisher::init(
     throughput_command_type_.reset(new ThroughputCommandDataType());
 
     // Register the command data type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != throughput_command_type_.register_type(participant_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR registering command type");
+        logError(THROUGHPUTPUBLISHER, "ERROR registering command type");
         return false;
     }
 
@@ -225,7 +221,7 @@ bool ThroughputPublisher::init(
     publisher_ = participant_->create_publisher(PUBLISHER_QOS_DEFAULT, nullptr);
     if (publisher_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the Publisher");
+        logError(THROUGHPUTPUBLISHER, "ERROR creating the Publisher");
         return false;
     }
 
@@ -233,7 +229,7 @@ bool ThroughputPublisher::init(
     subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT, nullptr);
     if (subscriber_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the Subscriber");
+        logError(THROUGHPUTPUBLISHER, "ERROR creating the Subscriber");
         return false;
     }
 
@@ -241,9 +237,9 @@ bool ThroughputPublisher::init(
     std::string profile_name = "publisher_profile";
 
     if (xml_config_file_.length() > 0
-            && RETCODE_OK != publisher_->get_datawriter_qos_from_profile(profile_name, dw_qos_))
+            && ReturnCode_t::RETCODE_OK != publisher_->get_datawriter_qos_from_profile(profile_name, dw_qos_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR unable to retrieve the " << profile_name);
+        logError(THROUGHPUTPUBLISHER, "ERROR unable to retrieve the " << profile_name);
         return false;
     }
 
@@ -254,20 +250,20 @@ bool ThroughputPublisher::init(
     ReliabilityQosPolicy rp;
     if (reliable_)
     {
-        rp.kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
+        rp.kind = eprosima::fastrtps::RELIABLE_RELIABILITY_QOS;
         dw_qos_.reliability(rp);
 
         RTPSReliableWriterQos rw_qos;
-        rw_qos.times.heartbeat_period.seconds = 0;
-        rw_qos.times.heartbeat_period.nanosec = 100000000;
-        rw_qos.times.nack_supression_duration = {0, 0};
-        rw_qos.times.nack_response_delay = {0, 0};
+        rw_qos.times.heartbeatPeriod.seconds = 0;
+        rw_qos.times.heartbeatPeriod.nanosec = 100000000;
+        rw_qos.times.nackSupressionDuration = {0, 0};
+        rw_qos.times.nackResponseDelay = {0, 0};
 
         dw_qos_.reliable_writer_qos(rw_qos);
     }
     else
     {
-        rp.kind = eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS;
+        rp.kind = eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS;
         dw_qos_.reliability(rp);
     }
 
@@ -302,7 +298,7 @@ bool ThroughputPublisher::init(
 
         if (nullptr == command_sub_topic_)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND Sub topic");
+            logError(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND Sub topic");
             return false;
         }
 
@@ -322,7 +318,7 @@ bool ThroughputPublisher::init(
 
         if (nullptr == command_pub_topic_)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND Pub topic");
+            logError(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND Pub topic");
             return false;
         }
     }
@@ -348,7 +344,7 @@ bool ThroughputPublisher::init(
 
         if (command_reader_ == nullptr)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND DataWriter");
+            logError(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND DataWriter");
             return false;
         }
     }
@@ -375,7 +371,7 @@ bool ThroughputPublisher::init(
 
         if (command_writer_ == nullptr)
         {
-            EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND DataReader");
+            logError(THROUGHPUTPUBLISHER, "ERROR creating the COMMAND DataReader");
             return false;
         }
     }
@@ -405,7 +401,7 @@ ThroughputPublisher::~ThroughputPublisher()
             || nullptr != data_pub_topic_
             || throughput_data_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR unregistering the DATA type");
+        logError(THROUGHPUTPUBLISHER, "ERROR unregistering the DATA type");
         return;
     }
 
@@ -421,14 +417,14 @@ ThroughputPublisher::~ThroughputPublisher()
 
     // Remove the participant
     DomainParticipantFactory::get_instance()->delete_participant(participant_);
-    EPROSIMA_LOG_INFO(THROUGHPUTPUBLISHER, "Pub: Participant removed");
+    logInfo(THROUGHPUTPUBLISHER, "Pub: Participant removed");
 }
 
 void ThroughputPublisher::run(
         uint32_t test_time,
         uint32_t recovery_time_ms,
         int demand,
-        uint32_t msg_size,
+        int msg_size,
         uint32_t subscribers)
 {
     subscribers_ = subscribers;
@@ -520,7 +516,7 @@ void ThroughputPublisher::run(
             if (dw_qos.history().depth < 0 ||
                     static_cast<uint32_t>(dw_qos.history().depth) < max_demand)
             {
-                EPROSIMA_LOG_WARNING(THROUGHPUTPUBLISHER, "Setting history depth to " << max_demand);
+                logWarning(THROUGHPUTPUBLISHER, "Setting history depth to " << max_demand);
                 dw_qos.resource_limits().max_samples = max_demand;
                 dw_qos.history().depth = max_demand;
             }
@@ -529,10 +525,10 @@ void ThroughputPublisher::run(
         else
         {
             // Ensure that the max samples is at least the demand
-            if (dw_qos.resource_limits().max_samples <= 0 ||
+            if (dw_qos.resource_limits().max_samples < 0 ||
                     static_cast<uint32_t>(dw_qos.resource_limits().max_samples) < max_demand)
             {
-                EPROSIMA_LOG_WARNING(THROUGHPUTPUBLISHER, "Setting resource limit max samples to " << max_demand);
+                logWarning(THROUGHPUTPUBLISHER, "Setting resource limit max samples to " << max_demand);
                 dw_qos.resource_limits().max_samples = max_demand;
             }
         }
@@ -549,25 +545,26 @@ void ThroughputPublisher::run(
         {
             assert(nullptr == dynamic_data_);
             // Create the data sample
-            dynamic_data_ = static_cast<DynamicData::_ref_type*>(dynamic_pub_sub_type_->create_data());
+            MemberId id;
+            dynamic_data_ = static_cast<DynamicData*>(dynamic_pub_sub_type_->createData());
 
             if (nullptr == dynamic_data_)
             {
-                EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER,
-                        "Iteration failed: Failed to create Dynamic Data");
+                logError(THROUGHPUTPUBLISHER, "Iteration failed: Failed to create Dynamic Data");
                 return;
             }
 
             // Modify the data Sample
-            (*dynamic_data_)->set_uint32_value(0, 0);
-            DynamicData::_ref_type member_data = (*dynamic_data_)->loan_value(
-                (*dynamic_data_)->get_member_id_at_index(1));
+            dynamic_data_->set_uint32_value(0, 0);
+            DynamicData* member_data = dynamic_data_->loan_value(
+                dynamic_data_->get_member_id_at_index(1));
 
-            for (uint32_t i = 0; i < msg_size; ++i)
+            for (int i = 0; i < msg_size; ++i)
             {
-                member_data->set_byte_value(i, 0);
+                member_data->insert_sequence_data(id);
+                member_data->set_byte_value(0, id);
             }
-            (*dynamic_data_)->return_loaned_value(member_data);
+            dynamic_data_->return_loaned_value(member_data);
         }
         else
         {
@@ -586,7 +583,7 @@ void ThroughputPublisher::run(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "Error preparing static types and endpoints for testing");
+                logError(THROUGHPUTPUBLISHER, "Error preparing static types and endpoints for testing");
                 test_failure = true;
                 break;
             }
@@ -642,7 +639,7 @@ void ThroughputPublisher::run(
         // Delete the Data Sample
         if (dynamic_types_)
         {
-            dynamic_pub_sub_type_.delete_data(dynamic_data_);
+            DynamicDataFactory::get_instance()->delete_data(dynamic_data_);
             dynamic_data_ = nullptr;
         }
         else
@@ -656,7 +653,7 @@ void ThroughputPublisher::run(
             // Destroy the data endpoints if using static types
             if (!destroy_data_endpoints())
             {
-                EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "Error removing static types and endpoints for testing");
+                logError(THROUGHPUTPUBLISHER, "Error removing static types and endpoints for testing");
                 test_failure = true;
                 break;
             }
@@ -684,7 +681,7 @@ void ThroughputPublisher::run(
         return;
     }
 
-    bool all_acked = command_writer_->wait_for_acknowledgments({20, 0}) == RETCODE_OK;
+    bool all_acked = command_writer_->wait_for_acknowledgments({20, 0}) == ReturnCode_t::RETCODE_OK;
     print_results(results_);
 
     if (!all_acked)
@@ -717,9 +714,9 @@ bool ThroughputPublisher::test(
 
     // If the subscriber does not acknowledge the TEST_STARTS in time, we consider something went wrong.
     std::chrono::steady_clock::time_point test_start_sent_tp = std::chrono::steady_clock::now();
-    if (RETCODE_OK != command_writer_->wait_for_acknowledgments({20, 0}))
+    if (ReturnCode_t::RETCODE_OK != command_writer_->wait_for_acknowledgments({20, 0}))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER,
+        logError(THROUGHPUTPUBLISHER,
                 "Something went wrong: The subscriber has not acknowledged the TEST_STARTS command.");
         return false;
     }
@@ -739,14 +736,14 @@ bool ThroughputPublisher::test(
         {
             if (dynamic_types_)
             {
-                (*dynamic_data_)->set_uint32_value(0, ++seqnum);
+                dynamic_data_->set_uint32_value(++seqnum, 0);
                 data_writer_->write(dynamic_data_);
             }
             else if (data_loans_)
             {
                 // Try loan a sample
                 void* data = nullptr;
-                if (RETCODE_OK
+                if (ReturnCode_t::RETCODE_OK
                         ==  data_writer_->loan_sample(
                             data,
                             DataWriter::LoanInitializationKind::NO_LOAN_INITIALIZATION))
@@ -754,7 +751,7 @@ bool ThroughputPublisher::test(
                     // initialize and send the sample
                     static_cast<ThroughputType*>(data)->seqnum = ++seqnum;
 
-                    if (RETCODE_OK != data_writer_->write(data))
+                    if (!data_writer_->write(data))
                     {
                         data_writer_->discard_loan(data);
                     }
@@ -798,10 +795,10 @@ bool ThroughputPublisher::test(
     command_writer_->write(&command_sample);
 
     // If the subscriber does not acknowledge the TEST_ENDS in time, we consider something went wrong.
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != command_writer_->wait_for_acknowledgments({20, 0}))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER,
+        logError(THROUGHPUTPUBLISHER,
                 "Something went wrong: The subscriber has not acknowledged the TEST_ENDS command.");
         return false;
     }
@@ -812,7 +809,7 @@ bool ThroughputPublisher::test(
     while ( !results_error && num_results_received < subscribers_ )
     {
         if (command_reader_->wait_for_unread_message({20, 0})
-                && RETCODE_OK == command_reader_->take_next_sample(&command_sample, &info)
+                && ReturnCode_t::RETCODE_OK == command_reader_->take_next_sample(&command_sample, &info)
                 && info.valid_data)
         {
             if (command_sample.m_command == TEST_RESULTS)
@@ -828,9 +825,8 @@ bool ThroughputPublisher::test(
                 result.publisher.totaltime_us =
                         std::chrono::duration<double, std::micro>(t_end_ - t_start_) - clock_overhead;
 
-                result.subscriber.recv_samples = command_sample.m_receivedsamples;
-                assert(samples >= command_sample.m_receivedsamples);
-                result.subscriber.lost_samples = samples - (uint32_t)command_sample.m_receivedsamples;
+                result.subscriber.recv_samples = command_sample.m_lastrecsample - command_sample.m_lostsamples;
+                result.subscriber.lost_samples = command_sample.m_lostsamples;
                 result.subscriber.totaltime_us =
                         std::chrono::microseconds(command_sample.m_totaltime)
                         - test_start_ack_duration - clock_overhead;
@@ -1032,40 +1028,31 @@ bool ThroughputPublisher::init_dynamic_types()
     // Check if it has been initialized before
     if (dynamic_pub_sub_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR DYNAMIC DATA type already initialized");
+        logError(THROUGHPUTPUBLISHER, "ERROR DYNAMIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR DYNAMIC DATA type already registered");
+        logError(THROUGHPUTPUBLISHER, "ERROR DYNAMIC DATA type already registered");
         return false;
     }
 
     // Dummy type registration
-    DynamicTypeBuilderFactory::_ref_type factory {DynamicTypeBuilderFactory::get_instance()};
     // Create basic builders
-    TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
-    type_descriptor->kind(TK_STRUCTURE);
-    type_descriptor->name(ThroughputDataType::type_name_);
-
-    DynamicTypeBuilder::_ref_type struct_type_builder {factory->create_type(type_descriptor)};
+    DynamicTypeBuilder_ptr struct_type_builder(DynamicTypeBuilderFactory::get_instance()->create_struct_builder());
 
     // Add members to the struct.
-    MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
-    member_descriptor->name("seqnum");
-    member_descriptor->type(factory->get_primitive_type(TK_UINT32));
-    struct_type_builder->add_member(member_descriptor);
-    member_descriptor->name("data");
-    member_descriptor->type(factory->create_sequence_type(
-                factory->get_primitive_type(TK_BYTE), static_cast<uint32_t>(LENGTH_UNLIMITED))->build());
-    struct_type_builder->add_member(member_descriptor);
+    struct_type_builder->add_member(0, "seqnum", DynamicTypeBuilderFactory::get_instance()->create_uint32_type());
+    struct_type_builder->add_member(1, "data", DynamicTypeBuilderFactory::get_instance()->create_sequence_builder(
+                DynamicTypeBuilderFactory::get_instance()->create_byte_type(), BOUND_UNLIMITED));
+    struct_type_builder->set_name(ThroughputDataType::type_name_);
     dynamic_pub_sub_type_.reset(new DynamicPubSubType(struct_type_builder->build()));
 
     // Register the data type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != dynamic_pub_sub_type_.register_type(participant_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR registering the DYNAMIC DATA topic");
+        logError(THROUGHPUTPUBLISHER, "ERROR registering the DYNAMIC DATA topic");
         return false;
     }
 
@@ -1080,19 +1067,19 @@ bool ThroughputPublisher::init_static_types(
     // Check if it has been initialized before
     if (throughput_data_type_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR STATIC DATA type already initialized");
+        logError(THROUGHPUTPUBLISHER, "ERROR STATIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR STATIC DATA type already registered");
+        logError(THROUGHPUTPUBLISHER, "ERROR STATIC DATA type already registered");
         return false;
     }
 
     // Create the static type
     throughput_data_type_.reset(new ThroughputDataType(payload));
     // Register the static type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != throughput_data_type_.register_type(participant_))
     {
         return false;
@@ -1106,13 +1093,13 @@ bool ThroughputPublisher::create_data_endpoints(
 {
     if (nullptr != data_pub_topic_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR topic already initialized");
+        logError(THROUGHPUTPUBLISHER, "ERROR topic already initialized");
         return false;
     }
 
     if (nullptr != data_writer_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR data_writer_ already initialized");
+        logError(THROUGHPUTPUBLISHER, "ERROR data_writer_ already initialized");
         return false;
     }
 
@@ -1132,7 +1119,7 @@ bool ThroughputPublisher::create_data_endpoints(
 
     if (nullptr == data_pub_topic_)
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR creating the DATA topic");
+        logError(THROUGHPUTPUBLISHER, "ERROR creating the DATA topic");
         return false;
     }
 
@@ -1156,9 +1143,9 @@ bool ThroughputPublisher::destroy_data_endpoints()
 
     // Delete the endpoint
     if (nullptr == data_writer_
-            || RETCODE_OK != publisher_->delete_datawriter(data_writer_))
+            || ReturnCode_t::RETCODE_OK != publisher_->delete_datawriter(data_writer_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR destroying the DataWriter");
+        logError(THROUGHPUTPUBLISHER, "ERROR destroying the DataWriter");
         return false;
     }
     data_writer_ = nullptr;
@@ -1166,18 +1153,18 @@ bool ThroughputPublisher::destroy_data_endpoints()
 
     // Delete the Topic
     if (nullptr == data_pub_topic_
-            || RETCODE_OK != participant_->delete_topic(data_pub_topic_))
+            || ReturnCode_t::RETCODE_OK != participant_->delete_topic(data_pub_topic_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR destroying the DATA topic");
+        logError(THROUGHPUTPUBLISHER, "ERROR destroying the DATA topic");
         return false;
     }
     data_pub_topic_ = nullptr;
 
     // Delete the Type
-    if (RETCODE_OK
+    if (ReturnCode_t::RETCODE_OK
             != participant_->unregister_type(ThroughputDataType::type_name_))
     {
-        EPROSIMA_LOG_ERROR(THROUGHPUTPUBLISHER, "ERROR unregistering the DATA type");
+        logError(THROUGHPUTPUBLISHER, "ERROR unregistering the DATA type");
         return false;
     }
 

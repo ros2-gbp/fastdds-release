@@ -2,7 +2,7 @@
 // serial_port.cpp
 // ~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -34,18 +34,22 @@ struct write_some_handler
 {
   write_some_handler() {}
   void operator()(const asio::error_code&, std::size_t) {}
+#if defined(ASIO_HAS_MOVE)
   write_some_handler(write_some_handler&&) {}
 private:
   write_some_handler(const write_some_handler&);
+#endif // defined(ASIO_HAS_MOVE)
 };
 
 struct read_some_handler
 {
   read_some_handler() {}
   void operator()(const asio::error_code&, std::size_t) {}
+#if defined(ASIO_HAS_MOVE)
   read_some_handler(read_some_handler&&) {}
 private:
   read_some_handler(const read_some_handler&);
+#endif // defined(ASIO_HAS_MOVE)
 };
 
 void test()
@@ -79,18 +83,18 @@ void test()
     serial_port::native_handle_type native_port2 = port1.native_handle();
     serial_port port6(ioc_ex, native_port2);
 
+#if defined(ASIO_HAS_MOVE)
     serial_port port7(std::move(port6));
-
-    basic_serial_port<io_context::executor_type> port8(ioc);
-    serial_port port9(std::move(port8));
+#endif // defined(ASIO_HAS_MOVE)
 
     // basic_serial_port operators.
 
+#if defined(ASIO_HAS_MOVE)
     port1 = serial_port(ioc);
     port1 = std::move(port2);
-    port1 = std::move(port8);
+#endif // defined(ASIO_HAS_MOVE)
 
-    // I/O object functions.
+    // basic_io_object functions.
 
     serial_port::executor_type ex = port1.get_executor();
     (void)ex;
@@ -100,8 +104,8 @@ void test()
     serial_port::lowest_layer_type& lowest_layer = port1.lowest_layer();
     (void)lowest_layer;
 
-    const serial_port& port10 = port1;
-    const serial_port::lowest_layer_type& lowest_layer2 = port10.lowest_layer();
+    const serial_port& port8 = port1;
+    const serial_port::lowest_layer_type& lowest_layer2 = port8.lowest_layer();
     (void)lowest_layer2;
 
     port1.open("null");
@@ -165,5 +169,5 @@ void test()
 ASIO_TEST_SUITE
 (
   "serial_port",
-  ASIO_COMPILE_TEST_CASE(serial_port_compile::test)
+  ASIO_TEST_CASE(serial_port_compile::test)
 )

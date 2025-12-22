@@ -12,28 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <bitset>
-#include <cstdint>
-#include <cstdio>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <string>
-
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/log/Colors.hpp>
-
-#include "../optionarg.hpp"
 #include "LatencyTestPublisher.hpp"
 #include "LatencyTestSubscriber.hpp"
+#include "../optionarg.hpp"
+
+#include <stdio.h>
+#include <string>
+#include <iostream>
+#include <iomanip>
+#include <bitset>
+#include <cstdint>
+#include <fstream>
+
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/dds/log/Colors.hpp>
+#include <fastrtps/Domain.h>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
 #pragma warning (disable:4512)
 #endif // if defined(_MSC_VER)
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 #if defined(_WIN32)
 #define COPYSTR strcpy_s
@@ -184,6 +187,10 @@ int main(
         int argc,
         char** argv)
 {
+
+    Log::SetVerbosity(Log::Kind::Info);
+    Log::SetCategoryFilter(std::regex("LatencyTest"));
+
     int columns;
 
 #if defined(_WIN32)
@@ -414,12 +421,12 @@ int main(
     {
         if (test_agent == TestAgent::BOTH)
         {
-            EPROSIMA_LOG_ERROR(LatencyTest, "Intra-process delivery NOT supported with security");
+            logError(LatencyTest, "Intra-process delivery NOT supported with security");
             return 1;
         }
         else if (Arg::EnablerValue::ON == data_sharing)
         {
-            EPROSIMA_LOG_ERROR(LatencyTest, "Sharing sample APIs NOT supported with RTPS encryption");
+            logError(LatencyTest, "Sharing sample APIs NOT supported with RTPS encryption");
             return 1;
         }
     }
@@ -427,7 +434,7 @@ int main(
 
     if ((Arg::EnablerValue::ON == data_sharing || data_loans) && dynamic_types)
     {
-        EPROSIMA_LOG_ERROR(LatencyTest, "Sharing sample APIs NOT supported with dynamic types");
+        logError(LatencyTest, "Sharing sample APIs NOT supported with dynamic types");
         return 1;
     }
 
@@ -475,7 +482,7 @@ int main(
     // Load an XML file with predefined profiles for publisher and subscriber
     if (xml_config_file.length() > 0)
     {
-        eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->load_XML_profiles_file(xml_config_file);
+        xmlparser::XMLProfileManager::loadXMLFile(xml_config_file);
     }
 
     LatencyDataSizes data_sizes;
@@ -497,7 +504,6 @@ int main(
                 dynamic_types, data_sharing, data_loans, shared_memory, forced_domain, data_sizes))
         {
             latency_publisher.run();
-            latency_publisher.destroy_user_entities();
         }
         else
         {
@@ -513,7 +519,6 @@ int main(
                 xml_config_file, dynamic_types, data_sharing, data_loans, shared_memory, forced_domain, data_sizes))
         {
             latency_subscriber.run();
-            latency_subscriber.destroy_user_entities();
         }
         else
         {
@@ -564,13 +569,6 @@ int main(
             {
                 sub.join();
             }
-
-            for (auto& sub : latency_subscribers)
-            {
-                sub->destroy_user_entities();
-            }
-
-            latency_publisher.destroy_user_entities();
         }
         else
         {

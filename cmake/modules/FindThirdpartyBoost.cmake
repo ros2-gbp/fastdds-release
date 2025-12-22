@@ -5,7 +5,7 @@
 #  feel free to use it as it is or modify it for your own needs.)
 
 set(THIRDPARTY_BOOST_INCLUDE_DIR 
-    ${CMAKE_CURRENT_LIST_DIR}/../../thirdparty/boost/include
+    ${PROJECT_SOURCE_DIR}/thirdparty/boost/include 
     CACHE 
     FILEPATH
     "Path to thirdparty/boost"
@@ -21,8 +21,8 @@ endif()
 
 try_compile(IS_THIRDPARTY_BOOST_OK
         ${CMAKE_BINARY_DIR}
-         ${THIRDPARTY_BOOST_INCLUDE_DIR}/../test/ThirdpartyBoostCompile_test.cpp
-         CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${THIRDPARTY_BOOST_INCLUDE_DIR};${CMAKE_CURRENT_LIST_DIR}/../../src/cpp"
+        ${PROJECT_SOURCE_DIR}/thirdparty/boost/test/ThirdpartyBoostCompile_test.cpp
+         CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${THIRDPARTY_BOOST_INCLUDE_DIR}"
          CXX_STANDARD 11
          LINK_LIBRARIES ${THIRDPARTY_BOOST_LINK_LIBS}
          OUTPUT_VARIABLE OUT

@@ -25,7 +25,7 @@
 
 #include <fastdds/rtps/common/GuidPrefix_t.hpp>
 
-#include <nlohmann/json.hpp>
+#include <json.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -41,68 +41,40 @@ class DiscoveryParticipantsAckStatus
 
 public:
 
-    DiscoveryParticipantsAckStatus() = default;
-
-    ~DiscoveryParticipantsAckStatus() = default;
-
-    enum class ParticipantState : uint8_t
+    DiscoveryParticipantsAckStatus()
     {
-        PENDING_SEND,  // Data(p) has not been sent yet
-        WAITING_ACK,   // Data(p) has already been sent but ACK has not been received
-        ACKED          // Data(p) has been acked
-    };
+    }
+
+    ~DiscoveryParticipantsAckStatus()
+    {
+    }
 
     void add_or_update_participant(
-            const GuidPrefix_t& guid_p,
-            ParticipantState status);
+            const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p,
+            bool status);
 
     void remove_participant(
-            const GuidPrefix_t& guid_p);
+            const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p);
 
     void unmatch_all();
 
-    bool is_waiting_ack(
-            const GuidPrefix_t& guid_p) const;
-
     bool is_matched(
-            const GuidPrefix_t& guid_p) const;
+            const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const;
 
     bool is_relevant_participant(
-            const GuidPrefix_t& guid_p) const;
+            const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const;
 
     bool is_acked_by_all() const;
 
-    std::vector<GuidPrefix_t> relevant_participants() const;
+    std::vector<eprosima::fastrtps::rtps::GuidPrefix_t> relevant_participants() const;
 
     void to_json(
             nlohmann::json& j) const;
 
 private:
 
-    std::map<GuidPrefix_t, ParticipantState> relevant_participants_map_;
+    std::map<eprosima::fastrtps::rtps::GuidPrefix_t, bool> relevant_participants_map_;
 };
-
-inline std::ostream& operator <<(
-        std::ostream& os,
-        DiscoveryParticipantsAckStatus::ParticipantState child)
-{
-    switch (child)
-    {
-        case DiscoveryParticipantsAckStatus::ParticipantState::PENDING_SEND:
-            os << "PENDING_SEND";
-            break;
-        case DiscoveryParticipantsAckStatus::ParticipantState::WAITING_ACK:
-            os << "WAITING_ACK";
-            break;
-        case DiscoveryParticipantsAckStatus::ParticipantState::ACKED:
-            os << "ACKED";
-            break;
-        default:
-            os << "UNKNOWN";
-            break;
-    }
-    return os;
-}
 
 } /* namespace ddb */
 } /* namespace rtps */

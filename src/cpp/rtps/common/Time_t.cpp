@@ -15,15 +15,115 @@
 /**
  * @file Time_t.cpp
  */
-#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 #include <cstdlib>
 #include <chrono>
 
-#include <utils/time_t_helpers.hpp>
+namespace {
+// unnamed namespace for inline functions in compilation unit. Better practice than static inline.
+
+constexpr uint64_t C_FRACTIONS_PER_SEC = 4294967296ULL;
+constexpr uint64_t C_NANOSECONDS_PER_SEC = 1000000000ULL;
+
+inline uint32_t frac_to_nano(
+        uint32_t fractions)
+{
+    return static_cast<uint32_t>((fractions * C_NANOSECONDS_PER_SEC) / C_FRACTIONS_PER_SEC);
+}
+
+inline uint32_t nano_to_frac(
+        uint32_t nanosecs)
+{
+    return static_cast<uint32_t>((nanosecs * C_FRACTIONS_PER_SEC) / C_NANOSECONDS_PER_SEC);
+}
+
+static void current_time_since_unix_epoch(
+        int32_t& secs,
+        uint32_t& nanosecs)
+{
+    using namespace std::chrono;
+
+    // Get time since epoch
+    auto t_since_epoch = system_clock::now().time_since_epoch();
+    // Get seconds
+    auto secs_t = duration_cast<seconds>(t_since_epoch);
+    // Remove seconds from time
+    t_since_epoch -= secs_t;
+
+    // Get seconds and nanoseconds
+    secs = static_cast<int32_t>(secs_t.count());
+    nanosecs = static_cast<uint32_t>(duration_cast<nanoseconds>(t_since_epoch).count());
+}
+
+} // unnamed namespace
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
+
+constexpr int32_t Time_t::INFINITE_SECONDS;
+constexpr uint32_t Time_t::INFINITE_NANOSECONDS;
+
+Time_t::Time_t()
+{
+    seconds = 0;
+    nanosec = 0;
+}
+
+Time_t::Time_t(
+        int32_t sec,
+        uint32_t nsec)
+{
+    seconds = sec;
+    nanosec = nsec;
+}
+
+Time_t::Time_t(
+        long double sec)
+{
+    seconds = static_cast<int32_t>(sec);
+    nanosec = static_cast<uint32_t>((sec - seconds) * C_NANOSECONDS_PER_SEC);
+}
+
+void Time_t::fraction(
+        uint32_t frac)
+{
+    nanosec = (frac == 0xffffffff)
+        ? 0xffffffff
+        : frac_to_nano(frac);
+}
+
+uint32_t Time_t::fraction() const
+{
+    uint32_t fraction = (nanosec == 0xffffffff)
+        ? 0xffffffff
+        : nano_to_frac(nanosec);
+
+    if (fraction != 0xffffffff)
+    {
+        uint32_t nano_check = frac_to_nano(fraction);
+        while (nano_check != nanosec)
+        {
+            nano_check = frac_to_nano(++fraction);
+        }
+    }
+
+    return fraction;
+}
+
+int64_t Time_t::to_ns() const
+{
+    int64_t nano = seconds * static_cast<int64_t>(C_NANOSECONDS_PER_SEC);
+    nano += nanosec;
+    return nano;
+}
+
+void Time_t::now(
+        Time_t& ret)
+{
+    current_time_since_unix_epoch(ret.seconds, ret.nanosec);
+}
+
 namespace rtps {
 
 Time_t::Time_t(
@@ -42,7 +142,7 @@ Time_t::Time_t(
 }
 
 Time_t::Time_t(
-        const eprosima::fastdds::dds::Time_t& time)
+        const eprosima::fastrtps::Time_t& time)
 {
     seconds_ = time.seconds;
     set_nanosec(time.nanosec);
@@ -136,13 +236,13 @@ void Time_t::fraction(
     set_fraction(frac);
 }
 
-dds::Duration_t Time_t::to_duration_t() const
+Duration_t Time_t::to_duration_t() const
 {
-    return dds::Duration_t(seconds_, nanosec_);
+    return Duration_t(seconds_, nanosec_);
 }
 
 void Time_t::from_duration_t(
-        const dds::Duration_t& duration)
+        const Duration_t& duration)
 {
     seconds_ = duration.seconds;
     set_nanosec(duration.nanosec);
@@ -184,5 +284,5 @@ void Time_t::now(
 }
 
 } // namsepace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

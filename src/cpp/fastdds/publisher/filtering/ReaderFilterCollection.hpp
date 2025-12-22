@@ -26,9 +26,9 @@
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
 #include <fastdds/rtps/builtin/data/ContentFilterProperty.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Guid.h>
 
-#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
 
 #include <foonathan/memory/container.hpp>
 #include <foonathan/memory/memory_pool.hpp>
@@ -36,7 +36,7 @@
 #include <fastdds/domain/DomainParticipantImpl.hpp>
 #include <fastdds/publisher/filtering/DataWriterFilteredChange.hpp>
 #include <fastdds/publisher/filtering/ReaderFilterInformation.hpp>
-#include <fastdds/topic/TopicProxy.hpp>
+#include <fastdds/topic/TopicImpl.hpp>
 #include <fastdds/topic/ContentFilterInfo.hpp>
 #include <fastdds/topic/ContentFilterUtils.hpp>
 
@@ -54,7 +54,7 @@ namespace dds {
 class ReaderFilterCollection
 {
     using reader_filter_map_helper =
-            utilities::collections::map_size_helper<fastdds::rtps::GUID_t, ReaderFilterInformation>;
+            utilities::collections::map_size_helper<fastrtps::rtps::GUID_t, ReaderFilterInformation>;
 
 public:
 
@@ -64,7 +64,7 @@ public:
      * @param allocation  Allocation configuration for reader filtering information.
      */
     explicit ReaderFilterCollection(
-            const fastdds::ResourceLimitedContainerConfig& allocation)
+            const fastrtps::ResourceLimitedContainerConfig& allocation)
         : reader_filter_allocator_(
             reader_filter_map_helper::node_size,
             reader_filter_map_helper::min_pool_size<pool_allocator_t>(allocation.initial))
@@ -103,7 +103,7 @@ public:
      */
     void update_filter_info(
             DataWriterFilteredChange& change,
-            const fastdds::rtps::SampleIdentity& related_sample_identity) const
+            const fastrtps::rtps::SampleIdentity& related_sample_identity) const
     {
         change.filtered_out_readers.clear();
 
@@ -135,7 +135,7 @@ public:
 
                         // Only evaluate filter on ALIVE changes, as UNREGISTERED and DISPOSED are always relevant
                         bool filter_result = true;
-                        if (fastdds::rtps::ALIVE == change.kind)
+                        if (fastrtps::rtps::ALIVE == change.kind)
                         {
                             // Evaluate filter and update filtered_out_readers
                             filter_result = entry.filter->evaluate(change.serializedPayload, info, it->first);
@@ -181,7 +181,7 @@ public:
      * @param [in] guid  GUID of the reader to remove.
      */
     void remove_reader(
-            const fastdds::rtps::GUID_t& guid)
+            const fastrtps::rtps::GUID_t& guid)
     {
         auto it = reader_filters_.find(guid);
         if (it != reader_filters_.end())
@@ -201,12 +201,12 @@ public:
      * @param [in] topic        Topic on which the writer calling this method is writing.
      */
     void process_reader_filter_info(
-            const fastdds::rtps::GUID_t& guid,
+            const fastrtps::rtps::GUID_t& guid,
             const rtps::ContentFilterProperty& filter_info,
             DomainParticipantImpl* participant,
             Topic* topic)
     {
-        TopicProxy* writer_topic = static_cast<TopicProxy*>(topic->get_impl());
+        TopicImpl* writer_topic = static_cast<TopicImpl*>(topic->get_impl());
 
         if (0 == filter_info.filter_class_name.size() ||
                 0 != writer_topic->get_rtps_topic_name().compare(filter_info.related_topic_name.c_str()))
@@ -313,7 +313,7 @@ private:
             filter_parameters,
             new_filter);
 
-        if (RETCODE_OK != ret)
+        if (ReturnCode_t::RETCODE_OK != ret)
         {
             return false;
         }
@@ -335,7 +335,7 @@ private:
 
     pool_allocator_t reader_filter_allocator_;
 
-    foonathan::memory::map<fastdds::rtps::GUID_t, ReaderFilterInformation, pool_allocator_t> reader_filters_;
+    foonathan::memory::map<fastrtps::rtps::GUID_t, ReaderFilterInformation, pool_allocator_t> reader_filters_;
 
     std::size_t max_filters_;
 };

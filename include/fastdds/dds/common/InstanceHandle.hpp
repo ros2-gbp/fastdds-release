@@ -17,23 +17,23 @@
  *
  */
 
-#ifndef FASTDDS_DDS_COMMON__INSTANCEHANDLE_HPP
-#define FASTDDS_DDS_COMMON__INSTANCEHANDLE_HPP
+#ifndef _FASTDDS_DDS_COMMON_INSTANCEHANDLE_HPP_
+#define _FASTDDS_DDS_COMMON_INSTANCEHANDLE_HPP_
 
-#include <fastdds/rtps/common/InstanceHandle.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastdds/rtps/common/InstanceHandle.h>
+#include <fastrtps/fastrtps_dll.h>
 
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 
-using InstanceHandle_t = eprosima::fastdds::rtps::InstanceHandle_t;
+using InstanceHandle_t = eprosima::fastrtps::rtps::InstanceHandle_t;
 
-extern FASTDDS_EXPORTED_API const InstanceHandle_t HANDLE_NIL;
+extern RTPS_DllAPI const InstanceHandle_t HANDLE_NIL;
 
 } // namespace dds
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_COMMON__INSTANCEHANDLE_HPP
+#endif // _FASTDDS_DDS_COMMON_INSTANCEHANDLE_HPP_

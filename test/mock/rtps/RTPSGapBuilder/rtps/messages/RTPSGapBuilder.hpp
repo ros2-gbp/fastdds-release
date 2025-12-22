@@ -17,16 +17,13 @@
  *
  */
 
-#ifndef FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP
-#define FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP
+#ifndef RTPSGAPBUILDER_HPP
+#define RTPSGAPBUILDER_HPP
 
-#include <fastdds/rtps/common/SequenceNumber.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
-
-#include <rtps/messages/RTPSMessageGroup.hpp>
+#include <fastrtps/rtps/messages/RTPSMessageGroup.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -89,8 +86,8 @@ public:
     MOCK_METHOD0(flush, bool());
 };
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastrtps */
+} /* namespace eprosima */
 
-#endif // FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP
+#endif /* RTPSGAPBUILDER_HPP */

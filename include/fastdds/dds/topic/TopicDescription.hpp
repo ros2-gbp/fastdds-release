@@ -16,8 +16,8 @@
  * @file TopicDescription.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__TOPICDESCRIPTION_HPP
-#define FASTDDS_DDS_TOPIC__TOPICDESCRIPTION_HPP
+#ifndef _FASTDDS_TOPIC_DESCRIPTION_HPP_
+#define _FASTDDS_TOPIC_DESCRIPTION_HPP_
 
 #include <string>
 
@@ -90,8 +90,8 @@ protected:
     std::string type_name_;
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace dds */
+} /* namespace fastdds */
+} /* namespace eprosima */
 
-#endif // FASTDDS_DDS_TOPIC__TOPICDESCRIPTION_HPP
+#endif /* _FASTDDS_TOPIC_DESCRIPTION_HPP_ */

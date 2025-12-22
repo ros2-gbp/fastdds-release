@@ -1,4 +1,4 @@
-name: Fast DDS MacOS CI
+name: Fast-DDS MacOS CI
 
 on:
   workflow_dispatch:
@@ -28,11 +28,6 @@ on:
         required: false
         type: boolean
         default: false
-      run-tests:
-        description: 'Run test suite of Fast DDS'
-        required: false
-        type: boolean
-        default: true
 
   pull_request:
     types:
@@ -58,6 +53,5 @@ jobs:
       colcon-args: ${{ inputs.colcon-args }}
       cmake-args: '-DSECURITY=ON ${{ inputs.cmake-args }} -DTHIRDPARTY_Asio=FORCE'
       ctest-args: ${{ inputs.ctest-args }}
-      fastdds-branch: ${{ inputs.fastdds_branch || github.ref || 'master' }}
+      fastdds-branch: ${{ inputs.fastdds_branch || github.ref || '2.6.x' }}
       use-ccache: ${{ ((inputs.use-ccache == true) && true) || false }}
-      run-tests: ${{ ((inputs.run-tests == true) && true) || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no-test')) }}
