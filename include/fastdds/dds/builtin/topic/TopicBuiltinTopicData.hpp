@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef FASTDDS_DDS_BUILTIN_TOPIC_TOPICBUILTINTOPICDATA_HPP
-#define FASTDDS_DDS_BUILTIN_TOPIC_TOPICBUILTINTOPICDATA_HPP
+#ifndef FASTDDS_DDS_BUILTIN_TOPIC__TOPICBUILTINTOPICDATA_HPP
+#define FASTDDS_DDS_BUILTIN_TOPIC__TOPICBUILTINTOPICDATA_HPP
 
 #include <fastdds/dds/builtin/topic/BuiltinTopicKey.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
@@ -54,7 +54,7 @@ struct TopicBuiltinTopicData
     //!Reliability Qos, implemented in the library.
     ReliabilityQosPolicy reliability;
 
-    //!Transport Priority Qos, NOT implemented in the library.
+    //!Transport Priority Qos, implemented in the library.
     TransportPriorityQosPolicy transport_priority;
 
     //!Lifespan Qos, implemented in the library.
@@ -78,4 +78,4 @@ struct TopicBuiltinTopicData
 } // fastdds
 } // eprosima
 
-#endif // FASTDDS_DDS_BUILTIN_TOPIC_TOPICBUILTINTOPICDATA_HPP
+#endif // FASTDDS_DDS_BUILTIN_TOPIC__TOPICBUILTINTOPICDATA_HPP

@@ -19,14 +19,14 @@
 #ifndef _SECURITY_ARTIFACTPROVIDERS_PKCS11PROVIDER_HPP_
 #define _SECURITY_ARTIFACTPROVIDERS_PKCS11PROVIDER_HPP_
 
-#include <openssl/engine.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
+#include <string>
 
-#include <fastdds/rtps/security/exceptions/SecurityException.h>
+#include <openssl/types.h>
+
+#include <rtps/security/exceptions/SecurityException.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -48,22 +48,19 @@ public:
 
 private:
 
-    EVP_PKEY* load_private_key_impl(
-            X509* certificate,
-            const std::string& file,
-            const std::string& password,
-            SecurityException& exception);
-
     SecurityException initialization_exception_;
     bool has_initialization_error_ = false;
+
+#if !defined(OPENSSL_NO_ENGINE)
     ENGINE* pkcs11_ = nullptr;
     UI_METHOD* ui_method_ = nullptr;
+#endif // !defined(OPENSSL_NO_ENGINE)
 };
 
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif  // _SECURITY_ARTIFACTPROVIDERS_PKCS11PROVIDER_HPP_

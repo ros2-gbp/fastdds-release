@@ -15,6 +15,8 @@
 #ifndef _FASTDDS_THIRDPARTYBOOST_BOOSTCONFIG_H_
 #define _FASTDDS_THIRDPARTYBOOST_BOOSTCONFIG_H_
 
+#include <utils/shared_memory/BoostAtExitRegistry.hpp>
+
 #define BOOST_DATE_TIME_NO_LIB
 #define BOOST_INTERPROCESS_ENABLE_TIMEOUT_WHEN_LOCKING
 #define BOOST_INTERPROCESS_TIMEOUT_WHEN_LOCKING_DURATION_MS 1000
@@ -26,6 +28,12 @@
 // it is more performant
 #define BOOST_INTERPROCESS_FORCE_NATIVE_EMULATION
 
+#ifdef ANDROID
+#define BOOST_INTERPROCESS_SHARED_DIR_PATH "/data/local/tmp"
+#endif
+
+#define BOOST_INTERPROCESS_ATEXIT(f) eprosima::detail::BoostAtExitRegistry::get_instance()->at_exit_register((f))
+
 #ifdef _MSC_VER
 
 #include <stdlib.h>
@@ -34,7 +42,7 @@
 #include <stdexcept>
 
 // TODO(Adolfo): This will fail if windows system without program data in C: drive
-#define BOOST_INTERPROCESS_SHARED_DIR_PATH "C:\\ProgramData\\eprosima\\fastrtps_interprocess"
+#define BOOST_INTERPROCESS_SHARED_DIR_PATH "C:\\ProgramData\\eprosima\\fastdds_interprocess"
 
 // Check that generic emulation has not been accidentally enabled
 #include <boost/interprocess/detail/workaround.hpp>

@@ -21,56 +21,83 @@
 #include <limits>
 #include <mutex>
 
-#include <fastdds/rtps/common/InstanceHandle.h>
-#include <fastdds/rtps/common/Time_t.h>
+#include <fastdds/dds/common/InstanceHandle.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/writer/RTPSWriter.h>
+#include <fastdds/dds/topic/qos/TopicQos.hpp>
+#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.hpp>
+
+#include <rtps/history/HistoryAttributesExtension.hpp>
+#include <rtps/writer/BaseWriter.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds::rtps;
 
-static HistoryAttributes to_history_attributes(
-        const TopicAttributes& topic_att,
+HistoryAttributes DataWriterHistory::to_history_attributes(
+        const HistoryQosPolicy& history_qos,
+        const ResourceLimitsQosPolicy& resource_limits_qos,
+        const rtps::TopicKind_t& topic_kind,
         uint32_t payloadMaxSize,
         MemoryManagementPolicy_t mempolicy)
 {
-    auto initial_samples = topic_att.resourceLimitsQos.allocated_samples;
-    auto max_samples = topic_att.resourceLimitsQos.max_samples;
-    auto extra_samples = topic_att.resourceLimitsQos.extra_samples;
+    auto initial_samples = resource_limits_qos.allocated_samples;
+    auto max_samples = resource_limits_qos.max_samples;
+    auto extra_samples = resource_limits_qos.extra_samples;
 
-    if (topic_att.historyQos.kind != KEEP_ALL_HISTORY_QOS)
+    if (history_qos.kind != KEEP_ALL_HISTORY_QOS)
     {
-        max_samples = topic_att.historyQos.depth;
-        if (topic_att.getTopicKind() != NO_KEY)
+        max_samples = get_min_max_samples(history_qos.depth, resource_limits_qos.max_samples_per_instance);
+        if (topic_kind != NO_KEY)
         {
-            max_samples *= topic_att.resourceLimitsQos.max_instances;
+            if (0 < resource_limits_qos.max_instances)
+            {
+                max_samples *= resource_limits_qos.max_instances;
+            }
+            else
+            {
+                max_samples = LENGTH_UNLIMITED;
+            }
         }
 
-        initial_samples = std::min(initial_samples, max_samples);
+        if (0 < initial_samples)
+        {
+            initial_samples = get_min_max_samples(initial_samples, max_samples);
+        }
     }
 
     return HistoryAttributes(mempolicy, payloadMaxSize, initial_samples, max_samples, extra_samples);
 }
 
 DataWriterHistory::DataWriterHistory(
-        const TopicAttributes& topic_att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        const std::shared_ptr<IChangePool>& change_pool,
+        const HistoryQosPolicy& history_qos,
+        const ResourceLimitsQosPolicy& resource_limits_qos,
+        const rtps::TopicKind_t& topic_kind,
         uint32_t payloadMaxSize,
-        MemoryManagementPolicy_t mempolicy)
-    : WriterHistory(to_history_attributes(topic_att, payloadMaxSize, mempolicy))
-    , history_qos_(topic_att.historyQos)
-    , resource_limited_qos_(topic_att.resourceLimitsQos)
-    , topic_att_(topic_att)
+        MemoryManagementPolicy_t mempolicy,
+        std::function<void (const fastdds::rtps::InstanceHandle_t&)> unack_sample_remove_functor)
+    : WriterHistory(to_history_attributes(history_qos, resource_limits_qos, topic_kind, payloadMaxSize,
+            mempolicy), payload_pool, change_pool)
+    , history_qos_(history_qos)
+    , resource_limited_qos_(resource_limits_qos)
+    , topic_kind_(topic_kind)
+    , unacknowledged_sample_removed_functor_(unack_sample_remove_functor)
 {
-    if (resource_limited_qos_.max_instances == 0)
+    if (resource_limited_qos_.max_samples <= 0)
+    {
+        resource_limited_qos_.max_samples = std::numeric_limits<int32_t>::max();
+    }
+
+    if (resource_limited_qos_.max_instances <= 0)
     {
         resource_limited_qos_.max_instances = std::numeric_limits<int32_t>::max();
     }
 
-    if (resource_limited_qos_.max_samples_per_instance == 0)
+    if (resource_limited_qos_.max_samples_per_instance <= 0)
     {
         resource_limited_qos_.max_samples_per_instance = std::numeric_limits<int32_t>::max();
     }
@@ -82,7 +109,7 @@ DataWriterHistory::~DataWriterHistory()
 
 void DataWriterHistory::rebuild_instances()
 {
-    if (topic_att_.getTopicKind() == WITH_KEY)
+    if (topic_kind_ == WITH_KEY)
     {
         for (CacheChange_t* change : m_changes)
         {
@@ -104,7 +131,7 @@ bool DataWriterHistory::register_instance(
     payload = nullptr;
 
     /// Preconditions
-    if (topic_att_.getTopicKind() == NO_KEY)
+    if (topic_kind_ == NO_KEY)
     {
         return false;
     }
@@ -118,8 +145,8 @@ bool DataWriterHistory::register_instance(
     return result;
 }
 
-fastrtps::rtps::SerializedPayload_t* DataWriterHistory::get_key_value(
-        const fastrtps::rtps::InstanceHandle_t& handle)
+fastdds::rtps::SerializedPayload_t* DataWriterHistory::get_key_value(
+        const fastdds::rtps::InstanceHandle_t& handle)
 {
     t_m_Inst_Caches::iterator vit = keyed_changes_.find(handle);
     if (vit != keyed_changes_.end() && vit->second.is_registered())
@@ -137,19 +164,30 @@ bool DataWriterHistory::prepare_change(
     if (m_isHistoryFull)
     {
         bool ret = false;
+        bool is_acked = change_is_acked_or_fully_delivered(m_changes.front());
+        InstanceHandle_t instance = topic_kind_ == NO_KEY ?
+                HANDLE_NIL : m_changes.front()->instanceHandle;
 
         if (history_qos_.kind == KEEP_ALL_HISTORY_QOS)
         {
             ret = this->mp_writer->try_remove_change(max_blocking_time, lock);
+            // If change was removed (ret == 1) in KeepAllHistory, it must have been acked
+            is_acked = ret;
         }
         else if (history_qos_.kind == KEEP_LAST_HISTORY_QOS)
         {
-            ret = this->remove_min_change();
+            ret = this->remove_min_change(max_blocking_time);
         }
 
-        if (!ret)
+        // Notify if change has been removed unacknowledged
+        if (ret && !is_acked)
         {
-            logWarning(RTPS_HISTORY, "Attempting to add Data to Full WriterCache: " << topic_att_.getTopicDataType());
+            unacknowledged_sample_removed_functor_(instance);
+        }
+        else if (!ret)
+        {
+            EPROSIMA_LOG_WARNING(RTPS_HISTORY,
+                    "Attempting to add Data to Full WriterCache.");
             return false;
         }
     }
@@ -157,8 +195,8 @@ bool DataWriterHistory::prepare_change(
     assert(!m_isHistoryFull);
 
     // For NO_KEY we can directly add the change
-    bool add = (topic_att_.getTopicKind() == NO_KEY);
-    if (topic_att_.getTopicKind() == WITH_KEY)
+    bool add = (topic_kind_ == NO_KEY);
+    if (topic_kind_ == WITH_KEY)
     {
         t_m_Inst_Caches::iterator vit;
 
@@ -181,7 +219,14 @@ bool DataWriterHistory::prepare_change(
                 }
                 else
                 {
+                    bool is_acked = change_is_acked_or_fully_delivered(vit->second.cache_changes.front());
+                    InstanceHandle_t instance = change->instanceHandle;
                     add = remove_change_pub(vit->second.cache_changes.front());
+                    // Notify if removed unacknowledged
+                    if (add && !is_acked)
+                    {
+                        unacknowledged_sample_removed_functor_(instance);
+                    }
                 }
             }
             else if (history_qos_.kind == KEEP_ALL_HISTORY_QOS)
@@ -245,10 +290,9 @@ bool DataWriterHistory::add_pub_change(
         if (this->add_change_(change, wparams))
 #endif // if HAVE_STRICT_REALTIME
         {
-            logInfo(RTPS_HISTORY,
-                    topic_att_.getTopicDataType()
-                    << " Change " << change->sequenceNumber << " added with key: " << change->instanceHandle
-                    << " and " << change->serializedPayload.length << " bytes");
+            EPROSIMA_LOG_INFO(RTPS_HISTORY,
+                    " Change " << change->sequenceNumber << " added with key: " << change->instanceHandle
+                               << " and " << change->serializedPayload.length << " bytes");
             returnedValue = true;
         }
     }
@@ -315,7 +359,7 @@ bool DataWriterHistory::removeMinChange()
 {
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
 
@@ -330,16 +374,33 @@ bool DataWriterHistory::removeMinChange()
 bool DataWriterHistory::remove_change_pub(
         CacheChange_t* change)
 {
+    return DataWriterHistory::remove_change_pub(change, std::chrono::steady_clock::now() + std::chrono::hours(24));
+}
+
+bool DataWriterHistory::remove_change_pub(
+        CacheChange_t* change,
+        const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time)
+{
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
 
-    std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
-    if (topic_att_.getTopicKind() == NO_KEY)
+#if HAVE_STRICT_REALTIME
+    std::unique_lock<RecursiveTimedMutex> lock(*this->mp_mutex, std::defer_lock);
+    if (!lock.try_lock_until(max_blocking_time))
     {
-        if (remove_change(change))
+        EPROSIMA_LOG_ERROR(PUBLISHER, "Cannot lock the DataWriterHistory mutex");
+        return false;
+    }
+#else
+    std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
+#endif // if HAVE_STRICT_REALTIME
+
+    if (topic_kind_ == NO_KEY)
+    {
+        if (remove_change(change, max_blocking_time))
         {
             m_isHistoryFull = false;
             return true;
@@ -360,7 +421,7 @@ bool DataWriterHistory::remove_change_pub(
         {
             if (((*chit)->sequenceNumber == change->sequenceNumber) && ((*chit)->writerGUID == change->writerGUID))
             {
-                if (remove_change(change))
+                if (remove_change(change, max_blocking_time))
                 {
                     vit->second.cache_changes.erase(chit);
                     m_isHistoryFull = false;
@@ -368,7 +429,7 @@ bool DataWriterHistory::remove_change_pub(
                 }
             }
         }
-        logError(PUBLISHER, "Change not found, something is wrong");
+        EPROSIMA_LOG_ERROR(PUBLISHER, "Change not found, something is wrong");
     }
     return false;
 }
@@ -376,7 +437,14 @@ bool DataWriterHistory::remove_change_pub(
 bool DataWriterHistory::remove_change_g(
         CacheChange_t* a_change)
 {
-    return remove_change_pub(a_change);
+    return remove_change_pub(a_change, std::chrono::steady_clock::now() + std::chrono::hours(24));
+}
+
+bool DataWriterHistory::remove_change_g(
+        CacheChange_t* a_change,
+        const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time)
+{
+    return remove_change_pub(a_change, max_blocking_time);
 }
 
 bool DataWriterHistory::remove_instance_changes(
@@ -385,13 +453,13 @@ bool DataWriterHistory::remove_instance_changes(
 {
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
 
-    if (topic_att_.getTopicKind() == NO_KEY)
+    if (topic_kind_ == NO_KEY)
     {
-        logError(RTPS_HISTORY, "Cannot be removed instance changes of a NO_KEY DataType");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "Cannot be removed instance changes of a NO_KEY DataType");
         return false;
     }
 
@@ -429,17 +497,17 @@ bool DataWriterHistory::set_next_deadline(
 {
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
     std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
 
-    if (topic_att_.getTopicKind() == NO_KEY)
+    if (topic_kind_ == NO_KEY)
     {
         next_deadline_us_ = next_deadline_us;
         return true;
     }
-    else if (topic_att_.getTopicKind() == WITH_KEY)
+    else if (topic_kind_ == WITH_KEY)
     {
         if (keyed_changes_.find(handle) == keyed_changes_.end())
         {
@@ -459,12 +527,12 @@ bool DataWriterHistory::get_next_deadline(
 {
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
     std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
 
-    if (topic_att_.getTopicKind() == WITH_KEY)
+    if (topic_kind_ == WITH_KEY)
     {
         auto min = std::min_element(
             keyed_changes_.begin(),
@@ -480,7 +548,7 @@ bool DataWriterHistory::get_next_deadline(
         next_deadline_us = min->second.next_deadline_us;
         return true;
     }
-    else if (topic_att_.getTopicKind() == NO_KEY)
+    else if (topic_kind_ == NO_KEY)
     {
         next_deadline_us = next_deadline_us_;
         return true;
@@ -494,7 +562,7 @@ bool DataWriterHistory::is_key_registered(
 {
     if (mp_writer == nullptr || mp_mutex == nullptr)
     {
-        logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+        EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
         return false;
     }
     std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
@@ -508,7 +576,7 @@ bool DataWriterHistory::wait_for_acknowledgement_last_change(
         std::unique_lock<RecursiveTimedMutex>& lock,
         const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time)
 {
-    if (WITH_KEY == topic_att_.getTopicKind())
+    if (WITH_KEY == topic_kind_)
     {
         // Find the instance
         t_m_Inst_Caches::iterator vit = keyed_changes_.find(handle);
@@ -521,6 +589,21 @@ bool DataWriterHistory::wait_for_acknowledgement_last_change(
     return false;
 }
 
+bool DataWriterHistory::change_is_acked_or_fully_delivered(
+        const CacheChange_t* change)
+{
+    bool is_acked = false;
+    if (mp_writer->get_disable_positive_acks())
+    {
+        is_acked = mp_writer->has_been_fully_delivered(change->sequenceNumber);
+    }
+    else
+    {
+        is_acked = mp_writer->is_acked_by_all(change->sequenceNumber);
+    }
+    return is_acked;
+}
+
 }  // namespace dds
-}  // namespace fastrtps
+}  // namespace fastdds
 }  // namespace eprosima

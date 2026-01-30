@@ -19,7 +19,10 @@
         ::testing::UnitTest::GetInstance()->current_test_info()->test_case_name() + std::string( \
             "_") + ::testing::UnitTest::GetInstance()->current_test_info()->name())
 
-#if defined(_WIN32)
+#if defined(__cplusplus_winrt)
+#define GET_PID GetCurrentProcessId
+#include <process.h>
+#elif defined(_WIN32)
 #define GET_PID _getpid
 #include <process.h>
 #else
@@ -28,20 +31,32 @@
 #include <unistd.h>
 #endif // if defined(_WIN32)
 
-#include "../types/Data1mbPubSubTypes.h"
-#include "../types/Data64kbPubSubTypes.h"
-#include "../types/FixedSizedPubSubTypes.h"
-#include "../types/HelloWorldPubSubTypes.h"
-#include "../types/KeyedData1mbPubSubTypes.h"
-#include "../types/KeyedHelloWorldPubSubTypes.h"
-#include "../types/StringTestPubSubTypes.h"
-#include "../types/UnboundedHelloWorldPubSubTypes.h"
+#include "../types/Data1mbPubSubTypes.hpp"
+#include "../types/Data100kbPubSubTypes.hpp"
+#include "../types/Data64kbPubSubTypes.hpp"
+#include "../types/FixedSizedPubSubTypes.hpp"
+#include "../types/HelloWorldPubSubTypes.hpp"
+#include "../types/KeyedData1mbPubSubTypes.hpp"
+#include "../types/KeyedHelloWorldPubSubTypes.hpp"
+#include "../types/core/core_typesPubSubTypes.hpp"
+#include "../types/StringTestPubSubTypes.hpp"
+#include "../types/UnboundedHelloWorldPubSubTypes.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <list>
 #include <functional>
+
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+struct BuiltinTopicKey_t;
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima
 
 #if HAVE_SECURITY
 extern void blackbox_security_init();
@@ -87,6 +102,10 @@ void default_receive_print(
 
 template<>
 void default_receive_print(
+        const Data100kb& data);
+
+template<>
+void default_receive_print(
         const Data1mb& data);
 
 template<>
@@ -123,6 +142,10 @@ void default_send_print(
 template<>
 void default_send_print(
         const Data64kb& data);
+
+template<>
+void default_send_print(
+        const Data100kb& data);
 
 template<>
 void default_send_print(
@@ -165,6 +188,9 @@ std::list<Data1mb> default_data300kb_mix_data_generator(
 std::list<Data1mb> default_data96kb_data300kb_data_generator(
         size_t max = 0);
 
+std::list<Data100kb> default_data100kb_data_generator(
+        size_t max = 0);
+
 std::list<KeyedData1mb> default_keyeddata300kb_data_generator(
         size_t max = 0);
 
@@ -182,6 +208,8 @@ extern const std::function<void(const StringTest&)>  default_string_print;
 
 extern const std::function<void(const Data64kb&)>  default_data64kb_print;
 
+extern const std::function<void(const Data100kb&)>  default_data100kb_print;
+
 extern const std::function<void(const Data1mb&)>  default_data300kb_print;
 
 template<typename T>
@@ -198,5 +226,16 @@ void print_non_received_messages(
 }
 
 /***** End auxiliary lambda function *****/
+
+/****** Auxiliary conversion helpers *******/
+void entity_id_to_builtin_topic_key(
+        eprosima::fastdds::rtps::BuiltinTopicKey_t& bt_key,
+        const eprosima::fastdds::rtps::EntityId_t& entity_id);
+
+void guid_prefix_to_builtin_topic_key(
+        eprosima::fastdds::rtps::BuiltinTopicKey_t& bt_key,
+        const eprosima::fastdds::rtps::GuidPrefix_t& guid_prefix);
+
+/****** End Auxiliary conversion helpers *******/
 
 #endif // __BLACKBOX_BLACKBOXTESTS_HPP__

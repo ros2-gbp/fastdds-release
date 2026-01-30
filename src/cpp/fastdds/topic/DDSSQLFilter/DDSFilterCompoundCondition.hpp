@@ -19,6 +19,7 @@
 #ifndef _FASTDDS_TOPIC_DDSSQLFILTER_DDSFILTERCOMPOUNDCONDITION_HPP_
 #define _FASTDDS_TOPIC_DDSSQLFILTER_DDSFILTERCOMPOUNDCONDITION_HPP_
 
+#include <cstdint>
 #include <memory>
 
 #include "DDSFilterCondition.hpp"
@@ -49,9 +50,9 @@ public:
     /**
      * Construct a DDSFilterCompoundCondition.
      *
-     * @param[in]  op     Operation to perform.
-     * @param[in]  left   Left operand.
-     * @param[in]  right  Right operand.
+     * @param [in]  op     Operation to perform.
+     * @param [in]  left   Left operand.
+     * @param [in]  right  Right operand.
      */
     DDSFilterCompoundCondition(
             OperationKind op,

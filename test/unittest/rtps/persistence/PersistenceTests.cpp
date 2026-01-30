@@ -12,41 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
+#include <climits>
+#include <sstream>
 
+#include <gtest/gtest.h>
+
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
+
+#include <rtps/common/GuidUtils.hpp>
 #include <rtps/history/CacheChangePool.h>
 #include <rtps/persistence/PersistenceService.h>
 #include <rtps/persistence/sqlite3.h>
 #include <rtps/persistence/SQLite3PersistenceServiceStatements.h>
+#include <utils/SystemInfo.hpp>
 
-#include <rtps/common/GuidUtils.hpp>
-#include <fastrtps/utils/TimeConversion.h>
-#include <fastdds/rtps/history/WriterHistory.h>
-
-#include <climits>
-#include <gtest/gtest.h>
-
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds::rtps;
 
 class NoOpPayloadPool : public IPayloadPool
 {
     virtual bool get_payload(
             uint32_t,
-            CacheChange_t&) override
+            SerializedPayload_t&) override
     {
         return true;
     }
 
     virtual bool get_payload(
-            SerializedPayload_t&,
-            IPayloadPool*&,
-            CacheChange_t&) override
+            const SerializedPayload_t&,
+            SerializedPayload_t&) override
     {
         return true;
     }
 
     virtual bool release_payload(
-            CacheChange_t&) override
+            SerializedPayload_t&) override
     {
         return true;
     }
@@ -63,7 +63,33 @@ protected:
 
     virtual void SetUp()
     {
-        std::remove(dbfile);
+        // Get info about current test
+        auto info = ::testing::UnitTest::GetInstance()->current_test_info();
+
+        // Create DB file name from test name and PID
+        std::ostringstream ss;
+        std::string test_case_name(info->test_case_name());
+        std::string test_name(info->name());
+        if (std::string::npos != test_case_name.find_first_of('/'))
+        {
+            ss << test_case_name.replace(test_case_name.find_first_of('/'), 1, "_");
+        }
+        else
+        {
+            ss << test_case_name;
+        }
+        ss <<  "_";
+        if (std::string::npos != test_name.find_first_of('/'))
+        {
+            ss << test_name.replace(test_name.find_first_of('/'), 1, "_");
+
+        }
+        else
+        {
+            ss << test_name;
+        }
+        ss << "_" << eprosima::SystemInfo::instance().process_id() << ".db";
+        dbfile = ss.str();
     }
 
     virtual void TearDown()
@@ -73,7 +99,7 @@ protected:
             delete service;
         }
 
-        std::remove(dbfile);
+        std::remove(dbfile.c_str());
     }
 
     void create_database(
@@ -98,7 +124,7 @@ protected:
         int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
                 SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_SHAREDCACHE;
 
-        rc = sqlite3_open_v2(dbfile, db, flags, 0);
+        rc = sqlite3_open_v2(dbfile.c_str(), db, flags, 0);
         if (rc != SQLITE_OK)
         {
             FAIL() << sqlite3_errmsg(*db);
@@ -221,7 +247,7 @@ protected:
         }
     }
 
-    const char* dbfile = "text.db";
+    std::string dbfile = "text.db";
 };
 
 /*!
@@ -230,6 +256,8 @@ protected:
  */
 TEST_F(PersistenceTest, Writer)
 {
+    using testing::_;
+
     const std::string persist_guid("TEST_WRITER");
 
     PropertyPolicy policy;
@@ -254,9 +282,18 @@ TEST_F(PersistenceTest, Writer)
     change.writerGUID = guid;
     change.serializedPayload.length = 0;
 
+    auto create_change = [&pool](uint32_t, ChangeKind_t, InstanceHandle_t)
+            {
+                CacheChange_t* ch = nullptr;
+                return pool->reserve_cache(ch) ? ch : nullptr;
+            };
+    EXPECT_CALL(history, create_change(_, _, _))
+            .Times(testing::AnyNumber())
+            .WillRepeatedly(testing::Invoke(create_change));
+
     // Initial load should return empty vector
     history.m_changes.clear();
-    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, pool, payload_pool_, max_seq));
+    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, max_seq));
     ASSERT_EQ(history.m_changes.size(), 0u);
 
     // Add two changes
@@ -273,7 +310,7 @@ TEST_F(PersistenceTest, Writer)
 
     // Loading should return two changes (seqs = 1, 2)
     history.m_changes.clear();
-    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, pool, payload_pool_, max_seq));
+    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, max_seq));
     ASSERT_EQ(history.m_changes.size(), 2u);
     ASSERT_EQ(max_seq, SequenceNumber_t(0, 2u));
     uint32_t i = 0;
@@ -290,7 +327,7 @@ TEST_F(PersistenceTest, Writer)
 
     // Loading should return one change (seq = 2)
     history.m_changes.clear();
-    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, pool, payload_pool_, max_seq));
+    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, max_seq));
     ASSERT_EQ(history.m_changes.size(), 1u);
     ASSERT_EQ((*history.m_changes.begin())->sequenceNumber, SequenceNumber_t(0, 2));
     ASSERT_EQ(max_seq, SequenceNumber_t(0, 2u));
@@ -299,11 +336,10 @@ TEST_F(PersistenceTest, Writer)
     history.m_changes.clear();
     change.sequenceNumber.low = 2;
     ASSERT_TRUE(service->remove_writer_change_from_storage(persist_guid, change));
-    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, pool, payload_pool_, max_seq));
+    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, max_seq));
     ASSERT_EQ(history.m_changes.size(), 0u);
     ASSERT_EQ(max_seq, SequenceNumber_t(0, 2u));
 }
-
 
 /*!
  * @fn TEST_F(PersistenceTest, SchemaVersionMismatch)
@@ -333,6 +369,8 @@ TEST_F(PersistenceTest, SchemaVersionMismatch)
  */
 TEST_P(PersistenceTest, SchemaVersionUpdate)
 {
+    using testing::_;
+
     auto from = GetParam();
 
     ASSERT_LT(from, 3);
@@ -367,9 +405,18 @@ TEST_P(PersistenceTest, SchemaVersionUpdate)
     change.writerGUID = guid;
     change.serializedPayload.length = 0;
 
+    auto create_change = [&pool](uint32_t, ChangeKind_t, InstanceHandle_t)
+            {
+                CacheChange_t* ch = nullptr;
+                return pool->reserve_cache(ch) ? ch : nullptr;
+            };
+    EXPECT_CALL(history, create_change(_, _, _))
+            .Times(testing::AnyNumber())
+            .WillRepeatedly(testing::Invoke(create_change));
+
     // Load data
     history.m_changes.clear();
-    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, pool, payload_pool_, last_seq_number));
+    ASSERT_TRUE(service->load_writer_from_storage(persist_guid, guid, &history, last_seq_number));
     ASSERT_EQ(history.m_changes.size(), 2u);
     ASSERT_EQ(last_seq_number, SequenceNumber_t(0, 2u));
     uint32_t i = 0;

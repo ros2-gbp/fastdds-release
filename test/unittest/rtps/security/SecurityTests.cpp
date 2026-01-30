@@ -39,8 +39,6 @@ void SecurityTest::initialization_ok()
             WillOnce(DoAll(SetArgPointee<0>(stateless_reader_), Return(true))).
             WillOnce(DoAll(SetArgPointee<0>(volatile_reader_), Return(true)));
 
-    EXPECT_CALL(*volatile_writer_, set_separate_sending(true)).Times(1);
-
     security_activated_ = manager_.init(security_attributes_, participant_properties_);
     ASSERT_TRUE(security_activated_);
     ASSERT_TRUE(manager_.is_security_initialized());
@@ -86,14 +84,14 @@ void SecurityTest::request_process_ok(
             Ref(remote_identity_handle_), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle_),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
             WillOnce(Return(change));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change)).Times(1).
             WillOnce(Return(true));
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
-    fill_participant_key(participant_data_.m_guid);
+    fill_participant_key(participant_data_.guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data_));
 
     if (request_message_change != nullptr)
@@ -115,12 +113,12 @@ void SecurityTest::reply_process_ok(
             WillOnce(DoAll(SetArgPointee<0>(&remote_identity_handle_),
             Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
 
-    fill_participant_key(participant_data_.m_guid);
+    fill_participant_key(participant_data_.guid);
     ASSERT_TRUE(manager_.discovered_participant(participant_data_));
 
     ParticipantGenericMessage message;
-    message.message_identity().source_guid(participant_data_.m_guid);
-    message.destination_participant_key(participant_data_.m_guid);
+    message.message_identity().source_guid(participant_data_.guid);
+    message.destination_participant_key(participant_data_.guid);
     message.message_class_id("dds.sec.auth");
     HandshakeMessageToken token;
     message.message_data().push_back(token);
@@ -149,7 +147,7 @@ void SecurityTest::reply_process_ok(
             Ref(local_identity_handle_), _, _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_handle_),
             SetArgPointee<1>(&handshake_message), Return(ValidationResult_t::VALIDATION_PENDING_HANDSHAKE_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
             WillOnce(Return(change2));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change2)).Times(1).
             WillOnce(Return(true));
@@ -158,7 +156,7 @@ void SecurityTest::reply_process_ok(
     EXPECT_CALL(participant_, pdp()).Times(1).WillOnce(Return(&pdp_));
     EXPECT_CALL(pdp_, get_participant_proxy_data_serialized(BIGEND)).Times(1);
 
-    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
+    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
 
     if (reply_message_change != nullptr)
     {
@@ -178,7 +176,7 @@ void SecurityTest::final_message_process_ok(
     EXPECT_CALL(*stateless_writer_->history_, remove_change(SequenceNumber_t{ 0, 1 })).Times(1).
             WillOnce(Return(true));
 
-    GUID_t remote_participant_key(participant_data_.m_guid);
+    GUID_t remote_participant_key(participant_data_.guid);
 
     ParticipantGenericMessage message;
     message.message_identity().source_guid(remote_participant_key);
@@ -217,7 +215,7 @@ void SecurityTest::final_message_process_ok(
     EXPECT_CALL(*auth_plugin_, process_handshake_rvr(_, _, Ref(handshake_handle_), _)).Times(1).
             WillOnce(DoAll(SetArgPointee<0>(&handshake_message),
             Return(ValidationResult_t::VALIDATION_OK_WITH_FINAL_MESSAGE)));
-    EXPECT_CALL(*stateless_writer_, new_change(_, _, _)).Times(1).
+    EXPECT_CALL(*stateless_writer_->history_, create_change(_, _, _)).Times(1).
             WillOnce(Return(change2));
     EXPECT_CALL(*stateless_writer_->history_, add_change_mock(change2)).Times(1).
             WillOnce(Return(true));
@@ -249,9 +247,9 @@ void SecurityTest::final_message_process_ok(
     CacheChange_t* kx_change_to_remove = new CacheChange_t(200);
     expect_kx_exchange(kx_change_to_add, kx_change_to_remove);
 
-    stateless_reader_->listener_->onNewCacheChangeAdded(stateless_reader_, change);
+    stateless_reader_->listener_->on_new_cache_change_added(stateless_reader_, change);
 
-    volatile_writer_->listener_->onWriterChangeReceivedByAll(volatile_writer_, kx_change_to_remove);
+    volatile_writer_->listener_->on_writer_change_received_by_all(volatile_writer_, kx_change_to_remove);
 
     if (final_message_change == nullptr)
     {
@@ -267,10 +265,10 @@ void SecurityTest::expect_kx_exchange(
         CacheChange_t& kx_change_to_add,
         CacheChange_t* kx_change_to_remove)
 {
-    EXPECT_CALL(*volatile_writer_, new_change(_, _, _)).Times(1).WillOnce(
-        DoAll(Invoke([&kx_change_to_add](const std::function<uint32_t()>& f, ChangeKind_t, InstanceHandle_t)
+    EXPECT_CALL(*volatile_writer_->history_, create_change(_, _, _)).Times(1).WillOnce(
+        DoAll(Invoke([&kx_change_to_add](uint32_t cdr_size, ChangeKind_t, InstanceHandle_t)
         {
-            kx_change_to_add.serializedPayload.reserve(f());
+            kx_change_to_add.serializedPayload.reserve(cdr_size);
         }),
         Return(&kx_change_to_add)));
     EXPECT_CALL(*volatile_writer_->history_, add_change_mock(&kx_change_to_add)).Times(1).

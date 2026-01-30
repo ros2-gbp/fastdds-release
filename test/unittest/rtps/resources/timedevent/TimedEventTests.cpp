@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mock/MockEvent.h"
-#include <fastrtps/rtps/resources/ResourceEvent.h>
-#include <thread>
 #include <random>
+#include <thread>
+
 #include <gtest/gtest.h>
+
+#include <rtps/resources/ResourceEvent.h>
+
+#include "mock/MockEvent.h"
 
 class TimedEventEnvironment : public ::testing::Environment
 {
@@ -24,7 +27,7 @@ public:
 
     void SetUp()
     {
-        service_ = new eprosima::fastrtps::rtps::ResourceEvent();
+        service_ = new eprosima::fastdds::rtps::ResourceEvent();
         service_->init_thread();
     }
 
@@ -33,7 +36,7 @@ public:
         delete service_;
     }
 
-    eprosima::fastrtps::rtps::ResourceEvent* service_;
+    eprosima::fastdds::rtps::ResourceEvent* service_;
 };
 
 TimedEventEnvironment* const env =
@@ -108,6 +111,43 @@ TEST(TimedEvent, Event_RestartEvents)
     int successed = event.successed_.load(std::memory_order_relaxed);
 
     ASSERT_EQ(successed, 1);
+}
+
+/*!
+ * @fn TEST(TimedEvent, Event_RecreateEvents)
+ * @brief This test checks the correct behavior of recreating events.
+ * First it is checked that recreating and restarting an event multiple times is possible.
+ * The event is then recreated (blocking cancel), and an object shared with the callback is modified in the main thread.
+ * A data race would be reported by thread sanitizer if cancelling (\c cancel_timer) the event instead.
+ */
+TEST(TimedEvent, Event_RecreateEvents)
+{
+    int num = 0;
+    auto callback = [&num]() -> void
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                num++;
+            };
+
+    MockEvent event(*env->service_, 100, false, callback);
+
+    for (int i = 0; i < 10; ++i)
+    {
+        event.event().recreate_timer();
+        event.event().restart_timer();
+        event.wait();
+    }
+
+    // Recreate timer (blocking cancel) and modify object shared with callback
+    // A data race would be reported by thread sanitizer if using cancel_timer instead
+    event.event().recreate_timer();
+    num = 10;
+
+    ASSERT_FALSE(event.wait(120));
+
+    int successed = event.successed_.load(std::memory_order_relaxed);
+
+    ASSERT_EQ(successed, 10);
 }
 
 /*!
@@ -335,7 +375,7 @@ TEST(TimedEventMultithread, Event_FourAutoRestart)
 
 TEST(TimedEventMultithread, PendingRaceCheck)
 {
-    using TimedEvent = eprosima::fastrtps::rtps::TimedEvent;
+    using TimedEvent = eprosima::fastdds::rtps::TimedEvent;
     using TimeClock = std::chrono::high_resolution_clock;
     using TimePoint = std::chrono::time_point<TimeClock>;
 
@@ -414,7 +454,7 @@ TEST(TimedEventMultithread, PendingRaceCheck)
  */
 TEST(TimedEvent, Event_UnregisterEventWithinCallbackOfAnotherEvent)
 {
-    using TimedEvent = eprosima::fastrtps::rtps::TimedEvent;
+    using TimedEvent = eprosima::fastdds::rtps::TimedEvent;
 
     constexpr auto expiration_ms = std::chrono::milliseconds(100);
     std::atomic_bool success(false);

@@ -15,27 +15,29 @@
 # limitations under the License.
 
 """
-    fastdds CLI tool.
+fastdds CLI tool.
 
-    This CLI tool provide a set commands and sub-commands to perform, Fast-DDS
-    related, maintenance / configuration tasks.
+This CLI tool provide a set commands and sub-commands to perform, Fast DDS
+related, maintenance / configuration tasks.
 
-    usage: fastdds <command> [<command-args>]
+usage: fastdds <command> [<command-args>]
 
-        Commands:
+    Commands:
 
-            discovery     Server-Client discovery auxiliary generator
+        discovery     Server-Client discovery auxiliary generator
 
-            shm           Shared-memory commands
+        shm           Shared-memory commands
 
-        fastdds <command> [-h] shows command usage
+        xml           XML commands
+
+    fastdds <command> [-h] shows command usage
 
 
-    positional arguments:
-    command     Command to run
+positional arguments:
+command     Command to run
 
-    optional arguments:
-    -h, --help  show this help message and exit
+optional arguments:
+-h, --help  show this help message and exit
 
 """
 
@@ -56,6 +58,7 @@ class FastDDSParser:
     Commands:\n\n
     \tdiscovery     Server-Client discovery auxiliary generator\n
     \tshm           Shared-memory commands\n
+    \txml           XML commands\n
     fastdds <command> [-h] shows command usage
     """
 
@@ -75,14 +78,17 @@ class FastDDSParser:
         parser.add_argument('command',
                             nargs='?',
                             help='Command to run')
+        parser.add_argument('-v', '--version', action='store_true', help='Print Fast DDS version')
 
         args = parser.parse_args(sys.argv[1:2])
 
         if args.command is not None:
             if not hasattr(self, args.command):
-                print('Invalid command')
+                print(f"Invalid command: '{args.command}'. Use 'fastdds -h' for help.")
             else:
                 getattr(self, args.command)()
+        elif args.version:
+            DiscoveryParser(['-v'])
         else:
             parser.print_help()
 
@@ -106,6 +112,18 @@ class FastDDSParser:
         """Discovery server command handler."""
         DiscoveryParser(sys.argv[2:])
 
+    def xml(self):
+        """
+        XML validation command handler.
+
+        New python dependency (XMLSchema) included in 2.10.X
+        Check it is installed, and report installation command if it is not.
+        """
+        try:
+            from xml_ci.parser import XMLParser
+            XMLParser(sys.argv[2:])
+        except ImportError:
+            sys.exit(1)
 
 if __name__ == '__main__':
 

@@ -17,13 +17,13 @@
  */
 
 #include <rtps/DataSharing/DataSharingNotification.hpp>
-#include <fastdds/rtps/common/Time_t.h>
+#include <fastdds/rtps/common/Time_t.hpp>
 
 #include <memory>
 #include <mutex>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 std::shared_ptr<DataSharingNotification> DataSharingNotification::create_notification(
@@ -94,10 +94,11 @@ void DataSharingNotification::destroy()
     }
     else
     {
-        logError(HISTORY_DATASHARING_LISTENER, "Trying to destroy non-owned notification segment " << segment_name_);
+        EPROSIMA_LOG_ERROR(HISTORY_DATASHARING_LISTENER,
+                "Trying to destroy non-owned notification segment " << segment_name_);
     }
 }
 
 }  // namespace rtps
-}  // namespace fastrtps
+}  // namespace fastdds
 }  // namespace eprosima

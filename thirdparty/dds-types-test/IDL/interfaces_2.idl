@@ -1,0 +1,31 @@
+exception MyEx
+{
+    long id;
+    string message;
+};
+
+interface MyIf
+{
+    exception MyEx2
+    {
+        long id;
+        string message;
+    };
+
+    struct MySt
+    {
+        char array[30];
+    };
+
+    void test1(in short s, out string m) raises (MyEx);
+
+    string test2(inout char s, inout string m) raises (MyEx2);
+
+    @feed
+    MySt test3(in long id) raises (MyEx);
+};
+
+struct MySt
+{
+    boolean blah;
+};

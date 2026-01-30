@@ -16,7 +16,7 @@
 #define _FASTDDS_TCP_ACCEPTOR_BASE_
 
 #include <asio.hpp>
-#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/Locator.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -35,18 +35,18 @@ protected:
     Locator locator_;
     asio::ip::tcp::endpoint endpoint_;
     std::vector<Locator> pending_out_locators_;
-    asio::io_service* io_service_;
+    asio::io_context* io_context_;
 
 public:
 
     TCPAcceptor(
-            asio::io_service& io_service,
+            asio::io_context& io_context,
             TCPTransportInterface* parent,
             const Locator& locator);
 
     TCPAcceptor(
-            asio::io_service& io_service,
-            const std::string& interface,
+            asio::io_context& io_context,
+            const std::string& iface,
             const Locator& locator);
 
     const Locator& locator() const

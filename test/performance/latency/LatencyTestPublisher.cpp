@@ -19,29 +19,32 @@
 
 #include "LatencyTestPublisher.hpp"
 
-#include <inttypes.h>
-
-#include <numeric>
+#include <chrono>
+#include <cinttypes>
 #include <cmath>
 #include <fstream>
+#include <numeric>
+#include <thread>
 
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/Colors.hpp>
+#include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicPubSubType.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilder.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicTypeBuilderFactory.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/MemberDescriptor.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/TypeDescriptor.hpp>
 #include <fastdds/dds/subscriber/DataReader.hpp>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
-
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
 
 #define TIME_LIMIT_US 10000
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::types;
+using namespace eprosima::fastdds::rtps;
 
 LatencyTestPublisher::LatencyTestPublisher()
     : latency_command_type_(new TestCommandDataType())
@@ -54,35 +57,7 @@ LatencyTestPublisher::LatencyTestPublisher()
 
 LatencyTestPublisher::~LatencyTestPublisher()
 {
-    // Static type endpoints shpuld have been removed for each payload iteration
-    if (dynamic_types_)
-    {
-        destroy_data_endpoints();
-    }
-    else if (nullptr != data_writer_
-            || nullptr != data_reader_
-            || nullptr != latency_data_pub_topic_
-            || nullptr != latency_data_sub_topic_
-            || !latency_data_type_)
-    {
-        logError(LATENCYPUBLISHER, "ERROR unregistering the DATA type and/or removing the endpoints")
-    }
-
-    subscriber_->delete_datareader(command_reader_);
-    participant_->delete_subscriber(subscriber_);
-
-    publisher_->delete_datawriter(command_writer_);
-    participant_->delete_publisher(publisher_);
-
-    participant_->delete_topic(latency_command_sub_topic_);
-    participant_->delete_topic(latency_command_pub_topic_);
-
-    std::string TestCommandType("TestCommandType");
-    participant_->unregister_type(TestCommandType);
-
-    DomainParticipantFactory::get_instance()->delete_participant(participant_);
-
-    logInfo(LatencyTest, "Pub: Participant removed");
+    EPROSIMA_LOG_INFO(LatencyTest, "Pub: Participant removed");
 }
 
 bool LatencyTestPublisher::init(
@@ -166,7 +141,7 @@ bool LatencyTestPublisher::init(
     // Load XML configuration
     if (xml_config_file_.length() > 0)
     {
-        if ( ReturnCode_t::RETCODE_OK !=
+        if ( RETCODE_OK !=
                 DomainParticipantFactory::get_instance()->
                         get_participant_qos_from_profile(
                     participant_profile_name,
@@ -218,9 +193,9 @@ bool LatencyTestPublisher::init(
     }
 
     // Register the command type
-    if (ReturnCode_t::RETCODE_OK != latency_command_type_.register_type(participant_))
+    if (RETCODE_OK != latency_command_type_.register_type(participant_))
     {
-        logError(LATENCYPUBLISHER, "ERROR registering the COMMAND type");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR registering the COMMAND type");
         return false;
     }
 
@@ -228,7 +203,7 @@ bool LatencyTestPublisher::init(
     publisher_ = participant_->create_publisher(PUBLISHER_QOS_DEFAULT, nullptr);
     if (publisher_ == nullptr)
     {
-        logError(LATENCYPUBLISHER, "ERROR creating PUBLISHER");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR creating PUBLISHER");
         return false;
     }
 
@@ -236,7 +211,7 @@ bool LatencyTestPublisher::init(
     subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT, nullptr);
     if (subscriber_ == nullptr)
     {
-        logError(LATENCYPUBLISHER, "ERROR creating SUBSCRIBER");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR creating SUBSCRIBER");
         return false;
     }
 
@@ -248,15 +223,17 @@ bool LatencyTestPublisher::init(
             std::string pub_profile_name = "pub_publisher_profile";
             std::string sub_profile_name = "pub_subscriber_profile";
 
-            if (ReturnCode_t::RETCODE_OK != publisher_->get_datawriter_qos_from_profile(pub_profile_name, dw_qos_))
+            if (RETCODE_OK != publisher_->get_datawriter_qos_from_profile(pub_profile_name, dw_qos_))
             {
-                logError(LATENCYPUBLISHER, "ERROR unable to retrive the " << pub_profile_name << "from XML file");
+                EPROSIMA_LOG_ERROR(LATENCYPUBLISHER,
+                        "ERROR unable to retrive the " << pub_profile_name << "from XML file");
                 return false;
             }
 
-            if (ReturnCode_t::RETCODE_OK != subscriber_->get_datareader_qos_from_profile(sub_profile_name, dr_qos_))
+            if (RETCODE_OK != subscriber_->get_datareader_qos_from_profile(sub_profile_name, dr_qos_))
             {
-                logError(LATENCYPUBLISHER, "ERROR unable to retrive the " << sub_profile_name << "from XML file")
+                EPROSIMA_LOG_ERROR(LATENCYPUBLISHER,
+                        "ERROR unable to retrive the " << sub_profile_name << "from XML file");
             }
         }
         // Create QoS Profiles
@@ -265,16 +242,16 @@ bool LatencyTestPublisher::init(
             ReliabilityQosPolicy rp;
             if (reliable)
             {
-                rp.kind = eprosima::fastrtps::RELIABLE_RELIABILITY_QOS;
+                rp.kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
 
                 RTPSReliableWriterQos rw_qos;
-                rw_qos.times.heartbeatPeriod.seconds = 0;
-                rw_qos.times.heartbeatPeriod.nanosec = 100000000;
+                rw_qos.times.heartbeat_period.seconds = 0;
+                rw_qos.times.heartbeat_period.nanosec = 100000000;
                 dw_qos_.reliable_writer_qos(rw_qos);
             }
             else
             {
-                rp.kind = eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS;
+                rp.kind = eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS;
             }
 
             dw_qos_.reliability(rp);
@@ -433,7 +410,7 @@ void LatencyTestPublisher::LatencyDataWriterListener::on_publication_matched(
 
     if (info.current_count_change > 0)
     {
-        logInfo(LatencyTest, C_MAGENTA << "Data Pub Matched" << C_DEF);
+        EPROSIMA_LOG_INFO(LatencyTest, C_MAGENTA << "Data Pub Matched" << C_DEF);
     }
 
     lock.unlock();
@@ -452,7 +429,7 @@ void LatencyTestPublisher::LatencyDataReaderListener::on_subscription_matched(
 
     if (info.current_count_change > 0)
     {
-        logInfo(LatencyTest, C_MAGENTA << "Data Sub Matched" << C_DEF);
+        EPROSIMA_LOG_INFO(LatencyTest, C_MAGENTA << "Data Sub Matched" << C_DEF);
     }
 
     lock.unlock();
@@ -471,7 +448,7 @@ void LatencyTestPublisher::ComandWriterListener::on_publication_matched(
 
     if (info.current_count_change > 0)
     {
-        logInfo(LatencyTest, C_MAGENTA << "Command Pub Matched" << C_DEF);
+        EPROSIMA_LOG_INFO(LatencyTest, C_MAGENTA << "Command Pub Matched" << C_DEF);
     }
 
     lock.unlock();
@@ -490,7 +467,7 @@ void LatencyTestPublisher::CommandReaderListener::on_subscription_matched(
 
     if (info.current_count_change > 0)
     {
-        logInfo(LatencyTest, C_MAGENTA << "Command Sub Matched" << C_DEF);
+        EPROSIMA_LOG_INFO(LatencyTest, C_MAGENTA << "Command Sub Matched" << C_DEF);
     }
 
     lock.unlock();
@@ -503,10 +480,13 @@ void LatencyTestPublisher::CommandReaderListener::on_data_available(
     TestCommandType command;
     SampleInfo info;
 
-    if (reader->take_next_sample(
-                &command, &info) == ReturnCode_t::RETCODE_OK
-            && info.valid_data)
+    while (reader->take_next_sample(&command, &info) == RETCODE_OK)
     {
+        if (!info.valid_data)
+        {
+            continue;
+        }
+
         if (command.m_command == BEGIN
                 || command.m_command == END )
         {
@@ -515,10 +495,6 @@ void LatencyTestPublisher::CommandReaderListener::on_data_available(
             latency_publisher_->mutex_.unlock();
             latency_publisher_->command_msg_cv_.notify_one();
         }
-    }
-    else
-    {
-        logInfo(LatencyTest, "Problem reading command message");
     }
 }
 
@@ -531,106 +507,139 @@ void LatencyTestPublisher::LatencyDataReaderListener::on_data_available(
     LoanableSequence<LatencyType> data_seq;
     std::chrono::duration<uint32_t, std::nano> bounce_time(0);
 
-    if (pub->data_loans_)
+    ReturnCode_t ret_code = RETCODE_OK;
+    while (RETCODE_OK == ret_code)
     {
-        if (ReturnCode_t::RETCODE_OK != reader->take(data_seq, infos, 1))
-        {
-            logError(LatencyTest, "Problem reading Subscriber echoed loaned test data");
-            return;
-        }
-    }
-    else
-    {
-        SampleInfo info;
-        void* data = pub->dynamic_types_ ?
-                (void*)pub->dynamic_data_in_:
-                (void*)pub->latency_data_in_;
-
-        // Retrieved echoed data
-        if (reader->take_next_sample(
-                    data, &info) != ReturnCode_t::RETCODE_OK
-                || !info.valid_data)
-        {
-            logError(LatencyTest, "Problem reading Subscriber echoed test data");
-            return;
-        }
-    }
-
-    // Atomic managemente of the sample
-    bool notify = false;
-    {
-        std::lock_guard<std::mutex> lock(pub->mutex_);
-
         if (pub->data_loans_)
         {
-            // we have requested a single sample
-            assert(infos.length() == 1 && data_seq.length() == 1);
-            // we have already released the former loan
-            assert(pub->latency_data_in_ == nullptr);
-            // reference the loaned data
-            pub->latency_data_in_ = &data_seq[0];
-            // retrieve the bounce time
-            bounce_time = std::chrono::duration<uint32_t, std::nano>(pub->latency_data_in_->bounce);
-        }
-
-        // Check if is the expected echo message
-        if ((pub->dynamic_types_
-                && (pub->dynamic_data_in_->get_uint32_value(0)
-                != pub->dynamic_data_out_->get_uint32_value(0)))
-                || (!pub->dynamic_types_
-                && (pub->latency_data_in_->seqnum
-                != pub->latency_data_out_->seqnum)))
-        {
-            logInfo(LatencyTest, "Echo message received is not the expected one");
+            ret_code = reader->take(data_seq, infos, 1);
+            if (RETCODE_OK != ret_code)
+            {
+                if (RETCODE_NO_DATA != ret_code)
+                {
+                    EPROSIMA_LOG_ERROR(LatencyTest, "Problem reading Subscriber echoed loaned test data");
+                }
+                return;
+            }
         }
         else
         {
-            // Factor of 2 below is to calculate the roundtrip divided by two. Note that nor the overhead does not
-            // need to be halved, as we access the clock twice per round trip
-            pub->end_time_ = std::chrono::steady_clock::now();
-            pub->end_time_ -= bounce_time;
-            auto roundtrip = std::chrono::duration<double, std::micro>(pub->end_time_ - pub->start_time_) / 2.0;
-            roundtrip -= pub->overhead_time_;
+            SampleInfo info;
+            void* data = pub->dynamic_types_ ?
+                    (void*)pub->dynamic_data_in_:
+                    (void*)pub->latency_data_in_;
 
-            // Discard samples were loan failed due to payload outages
-            // in that case the roundtrip will match the os scheduler quantum slice
-            if (roundtrip.count() > 0
-                    && !(pub->data_loans_ && roundtrip.count() > 10000))
+            // Retrieved echoed data
+            ret_code = reader->take_next_sample(data, &info);
+            if (RETCODE_OK != ret_code)
             {
-                pub->times_.push_back(roundtrip);
-                ++pub->received_count_;
+                if (RETCODE_NO_DATA != ret_code)
+                {
+                    EPROSIMA_LOG_ERROR(LatencyTest, "Problem reading Subscriber echoed test data");
+                }
+                return;
             }
 
-            // Reset seqnum from out data
+            if (!info.valid_data)
+            {
+                // No valid data, continue to next sample
+                continue;
+            }
+        }
+
+        // Atomic management of the sample
+        bool notify = false;
+        // This loop allows us to the scope of the lock_guard without using goto.
+        // We need this to avoid calling return_loan() while the mutex is locked, as it
+        // may cause an ABBA deadlock.
+        while (true)
+        {
+            std::lock_guard<std::mutex> lock(pub->mutex_);
+
+            if (pub->data_loans_)
+            {
+                // we have requested a single sample
+                assert(infos.length() == 1 && data_seq.length() == 1);
+                // we have already released the former loan
+                assert(pub->latency_data_in_ == nullptr);
+                // check if the sample is valid
+                if (!infos[0].valid_data)
+                {
+                    // Avoid processing when the sample does not have data
+                    break;
+                }
+                // reference the loaned data
+                pub->latency_data_in_ = &data_seq[0];
+                // retrieve the bounce time
+                bounce_time = std::chrono::duration<uint32_t, std::nano>(pub->latency_data_in_->bounce);
+            }
+
+            // Check if is the expected echo message
+            uint32_t dyn_value_in {0};
+            uint32_t dyn_value_out {0};
             if (pub->dynamic_types_)
             {
-                pub->dynamic_data_out_->set_uint32_value(0, 0);
+                (*pub->dynamic_data_in_)->get_uint32_value(dyn_value_in, 0);
+                (*pub->dynamic_data_out_)->get_uint32_value(dyn_value_out, 0);
+            }
+
+            if ((pub->dynamic_types_ && dyn_value_in != dyn_value_out)
+                    || (!pub->dynamic_types_ && pub->latency_data_in_->seqnum != pub->latency_data_out_->seqnum))
+            {
+                EPROSIMA_LOG_INFO(LatencyTest, "Echo message received is not the expected one");
             }
             else
             {
-                pub->latency_data_out_->seqnum = 0;
+                // Factor of 2 below is to calculate the roundtrip divided by two. Note that nor the overhead does not
+                // need to be halved, as we access the clock twice per round trip
+                pub->end_time_ = std::chrono::steady_clock::now();
+                pub->end_time_ -= bounce_time;
+                auto roundtrip = std::chrono::duration<double, std::micro>(pub->end_time_ - pub->start_time_) / 2.0;
+                roundtrip -= pub->overhead_time_;
+
+                // Discard samples were loan failed due to payload outages
+                // in that case the roundtrip will match the os scheduler quantum slice
+                if (roundtrip.count() > 0
+                        && !(pub->data_loans_ && roundtrip.count() > 10000))
+                {
+                    pub->times_.push_back(roundtrip);
+                    ++pub->received_count_;
+                }
+
+                // Reset seqnum from out data
+                if (pub->dynamic_types_)
+                {
+                    (*pub->dynamic_data_out_)->set_uint32_value(0, 0);
+                }
+                else
+                {
+                    pub->latency_data_out_->seqnum = 0;
+                }
             }
+
+            if (pub->data_loans_)
+            {
+                pub->latency_data_in_ = nullptr;
+            }
+
+            ++pub->data_msg_count_;
+            notify = pub->data_msg_count_ >= pub->subscribers_;
+
+            // Break the loop (i.e. exit the lock_guard scope)
+            break;
         }
 
-        if (pub->data_loans_)
+        if (notify)
         {
-            pub->latency_data_in_ = nullptr;
+            pub->data_msg_cv_.notify_one();
         }
 
-        ++pub->data_msg_count_;
-        notify = pub->data_msg_count_ >= pub->subscribers_;
-    }
-
-    if (notify)
-    {
-        pub->data_msg_cv_.notify_one();
-    }
-
-    // release the loan if any
-    if (pub->data_loans_
-            && ReturnCode_t::RETCODE_OK != reader->return_loan(data_seq, infos))
-    {
-        logError(LatencyTest, "Problem returning loaned test data");
+        // release the loan if any
+        if (pub->data_loans_
+                && RETCODE_OK != reader->return_loan(data_seq, infos))
+        {
+            EPROSIMA_LOG_ERROR(LatencyTest, "Problem returning loaned test data");
+        }
     }
 }
 
@@ -673,6 +682,15 @@ void LatencyTestPublisher::run()
     }
 }
 
+void LatencyTestPublisher::destroy_user_entities()
+{
+    // Delete DDS entities contained within the DomainParticipant
+    participant_->delete_contained_entities();
+
+    // Delete DomainParticipant
+    DomainParticipantFactory::get_instance()->delete_participant(participant_);
+}
+
 void LatencyTestPublisher::export_csv(
         const std::string& data_name,
         const std::string& str_reliable,
@@ -699,56 +717,54 @@ bool LatencyTestPublisher::test(
 
     if (dynamic_types_)
     {
-        dynamic_data_in_ = static_cast<DynamicData*>(dynamic_pub_sub_type_->createData());
-        dynamic_data_out_ = static_cast<DynamicData*>(dynamic_pub_sub_type_->createData());
+        dynamic_data_in_ = static_cast<DynamicData::_ref_type*>(dynamic_pub_sub_type_->create_data());
+        dynamic_data_out_ = static_cast<DynamicData::_ref_type*>(dynamic_pub_sub_type_->create_data());
 
         if (nullptr == dynamic_data_in_)
         {
-            logError(LATENCYPUBLISHER, "Iteration failed: Failed to create Dynamic Data In");
+            EPROSIMA_LOG_ERROR(LATENCYPUBLISHER,
+                    "Iteration failed: Failed to create Dynamic Data In");
             return false;
         }
 
         if (nullptr == dynamic_data_out_)
         {
-            logError(LATENCYPUBLISHER, "Iteration failed: Failed to create Dynamic Data Out");
+            EPROSIMA_LOG_ERROR(LATENCYPUBLISHER,
+                    "Iteration failed: Failed to create Dynamic Data Out");
             return false;
         }
 
-        MemberId id_in;
-        MemberId id_out;
-        DynamicData* data_in = dynamic_data_in_->loan_value(
-            dynamic_data_in_->get_member_id_at_index(1));
-        DynamicData* data_out = dynamic_data_out_->loan_value(
-            dynamic_data_out_->get_member_id_at_index(1));
+        DynamicData::_ref_type data_in = (*dynamic_data_in_)->loan_value(
+            (*dynamic_data_in_)->get_member_id_at_index(1));
+        DynamicData::_ref_type data_out = (*dynamic_data_out_)->loan_value(
+            (*dynamic_data_out_)->get_member_id_at_index(1));
 
         // fill until complete the desired payload size
         uint32_t padding = datasize - 4; // sequence number is a DWORD
 
         for (uint32_t i = 0; i < padding; ++i)
         {
-            data_in->insert_sequence_data(id_in);
-            data_in->set_byte_value(0, id_in);
-            data_out->insert_sequence_data(id_out);
-            data_out->set_byte_value(0, id_out);
+            data_in->set_byte_value(i, 0);
+            data_out->set_byte_value(i, 0);
         }
 
-        dynamic_data_in_->return_loaned_value(data_in);
-        dynamic_data_out_->return_loaned_value(data_out);
+        (*dynamic_data_in_)->return_loaned_value(data_in);
+        (*dynamic_data_out_)->return_loaned_value(data_out);
     }
     else if (init_static_types(datasize) && create_data_endpoints())
     {
         if (!data_loans_)
         {
             // Create the reception data sample
-            latency_data_in_ = static_cast<LatencyType*>(latency_data_type_->createData());
+            latency_data_in_ = static_cast<LatencyType*>(latency_data_type_->create_data());
         }
         // On loans scenario this object will be kept only to check the echoed sample is correct
         // On the ordinary case it keeps the object to send
-        latency_data_out_ = static_cast<LatencyType*>(latency_data_type_->createData());
+        latency_data_out_ = static_cast<LatencyType*>(latency_data_type_->create_data());
     }
     else
     {
-        logError(LATENCYPUBLISHER, "Error preparing types and endpoints for testing");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "Error preparing types and endpoints for testing");
         return false;
     }
 
@@ -756,9 +772,9 @@ bool LatencyTestPublisher::test(
     times_.clear();
     TestCommandType command;
     command.m_command = READY;
-    if (!command_writer_->write(&command))
+    if (RETCODE_OK != command_writer_->write(&command))
     {
-        logError(LatencyTest, "Publisher cannot publish READY command");
+        EPROSIMA_LOG_ERROR(LatencyTest, "Publisher cannot publish READY command");
         return false;
     }
 
@@ -770,7 +786,7 @@ bool LatencyTestPublisher::test(
             return total_matches() == 4 * subscribers_;
         });
 
-    logInfo(LatencyTest, C_B_MAGENTA << "Pub: DISCOVERY COMPLETE " << C_DEF)
+    EPROSIMA_LOG_INFO(LatencyTest, C_B_MAGENTA << "Pub: DISCOVERY COMPLETE " << C_DEF);
 
     // Wait for Subscriber's BEGIN command
     wait_for_command(
@@ -782,12 +798,12 @@ bool LatencyTestPublisher::test(
     // The first measurement it's usually not representative, so we take one more and then drop the first one.
     for (unsigned int count = 1; count <= samples_ + 1; ++count)
     {
-        void* data = nullptr;
+        void* data {nullptr};
 
         if (dynamic_types_)
         {
-            dynamic_data_in_->set_uint32_value(0, 0);
-            dynamic_data_out_->set_uint32_value(count, 0);
+            (*dynamic_data_in_)->set_uint32_value(0, 0);
+            (*dynamic_data_out_)->set_uint32_value(0, count);
             data = dynamic_data_out_;
         }
         else
@@ -804,7 +820,7 @@ bool LatencyTestPublisher::test(
 
                 while (trials-- != 0 && !loaned)
                 {
-                    loaned = (ReturnCode_t::RETCODE_OK
+                    loaned = (RETCODE_OK
                             ==  data_writer_->loan_sample(
                                 data,
                                 DataWriter::LoanInitializationKind::NO_LOAN_INITIALIZATION));
@@ -813,13 +829,13 @@ bool LatencyTestPublisher::test(
 
                     if (!loaned)
                     {
-                        logInfo(LatencyTest, "Publisher trying to loan: " << trials);
+                        EPROSIMA_LOG_INFO(LatencyTest, "Publisher trying to loan: " << trials);
                     }
                 }
 
                 if (!loaned)
                 {
-                    logError(LatencyTest, "Problem on Publisher test data with loan");
+                    EPROSIMA_LOG_ERROR(LatencyTest, "Problem on Publisher test data with loan");
                     continue; // next iteration
                 }
 
@@ -842,7 +858,7 @@ bool LatencyTestPublisher::test(
         start_time_ = std::chrono::steady_clock::now();
 
         // Data publishing
-        if (!data_writer_->write(data))
+        if (RETCODE_OK != data_writer_->write(data))
         {
             // return the loan
             if (data_loans_)
@@ -850,7 +866,7 @@ bool LatencyTestPublisher::test(
                 data_writer_->discard_loan(data);
             }
 
-            logError(LatencyTest, "Publisher write operation failed");
+            EPROSIMA_LOG_ERROR(LatencyTest, "Publisher write operation failed");
             return false;
         }
 
@@ -870,7 +886,7 @@ bool LatencyTestPublisher::test(
 
     if (test_status_ != 0)
     {
-        logError(LatencyTest, "Error in test");
+        EPROSIMA_LOG_ERROR(LatencyTest, "Error in test");
         return false;
     }
 
@@ -888,8 +904,8 @@ bool LatencyTestPublisher::test(
     // Delete Data Sample
     if (dynamic_types_)
     {
-        DynamicDataFactory::get_instance()->delete_data(dynamic_data_in_);
-        DynamicDataFactory::get_instance()->delete_data(dynamic_data_out_);
+        dynamic_pub_sub_type_->delete_data(dynamic_data_in_);
+        dynamic_pub_sub_type_->delete_data(dynamic_data_out_);
     }
     else
     {
@@ -910,7 +926,7 @@ bool LatencyTestPublisher::test(
     // Remove endpoints associated with the given payload size
     else if (!destroy_data_endpoints())
     {
-        logError(LATENCYPUBLISHER, "Endpoints for payload size " << datasize << " could not been removed");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "Endpoints for payload size " << datasize << " could not been removed");
         return false;
     }
 
@@ -1052,30 +1068,39 @@ bool LatencyTestPublisher::init_dynamic_types()
     // Check if it has been initialized before
     if (dynamic_pub_sub_type_)
     {
-        logError(LATENCYPUBLISHER, "ERROR DYNAMIC DATA type already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR DYNAMIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(LatencyDataType::type_name_))
     {
-        logError(LATENCYPUBLISHER, "ERROR DYNAMIC DATA type already registered");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR DYNAMIC DATA type already registered");
         return false;
     }
 
     // Dummy type registration
+    DynamicTypeBuilderFactory::_ref_type factory {DynamicTypeBuilderFactory::get_instance()};
     // Create basic builders
-    DynamicTypeBuilder_ptr struct_type_builder(DynamicTypeBuilderFactory::get_instance()->create_struct_builder());
+    TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
+    type_descriptor->kind(TK_STRUCTURE);
+    type_descriptor->name(LatencyDataType::type_name_);
+
+    DynamicTypeBuilder::_ref_type struct_type_builder {factory->create_type(type_descriptor)};
 
     // Add members to the struct.
-    struct_type_builder->add_member(0, "seqnum", DynamicTypeBuilderFactory::get_instance()->create_uint32_type());
-    struct_type_builder->add_member(1, "data", DynamicTypeBuilderFactory::get_instance()->create_sequence_builder(
-                DynamicTypeBuilderFactory::get_instance()->create_byte_type(), BOUND_UNLIMITED));
-    struct_type_builder->set_name(LatencyDataType::type_name_);
+    MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
+    member_descriptor->name("seqnum");
+    member_descriptor->type(factory->get_primitive_type(TK_UINT32));
+    struct_type_builder->add_member(member_descriptor);
+    member_descriptor->name("data");
+    member_descriptor->type(factory->create_sequence_type(
+                factory->get_primitive_type(TK_BYTE), static_cast<uint32_t>(LENGTH_UNLIMITED))->build());
+    struct_type_builder->add_member(member_descriptor);
     dynamic_pub_sub_type_.reset(new DynamicPubSubType(struct_type_builder->build()));
 
     // Register the data type
-    if (ReturnCode_t::RETCODE_OK != dynamic_pub_sub_type_.register_type(participant_))
+    if (RETCODE_OK != dynamic_pub_sub_type_.register_type(participant_))
     {
-        logError(LATENCYPUBLISHER, "ERROR registering the DYNAMIC DATA type");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR registering the DYNAMIC DATA type");
         return false;
     }
 
@@ -1090,12 +1115,12 @@ bool LatencyTestPublisher::init_static_types(
     // Check if it has been initialized before
     if (latency_data_type_)
     {
-        logError(LATENCYPUBLISHER, "ERROR STATIC DATA type already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR STATIC DATA type already initialized");
         return false;
     }
     else if (participant_->find_type(LatencyDataType::type_name_))
     {
-        logError(LATENCYPUBLISHER, "ERROR STATIC DATA type already registered");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR STATIC DATA type already registered");
         return false;
     }
 
@@ -1105,9 +1130,9 @@ bool LatencyTestPublisher::init_static_types(
     // Create the static type
     latency_data_type_.reset(new LatencyDataType(padding));
     // Register the static type
-    if (ReturnCode_t::RETCODE_OK != latency_data_type_.register_type(participant_))
+    if (RETCODE_OK != latency_data_type_.register_type(participant_))
     {
-        logError(LATENCYPUBLISHER, "ERROR registering the STATIC DATA type");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR registering the STATIC DATA type");
         return false;
     }
 
@@ -1118,25 +1143,25 @@ bool LatencyTestPublisher::create_data_endpoints()
 {
     if (nullptr != latency_data_pub_topic_ || nullptr != latency_data_sub_topic_)
     {
-        logError(LATENCYPUBLISHER, "ERROR latency_data_pub_topic_ already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR latency_data_pub_topic_ already initialized");
         return false;
     }
 
     if (nullptr != latency_data_sub_topic_)
     {
-        logError(LATENCYPUBLISHER, "ERROR latency_data_sub_topic_ already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR latency_data_sub_topic_ already initialized");
         return false;
     }
 
     if (nullptr != data_writer_)
     {
-        logError(LATENCYPUBLISHER, "ERROR data_writer_ already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR data_writer_ already initialized");
         return false;
     }
 
     if (nullptr != data_reader_)
     {
-        logError(LATENCYPUBLISHER, "ERROR data_reader_ already initialized");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR data_reader_ already initialized");
         return false;
     }
 
@@ -1156,7 +1181,7 @@ bool LatencyTestPublisher::create_data_endpoints()
 
     if (nullptr == latency_data_pub_topic_)
     {
-        logError(LATENCYPUBLISHER, "ERROR creating latency_data_pub_topic_");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR creating latency_data_pub_topic_");
         return false;
     }
 
@@ -1177,7 +1202,7 @@ bool LatencyTestPublisher::create_data_endpoints()
 
     if (latency_data_sub_topic_ == nullptr)
     {
-        logError(LATENCYPUBLISHER, "ERROR creating latency_data_sub_topic_");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR creating latency_data_sub_topic_");
         return false;
     }
 
@@ -1214,18 +1239,18 @@ bool LatencyTestPublisher::destroy_data_endpoints()
 
     // Delete the endpoints
     if (nullptr == data_writer_
-            || ReturnCode_t::RETCODE_OK != publisher_->delete_datawriter(data_writer_))
+            || RETCODE_OK != publisher_->delete_datawriter(data_writer_))
     {
-        logError(LATENCYPUBLISHER, "ERROR destroying the DataWriter");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR destroying the DataWriter");
         return false;
     }
     data_writer_ = nullptr;
     data_writer_listener_.reset();
 
     if (nullptr == data_reader_
-            || ReturnCode_t::RETCODE_OK != subscriber_->delete_datareader(data_reader_))
+            || RETCODE_OK != subscriber_->delete_datareader(data_reader_))
     {
-        logError(LATENCYPUBLISHER, "ERROR destroying the DataReader");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR destroying the DataReader");
         return false;
     }
     data_reader_ = nullptr;
@@ -1233,25 +1258,25 @@ bool LatencyTestPublisher::destroy_data_endpoints()
 
     // Delete the Topics
     if (nullptr == latency_data_pub_topic_
-            || ReturnCode_t::RETCODE_OK != participant_->delete_topic(latency_data_pub_topic_))
+            || RETCODE_OK != participant_->delete_topic(latency_data_pub_topic_))
     {
-        logError(LATENCYPUBLISHER, "ERROR destroying the DATA PUB topic");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR destroying the DATA PUB topic");
         return false;
     }
     latency_data_pub_topic_ = nullptr;
 
     if (nullptr == latency_data_sub_topic_
-            || ReturnCode_t::RETCODE_OK != participant_->delete_topic(latency_data_sub_topic_))
+            || RETCODE_OK != participant_->delete_topic(latency_data_sub_topic_))
     {
-        logError(LATENCYPUBLISHER, "ERROR destroying the DATA SUB topic");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR destroying the DATA SUB topic");
         return false;
     }
     latency_data_sub_topic_ = nullptr;
 
     // Delete the Type
-    if (ReturnCode_t::RETCODE_OK != participant_->unregister_type(LatencyDataType::type_name_))
+    if (RETCODE_OK != participant_->unregister_type(LatencyDataType::type_name_))
     {
-        logError(LATENCYPUBLISHER, "ERROR unregistering the DATA type");
+        EPROSIMA_LOG_ERROR(LATENCYPUBLISHER, "ERROR unregistering the DATA type");
         return false;
     }
 

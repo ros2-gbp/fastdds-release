@@ -18,15 +18,18 @@
 
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/transport/ChainingTransportDescriptor.h>
-#include <fastdds/rtps/transport/ChainingTransport.h>
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/ChainingTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/ChainingTransport.hpp>
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/NetworkBuffer.hpp>
 
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
 using BuiltinTransports = eprosima::fastdds::rtps::BuiltinTransports;
+using BuiltinTransportsOptions = eprosima::fastdds::rtps::BuiltinTransportsOptions;
+using NetworkBuffer = eprosima::fastdds::rtps::NetworkBuffer;
 
 class TestChainingTransportDescriptor : public eprosima::fastdds::rtps::ChainingTransportDescriptor
 {
@@ -67,38 +70,39 @@ public:
     }
 
     bool init(
-            const eprosima::fastrtps::rtps::PropertyPolicy* properties = nullptr) override
+            const eprosima::fastdds::rtps::PropertyPolicy* properties = nullptr,
+            const uint32_t& max_msg_size_no_frag = 0) override
     {
         const std::string* value =
-                eprosima::fastrtps::rtps::PropertyPolicyHelper::find_property(*properties, test_property_name);
+                eprosima::fastdds::rtps::PropertyPolicyHelper::find_property(*properties, test_property_name);
         if (value && 0 == value->compare(test_property_value))
         {
             descriptor_.init_function_called();
         }
-        return low_level_transport_->init(properties);
+        return low_level_transport_->init(properties, max_msg_size_no_frag);
     }
 
     bool send(
-            eprosima::fastrtps::rtps::SenderResource* low_sender_resource,
-            const eprosima::fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            eprosima::fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            eprosima::fastrtps::rtps::LocatorsIterator* destination_locators_end,
+            eprosima::fastdds::rtps::SenderResource* low_sender_resource,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            eprosima::fastdds::rtps::LocatorsIterator* destination_locators_begin,
+            eprosima::fastdds::rtps::LocatorsIterator* destination_locators_end,
             const std::chrono::steady_clock::time_point& timeout) override
     {
         descriptor_.send_function_called();
 
         // Call low level transport
-        return low_sender_resource->send(send_buffer, send_buffer_size, destination_locators_begin,
-                       destination_locators_end, timeout);
+        return low_sender_resource->send(buffers, total_bytes, destination_locators_begin,
+                       destination_locators_end, timeout, 0);
     }
 
     void receive(
             eprosima::fastdds::rtps::TransportReceiverInterface* next_receiver,
-            const eprosima::fastrtps::rtps::octet* receive_buffer,
+            const eprosima::fastdds::rtps::octet* receive_buffer,
             uint32_t receive_buffer_size,
-            const eprosima::fastrtps::rtps::Locator_t& local_locator,
-            const eprosima::fastrtps::rtps::Locator_t& remote_locator) override
+            const eprosima::fastdds::rtps::Locator_t& local_locator,
+            const eprosima::fastdds::rtps::Locator_t& remote_locator) override
     {
         descriptor_.receive_function_called();
 
@@ -155,7 +159,8 @@ public:
     }
 
     static void test_api(
-            const BuiltinTransports& builtin_transports)
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
     {
         if (builtin_transports == BuiltinTransports::NONE)
         {
@@ -170,7 +175,17 @@ public:
         }
         else
         {
-            run_test("", "", "", builtin_transports);
+            run_test("", "", "", builtin_transports, builtin_transports_options);
+        }
+    }
+
+    static void test_api_100kb(
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
+    {
+        if (builtin_transports != BuiltinTransports::NONE)
+        {
+            run_test_api_100kb(builtin_transports, builtin_transports_options);
         }
     }
 
@@ -180,14 +195,16 @@ private:
             const std::string& profiles_file,
             const std::string& participant_profile,
             const std::string& env_var_value,
-            const BuiltinTransports& builtin_transports)
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
     {
         enum class BuiltinTransportsTestCase : uint8_t
         {
             NONE,
             XML,
             ENV,
-            API
+            API,
+            API_OPTIONS
         };
 
         BuiltinTransportsTestCase test_case = BuiltinTransportsTestCase::NONE;
@@ -198,6 +215,7 @@ private:
             ASSERT_NE(participant_profile, "");
             ASSERT_EQ(builtin_transports, BuiltinTransports::NONE);
             ASSERT_EQ(env_var_value, "");
+            ASSERT_EQ(builtin_transports_options, nullptr);
             test_case = BuiltinTransportsTestCase::XML;
         }
         else if (env_var_value != "")
@@ -205,6 +223,7 @@ private:
             ASSERT_EQ(profiles_file, "");
             ASSERT_EQ(participant_profile, "");
             ASSERT_EQ(builtin_transports, BuiltinTransports::NONE);
+            ASSERT_EQ(builtin_transports_options, nullptr);
             test_case = BuiltinTransportsTestCase::ENV;
         }
         else if (builtin_transports != BuiltinTransports::NONE)
@@ -212,7 +231,9 @@ private:
             ASSERT_EQ(profiles_file, "");
             ASSERT_EQ(participant_profile, "");
             ASSERT_EQ(env_var_value, "");
-            test_case = BuiltinTransportsTestCase::API;
+            test_case =
+                    (builtin_transports_options !=
+                    nullptr) ? BuiltinTransportsTestCase::API_OPTIONS : BuiltinTransportsTestCase::API;
         }
 
         ASSERT_NE(test_case, BuiltinTransportsTestCase::NONE);
@@ -222,11 +243,11 @@ private:
         PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
 
         // Reliable keep all to wait of all acked as end condition
-        writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+        writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
 
-        reader.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS);
+        reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
 
         // Builtin transport configuration according to test_case
         switch (test_case)
@@ -253,6 +274,12 @@ private:
             {
                 writer.setup_transports(builtin_transports);
                 reader.setup_transports(builtin_transports);
+                break;
+            }
+            case BuiltinTransportsTestCase::API_OPTIONS:
+            {
+                writer.setup_transports(builtin_transports, *builtin_transports_options);
+                reader.setup_transports(builtin_transports, *builtin_transports_options);
                 break;
             }
             default:
@@ -285,6 +312,57 @@ private:
         EXPECT_TRUE(writer.waitForAllAcked(std::chrono::seconds(3)));
     }
 
+    static void run_test_api_100kb(
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
+    {
+        /* Test configuration */
+        PubSubWriter<Data100kbPubSubType> writer(TEST_TOPIC_NAME);
+        PubSubReader<Data100kbPubSubType> reader(TEST_TOPIC_NAME);
+
+        // Reliable keep all to wait of all acked as end condition
+        writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
+
+        reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
+
+        // Builtin transport configuration
+        if (builtin_transports_options != nullptr)
+        {
+            writer.setup_transports(builtin_transports, *builtin_transports_options);
+            reader.setup_transports(builtin_transports, *builtin_transports_options);
+        }
+        else
+        {
+            writer.setup_transports(builtin_transports);
+            reader.setup_transports(builtin_transports);
+        }
+
+        /* Run test */
+        // Init writer
+        writer.init();
+        ASSERT_TRUE(writer.isInitialized());
+
+        // Init reader
+        reader.init();
+        ASSERT_TRUE(reader.isInitialized());
+
+        // Wait for discovery
+        writer.wait_discovery();
+        reader.wait_discovery();
+
+        // Send data
+        auto data = default_data100kb_data_generator();
+        reader.startReception(data);
+        writer.send(data);
+        ASSERT_TRUE(data.empty());
+
+        // Wait for reception acknowledgement
+        reader.block_for_all();
+        EXPECT_TRUE(writer.waitForAllAcked(std::chrono::seconds(3)));
+    }
+
     static const std::string env_var_name_;
 };
 
@@ -299,7 +377,7 @@ TEST(ChainingTransportTests, basic_test)
     bool reader_init_function_called = false;
     bool reader_receive_function_called = false;
     bool reader_send_function_called = false;
-    eprosima::fastrtps::rtps::PropertyPolicy test_property_policy;
+    eprosima::fastdds::rtps::PropertyPolicy test_property_policy;
     test_property_policy.properties().push_back({test_property_name, test_property_value});
     std::shared_ptr<UDPv4TransportDescriptor> udp_transport = std::make_shared<UDPv4TransportDescriptor>();
     std::shared_ptr<TestChainingTransportDescriptor> writer_transport =
@@ -345,7 +423,7 @@ TEST(ChainingTransportTests, basic_test)
     reader.disable_builtin_transport()
             .add_user_transport_to_pparams(reader_transport)
             .property_policy(test_property_policy)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -381,7 +459,7 @@ TEST(ChainingTransportTests, tcp_client_server_with_wan_correct_sender_resources
     std::atomic<int> times_reader_receive_function_called{0};
     std::atomic<int> times_reader_send_function_called{0};
 
-    eprosima::fastrtps::rtps::PropertyPolicy test_property_policy;
+    eprosima::fastdds::rtps::PropertyPolicy test_property_policy;
     test_property_policy.properties().push_back({test_property_name, test_property_value});
 
     uint16_t port = static_cast<uint16_t>(GET_PID());
@@ -397,8 +475,8 @@ TEST(ChainingTransportTests, tcp_client_server_with_wan_correct_sender_resources
     reader_tcp_transport->set_WAN_address("127.0.0.1");
     reader_tcp_transport->listening_ports.push_back(port);
 
-    eprosima::fastrtps::rtps::LocatorList_t reader_locators;
-    eprosima::fastrtps::rtps::Locator_t reader_loc;
+    eprosima::fastdds::rtps::LocatorList_t reader_locators;
+    eprosima::fastdds::rtps::Locator_t reader_loc;
     reader_loc.port = port;
     IPLocator::setIPv4(reader_loc, "127.0.0.1");
     reader_loc.kind = LOCATOR_KIND_TCPv4;
@@ -440,7 +518,7 @@ TEST(ChainingTransportTests, tcp_client_server_with_wan_correct_sender_resources
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
 
-    eprosima::fastrtps::rtps::LocatorList_t initial_peers;
+    eprosima::fastdds::rtps::LocatorList_t initial_peers;
     initial_peers.push_back(reader_loc);
 
     writer.disable_builtin_transport()
@@ -454,7 +532,7 @@ TEST(ChainingTransportTests, tcp_client_server_with_wan_correct_sender_resources
 
     reader.disable_builtin_transport()
             .add_user_transport_to_pparams(reader_transport)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .property_policy(test_property_policy)
             .metatraffic_unicast_locator_list(reader_locators)
             .set_default_unicast_locators(reader_locators)
@@ -506,6 +584,14 @@ TEST(ChainingTransportTests, builtin_transports_api_shm)
     BuiltinTransportsTest::test_api(BuiltinTransports::SHM);
 }
 
+TEST(ChainingTransportTests, builtin_transports_api_shm_no_frag)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 200000;
+    options.sockets_buffer_size = 200000;
+    BuiltinTransportsTest::test_api_100kb(BuiltinTransports::SHM, &options);
+}
+
 TEST(ChainingTransportTests, builtin_transports_api_udpv4)
 {
     BuiltinTransportsTest::test_api(BuiltinTransports::UDPv4);
@@ -521,12 +607,52 @@ TEST(ChainingTransportTests, builtin_transports_api_large_data)
     BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA);
 }
 
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_max_msg_size)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 70000;
+    options.sockets_buffer_size = 70000;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsOptions options;
+    options.non_blocking_send = true;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsOptions options;
+    options.tcp_negotiation_timeout = 50;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_all_options)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 70000;
+    options.sockets_buffer_size = 70000;
+    options.non_blocking_send = true;
+    options.tcp_negotiation_timeout = 50;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
 #ifndef __APPLE__
 TEST(ChainingTransportTests, builtin_transports_api_large_datav6)
 {
     BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATAv6);
 }
 #endif // __APPLE__
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_no_frag)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 200000;
+    options.sockets_buffer_size = 200000;
+    BuiltinTransportsTest::test_api_100kb(BuiltinTransports::LARGE_DATA, &options);
+}
 
 TEST(ChainingTransportTests, builtin_transports_env_none)
 {
@@ -561,6 +687,41 @@ TEST(ChainingTransportTests, builtin_transports_env_udpv6)
 TEST(ChainingTransportTests, builtin_transports_env_large_data)
 {
     BuiltinTransportsTest::test_env("LARGE_DATA");
+}
+
+/**
+ * P2P transport shall always be used along with ROS2_EASY_MODE.
+ * This is due to the working principle of the mode. If it is not specified,
+ * the background discovery server will not be launched and the test will never
+ * finish since both clients will keep waiting for it.
+ */
+TEST(ChainingTransportTests, builtin_transports_env_p2p)
+{
+#ifndef _WIN32 // ROS2_EASY_MODE not available on Windows yet
+    setenv("ROS2_EASY_MODE", "127.0.0.1", 1);
+    BuiltinTransportsTest::test_env("P2P");
+#endif // _WIN32
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_max_msg_size)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?max_msg_size=70KB&sockets_size=70KB");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?non_blocking=true");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?tcp_negotiation_timeout=50");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_all_options)
+{
+    BuiltinTransportsTest::test_env(
+        "LARGE_DATA?max_msg_size=70KB&sockets_size=70KB&non_blocking=true&tcp_negotiation_timeout=50");
 }
 
 #ifndef __APPLE__
@@ -603,6 +764,42 @@ TEST(ChainingTransportTests, builtin_transports_xml_udpv6)
 TEST(ChainingTransportTests, builtin_transports_xml_large_data)
 {
     BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata");
+}
+
+/**
+ * DS Auto transport shall always be used along with ROS2_EASY_MODE=<ip>.
+ * This is due to the working principle of the mode. If it is not specified,
+ * the background discovery server will not be launched and the test will never
+ * finish since both clients will keep waiting for it.
+ * On the other hand, defining the environment variable somehow shadows the
+ * xml parsing, but it is assumed in this case.
+ */
+TEST(ChainingTransportTests, builtin_transports_xml_p2p)
+{
+#ifndef _WIN32 // ROS2_EASY_MODE not available on Windows yet
+    setenv("ROS2_EASY_MODE", "127.0.0.1", 1);
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_p2p");
+#endif // _WIN32
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_max_msg_size)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_max_msg_size");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_non_blocking_send");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_tcp_negotiation_timeout");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_all_options)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_all_options");
 }
 
 #ifndef __APPLE__

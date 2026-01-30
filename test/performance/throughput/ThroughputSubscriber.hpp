@@ -32,19 +32,12 @@
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/subscriber/Subscriber.hpp>
-#include <fastrtps/rtps/attributes/PropertyPolicy.h>
-#include <fastrtps/types/DynamicData.h>
-#include <fastrtps/types/DynamicDataFactory.h>
-#include <fastrtps/types/DynamicPubSubType.h>
-#include <fastrtps/types/DynamicType.h>
-#include <fastrtps/types/DynamicTypeBuilder.h>
-#include <fastrtps/types/DynamicTypeBuilderFactory.h>
-#include <fastrtps/types/DynamicTypeBuilderPtr.h>
-#include <fastrtps/types/MemberDescriptor.h>
-#include <fastrtps/types/TypeDescriptor.h>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicData.hpp>
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
 #include "ThroughputTypes.hpp"
 
 #include "../optionarg.hpp"
+#include "ThroughputTypes.hpp"
 
 class ThroughputSubscriber
 {
@@ -56,8 +49,8 @@ public:
             bool reliable,
             uint32_t pid,
             bool hostname,
-            const eprosima::fastrtps::rtps::PropertyPolicy& part_property_policy,
-            const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
+            const eprosima::fastdds::rtps::PropertyPolicy& part_property_policy,
+            const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
             const std::string& xml_config_file,
             bool dynamic_types,
             Arg::EnablerValue data_sharing,
@@ -119,7 +112,7 @@ private:
     ThroughputType* throughput_data_ = nullptr;
     eprosima::fastdds::dds::TypeSupport throughput_data_type_;
     // Dynamic Data
-    eprosima::fastrtps::types::DynamicData* dynamic_data_ = nullptr;
+    eprosima::fastdds::dds::DynamicData::_ref_type* dynamic_data_ {nullptr};
     eprosima::fastdds::dds::TypeSupport dynamic_pub_sub_type_;
     // QoS Profiles
     eprosima::fastdds::dds::DataReaderQos dr_qos_;
@@ -148,6 +141,7 @@ private:
         ThroughputSubscriber& throughput_subscriber_;
         uint32_t last_seq_num_ = 0;
         uint32_t lost_samples_ = 0;
+        uint64_t received_samples_ = 0;
         eprosima::fastdds::dds::SampleInfo info_;
         std::atomic_int matched_;
         std::atomic_bool enable_;
@@ -181,6 +175,7 @@ private:
 
         uint32_t saved_last_seq_num_;
         uint32_t saved_lost_samples_;
+        uint64_t saved_received_samples_;
     }
     data_reader_listener_;
 

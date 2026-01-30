@@ -16,12 +16,12 @@
  * @file PublicationMatchedStatus.hpp
  */
 
-#ifndef _PUBLICATION_MATCHED_STATUS_HPP_
-#define _PUBLICATION_MATCHED_STATUS_HPP_
+#ifndef FASTDDS_DDS_CORE_STATUS__PUBLICATIONMATCHEDSTATUS_HPP
+#define FASTDDS_DDS_CORE_STATUS__PUBLICATIONMATCHEDSTATUS_HPP
 
 #include <cstdint>
 #include <fastdds/dds/core/status/MatchedStatus.hpp>
-#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/dds/common/InstanceHandle.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -38,4 +38,4 @@ struct PublicationMatchedStatus : public MatchedStatus
 } // namespace fastdds
 } // namespace eprosima
 
-#endif //_PUBLICATION_MATCHED_STATUS_HPP_
+#endif //FASTDDS_DDS_CORE_STATUS__PUBLICATIONMATCHEDSTATUS_HPP

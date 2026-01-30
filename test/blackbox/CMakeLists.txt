@@ -11,190 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-macro(add_blackbox_gtest)
-    # Parse arguments
-    if("${ARGV0}" STREQUAL "NAME")
-        set(uniValueArgs NAME COMMAND)
-        unset(test)
-        unset(command)
-    else()
-        set(test "${ARGV0}")
-        set(command "${test}")
-    endif()
-    set(multiValueArgs SOURCES ENVIRONMENTS DEPENDENCIES LABELS IGNORE)
-    cmake_parse_arguments(GTEST "" "${uniValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(GTEST_NAME)
-        set(test ${GTEST_NAME})
-        set(command ${GTEST_COMMAND})
-    endif()
-
-    # IGNORE keeps a filter expression for the test list:
-    #   +   if GTEST_INDIVIDUAL is enforced the expressions are regular expression and the matching tests would be disabled
-    #       using cmake add_test DISABLE property
-    #   +   if no GTEST_INDIVIDUAL is enforce the filtering will be added to gtest command via --gtest_filter and it's
-    #       own filtering syntax
-
-    if(GTEST_INDIVIDUAL)
-        if(WIN32)
-            set(WIN_PATH "$ENV{PATH}")
-            get_target_property(LINK_LIBRARIES_ ${command} LINK_LIBRARIES)
-            if(NOT "${LINK_LIBRARIES_}" STREQUAL "LINK_LIBRARIES_-NOTFOUND")
-                foreach(LIBRARY_LINKED ${LINK_LIBRARIES_})
-                    if(TARGET ${LIBRARY_LINKED})
-                        set(WIN_PATH "$<TARGET_FILE_DIR:${LIBRARY_LINKED}>;${WIN_PATH}")
-                    endif()
-                endforeach()
-            endif()
-            foreach(DEP ${GTEST_DEPENDENCIES})
-                set(WIN_PATH "$<TARGET_FILE_DIR:${DEP}>;${WIN_PATH}")
-            endforeach()
-            string(REPLACE ";" "\\;" WIN_PATH "${WIN_PATH}")
-        endif()
-
-        foreach(GTEST_SOURCE_FILE ${GTEST_SOURCES})
-            file(STRINGS ${GTEST_SOURCE_FILE} GTEST_TEST_NAMES REGEX "^TEST(\\(|_F)" )
-            foreach(GTEST_TEST_NAME ${GTEST_TEST_NAMES})
-                string(REGEX REPLACE ["\) \(,"] ";" GTEST_TEST_NAME ${GTEST_TEST_NAME})
-                list(GET GTEST_TEST_NAME 1 GTEST_GROUP_NAME)
-                list(GET GTEST_TEST_NAME 3 GTEST_TEST_NAME)
-                add_test(NAME ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}
-                    COMMAND ${command} --gtest_filter=${GTEST_GROUP_NAME}.${GTEST_TEST_NAME})
-
-                # decide if disable
-                unset(GTEST_USER_DISABLED)
-                foreach(GTEST_USER_FILTER ${GTEST_IGNORE})
-                    string(REGEX MATCH ${GTEST_USER_FILTER} GTEST_USER_DISABLED ${GTEST_TEST_NAME})
-                    if(GTEST_USER_DISABLED)
-                        break()
-                    endif()
-                endforeach()
-
-                # Add environment
-                if(WIN32)
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME} APPEND PROPERTY ENVIRONMENT "PATH=${WIN_PATH}")
-                endif()
-
-                foreach(property ${GTEST_ENVIRONMENTS})
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME} APPEND PROPERTY ENVIRONMENT "${property}")
-                endforeach()
-
-                # Add labels and enable
-                set_tests_properties(${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME} PROPERTIES
-                    LABELS "${GTEST_LABELS}"
-                    DISABLED $<BOOL:${GTEST_USER_DISABLED}>)
-
-            endforeach()
-            file(STRINGS ${GTEST_SOURCE_FILE} GTEST_TEST_NAMES REGEX "^TEST_P" )
-            foreach(GTEST_TEST_NAME ${GTEST_TEST_NAMES})
-                string(REGEX REPLACE ["\) \(,"] ";" GTEST_TEST_NAME ${GTEST_TEST_NAME})
-                list(GET GTEST_TEST_NAME 1 GTEST_GROUP_NAME)
-                list(GET GTEST_TEST_NAME 3 GTEST_TEST_NAME)
-
-                add_test(NAME ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Transport
-                    COMMAND ${command} --gtest_filter=*/${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}/Transport*)
-
-                # decide if disable
-                unset(GTEST_USER_DISABLED)
-                foreach(GTEST_USER_FILTER ${GTEST_IGNORE})
-                    string(REGEX MATCH ${GTEST_USER_FILTER} GTEST_USER_DISABLED ${GTEST_TEST_NAME})
-                    if(GTEST_USER_DISABLED)
-                        break()
-                    endif()
-                endforeach()
-
-                # Add environment
-                if(WIN32)
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Transport APPEND PROPERTY ENVIRONMENT "PATH=${WIN_PATH}")
-                endif()
-
-                foreach(property ${GTEST_ENVIRONMENTS})
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Transport APPEND PROPERTY ENVIRONMENT "${property}")
-                endforeach()
-
-                # Add labels and enable
-                set_tests_properties(${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Transport PROPERTIES
-                    LABELS "${GTEST_LABELS}"
-                    DISABLED $<BOOL:${GTEST_USER_DISABLED}>)
-
-                add_test(NAME ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Intraprocess
-                    COMMAND ${command} --gtest_filter=*/${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}/Intraprocess*)
-
-                # Add environment
-                if(WIN32)
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Intraprocess APPEND PROPERTY ENVIRONMENT "PATH=${WIN_PATH}")
-                endif()
-
-                foreach(property ${GTEST_ENVIRONMENTS})
-                    set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Intraprocess APPEND PROPERTY ENVIRONMENT "${property}")
-                endforeach()
-
-                # Add labels and enable
-                set_tests_properties(${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Intraprocess PROPERTIES
-                    LABELS "${GTEST_LABELS}"
-                    DISABLED $<BOOL:${GTEST_USER_DISABLED}>)
-
-                if(${test} MATCHES ".*_DDS_PIM$")
-                    add_test(NAME ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Datasharing
-                        COMMAND ${command} --gtest_filter=*/${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}/Datasharing*)
-
-                    # Add environment
-                    if(WIN32)
-                        set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Datasharing APPEND PROPERTY ENVIRONMENT "PATH=${WIN_PATH}")
-                    endif()
-
-                    foreach(property ${GTEST_ENVIRONMENTS})
-                        set_property(TEST ${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Datasharing APPEND PROPERTY ENVIRONMENT "${property}")
-                    endforeach()
-
-                    # Add labels and enable
-                    set_tests_properties(${test}.${GTEST_GROUP_NAME}.${GTEST_TEST_NAME}.Datasharing PROPERTIES
-                        LABELS "${GTEST_LABELS}"
-                        DISABLED $<BOOL:${GTEST_USER_DISABLED}>)
-
-                endif()
-
-            endforeach()
-        endforeach()
-    else()
-
-        # add filtering statement if required
-        if(GTEST_IGNORE)
-            set(command "${command} --gtest_filter=${GTEST_IGNORE}")
-        endif()
-
-        add_test(NAME ${test} COMMAND ${command})
-
-        # Add environment
-        if(WIN32)
-            set(WIN_PATH "$ENV{PATH}")
-            get_target_property(LINK_LIBRARIES_ ${command} LINK_LIBRARIES)
-            if(NOT "${LINK_LIBRARIES_}" STREQUAL "LINK_LIBRARIES_-NOTFOUND")
-                foreach(LIBRARY_LINKED ${LINK_LIBRARIES_})
-                    if(TARGET ${LIBRARY_LINKED})
-                        set(WIN_PATH "$<TARGET_FILE_DIR:${LIBRARY_LINKED}>;${WIN_PATH}")
-                    endif()
-                endforeach()
-            endif()
-            foreach(DEP ${GTEST_DEPENDENCIES})
-                set(WIN_PATH "$<TARGET_FILE_DIR:${DEP}>;${WIN_PATH}")
-            endforeach()
-            string(REPLACE ";" "\\;" WIN_PATH "${WIN_PATH}")
-            set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT "PATH=${WIN_PATH}")
-        endif()
-
-        foreach(property ${GTEST_ENVIRONMENTS})
-            set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT "${property}")
-        endforeach()
-
-        # Add labels
-        set_property(TEST ${test} PROPERTY LABELS "${GTEST_LABELS}")
-    endif()
-endmacro()
 
 option(RTPS_API_TESTS "Enable tests using RTPS API" ON)
-option(FASTRTPS_API_TESTS "Enable tests using FastRTPS API" ON)
-option(FASTDDS_PIM_API_TESTS "Enable tests using FastDDS API" OFF)
+option(FASTDDS_PIM_API_TESTS "Enable tests using FastDDS API" ON)
 
 if(WIN32)
     add_definitions(
@@ -227,48 +46,42 @@ endif()
 
 # Filter pksc11 related tests if library is not available
 if(NOT LibP11_FOUND)
-    if(GTEST_INDIVIDUAL)
-        set(pkcs_filter "[Pp][Kk][Cc][Ss]")
-    else()
-        set(pkcs_filter "-*pkcs*")
-    endif() # GTEST_INDIVIDUAL
+    set(pkcs_filter "*pkcs*")
 endif() # LibP11_FOUND
 
-if(SECURITY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/maincacert.pem
-        ${CMAKE_CURRENT_BINARY_DIR}/maincacert.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainpubcert.pem
-        ${CMAKE_CURRENT_BINARY_DIR}/mainpubcert.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainpubkey.pem
-        ${CMAKE_CURRENT_BINARY_DIR}/mainpubkey.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_helloworld_all_enable.smime
-        ${CMAKE_CURRENT_BINARY_DIR}/governance_helloworld_all_enable.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/permissions_helloworld.smime
-        ${CMAKE_CURRENT_BINARY_DIR}/permissions_helloworld.smime COPYONLY)
+string(JOIN ":" BLACKBOX_HIGH_LEVEL_IGNORED_TESTS ${pkcs_filter})
+if(NOT BLACKBOX_HIGH_LEVEL_IGNORED_TESTS STREQUAL "")
+	message(STATUS "Ignoring tests '${BLACKBOX_HIGH_LEVEL_IGNORED_TESTS}'")
+    string(PREPEND BLACKBOX_HIGH_LEVEL_IGNORED_TESTS "-")
 endif()
+message(STATUS "BLACKBOX_HIGH_LEVEL_IGNORED_TESTS set to '${BLACKBOX_HIGH_LEVEL_IGNORED_TESTS}'")
 
-file(GLOB RTPS_BLACKBOXTESTS_TEST_SOURCE "common/RTPSBlackboxTests*.cpp")
+file(GLOB RTPS_BLACKBOXTESTS_TEST_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/RTPSBlackboxTests*.cpp")
 set(RTPS_BLACKBOXTESTS_SOURCE ${RTPS_BLACKBOXTESTS_TEST_SOURCE}
-    types/HelloWorld.cxx
-    types/HelloWorldPubSubTypes.cxx
-    types/KeyedHelloWorld.cxx
-    types/KeyedHelloWorldPubSubTypes.cxx
-    types/StringTest.cxx
-    types/StringTestPubSubTypes.cxx
-    types/Data64kb.cxx
-    types/Data64kbPubSubTypes.cxx
-    types/Data1mb.cxx
-    types/Data1mbPubSubTypes.cxx
-    types/KeyedData1mb.cxx
-    types/KeyedData1mbPubSubTypes.cxx
-    types/FixedSized.cxx
-    types/FixedSizedPubSubTypes.cxx
-    types/UnboundedHelloWorld.cxx
-    types/UnboundedHelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data1mbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data1mbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data100kbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data100kbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data64kbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data64kbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/FixedSizedPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/FixedSizedTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/HelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/HelloWorldTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedData1mbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedData1mbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedHelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedHelloWorldTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/core/core_typesPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/core/core_typesTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/StringTestPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/StringTestTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/UnboundedHelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/UnboundedHelloWorldTypeObjectSupport.cxx
 
-    utils/data_generators.cpp
-    utils/lambda_functions.cpp
-    utils/print_functions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/data_generators.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/lambda_functions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/print_functions.cpp
     )
 add_executable(BlackboxTests_RTPS ${RTPS_BLACKBOXTESTS_SOURCE})
 target_compile_definitions(BlackboxTests_RTPS PRIVATE
@@ -277,52 +90,60 @@ target_compile_definitions(BlackboxTests_RTPS PRIVATE
     $<$<NOT:$<BOOL:${IS_THIRDPARTY_BOOST_SUPPORTED}>>:FASTDDS_SHM_TRANSPORT_DISABLED> # Do not compile SHM Transport
     $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    $<$<BOOL:${WIN32}>:_ENABLE_ATOMIC_ALIGNMENT_FIX>
     )
 target_include_directories(BlackboxTests_RTPS PRIVATE
     ${Asio_INCLUDE_DIR})
-target_link_libraries(BlackboxTests_RTPS fastrtps fastcdr foonathan_memory GTest::gtest)
-add_blackbox_gtest(BlackboxTests_RTPS SOURCES ${RTPS_BLACKBOXTESTS_TEST_SOURCE} IGNORE ${pkcs_filter})
-
-file(GLOB BLACKBOXTESTS_TEST_SOURCE "common/BlackboxTests*.cpp")
-set(BLACKBOXTESTS_SOURCE ${BLACKBOXTESTS_TEST_SOURCE}
-    types/HelloWorld.cxx
-    types/HelloWorldPubSubTypes.cxx
-    types/HelloWorldTypeObject.cxx
-    types/KeyedHelloWorld.cxx
-    types/KeyedHelloWorldPubSubTypes.cxx
-    types/StringTest.cxx
-    types/StringTestPubSubTypes.cxx
-    types/Data64kb.cxx
-    types/Data64kbPubSubTypes.cxx
-    types/Data1mb.cxx
-    types/Data1mbPubSubTypes.cxx
-    types/KeyedData1mb.cxx
-    types/KeyedData1mbPubSubTypes.cxx
-    types/FixedSized.cxx
-    types/FixedSizedPubSubTypes.cxx
-    types/TestIncludeRegression3361.cxx
-    types/TestIncludeRegression3361TypeObject.cxx
-    types/TestRegression3361.cxx
-    types/TestRegression3361PubSubTypes.cxx
-    types/TestRegression3361TypeObject.cxx
-    types/UnboundedHelloWorld.cxx
-    types/UnboundedHelloWorldPubSubTypes.cxx
-
-    utils/data_generators.cpp
-    utils/lambda_functions.cpp
-    utils/print_functions.cpp
-
-    common/DatagramInjectionTransport.cpp
-    common/TCPReqRepHelloWorldRequester.cpp
-    common/TCPReqRepHelloWorldReplier.cpp
+target_link_libraries(BlackboxTests_RTPS fastdds fastcdr foonathan_memory GTest::gtest)
+gtest_discover_tests(BlackboxTests_RTPS
+    PROPERTIES
+            ENVIRONMENT "CERTS_PATH=${CMAKE_CURRENT_SOURCE_DIR}/../certs"
+    TEST_PREFIX "BlackboxTests_RTPS."
+    TEST_FILTER ${BLACKBOX_HIGH_LEVEL_IGNORED_TESTS}
+    NO_PRETTY_VALUES
     )
 
-file(GLOB DDS_BLACKBOXTESTS_TEST_SOURCE "common/DDSBlackboxTests*.cpp")
+file(GLOB BLACKBOXTESTS_TEST_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/BlackboxTests*.cpp")
+set(BLACKBOXTESTS_SOURCE ${BLACKBOXTESTS_TEST_SOURCE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data1mbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data1mbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data100kbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data100kbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data64kbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/Data64kbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/FixedSizedPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/FixedSizedTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/HelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/HelloWorldTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedData1mbPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedData1mbTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedHelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/KeyedHelloWorldTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/core/core_typesPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/core/core_typesTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/StringTestPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/StringTestTypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/TestIncludeRegression3361TypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/TestRegression3361PubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/TestRegression3361TypeObjectSupport.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/UnboundedHelloWorldPubSubTypes.cxx
+    ${CMAKE_CURRENT_SOURCE_DIR}/types/UnboundedHelloWorldTypeObjectSupport.cxx
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/data_generators.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/lambda_functions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/print_functions.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/DatagramInjectionTransport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/TCPReqRepHelloWorldRequester.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/TCPReqRepHelloWorldReplier.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/TCPReqRepHelloWorldService.cpp
+    )
+
+file(GLOB DDS_BLACKBOXTESTS_TEST_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/DDSBlackboxTests*.cpp")
 set(DDS_BLACKBOXTESTS_SOURCE
     ${DDS_BLACKBOXTESTS_TEST_SOURCE}
     ${BLACKBOXTESTS_SOURCE}
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/discovery/participant/ServerAttributes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/rtps/messages/CDRMessage.cpp
     )
 
 # Prepare static discovery xml file for blackbox tests.
@@ -335,80 +156,53 @@ if(W_UNICAST_PORT_RANDOM_NUMBER LESS 1025)
 endif()
 math(EXPR R_UNICAST_PORT_RANDOM_NUMBER "${W_UNICAST_PORT_RANDOM_NUMBER} + 1")
 math(EXPR MULTICAST_PORT_RANDOM_NUMBER "${R_UNICAST_PORT_RANDOM_NUMBER} + 1")
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubWriter.xml.in
-    ${CMAKE_CURRENT_BINARY_DIR}/PubSubWriter.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubReader.xml.in
-    ${CMAKE_CURRENT_BINARY_DIR}/PubSubReader.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubWriterPersistence.xml.in
-    ${CMAKE_CURRENT_BINARY_DIR}/PubSubWriterPersistence.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubReaderPersistence.xml.in
-    ${CMAKE_CURRENT_BINARY_DIR}/PubSubReaderPersistence.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participant_flags.xml
-    ${CMAKE_CURRENT_BINARY_DIR}/discovery_participant_flags.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/persistence.xml
-    ${CMAKE_CURRENT_BINARY_DIR}/persistence.xml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/StatisticsDomainParticipant.xml
-    ${CMAKE_CURRENT_BINARY_DIR}/StatisticsDomainParticipant.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/RTPSParticipant_static_disc.xml.in
+    ${CMAKE_CURRENT_BINARY_DIR}/RTPSParticipant_static_disc.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubWriterPersistence_static_disc.xml.in
+    ${CMAKE_CURRENT_BINARY_DIR}/PubSubWriterPersistence_static_disc.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/PubSubReaderPersistence_static_disc.xml.in
+    ${CMAKE_CURRENT_BINARY_DIR}/PubSubReaderPersistence_static_disc.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participant_flags_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/discovery_participant_flags_profile.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/StatisticsDomainParticipant_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/StatisticsDomainParticipant_profile.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/MonitorServiceDomainParticipant_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/MonitorServiceDomainParticipant_profile.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/MonitorServiceConnectionList_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/MonitorServiceConnectionList_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/utils/check_guid.py
     ${CMAKE_CURRENT_BINARY_DIR}/check_guid.py)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/partitions.xml
-    ${CMAKE_CURRENT_BINARY_DIR}/partitions.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/partitions_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/partitions_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/builtin_transports_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/builtin_transports_profile.xml)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/auth_handshake_props_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/auth_handshake_props_profile.xml COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/security_bug_participant_generic_message.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/security_bug_participant_generic_message.xml COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participants_initial_peers_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/discovery_participants_initial_peers_profile.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/discovery_participants_client_server_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/discovery_participants_client_server_profile.xml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/transport_priority_profile.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/transport_priority_profile.xml)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/datagrams" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-
-if(FASTRTPS_API_TESTS)
-    set(BLACKBOXTESTS_FASTRTPS_SOURCE
-        ${BLACKBOXTESTS_SOURCE}
-        api/fastrtps_deprecated/ReqRepHelloWorldRequester.cpp
-        api/fastrtps_deprecated/ReqRepHelloWorldReplier.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/builtin/discovery/participant/ServerAttributes.cpp
-        )
-
-    add_executable(BlackboxTests_FastRTPS ${BLACKBOXTESTS_FASTRTPS_SOURCE})
-    target_compile_definitions(BlackboxTests_FastRTPS PRIVATE
-        BOOST_ASIO_STANDALONE
-        ASIO_STANDALONE
-        $<$<NOT:$<BOOL:${IS_THIRDPARTY_BOOST_SUPPORTED}>>:FASTDDS_SHM_TRANSPORT_DISABLED> # Do not compile SHM Transport
-        $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
-        $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
-        )
-    target_include_directories(BlackboxTests_FastRTPS PRIVATE
-        ${Asio_INCLUDE_DIR}
-        api/fastrtps_deprecated)
-    target_link_libraries(BlackboxTests_FastRTPS
-        fastrtps
-        fastcdr
-        foonathan_memory
-        GTest::gtest
-        $<$<BOOL:${LibP11_FOUND}>:eProsima_p11>  # $<TARGET_NAME_IF_EXISTS:eProsima_p11>
-        )
-
-    add_blackbox_gtest(BlackboxTests_FastRTPS SOURCES ${BLACKBOXTESTS_TEST_SOURCE}
-        ENVIRONMENTS "CERTS_PATH=${PROJECT_SOURCE_DIR}/test/certs"
-        "TOPIC_RANDOM_NUMBER=${TOPIC_RANDOM_NUMBER}"
-        "W_UNICAST_PORT_RANDOM_NUMBER=${W_UNICAST_PORT_RANDOM_NUMBER}"
-        "R_UNICAST_PORT_RANDOM_NUMBER=${R_UNICAST_PORT_RANDOM_NUMBER}"
-        "MULTICAST_PORT_RANDOM_NUMBER=${MULTICAST_PORT_RANDOM_NUMBER}"
-        $<$<BOOL:${OPENSSL_CONF}>:OPENSSL_CONF=${OPENSSL_CONF}>
-        IGNORE ${pkcs_filter}
-        )
-endif(FASTRTPS_API_TESTS)
 
 if(FASTDDS_PIM_API_TESTS)
     set(BLACKBOXTESTS_FASTDDS_PIM_SOURCE
         ${DDS_BLACKBOXTESTS_SOURCE}
-        api/dds-pim/ReqRepHelloWorldRequester.cpp
-        api/dds-pim/ReqRepHelloWorldReplier.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/ReqRepHelloWorldRequester.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/ReqRepHelloWorldReplier.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim/ReqRepHelloWorldService.cpp
         )
 
     if (FASTDDS_STATISTICS)
 
         set(statistics_sources
-            ${PROJECT_SOURCE_DIR}/src/cpp/statistics/types/types.cxx
-            ${PROJECT_SOURCE_DIR}/src/cpp/statistics/types/typesPubSubTypes.cxx
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/statistics/types/monitorservice_typesPubSubTypes.cxx
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/statistics/types/monitorservice_typesTypeObjectSupport.cxx
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/statistics/types/typesPubSubTypes.cxx
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/statistics/types/typesTypeObjectSupport.cxx
             )
 
         list(APPEND BLACKBOXTESTS_FASTDDS_PIM_SOURCE ${statistics_sources})
@@ -422,44 +216,40 @@ if(FASTDDS_PIM_API_TESTS)
         $<$<NOT:$<BOOL:${IS_THIRDPARTY_BOOST_SUPPORTED}>>:FASTDDS_SHM_TRANSPORT_DISABLED> # Do not compile SHM Transport
         $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
         $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+        $<$<BOOL:${WIN32}>:_ENABLE_ATOMIC_ALIGNMENT_FIX>
         )
     target_include_directories(BlackboxTests_DDS_PIM PRIVATE
         ${Asio_INCLUDE_DIR}
-        api/dds-pim)
+        ${CMAKE_CURRENT_SOURCE_DIR}/api/dds-pim
+        ${CMAKE_CURRENT_SOURCE_DIR}/../utils)
     target_link_libraries(BlackboxTests_DDS_PIM
-        fastrtps
+        fastdds
         fastcdr
         foonathan_memory
         GTest::gtest
         $<$<BOOL:${LibP11_FOUND}>:eProsima_p11>  # $<TARGET_NAME_IF_EXISTS:eProsima_p11>
         )
-    add_blackbox_gtest(BlackboxTests_DDS_PIM SOURCES ${DDS_BLACKBOXTESTS_SOURCE}
-        ENVIRONMENTS "CERTS_PATH=${PROJECT_SOURCE_DIR}/test/certs"
-        "TOPIC_RANDOM_NUMBER=${TOPIC_RANDOM_NUMBER}"
-        "W_UNICAST_PORT_RANDOM_NUMBER=${W_UNICAST_PORT_RANDOM_NUMBER}"
-        "R_UNICAST_PORT_RANDOM_NUMBER=${R_UNICAST_PORT_RANDOM_NUMBER}"
-        "MULTICAST_PORT_RANDOM_NUMBER=${MULTICAST_PORT_RANDOM_NUMBER}"
-        $<$<BOOL:${OPENSSL_CONF}>:OPENSSL_CONF=${OPENSSL_CONF}>
-        IGNORE ${pkcs_filter}
+    gtest_discover_tests(BlackboxTests_DDS_PIM
+        PROPERTIES
+            ENVIRONMENT "CERTS_PATH=${CMAKE_CURRENT_SOURCE_DIR}/../certs"
+            ENVIRONMENT "TOPIC_RANDOM_NUMBER=${TOPIC_RANDOM_NUMBER}"
+            ENVIRONMENT "W_UNICAST_PORT_RANDOM_NUMBER=${W_UNICAST_PORT_RANDOM_NUMBER}"
+            ENVIRONMENT "R_UNICAST_PORT_RANDOM_NUMBER=${R_UNICAST_PORT_RANDOM_NUMBER}"
+            ENVIRONMENT "MULTICAST_PORT_RANDOM_NUMBER=${MULTICAST_PORT_RANDOM_NUMBER}"
+            ENVIRONMENT $<IF:$<BOOL:${OPENSSL_CONF}>,OPENSSL_CONF=${OPENSSL_CONF},>
+        TEST_PREFIX "BlackboxTests_DDS_PIM."
+        TEST_FILTER ${BLACKBOX_HIGH_LEVEL_IGNORED_TESTS}
+        NO_PRETTY_VALUES
         )
 endif(FASTDDS_PIM_API_TESTS)
 
 # Add 'xfail' label to flaky tests
-set(BLACKBOX_XFAIL_LIST XFAIL_RTPS)
-if(FASTRTPS_API_TESTS)
-    set(BLACKBOX_XFAIL_LIST ${BLACKBOX_XFAIL_LIST} XFAIL_FASTRTPS)
-endif()
-if(FASTDDS_PIM_API_TESTS)
-    set(BLACKBOX_XFAIL_LIST ${BLACKBOX_XFAIL_LIST} XFAIL_DDS_PIM)
-endif()
-
-foreach(BLACKBOX_XFAIL_TEST ${BLACKBOX_XFAIL_LIST})
-    add_xfail_label(${CMAKE_CURRENT_SOURCE_DIR}/${BLACKBOX_XFAIL_TEST}.list)
-    if(SECURITY)
-        add_xfail_label(${CMAKE_CURRENT_SOURCE_DIR}/${BLACKBOX_XFAIL_TEST}_SECURITY.list)
-    endif()
-endforeach()
+set_property(DIRECTORY APPEND PROPERTY
+    TEST_INCLUDE_FILES ${CMAKE_CURRENT_LIST_DIR}/xfail_tests.cmake
+    )
 
 # Necessary files
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/environment_file.json
     ${CMAKE_CURRENT_BINARY_DIR}/environment_file.json COPYONLY)
+
+unset(pkcs_filter)

@@ -13,18 +13,16 @@
 // limitations under the License.
 
 #include <cstdint>
-#include <fstream>
 #include <mutex>
-#include <set>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/UDPv6TransportDescriptor.h>
-#include <fastrtps/log/Log.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/UDPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 #include "BlackboxTests.hpp"
 #include "DatagramInjectionTransport.hpp"
@@ -32,8 +30,8 @@
 #include "PubSubWriter.hpp"
 #include "UDPMessageSender.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 enum communication_type
 {
@@ -54,6 +52,10 @@ public:
         }
         else
         {
+#ifdef __APPLE__
+            // TODO: fix IPv6 issues related with zone ID
+            GTEST_SKIP() << "UDPv6 tests are disabled in Mac";
+#endif // ifdef __APPLE__
             test_transport_ = std::make_shared<UDPv6TransportDescriptor>();
         }
     }
@@ -68,11 +70,11 @@ public:
     {
         if (use_udpv4)
         {
-            eprosima::fastrtps::rtps::IPFinder::getIP4Address(loc);
+            eprosima::fastdds::rtps::IPFinder::getIP4Address(loc);
         }
         else
         {
-            eprosima::fastrtps::rtps::IPFinder::getIP6Address(loc);
+            eprosima::fastdds::rtps::IPFinder::getIP6Address(loc);
         }
     }
 
@@ -125,7 +127,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P3)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -156,7 +158,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -187,7 +189,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -217,7 +219,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_6_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -387,7 +389,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipant)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipant)
 {
-    Log::SetVerbosity(Log::Kind::Warning);
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -464,7 +466,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipantZeroPort)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipantZeroPort)
 {
-    Log::SetVerbosity(Log::Kind::Warning);
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -589,8 +591,8 @@ TEST(TransportUDP, MaliciousManipulatedDataOctetsToNextHeaderIgnore)
 
     // Set common QoS
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+            .history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
 
     // Set custom reader locator so we can send malicious data to a known location
     Locator_t reader_locator;
@@ -971,6 +973,103 @@ TEST(TransportUDP, MaliciousDataFragUnalignedSizes)
         auto writer_guid = writer.datawriter_guid();
 
         MaliciousDataFragUnalignedSizes malicious_packet{};
+        malicious_packet.sender_prefix = writer_guid.guidPrefix;
+        malicious_packet.data.header.writer_id = writer_guid.entityId;
+        malicious_packet.data.header.reader_id = reader.datareader_guid().entityId;
+
+        CDRMessage_t msg(0);
+        uint32_t msg_len = static_cast<uint32_t>(sizeof(malicious_packet));
+        msg.init(reinterpret_cast<octet*>(&malicious_packet), msg_len);
+        msg.length = msg_len;
+        msg.pos = msg_len;
+        fake_msg_sender.send(msg, reader_locator);
+    }
+
+    // Block reader until reception finished or timeout.
+    reader.block_for_all();
+}
+
+// Regression test for redmine issue #24030
+TEST(TransportUDP, MaliciousDataFragLastFragment)
+{
+    // Force using UDP transport
+    auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+
+    PubSubWriter<UnboundedHelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    PubSubReader<UnboundedHelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+
+    struct MaliciousDataFragInconsistentLastFragmentLength
+    {
+        std::array<char, 4> rtps_id{ {'R', 'T', 'P', 'S'} };
+        std::array<uint8_t, 2> protocol_version{ {2, 3} };
+        std::array<uint8_t, 2> vendor_id{ {0x01, 0x0F} };
+        GuidPrefix_t sender_prefix{};
+
+        struct DataFragSubMsg
+        {
+            struct Header
+            {
+                uint8_t submessage_id = 0x16;
+#if FASTDDS_IS_BIG_ENDIAN_TARGET
+                uint8_t flags = 0x00;
+#else
+                uint8_t flags = 0x01;
+#endif  // FASTDDS_IS_BIG_ENDIAN_TARGET
+                uint16_t octets_to_next_header = 0x24;
+                uint16_t extra_flags = 0;
+                uint16_t octets_to_inline_qos = 0x1c;
+                EntityId_t reader_id{};
+                EntityId_t writer_id{};
+                SequenceNumber_t sn{100};
+                uint32_t fragment_starting_num = 1;
+                uint16_t fragments_in_submessage = 8;
+                uint16_t fragment_size = 65504;
+                uint32_t sample_size = 65504 * 8;
+            };
+
+            struct SerializedData
+            {
+                octet data[4] {0xA0, 0xA1, 0xA2, 0xA3};
+            };
+
+            Header header;
+            SerializedData payload;
+        }
+        data;
+    };
+
+    UDPMessageSender fake_msg_sender;
+
+    // Set common QoS
+    reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
+            .history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+
+    // Set custom reader locator so we can send malicious data to a known location
+    Locator_t reader_locator;
+    ASSERT_TRUE(IPLocator::setIPv4(reader_locator, "127.0.0.1"));
+    reader_locator.port = 7000;
+    reader.add_to_unicast_locator_list("127.0.0.1", 7000);
+
+    // Initialize and wait for discovery
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.wait_discovery();
+    writer.wait_discovery();
+
+    auto data = default_unbounded_helloworld_data_generator();
+    reader.startReception(data);
+    writer.send(data);
+    ASSERT_TRUE(data.empty());
+
+    // Send malicious data
+    {
+        auto writer_guid = writer.datawriter_guid();
+
+        MaliciousDataFragInconsistentLastFragmentLength malicious_packet{};
         malicious_packet.sender_prefix = writer_guid.guidPrefix;
         malicious_packet.data.header.writer_id = writer_guid.entityId;
         malicious_packet.data.header.reader_id = reader.datareader_guid().entityId;

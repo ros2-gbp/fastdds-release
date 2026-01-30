@@ -16,10 +16,10 @@
  * @file LivelinessChangedStatus.hpp
  */
 
-#ifndef _FASTDDS_DDS_QOS_LIVELINESSCHANGEDSTATUS_HPP_
-#define _FASTDDS_DDS_QOS_LIVELINESSCHANGEDSTATUS_HPP_
+#ifndef FASTDDS_DDS_CORE_STATUS__LIVELINESSCHANGEDSTATUS_HPP
+#define FASTDDS_DDS_CORE_STATUS__LIVELINESSCHANGEDSTATUS_HPP
 
-#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/dds/common/InstanceHandle.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -56,4 +56,4 @@ struct LivelinessChangedStatus
 } //namespace fastdds
 } //namespace eprosima
 
-#endif // _FASTDDS_DDS_QOS_LIVELINESSCHANGEDSTATUS_HPP_
+#endif // FASTDDS_DDS_CORE_STATUS__LIVELINESSCHANGEDSTATUS_HPP

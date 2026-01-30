@@ -18,6 +18,9 @@
 
 #include <security/artifact_providers/FileProvider.hpp>
 
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -29,7 +32,7 @@
 
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -128,8 +131,8 @@ X509_STORE* FileProvider::load_ca(
                             const char* error_msg = X509_verify_cert_error_string(error_code);
 
                             exception = _SecurityException_(
-                                    "Error '" + std::to_string(error_code) + "' verifying CA certificate for " +
-                                    ca_sn + ": " + error_msg);
+                                "Error '" + std::to_string(error_code) + "' verifying CA certificate for " +
+                                ca_sn + ": " + error_msg);
                             X509_STORE_CTX_free(ctx);
                         }
                         else
@@ -291,6 +294,6 @@ X509_CRL* FileProvider::load_crl(
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 

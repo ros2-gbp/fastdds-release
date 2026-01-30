@@ -19,19 +19,18 @@
 #include <asio.hpp>
 #include <gtest/gtest.h>
 
-#include <MockReceiverResource.h>
-
 #include <fastdds/dds/log/Log.hpp>
-#include <fastrtps/transport/UDPv4TransportDescriptor.h>
-#include <fastrtps/rtps/network/NetworkFactory.h>
-#include <fastrtps/utils/Semaphore.h>
-#include <fastrtps/utils/IPFinder.h>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
+#include <utils/Semaphore.hpp>
+
+#include <MockReceiverResource.h>
 #include <rtps/transport/UDPv4Transport.h>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using UDPv4Transport = eprosima::fastdds::rtps::UDPv4Transport;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 #if defined(_WIN32)
 #define GET_PID _getpid
@@ -69,7 +68,7 @@ public:
 
     void HELPER_SetDescriptorDefaults();
 
-    UDPv4TransportDescriptor descriptor;
+    eprosima::fastdds::rtps::UDPv4TransportDescriptor descriptor;
     std::unique_ptr<std::thread> senderThread;
     std::unique_ptr<std::thread> receiverThread;
 };
@@ -196,11 +195,17 @@ TEST_F(UDPv4Tests, send_and_receive_between_ports)
     MockReceiverResource receiver(transportUnderTest, multicastLocator);
     MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
+    ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, multicastLocator));
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator)); // Includes loopback
     ASSERT_FALSE(send_resource_list.empty());
     ASSERT_TRUE(transportUnderTest.IsInputChannelOpen(multicastLocator));
     octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < 5; ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
 
     Semaphore sem;
     std::function<void()> recCallback = [&]()
@@ -221,8 +226,8 @@ TEST_F(UDPv4Tests, send_and_receive_between_ports)
                 {
                     Locators locators_begin(locator_list.begin());
                     Locators locators_end(locator_list.end());
-                    sent |= send_resource->send(message, 5, &locators_begin, &locators_end,
-                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                    sent |= send_resource->send(buffer_list, 5, &locators_begin, &locators_end,
+                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0);
                     if (sent)
                     {
                         break;
@@ -255,11 +260,17 @@ TEST_F(UDPv4Tests, send_to_loopback)
     MockReceiverResource receiver(transportUnderTest, multicastLocator);
     MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
+    ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, multicastLocator));
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator)); // Includes loopback
     ASSERT_FALSE(send_resource_list.empty());
     ASSERT_TRUE(transportUnderTest.IsInputChannelOpen(multicastLocator));
     octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < 5; ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
 
     Semaphore sem;
     std::function<void()> recCallback = [&]()
@@ -280,8 +291,8 @@ TEST_F(UDPv4Tests, send_to_loopback)
                 {
                     Locators locators_begin(locator_list.begin());
                     Locators locators_end(locator_list.end());
-                    sent |= send_resource->send(message, 5, &locators_begin, &locators_end,
-                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                    sent |= send_resource->send(buffer_list, 5, &locators_begin, &locators_end,
+                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0);
                     if (sent)
                     {
                         break;
@@ -303,7 +314,7 @@ TEST_F(UDPv4Tests, send_is_rejected_if_buffer_size_is_bigger_to_size_specified_i
     UDPv4Transport transportUnderTest(descriptor);
     transportUnderTest.init();
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
     Locator_t genericOutputChannelLocator;
     genericOutputChannelLocator.kind = LOCATOR_KIND_UDPv4;
     genericOutputChannelLocator.port = g_default_port;
@@ -321,8 +332,10 @@ TEST_F(UDPv4Tests, send_is_rejected_if_buffer_size_is_bigger_to_size_specified_i
 
     // Then
     std::vector<octet> receiveBufferWrongSize(descriptor.sendBufferSize + 1);
-    ASSERT_FALSE(send_resource_list.at(0)->send(receiveBufferWrongSize.data(), (uint32_t)receiveBufferWrongSize.size(),
-            &locators_begin, &locators_end, (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+    std::vector<NetworkBuffer> buffer_list;
+    buffer_list.emplace_back(receiveBufferWrongSize.data(), (uint32_t)receiveBufferWrongSize.size());
+    ASSERT_FALSE(send_resource_list.at(0)->send(buffer_list, (uint32_t)receiveBufferWrongSize.size(),
+            &locators_begin, &locators_end, (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
 }
 
 TEST_F(UDPv4Tests, RemoteToMainLocal_simply_strips_out_address_leaving_IP_ANY)
@@ -342,7 +355,7 @@ TEST_F(UDPv4Tests, RemoteToMainLocal_simply_strips_out_address_leaving_IP_ANY)
     ASSERT_EQ(mainLocalLocator.port, remote_locator.port);
     ASSERT_EQ(mainLocalLocator.kind, remote_locator.kind);
 
-    ASSERT_EQ(IPLocator::toIPv4string(mainLocalLocator), s_IPv4AddressAny);
+    ASSERT_EQ(IPLocator::toIPv4string(mainLocalLocator), eprosima::fastdds::rtps::s_IPv4AddressAny);
 }
 
 TEST_F(UDPv4Tests, match_if_port_AND_address_matches)
@@ -369,7 +382,7 @@ TEST_F(UDPv4Tests, send_to_wrong_interface)
     UDPv4Transport transportUnderTest(descriptor);
     transportUnderTest.init();
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
     Locator_t outputChannelLocator;
     outputChannelLocator.port = g_default_port;
     outputChannelLocator.kind = LOCATOR_KIND_UDPv4;
@@ -377,17 +390,23 @@ TEST_F(UDPv4Tests, send_to_wrong_interface)
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator));
     ASSERT_FALSE(send_resource_list.empty());
 
+    Locator_t empty_locator;
+    EXPECT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, empty_locator));
+
     LocatorList_t locator_list;
-    locator_list.push_back(Locator_t());
+    locator_list.push_back(empty_locator);
     Locators locators_begin(locator_list.begin());
     Locators locators_end(locator_list.end());
 
-    //Sending through a different IP will NOT work, except 0.0.0.0
-    IPLocator::setIPv4(outputChannelLocator, 111, 111, 111, 111);
-    std::vector<octet> message = { 'H', 'e', 'l', 'l', 'o' };
-    ASSERT_FALSE(send_resource_list.at(0)->send(message.data(), (uint32_t)message.size(), &locators_begin,
+    octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < 5; ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
+    ASSERT_FALSE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin,
             &locators_end,
-            (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+            (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
 }
 
 TEST_F(UDPv4Tests, send_to_blocked_interface)
@@ -396,7 +415,7 @@ TEST_F(UDPv4Tests, send_to_blocked_interface)
     UDPv4Transport transportUnderTest(descriptor);
     transportUnderTest.init();
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
     Locator_t outputChannelLocator;
     outputChannelLocator.port = g_default_port;
     outputChannelLocator.kind = LOCATOR_KIND_UDPv4;
@@ -426,7 +445,7 @@ TEST_F(UDPv4Tests, send_to_allowed_interface)
             UDPv4Transport transportUnderTest(descriptor);
             transportUnderTest.init();
 
-            SendResourceList send_resource_list;
+            eprosima::fastdds::rtps::SendResourceList send_resource_list;
             Locator_t outputChannelLocator;
             outputChannelLocator.port = g_default_port;
             outputChannelLocator.kind = LOCATOR_KIND_UDPv4;
@@ -438,6 +457,7 @@ TEST_F(UDPv4Tests, send_to_allowed_interface)
             remoteMulticastLocator.port = g_default_port;
             remoteMulticastLocator.kind = LOCATOR_KIND_UDPv4;
             IPLocator::setIPv4(remoteMulticastLocator, 239, 255, 1, 4);
+            ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, remoteMulticastLocator));
 
             LocatorList_t locator_list;
             locator_list.push_back(remoteMulticastLocator);
@@ -445,10 +465,15 @@ TEST_F(UDPv4Tests, send_to_allowed_interface)
             Locators locators_end(locator_list.end());
 
             // Sending through a ALLOWED IP will work
-            std::vector<octet> message = { 'H', 'e', 'l', 'l', 'o' };
-            ASSERT_TRUE(send_resource_list.at(0)->send(message.data(), (uint32_t)message.size(),
+            octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+            std::vector<NetworkBuffer> buffer_list;
+            for (size_t i = 0; i < 5; ++i)
+            {
+                buffer_list.emplace_back(&message[i], 1);
+            }
+            ASSERT_TRUE(send_resource_list.at(0)->send(buffer_list, 5,
                     &locators_begin, &locators_end,
-                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
         }
     }
 }
@@ -492,11 +517,17 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_localhost)
     MockReceiverResource receiver(transportUnderTest, unicastLocator);
     MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
+    ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, unicastLocator));
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator)); // Includes loopback
     ASSERT_FALSE(send_resource_list.empty());
     ASSERT_TRUE(transportUnderTest.IsInputChannelOpen(unicastLocator));
     octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < 5; ++i)
+    {
+        buffer_list.emplace_back(&message[i], 1);
+    }
 
     Semaphore sem;
     std::function<void()> recCallback = [&]()
@@ -512,8 +543,8 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_localhost)
                 Locators locators_begin(locator_list.begin());
                 Locators locators_end(locator_list.end());
 
-                EXPECT_TRUE(send_resource_list.at(0)->send(message, 5, &locators_begin, &locators_end,
-                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin, &locators_end,
+                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
             };
 
     senderThread.reset(new std::thread(sendThreadFunction));
@@ -529,9 +560,9 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast)
 
     if (interfaces.size() > 0)
     {
-        for (const auto& interface : interfaces)
+        for (const auto& network_interface : interfaces)
         {
-            descriptor.interfaceWhiteList.push_back(interface.name);
+            descriptor.interfaceWhiteList.push_back(network_interface.name);
         }
         UDPv4Transport transportUnderTest(descriptor);
         transportUnderTest.init();
@@ -552,11 +583,17 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast)
         MockReceiverResource receiver(transportUnderTest, unicastLocator);
         MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
 
-        SendResourceList send_resource_list;
+        eprosima::fastdds::rtps::SendResourceList send_resource_list;
+        ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, unicastLocator));
         ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator)); // Includes loopback
         ASSERT_FALSE(send_resource_list.empty());
         ASSERT_TRUE(transportUnderTest.IsInputChannelOpen(unicastLocator));
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -572,8 +609,8 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast)
                     Locators locators_begin(locator_list.begin());
                     Locators locators_end(locator_list.end());
 
-                    EXPECT_TRUE(send_resource_list.at(0)->send(message, 5, &locators_begin, &locators_end,
-                            (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                    EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin, &locators_end,
+                            (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
                 };
 
         senderThread.reset(new std::thread(sendThreadFunction));
@@ -590,9 +627,9 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast_to_mul
 
     if (interfaces.size() > 0)
     {
-        for (const auto& interface : interfaces)
+        for (const auto& network_interface : interfaces)
         {
-            descriptor.interfaceWhiteList.push_back(interface.name);
+            descriptor.interfaceWhiteList.push_back(network_interface.name);
         }
         UDPv4Transport transportUnderTest(descriptor);
         transportUnderTest.init();
@@ -613,11 +650,18 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast_to_mul
         MockReceiverResource receiver(transportUnderTest, unicastLocator);
         MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
 
-        SendResourceList send_resource_list;
+        eprosima::fastdds::rtps::SendResourceList send_resource_list;
+        ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, unicastLocator));
         ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, outputChannelLocator)); // Includes loopback
         ASSERT_FALSE(send_resource_list.empty());
         ASSERT_TRUE(transportUnderTest.IsInputChannelOpen(unicastLocator));
         octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        std::vector<NetworkBuffer> buffer_list;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            buffer_list.emplace_back(&message[i], 1);
+        }
+
 
         Semaphore sem;
         std::function<void()> recCallback = [&]()
@@ -633,8 +677,8 @@ TEST_F(UDPv4Tests, send_and_receive_between_allowed_sockets_using_unicast_to_mul
                     Locators locators_begin(locator_list.begin());
                     Locators locators_end(locator_list.end());
 
-                    EXPECT_TRUE(send_resource_list.at(0)->send(message, 5, &locators_begin, &locators_end,
-                            (std::chrono::steady_clock::now() + std::chrono::microseconds(100))));
+                    EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, 5, &locators_begin, &locators_end,
+                            (std::chrono::steady_clock::now() + std::chrono::microseconds(100)), 0));
                 };
 
         senderThread.reset(new std::thread(sendThreadFunction));
@@ -710,13 +754,18 @@ TEST_F(UDPv4Tests, simple_throughput)
 
     octet sample_data[sample_size];
     memset(sample_data, 0, sizeof(sample_data));
+    std::vector<NetworkBuffer> buffer_list;
+    for (size_t i = 0; i < sample_size; ++i)
+    {
+        buffer_list.emplace_back(&sample_data[i], 1);
+    }
 
     Locator_t sub_locator;
     sub_locator.kind = LOCATOR_KIND_UDPv4;
     sub_locator.port = 50000;
     IPLocator::setIPv4(sub_locator, 127, 0, 0, 1);
 
-    UDPv4TransportDescriptor my_descriptor;
+    eprosima::fastdds::rtps::UDPv4TransportDescriptor my_descriptor;
 
     // Subscriber
 
@@ -741,7 +790,7 @@ TEST_F(UDPv4Tests, simple_throughput)
     LocatorList_t send_locators_list;
     send_locators_list.push_back(sub_locator);
 
-    SendResourceList send_resource_list;
+    eprosima::fastdds::rtps::SendResourceList send_resource_list;
     ASSERT_TRUE(pub_transport.OpenOutputChannel(send_resource_list, sub_locator));
 
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -751,8 +800,8 @@ TEST_F(UDPv4Tests, simple_throughput)
         Locators locators_begin(send_locators_list.begin());
         Locators locators_end(send_locators_list.end());
 
-        EXPECT_TRUE(send_resource_list.at(0)->send(sample_data, sizeof(sample_data), &locators_begin, &locators_end,
-                (std::chrono::steady_clock::now() + std::chrono::milliseconds(100))));
+        EXPECT_TRUE(send_resource_list.at(0)->send(buffer_list, sizeof(sample_data), &locators_begin, &locators_end,
+                (std::chrono::steady_clock::now() + std::chrono::milliseconds(100)), 0));
     }
 
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -788,8 +837,8 @@ TEST_F(UDPv4Tests, double_binding_fails)
 void UDPv4Tests::HELPER_SetDescriptorDefaults()
 {
     descriptor.maxMessageSize = 5;
-    descriptor.sendBufferSize = 5;
-    descriptor.receiveBufferSize = 5;
+    descriptor.sendBufferSize = 5000;
+    descriptor.receiveBufferSize = 5000;
     descriptor.interfaceWhiteList.clear();
 }
 

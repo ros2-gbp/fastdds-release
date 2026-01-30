@@ -108,10 +108,11 @@ if(GST_FOUND)
     if (WIN32)
         target_link_libraries(
             VideoTest
-            fastrtps
+            fastdds
             fastcdr
             foonathan_memory
             fastdds::optionparser
+            GTest::gtest
             ${CMAKE_THREAD_LIBS_INIT}
             ${CMAKE_DL_LIBS}
             ${GST_LIBRARIES}
@@ -124,10 +125,11 @@ if(GST_FOUND)
     else()
         target_link_libraries(
             VideoTest
-            fastrtps
+            fastdds
             fastcdr
             foonathan_memory
             fastdds::optionparser
+            GTest::gtest
             ${CMAKE_THREAD_LIBS_INIT}
             ${CMAKE_DL_LIBS}
             ${GST_LIBRARIES}
@@ -140,10 +142,10 @@ if(GST_FOUND)
     ###########################################################################
     set(
         VIDEO_TEST_LIST
-        interprocess_best_effort
-        interprocess_reliable
-        interprocess_best_effort_tcp
-        interprocess_reliable_tcp
+        video_interprocess_best_effort_profile
+        video_interprocess_reliable_profile
+        video_interprocess_best_effort_tcp_profile
+        video_interprocess_reliable_tcp_profile
     )
 
     ###########################################################################

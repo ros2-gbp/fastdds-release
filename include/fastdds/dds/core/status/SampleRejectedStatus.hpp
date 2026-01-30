@@ -16,12 +16,12 @@
  * @file SampleRejectedStatus.hpp
  */
 
-#ifndef _FASTDDS_DDS_QOS_SAMPLEREJECTEDSTATUS_HPP_
-#define _FASTDDS_DDS_QOS_SAMPLEREJECTEDSTATUS_HPP_
+#ifndef FASTDDS_DDS_CORE_STATUS__SAMPLEREJECTEDSTATUS_HPP
+#define FASTDDS_DDS_CORE_STATUS__SAMPLEREJECTEDSTATUS_HPP
 
 #include <cstdint>
 
-#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/dds/common/InstanceHandle.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,10 +37,12 @@ enum SampleRejectedStatusKind
     //! Exceeds the max_samples limit
     REJECTED_BY_SAMPLES_LIMIT,
     //! Exceeds the max_samples_per_instance limit
-    REJECTED_BY_SAMPLES_PER_INSTANCE_LIMIT
+    REJECTED_BY_SAMPLES_PER_INSTANCE_LIMIT,
+    //! Instance could not be determined
+    REJECTED_BY_UNKNOWN_INSTANCE
 };
 
-//! @brief A struct storing the sample lost status
+//! @brief A struct storing the sample rejected status
 struct SampleRejectedStatus
 {
     /**
@@ -69,4 +71,4 @@ struct SampleRejectedStatus
 } //namespace fastdds
 } //namespace eprosima
 
-#endif // _FASTDDS_DDS_QOS_SAMPLEREJECTEDSTATUS_HPP_
+#endif // FASTDDS_DDS_CORE_STATUS__SAMPLEREJECTEDSTATUS_HPP

@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef _FASTDDS_DDS_QOS_WRITERQOS_HPP_
-#define _FASTDDS_DDS_QOS_WRITERQOS_HPP_
+#ifndef FASTDDS_DDS_PUBLISHER_QOS__WRITERQOS_HPP
+#define FASTDDS_DDS_PUBLISHER_QOS__WRITERQOS_HPP
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 
@@ -31,14 +31,15 @@ namespace dds {
  * Although these values can be set and are transmitted
  * during the Endpoint Discovery Protocol, not all of the behaviour associated with them has been implemented in the library.
  * Please consult each of them to check for implementation details and default values.
- * @ingroup FASTRTPS_ATTRIBUTES_MODULE
+ * @ingroup FASTDDS_QOS_MODULE
  */
+FASTDDS_TODO_BEFORE(4, 0, "Remove this class in favor of PublicationBuiltinTopicData");
 class WriterQos
 {
 public:
 
-    RTPS_DllAPI WriterQos();
-    RTPS_DllAPI virtual ~WriterQos();
+    FASTDDS_EXPORTED_API WriterQos();
+    FASTDDS_EXPORTED_API virtual ~WriterQos();
 
     bool operator ==(
             const WriterQos& b) const
@@ -62,7 +63,8 @@ public:
                (this->m_publishMode == b.m_publishMode) &&
                (this->m_disablePositiveACKs == b.m_disablePositiveACKs) &&
                (this->representation == b.representation) &&
-               (this->data_sharing == b.data_sharing);
+               (this->data_sharing == b.data_sharing) &&
+               (this->transport_priority == b.transport_priority);
     }
 
     //!Durability Qos, implemented in the library.
@@ -92,10 +94,10 @@ public:
     //!Time Based Filter Qos, NOT implemented in the library.
     TimeBasedFilterQosPolicy m_timeBasedFilter;
 
-    //!Ownership Qos, NOT implemented in the library.
+    //!Ownership Qos, implemented in the library.
     OwnershipQosPolicy m_ownership;
 
-    //!Owenership Strength Qos, NOT implemented in the library.
+    //!Owenership Strength Qos, implemented in the library.
     OwnershipStrengthQosPolicy m_ownershipStrength;
 
     //!Destination Order Qos, NOT implemented in the library.
@@ -112,6 +114,9 @@ public:
 
     //!Group Data Qos, NOT implemented in the library.
     GroupDataQosPolicy m_groupData;
+
+    //! Transport priority Qos, implemented in the library.
+    TransportPriorityQosPolicy transport_priority;
 
     //!Publication Mode Qos, implemented in the library.
     PublishModeQosPolicy m_publishMode;
@@ -132,27 +137,37 @@ public:
      * Set Qos from another class
      * @param qos Reference from a WriterQos object.
      * @param first_time Boolean indicating whether is the first time (If not some parameters cannot be set).
+     *
+     * @warning The use of this class and methods is discourgaed, consider using PublicationBuiltinTopicData instead.
      */
-    RTPS_DllAPI void setQos(
+    FASTDDS_EXPORTED_API void setQos(
             const WriterQos& qos,
             bool first_time);
 
     /**
      * Check if the Qos values are compatible between each other.
      * @return True if correct.
+     *
+     * @warning The use of this class and methods is discourgaed, consider using PublicationBuiltinTopicData instead.
      */
-    RTPS_DllAPI bool checkQos() const;
+    FASTDDS_EXPORTED_API bool checkQos() const;
 
-    RTPS_DllAPI bool canQosBeUpdated(
+    /**
+     * @warning The use of this class and methods is discourgaed, consider using PublicationBuiltinTopicData instead.
+     */
+    FASTDDS_EXPORTED_API bool canQosBeUpdated(
             const WriterQos& qos) const;
 
+    /**
+     * @warning The use of this class and methods is discourgaed, consider using PublicationBuiltinTopicData instead.
+     */
     void clear();
 };
 
-//RTPS_DllAPI extern const WriterQos DATAWRITER_QOS_DEFAULT;
+//FASTDDS_EXPORTED_API extern const WriterQos DATAWRITER_QOS_DEFAULT;
 
 } //namespace dds
 } //namespace fastdds
 } //namespace eprosima
 
-#endif // _FASTDDS_DDS_QOS_WRITERQOS_HPP_
+#endif // FASTDDS_DDS_PUBLISHER_QOS__WRITERQOS_HPP

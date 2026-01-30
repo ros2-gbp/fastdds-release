@@ -19,29 +19,27 @@
 
 #include <rtps/builtin/discovery/participant/DS/PDPSecurityInitiatorListener.hpp>
 
-#include <fastdds/dds/log/Log.hpp>
-
-#include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
-#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
-#include <fastdds/rtps/builtin/discovery/participant/PDPListener.h>
-#include <fastdds/rtps/history/ReaderHistory.h>
-#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
-#include <fastdds/rtps/participant/RTPSParticipantListener.h>
-#include <fastdds/rtps/reader/RTPSReader.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-
-#include <fastrtps/utils/TimeConversion.h>
+#include <mutex>
 
 #include <fastdds/core/policy/ParameterList.hpp>
-#include <rtps/builtin/discovery/participant/PDPEndpoints.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/participant/RTPSParticipantListener.hpp>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
 
-#include <mutex>
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/discovery/endpoint/EDP.h>
+#include <rtps/builtin/discovery/participant/PDP.h>
+#include <rtps/builtin/discovery/participant/PDPEndpoints.hpp>
+#include <rtps/builtin/discovery/participant/PDPListener.h>
+#include <rtps/network/utils/external_locators.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/resources/TimedEvent.h>
 
 using ParameterList = eprosima::fastdds::dds::ParameterList;
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 PDPSecurityInitiatorListener::PDPSecurityInitiatorListener(
@@ -88,6 +86,17 @@ void PDPSecurityInitiatorListener::process_alive_data(
 
 }
 
+bool PDPSecurityInitiatorListener::check_discovery_conditions(
+        ParticipantProxyData& /* participant_data */)
+{
+    /* Do not check PID_VENDOR_ID */
+    // In Discovery Server we don't impose
+    // domain ids to be the same
+    /* Do not check PID_DOMAIN_ID */
+    /* Do not check PARTICIPANT_TYPE */
+    return true;
+}
+
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

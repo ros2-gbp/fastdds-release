@@ -22,12 +22,11 @@
 #include <cassert>
 #include <cstdint>
 
+#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/LoanableCollection.hpp>
 #include <fastdds/dds/core/LoanableTypedCollection.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
-
-#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/subscriber/DataReaderImpl.hpp>
 #include <fastdds/subscriber/DataReaderImpl/DataReaderLoanManager.hpp>
@@ -36,9 +35,10 @@
 #include <fastdds/subscriber/DataReaderImpl/SampleLoanManager.hpp>
 #include <fastdds/subscriber/history/DataReaderHistory.hpp>
 
-#include <fastdds/rtps/common/CacheChange.h>
-#include <fastdds/rtps/reader/RTPSReader.h>
+#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
 
+#include <rtps/reader/BaseReader.hpp>
 #include <rtps/reader/WriterProxy.h>
 #include <rtps/DataSharing/DataSharingPayloadPool.hpp>
 
@@ -50,13 +50,12 @@ namespace detail {
 
 struct ReadTakeCommand
 {
-    using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
     using history_type = eprosima::fastdds::dds::detail::DataReaderHistory;
-    using CacheChange_t = eprosima::fastrtps::rtps::CacheChange_t;
-    using RTPSReader = eprosima::fastrtps::rtps::RTPSReader;
-    using WriterProxy = eprosima::fastrtps::rtps::WriterProxy;
+    using CacheChange_t = eprosima::fastdds::rtps::CacheChange_t;
+    using RTPSReader = eprosima::fastdds::rtps::RTPSReader;
+    using WriterProxy = eprosima::fastdds::rtps::WriterProxy;
     using SampleInfoSeq = LoanableTypedCollection<SampleInfo>;
-    using DataSharingPayloadPool = eprosima::fastrtps::rtps::DataSharingPayloadPool;
+    using DataSharingPayloadPool = eprosima::fastdds::rtps::DataSharingPayloadPool;
 
     ReadTakeCommand(
             DataReaderImpl& reader,
@@ -65,7 +64,8 @@ struct ReadTakeCommand
             int32_t max_samples,
             const StateFilter& states,
             const history_type::instance_info& instance,
-            bool single_instance = false)
+            bool single_instance,
+            bool loop_for_data)
         : type_(reader.type_)
         , loan_manager_(reader.loan_manager_)
         , history_(reader.history_)
@@ -79,6 +79,7 @@ struct ReadTakeCommand
         , instance_(instance)
         , handle_(instance->first)
         , single_instance_(single_instance)
+        , loop_for_data_(loop_for_data)
     {
         assert(0 <= remaining_samples_);
 
@@ -88,7 +89,7 @@ struct ReadTakeCommand
 
     ~ReadTakeCommand()
     {
-        if (!data_values_.has_ownership() && ReturnCode_t::RETCODE_NO_DATA == return_value_)
+        if (!data_values_.has_ownership() && RETCODE_NO_DATA == return_value_)
         {
             loan_manager_.return_loan(data_values_, sample_infos_);
             data_values_.unloan();
@@ -119,7 +120,7 @@ struct ReadTakeCommand
                 WriterProxy* wp = nullptr;
                 bool is_future_change = false;
                 bool remove_change = false;
-                if (reader_->begin_sample_access_nts(change, wp, is_future_change))
+                if (rtps::BaseReader::downcast(reader_)->begin_sample_access_nts(change, wp, is_future_change))
                 {
                     //Check if the payload is dirty
                     remove_change = !check_datasharing_validity(change, data_values_.has_ownership());
@@ -145,7 +146,7 @@ struct ReadTakeCommand
                     // Add sample and info to collections
                     ReturnCode_t previous_return_value = return_value_;
                     bool added = add_sample(*it, remove_change);
-                    reader_->end_sample_access_nts(change, wp, added);
+                    history_.change_was_processed_nts(change, added);
 
                     // Check if the payload is dirty
                     if (added && !check_datasharing_validity(change, data_values_.has_ownership()))
@@ -163,7 +164,11 @@ struct ReadTakeCommand
                         added = false;
                     }
 
-                    if (remove_change || (added && take_samples))
+                    // Only send ACK if the change will not be removed to avoid sending the same ACK twice
+                    bool should_remove = remove_change || (added && take_samples);
+                    rtps::BaseReader::downcast(reader_)->end_sample_access_nts(change, wp, added, !should_remove);
+
+                    if (should_remove)
                     {
                         // Remove from history
                         history_.remove_change_sub(change, it);
@@ -178,9 +183,21 @@ struct ReadTakeCommand
             ++it;
         }
 
+        // Check if there is a state notification sample available
+        if (!finished_ && instance_->second->has_state_notification_sample)
+        {
+            // Add sample and info to collections
+            bool deserialization_error = false;
+            bool added = add_sample(nullptr, deserialization_error);
+            if (added && take_samples)
+            {
+                instance_->second->has_state_notification_sample = false;
+            }
+        }
+
         if (current_slot_ > first_slot)
         {
-            instance_->second->view_state = ViewStateKind::NOT_NEW_VIEW_STATE;
+            history_.instance_viewed_nts(instance_->second);
             ret_val = true;
 
             // complete sample infos
@@ -194,7 +211,17 @@ struct ReadTakeCommand
             }
         }
 
-        next_instance();
+        // Check if further iteration is required
+        if (single_instance_ && (!loop_for_data_ || (loop_for_data_ && ret_val)))
+        {
+            finished_ = true;
+            history_.check_and_remove_instance(instance_);
+        }
+        else
+        {
+            next_instance();
+        }
+
         return ret_val;
     }
 
@@ -225,22 +252,66 @@ struct ReadTakeCommand
         info.reception_timestamp = item->reader_info.receptionTimestamp;
         info.instance_handle = item->instanceHandle;
         info.publication_handle = InstanceHandle_t(item->writerGUID);
+
+        /*
+         * TODO(eduponz): The sample identity should be taken from the sample identity parameter.
+         * More importantly, the related sample identity should be taken from the related sample identity
+         * in write_params.
+         */
+        FASTDDS_TODO_BEFORE(4, 0, "Fill both sample_identity and related_sample_identity with write_params");
         info.sample_identity.writer_guid(item->writerGUID);
         info.sample_identity.sequence_number(item->sequenceNumber);
         info.related_sample_identity = item->write_params.sample_identity();
+        info.has_more_replies = item->write_params.has_more_replies();
+        info.original_writer_info = item->write_params.original_writer_info();
+
         info.valid_data = true;
 
         switch (item->kind)
         {
-            case eprosima::fastrtps::rtps::NOT_ALIVE_DISPOSED:
-            case eprosima::fastrtps::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED:
-            case eprosima::fastrtps::rtps::NOT_ALIVE_UNREGISTERED:
+            case eprosima::fastdds::rtps::NOT_ALIVE_DISPOSED:
+            case eprosima::fastdds::rtps::NOT_ALIVE_DISPOSED_UNREGISTERED:
+            case eprosima::fastdds::rtps::NOT_ALIVE_UNREGISTERED:
                 info.valid_data = false;
                 break;
-            case eprosima::fastrtps::rtps::ALIVE:
+            case eprosima::fastdds::rtps::ALIVE:
             default:
                 break;
         }
+    }
+
+    /**
+     * @brief Generate SampleInfo for an instance without data.
+     *
+     * @param[out]  info             SampleInfo to fill.
+     * @param[in]   instance_handle  Handle of the instance.
+     * @param[in]   instance         DataReaderInstance information.
+     */
+    static void generate_instance_info(
+            SampleInfo& info,
+            const InstanceHandle_t& instance_handle,
+            const DataReaderInstance& instance)
+    {
+        fastdds::rtps::Time_t current_time;
+        fastdds::rtps::Time_t::now(current_time);
+
+        info.sample_state = NOT_READ_SAMPLE_STATE;
+        info.instance_state = instance.instance_state;
+        info.view_state = instance.view_state;
+        info.disposed_generation_count = instance.disposed_generation_count;
+        info.no_writers_generation_count = instance.no_writers_generation_count;
+        info.sample_rank = 0;
+        info.generation_rank = 0;
+        info.absolute_generation_rank = 0;
+        info.source_timestamp = current_time;
+        info.reception_timestamp = current_time;
+        info.instance_handle = instance_handle;
+        info.publication_handle = InstanceHandle_t{};
+
+        info.sample_identity = rtps::SampleIdentity{};
+        info.related_sample_identity = rtps::SampleIdentity{};
+
+        info.valid_data = false;
     }
 
 private:
@@ -258,9 +329,10 @@ private:
     history_type::instance_info instance_;
     InstanceHandle_t handle_;
     bool single_instance_;
+    bool loop_for_data_;
 
     bool finished_ = false;
-    ReturnCode_t return_value_ = ReturnCode_t::RETCODE_NO_DATA;
+    ReturnCode_t return_value_ = RETCODE_NO_DATA;
 
     LoanableCollection::size_type current_slot_ = 0;
 
@@ -268,11 +340,13 @@ private:
     {
         while (!is_current_instance_valid())
         {
-            if (!next_instance())
+            if ((single_instance_ && !loop_for_data_) || !next_instance())
             {
+                finished_ = true;
                 return false;
             }
         }
+
         return true;
     }
 
@@ -287,11 +361,6 @@ private:
     bool next_instance()
     {
         history_.check_and_remove_instance(instance_);
-        if (single_instance_)
-        {
-            finished_ = true;
-            return false;
-        }
 
         auto result = history_.next_available_instance_nts(handle_, instance_);
         if (!result.first)
@@ -334,7 +403,7 @@ private:
             }
 
             // Mark that some data is available
-            return_value_ = ReturnCode_t::RETCODE_OK;
+            return_value_ = RETCODE_OK;
             ++current_slot_;
             --remaining_samples_;
             ret_val = true;
@@ -352,7 +421,7 @@ private:
         if (data_values_.has_ownership())
         {
             // perform deserialization
-            return type_->deserialize(payload, data_values_.buffer()[current_slot_]);
+            return type_->deserialize(*payload, data_values_.buffer()[current_slot_]);
         }
         else
         {
@@ -376,7 +445,15 @@ private:
         }
 
         SampleInfo& info = sample_infos_[current_slot_];
-        generate_info(info, *instance_->second, item);
+        const DataReaderInstance& instance = *instance_->second;
+        if (item)
+        {
+            generate_info(info, instance, item);
+        }
+        else
+        {
+            generate_instance_info(info, instance_->first, instance);
+        }
     }
 
     bool check_datasharing_validity(
@@ -386,7 +463,8 @@ private:
         bool is_valid = true;
         if (has_ownership)  //< On loans the user must check the validity anyways
         {
-            DataSharingPayloadPool* pool = dynamic_cast<DataSharingPayloadPool*>(change->payload_owner());
+            DataSharingPayloadPool* pool =
+                    dynamic_cast<DataSharingPayloadPool*>(change->serializedPayload.payload_owner);
             if (pool)
             {
                 //Check if the payload is dirty
@@ -396,7 +474,7 @@ private:
 
         if (!is_valid)
         {
-            logWarning(RTPS_READER,
+            EPROSIMA_LOG_WARNING(RTPS_READER,
                     "Change " << change->sequenceNumber << " from " << change->writerGUID << " is overidden");
             return false;
         }

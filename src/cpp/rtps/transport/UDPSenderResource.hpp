@@ -15,8 +15,8 @@
 #ifndef __TRANSPORT_UDPSENDERRESOURCE_HPP__
 #define __TRANSPORT_UDPSENDERRESOURCE_HPP__
 
-#include <fastdds/rtps/common/Locator.h>
-#include <fastdds/rtps/network/SenderResource.h>
+#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/transport/SenderResource.hpp>
 
 #include <rtps/transport/ChainingSenderResource.hpp>
 #include <rtps/transport/UDPTransportInterface.h>
@@ -25,7 +25,7 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class UDPSenderResource : public fastrtps::rtps::SenderResource
+class UDPSenderResource : public SenderResource
 {
 public:
 
@@ -47,15 +47,16 @@ public:
                 };
 
         send_lambda_ = [this, &transport](
-            const fastrtps::rtps::octet* data,
-            uint32_t dataSize,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point) -> bool
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end,
+            const std::chrono::steady_clock::time_point& max_blocking_time_point,
+            int32_t transport_priority) -> bool
                 {
-                    return transport.send(data, dataSize, socket_, destination_locators_begin,
+                    return transport.send(buffers, total_bytes, socket_, destination_locators_begin,
                                    destination_locators_end, only_multicast_purpose_, whitelisted_,
-                                   max_blocking_time_point);
+                                   max_blocking_time_point, transport_priority);
                 };
     }
 
@@ -129,7 +130,7 @@ private:
 };
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif // __TRANSPORT_UDPSENDERRESOURCE_HPP__

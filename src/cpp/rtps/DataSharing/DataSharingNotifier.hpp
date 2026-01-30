@@ -26,7 +26,7 @@
 #include <memory>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 class DataSharingNotifier : public IDataSharingNotifier
@@ -79,7 +79,7 @@ public:
     {
         if (is_enabled())
         {
-            logInfo(RTPS_WRITER, "Notifying reader " << shared_notification_->reader());
+            EPROSIMA_LOG_INFO(RTPS_WRITER, "Notifying reader " << shared_notification_->reader());
             shared_notification_->notify();
         }
     }
@@ -92,7 +92,7 @@ protected:
 
 
 }  // namespace rtps
-}  // namespace fastrtps
+}  // namespace fastdds
 }  // namespace eprosima
 
 #endif  // RTPS_DATASHARING_DATASHARINGNOTIFIER_HPP

@@ -14,19 +14,17 @@
 
 #include <thread>
 
+#include <fastdds/rtps/common/CDRMessage_t.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 #include <gtest/gtest.h>
 
-#include <fastrtps/utils/TimeConversion.h>
-
+#include "../utils/filter_helpers.hpp"
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
-#include <rtps/transport/test_UDPv4Transport.h>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using test_UDPv4Transport = eprosima::fastdds::rtps::test_UDPv4Transport;
-using test_UDPv4TransportDescriptor = eprosima::fastdds::rtps::test_UDPv4TransportDescriptor;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 void reliability_disable_heartbeat_piggyback(
         bool disable_heartbeat_piggyback)
@@ -45,9 +43,9 @@ void reliability_disable_heartbeat_piggyback(
                 if (start_reception)
                 {
                     auto old_pos = msg.pos;
-                    EntityId_t writer_id_msg;
                     msg.pos += 4;
-                    CDRMessage::readEntityId(&msg, &writer_id_msg);
+                    EntityId_t writer_id_msg = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                        (char*)&msg.buffer[msg.pos]);
                     if (writer_id == writer_id_msg)
                     {
                         heartbeat_found = true;
@@ -57,8 +55,8 @@ void reliability_disable_heartbeat_piggyback(
                 return false;
             };
 
-    writer.reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-            .history_kind(eprosima::fastrtps::KEEP_LAST_HISTORY_QOS)
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
             .history_depth(1)
             .heartbeat_period_seconds(180000)
             .disable_heartbeat_piggyback(disable_heartbeat_piggyback)
@@ -67,8 +65,8 @@ void reliability_disable_heartbeat_piggyback(
             .init();
     writer_id = writer.datawriter_guid().entityId;
 
-    reader.history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+    reader.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -101,4 +99,46 @@ TEST(Reliability, DisableHeartbeatPiggybackFalse)
 TEST(Reliability, DisableHeartbeatPiggybackTrue)
 {
     reliability_disable_heartbeat_piggyback(true);
+}
+
+/**
+ * This test checks that waitForAllAcked() triggers a heartbeat if needed.
+ */
+TEST(Reliability, wait_for_all_acked_triggers_heartbeat)
+{
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+
+    // Either ensure that the history will not become full, or disable piggyback heartbeats
+    static constexpr int32_t HISTORY_DEPTH = 10;
+    static constexpr int32_t NUM_SAMPLES = 1;
+    static_assert(NUM_SAMPLES < HISTORY_DEPTH, "NUM_SAMPLES must be less than HISTORY_DEPTH");
+
+    reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(HISTORY_DEPTH)
+            .init();
+
+    writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS)
+            .history_depth(HISTORY_DEPTH)
+            .heartbeat_period_seconds(180000) // Large heartbeat period to avoid interference
+            .init();
+
+    ASSERT_TRUE(reader.isInitialized());
+    ASSERT_TRUE(writer.isInitialized());
+
+    // Wait for discovery.
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    // Wait for the initial heartbeat/acknack exchange to finish
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    auto data = default_helloworld_data_generator(NUM_SAMPLES);
+    writer.send(data);
+    ASSERT_TRUE(data.empty());
+
+    // Wait until all data is acknowledged. This should trigger a heartbeat.
+    ASSERT_TRUE(writer.waitForAllAcked(std::chrono::seconds(1)));
 }
