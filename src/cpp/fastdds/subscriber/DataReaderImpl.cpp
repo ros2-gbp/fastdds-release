@@ -1622,7 +1622,8 @@ ReturnCode_t DataReaderImpl::check_qos(
     {
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
                 "HISTORY DEPTH '" << qos.history().depth <<
-                "' is inconsistent with max_samples_per_instance: '" << qos.resource_limits().max_samples_per_instance <<
+                "' is inconsistent with max_samples_per_instance: '" <<
+                qos.resource_limits().max_samples_per_instance <<
                 "'. Consistency rule: depth <= max_samples_per_instance." <<
                 " Effectively using max_samples_per_instance as depth.");
     }
@@ -1632,19 +1633,19 @@ ReturnCode_t DataReaderImpl::check_qos(
 ReturnCode_t DataReaderImpl::check_allocation_consistency(
         const DataReaderQos& qos)
 {
+    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
+            (qos.resource_limits().max_samples > 0))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
+                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
+        return RETCODE_INCONSISTENT_POLICY;
+    }
     if ((qos.resource_limits().max_samples > 0) &&
             (qos.resource_limits().max_samples <
             (qos.resource_limits().max_instances * qos.resource_limits().max_samples_per_instance)))
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
                 "max_samples should be greater than max_instances * max_samples_per_instance");
-        return RETCODE_INCONSISTENT_POLICY;
-    }
-    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
-            (qos.resource_limits().max_samples > 0))
-    {
-        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
-                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
         return RETCODE_INCONSISTENT_POLICY;
     }
     return RETCODE_OK;
@@ -2040,12 +2041,11 @@ InstanceHandle_t DataReaderImpl::lookup_instance(
         const void* instance) const
 {
     InstanceHandle_t handle = HANDLE_NIL;
-
     if (instance && type_->is_compute_key_provided)
     {
         if (type_->compute_key(const_cast<void*>(instance), handle, false))
         {
-            if (!history_.is_instance_present(handle))
+            if (!history_.is_instance_present(handle) || !handle.isDefined())
             {
                 handle = HANDLE_NIL;
             }
