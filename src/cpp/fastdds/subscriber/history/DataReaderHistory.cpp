@@ -96,9 +96,16 @@ DataReaderHistory::DataReaderHistory(
     {
         resource_limited_qos_.max_instances = 1;
         resource_limited_qos_.max_samples_per_instance = resource_limited_qos_.max_samples;
-        key_changes_allocation_.initial = resource_limited_qos_.allocated_samples;
-        key_changes_allocation_.maximum = resource_limited_qos_.max_samples;
 
+        if (0 < resource_limited_qos_.allocated_samples)
+        {
+            key_changes_allocation_.initial = resource_limited_qos_.allocated_samples;
+        }
+
+        if (resource_limited_qos_.max_samples_per_instance < std::numeric_limits<int32_t>::max())
+        {
+            key_changes_allocation_.maximum = resource_limited_qos_.max_samples_per_instance;
+        }
         instances_.emplace(c_InstanceHandle_Unknown,
                 std::make_shared<DataReaderInstance>(key_changes_allocation_, key_writers_allocation_));
         data_available_instances_[c_InstanceHandle_Unknown] = instances_[c_InstanceHandle_Unknown];
@@ -221,6 +228,7 @@ bool DataReaderHistory::received_change_keep_all(
             return add_to_reader_history_if_not_full(a_change, rejection_reason);
         }
 
+        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
         rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
         return false;
     }
@@ -263,6 +271,7 @@ bool DataReaderHistory::received_change_keep_last(
             return add_to_reader_history_if_not_full(a_change, rejection_reason);
         }
 
+        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
         rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
         return false;
     }
@@ -272,7 +281,8 @@ bool DataReaderHistory::received_change_keep_last(
     if (find_key(a_change->instanceHandle, vit))
     {
         DataReaderInstance::ChangeCollection& instance_changes = vit->second->cache_changes;
-        if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
+        auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
+        if (instance_changes.size() < static_cast<size_t>(effective_depth))
         {
             ret_value = true;
         }
@@ -378,6 +388,13 @@ bool DataReaderHistory::get_first_untaken_info(
             }
 
             ReadTakeCommand::generate_info(info, *(it.second), instance_change);
+            return true;
+        }
+
+        if (it.second->has_state_notification_sample)
+        {
+            // Generate SampleInfo for state notification sample
+            ReadTakeCommand::generate_instance_info(info, it.first, *(it.second));
             return true;
         }
     }
@@ -807,7 +824,8 @@ bool DataReaderHistory::completed_change_keep_last(
 {
     bool ret_value = false;
     DataReaderInstance::ChangeCollection& instance_changes = instance.cache_changes;
-    if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
+    auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
+    if (instance_changes.size() < static_cast<size_t>(effective_depth))
     {
         ret_value = true;
     }
