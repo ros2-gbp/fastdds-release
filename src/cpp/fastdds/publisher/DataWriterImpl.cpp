@@ -338,6 +338,20 @@ ReturnCode_t DataWriterImpl::enable()
             datasharing.add_domain_id(utils::default_domain_id());
         }
         w_att.endpoint.set_data_sharing_configuration(datasharing);
+
+        // Update pool config for KEEP_ALL when max_samples is infinite
+        if ((0 == pool_config_.maximum_size) && (KEEP_ALL_HISTORY_QOS == qos_.history().kind))
+        {
+            // Override infinite with old default value for max_samples + extra samples
+            pool_config_.maximum_size = 5000;
+            if (0 < qos_.resource_limits().extra_samples)
+            {
+                pool_config_.maximum_size += static_cast<uint32_t>(qos_.resource_limits().extra_samples);
+            }
+            EPROSIMA_LOG_ERROR(DATA_WRITER,
+                    "DataWriter with KEEP_ALL history and infinite max_samples is not compatible with DataSharing. "
+                    "Setting max_samples to " << pool_config_.maximum_size);
+        }
     }
     else
     {
@@ -679,13 +693,16 @@ ReturnCode_t DataWriterImpl::check_write_preconditions(
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_.get()->compute_key(data, instance_handle, is_key_protected);
+        if (!type_->compute_key(data, instance_handle, is_key_protected) || !instance_handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
-    // Check if the Handle is different from the special value HANDLE_NIL and
-    // does not correspond with the instance referred by the data
-    if (handle.isDefined() && handle != instance_handle)
+    if (handle.isDefined() && instance_handle != handle)
     {
+        EPROSIMA_LOG_ERROR(DATA_WRITER, "Handle differs from data's key.");
         return RETCODE_PRECONDITION_NOT_MET;
     }
 
@@ -760,7 +777,7 @@ ReturnCode_t DataWriterImpl::check_instance_preconditions(
 
     instance_handle = handle;
 
-#if defined(NDEBUG)
+#if defined(NDEBUG) // In Release build, compute key only if necessary
     if (!instance_handle.isDefined())
 #endif // if !defined(NDEBUG)
     {
@@ -768,13 +785,17 @@ ReturnCode_t DataWriterImpl::check_instance_preconditions(
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_->compute_key(data, instance_handle, is_key_protected);
+        if (!type_->compute_key(data, instance_handle, is_key_protected) || !instance_handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) // In Debug build, always check that provided handle matches data's key
     if (handle.isDefined() && instance_handle != handle)
     {
-        EPROSIMA_LOG_ERROR(DATA_WRITER, "handle differs from data's key.");
+        EPROSIMA_LOG_ERROR(DATA_WRITER, "Handle differs from data's key.");
         return RETCODE_PRECONDITION_NOT_MET;
     }
 #endif // if !defined(NDEBUG)
@@ -1022,16 +1043,32 @@ ReturnCode_t DataWriterImpl::perform_create_new_change(
     {
         uint32_t payload_size = fixed_payload_size_ ? fixed_payload_size_ : type_->calculate_serialized_size(
             data, data_representation_);
-        if (!get_free_payload_from_pool(payload_size, payload))
+        // Initialize payload to null state
+        payload.length = 0;
+        payload.max_size = 0;
+        payload.data = nullptr;
+        payload.payload_owner = nullptr;
+        bool should_serialize = (change_kind == ALIVE);
+        if (should_serialize)
         {
-            return RETCODE_OUT_OF_RESOURCES;
-        }
+            // Request payload from pool and proceed with serialization
+            if (!get_free_payload_from_pool(payload_size, payload))
+            {
+                // ALIVE changes need a payload and serialization
+                return RETCODE_OUT_OF_RESOURCES;
+            }
 
-        if ((ALIVE == change_kind) && !type_->serialize(data, payload, data_representation_))
+            if (!type_->serialize(data, payload, data_representation_))
+            {
+                EPROSIMA_LOG_WARNING(DATA_WRITER, "Data serialization returned false");
+                payload_pool_->release_payload(payload);
+                return RETCODE_ERROR;
+            }
+        }
+        else
         {
-            EPROSIMA_LOG_WARNING(DATA_WRITER, "Data serialization returned false");
-            payload_pool_->release_payload(payload);
-            return RETCODE_ERROR;
+            // If not serializable (UNREGISTER or DISPOSE), the handle must be defined
+            assert(handle.isDefined());
         }
     }
 
@@ -1115,6 +1152,8 @@ ReturnCode_t DataWriterImpl::create_new_change_with_params(
         return ret_code;
     }
 
+    // As this entry point does not receive an InstanceHandle_t, it has to be computed if the topic
+    // requires it
     InstanceHandle_t handle;
     if (type_->is_compute_key_provided)
     {
@@ -1122,7 +1161,11 @@ ReturnCode_t DataWriterImpl::create_new_change_with_params(
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_->compute_key(data, handle, is_key_protected);
+        if (!type_->compute_key(data, handle, is_key_protected) || !handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
     return perform_create_new_change(changeKind, data, wparams, handle);
@@ -2097,7 +2140,8 @@ ReturnCode_t DataWriterImpl::check_qos(
     {
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
                 "HISTORY DEPTH '" << qos.history().depth <<
-                "' is inconsistent with max_samples_per_instance: '" << qos.resource_limits().max_samples_per_instance <<
+                "' is inconsistent with max_samples_per_instance: '" <<
+                qos.resource_limits().max_samples_per_instance <<
                 "'. Consistency rule: depth <= max_samples_per_instance." <<
                 " Effectively using max_samples_per_instance as depth.");
     }
@@ -2107,19 +2151,19 @@ ReturnCode_t DataWriterImpl::check_qos(
 ReturnCode_t DataWriterImpl::check_allocation_consistency(
         const DataWriterQos& qos)
 {
+    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
+            (qos.resource_limits().max_samples > 0))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
+                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
+        return RETCODE_INCONSISTENT_POLICY;
+    }
     if ((qos.resource_limits().max_samples > 0) &&
             (qos.resource_limits().max_samples <
             (qos.resource_limits().max_instances * qos.resource_limits().max_samples_per_instance)))
     {
         EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
                 "max_samples should be greater than max_instances * max_samples_per_instance");
-        return RETCODE_INCONSISTENT_POLICY;
-    }
-    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
-            (qos.resource_limits().max_samples > 0))
-    {
-        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
-                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
         return RETCODE_INCONSISTENT_POLICY;
     }
     return RETCODE_OK;

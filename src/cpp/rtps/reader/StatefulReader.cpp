@@ -649,6 +649,16 @@ bool StatefulReader::process_data_msg(
                 }
                 datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add);
             }
+            else if (change->serializedPayload.length == 0 && change->kind != ChangeKind_t::ALIVE &&
+                    change->instanceHandle.isDefined())
+            {
+                // A UNREGISTER or DISPOSE status change was sent without payload, but calling get_payload with size 0 might fail
+                // depending on the configured payload pool. However, those operations are still valid if and only if instanceHandle
+                // is defined so they are handled in this special case
+                // These conditions were already checked in change_is_relevant_for_filter, but it makes sense to have a proper case
+                // here
+                change_to_add->serializedPayload.length = 0;
+            }
             else if (payload_pool_->get_payload(change->serializedPayload, change_to_add->serializedPayload))
             {
                 if (change->serializedPayload.payload_owner == nullptr)
@@ -671,7 +681,10 @@ bool StatefulReader::process_data_msg(
             {
                 EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                         IDSTRING "Change " << change_to_add->sequenceNumber << " not added to history");
-                change_to_add->serializedPayload.payload_owner->release_payload(change_to_add->serializedPayload);
+                if (change_to_add->serializedPayload.payload_owner)
+                {
+                    change_to_add->serializedPayload.payload_owner->release_payload(change_to_add->serializedPayload);
+                }
                 change_pool_->release_cache(change_to_add);
                 return false;
             }
@@ -816,6 +829,17 @@ bool StatefulReader::process_data_frag_msg(
                          */
                         if (fastdds::dds::REJECTED_BY_INSTANCES_LIMIT == rejection_reason)
                         {
+                            pWP->irrelevant_change_set(work_change->sequenceNumber);
+                            has_to_notify = true;
+                        }
+
+                        /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+                         * Because the instance will still be unknown
+                         */
+                        if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+                        {
+                            EPROSIMA_LOG_ERROR(RTPS_READER, "Change received from " << work_change->writerGUID << " with sequence number: " <<
+                                    work_change->sequenceNumber << " ignored. Could not compute key in keyed topic.");
                             pWP->irrelevant_change_set(work_change->sequenceNumber);
                             has_to_notify = true;
                         }
@@ -1184,6 +1208,18 @@ bool StatefulReader::change_received(
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 NotifyChanges(prox);
             }
+
+            /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+             * Because the instance will still be unknown
+             */
+            if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+            {
+                EPROSIMA_LOG_ERROR(RTPS_READER, "Change received from " << a_change->writerGUID << " with sequence number: "
+                                                                        << a_change->sequenceNumber <<
+                        " ignored. Could not compute key in keyed topic.");
+                prox->irrelevant_change_set(a_change->sequenceNumber);
+                NotifyChanges(prox);
+            }
         }
     }
 
@@ -1227,9 +1263,7 @@ void StatefulReader::NotifyChanges(
         while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
     }
     // Ensure correct state of proxy when max_seq is not present in history
-    while (c_SequenceNumber_Unknown != prox->next_cache_change_to_be_notified())
-    {
-    }
+    prox->consider_all_notified();
 
     // Notify listener if new data is available
     auto listener = get_listener();
