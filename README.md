@@ -1,3 +1,29 @@
+## fastdds (rolling) - 3.4.2-1
+
+The packages in the `fastdds` repository were released into the `rolling` distro by running `/usr/bin/bloom-release -r rolling fastdds` on `Fri, 30 Jan 2026 08:33:42 -0000`
+
+The `fastdds` package was released.
+
+These packages were explicitly ignored:
+- `fastrtps`
+
+Version of package(s) in repository `fastdds`:
+
+- upstream repository: https://github.com/eProsima/Fast-DDS.git
+- release repository: https://github.com/ros2-gbp/fastdds-release.git
+- rosdistro version: `3.4.1-1`
+- old version: `3.4.1-1`
+- new version: `3.4.2-1`
+
+Versions of tools used:
+
+- bloom version: `0.13.0`
+- catkin_pkg version: `1.1.0`
+- rosdep version: `0.26.0`
+- rosdistro version: `1.0.1`
+- vcstools version: `0.1.42`
+
+
 ## fastrtps (humble) - 2.6.11-1
 
 The packages in the `fastrtps` repository were released into the `humble` distro by running `/usr/bin/bloom-release -r humble fastrtps` on `Mon, 22 Dec 2025 14:55:44 -0000`
