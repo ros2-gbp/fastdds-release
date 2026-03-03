@@ -36,6 +36,9 @@
 #include "PubSubWriterReader.hpp"
 #include "PubSubParticipant.hpp"
 #include "UDPMessageSender.hpp"
+#include "DatagramInjectionTransport.hpp"
+
+#include "../utils/filter_helpers.hpp"
 
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
@@ -47,6 +50,26 @@ enum communication_type
     TRANSPORT,
     INTRAPROCESS,
     DATASHARING
+};
+
+// A LogConsumer that just counts the number of entries consumed
+struct TestConsumer : public eprosima::fastdds::dds::LogConsumer
+{
+    TestConsumer(
+            std::atomic_size_t& n_logs_ref)
+        : n_logs_(n_logs_ref)
+    {
+    }
+
+    void Consume(
+            const eprosima::fastdds::dds::Log::Entry&) override
+    {
+        ++n_logs_;
+    }
+
+private:
+
+    std::atomic_size_t& n_logs_;
 };
 
 static void fill_pub_auth(
@@ -324,8 +347,8 @@ TEST_P(Security, BuiltinAuthenticationPlugin_PKIDH_validation_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -394,7 +417,7 @@ TEST_P(Security, BuiltinAuthenticationPlugin_PKIDH_validation_fail)
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        writer.waitUnauthorized();
+        writer.wait_unauthorized();
     }
     {
         PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
@@ -414,7 +437,7 @@ TEST_P(Security, BuiltinAuthenticationPlugin_PKIDH_validation_fail)
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitUnauthorized();
+        reader.wait_unauthorized();
     }
 }
 
@@ -450,8 +473,8 @@ TEST_P(Security, BuiltinAuthenticationPlugin_PKIDH_lossy_conditions)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -465,26 +488,6 @@ TEST(Security, BuiltinAuthenticationPlugin_second_participant_creation_loop)
 
     using Log = eprosima::fastdds::dds::Log;
     using LogConsumer = eprosima::fastdds::dds::LogConsumer;
-
-    // A LogConsumer that just counts the number of entries consumed
-    struct TestConsumer : public LogConsumer
-    {
-        TestConsumer(
-                std::atomic_size_t& n_logs_ref)
-            : n_logs_(n_logs_ref)
-        {
-        }
-
-        void Consume(
-                const Log::Entry&) override
-        {
-            ++n_logs_;
-        }
-
-    private:
-
-        std::atomic_size_t& n_logs_;
-    };
 
     // Counter for log entries
     std::atomic<size_t>n_logs{};
@@ -595,26 +598,6 @@ TEST_P(Security, BuiltinAuthenticationPlugin_ensure_same_guid_reconnection)
     using Log = eprosima::fastdds::dds::Log;
     using LogConsumer = eprosima::fastdds::dds::LogConsumer;
 
-    // A LogConsumer that just counts the number of entries consumed
-    struct TestConsumer : public LogConsumer
-    {
-        TestConsumer(
-                std::atomic_size_t& n_logs_ref)
-            : n_logs_(n_logs_ref)
-        {
-        }
-
-        void Consume(
-                const Log::Entry&) override
-        {
-            ++n_logs_;
-        }
-
-    private:
-
-        std::atomic_size_t& n_logs_;
-    };
-
     // Counter for log entries
     std::atomic<size_t>n_logs{};
 
@@ -690,8 +673,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_rtps_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -746,8 +729,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_shm_transport_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -804,8 +787,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_shm_udp_transport_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -850,8 +833,8 @@ TEST(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_rtps_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -928,8 +911,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_large_string)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -974,8 +957,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_rtps_large_string
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1028,8 +1011,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_rtps_data300kb)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1082,8 +1065,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_rtps_data300kb)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1131,8 +1114,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_submessage_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1180,8 +1163,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_submessage_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1265,8 +1248,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_submessage_larg
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1314,8 +1297,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_submessage_large_
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1371,8 +1354,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_submessage_data
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1428,8 +1411,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_submessage_data30
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1477,8 +1460,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_payload_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1526,8 +1509,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_payload_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1645,8 +1628,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_payload_large_s
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1694,8 +1677,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_payload_large_str
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1751,8 +1734,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_payload_data300
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1808,8 +1791,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_payload_data300kb
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1861,8 +1844,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_all_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1914,8 +1897,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_all_ok)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -1967,8 +1950,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_all_large_strin
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -2020,8 +2003,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_all_large_string)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -2081,8 +2064,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_besteffort_all_data300kb)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -2142,8 +2125,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_all_data300kb)
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -2197,8 +2180,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_reliable_all_data300kb_mix
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -2273,8 +2256,8 @@ TEST_P(Security, BuiltinAuthenticationAndCryptoPlugin_user_data)
     ASSERT_TRUE(reader.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     reader.wait_discovery();
     writer.wait_discovery();
@@ -2331,8 +2314,8 @@ TEST_P(Security, BuiltinAuthenticationAndAccessAndCryptoPlugin_governance_rule_o
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitAuthorized();
-        writer.waitAuthorized();
+        reader.wait_authorized();
+        writer.wait_authorized();
 
         // Wait for discovery.
         writer.wait_discovery();
@@ -2548,8 +2531,8 @@ TEST_P(Security, BuiltinAuthenticationAndAccessAndCryptoPlugin_Permissions_valid
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitAuthorized();
-        writer.waitAuthorized();
+        reader.wait_authorized();
+        writer.wait_authorized();
 
         // Wait for discovery.
         writer.wait_discovery();
@@ -2659,8 +2642,8 @@ TEST_P(Security, BuiltinAuthenticationAndAccessAndCryptoPlugin_Permissions_valid
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitAuthorized();
-        writer.waitAuthorized();
+        reader.wait_authorized();
+        writer.wait_authorized();
 
         // Wait for discovery.
         writer.wait_discovery();
@@ -2858,8 +2841,8 @@ TEST_F(SecurityPkcs, BuiltinAuthenticationAndAccessAndCryptoPlugin_pkcs11_key)
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitAuthorized();
-        writer.waitAuthorized();
+        reader.wait_authorized();
+        writer.wait_authorized();
 
         // Wait for discovery.
         writer.wait_discovery();
@@ -2895,8 +2878,8 @@ TEST_F(SecurityPkcs, BuiltinAuthenticationAndAccessAndCryptoPlugin_pkcs11_key)
         ASSERT_TRUE(writer.isInitialized());
 
         // Wait for authorization
-        reader.waitAuthorized();
-        writer.waitAuthorized();
+        reader.wait_authorized();
+        writer.wait_authorized();
 
         // Wait for discovery.
         writer.wait_discovery();
@@ -2990,8 +2973,8 @@ static void BuiltinAuthenticationAndAccessAndCryptoPlugin_Permissions_validation
     ASSERT_TRUE(writer.isInitialized());
 
     // Wait for authorization
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
 
     // Wait for discovery.
     writer.wait_discovery();
@@ -3098,8 +3081,8 @@ TEST_P(Security, RemoveParticipantProxyDataonSecurityManagerLeaseExpired_validat
     std::cout << std::endl << "Waiting discovery between participants." << std::endl;
 
     // 3.Wait for authorization
-    pubsub_reader->waitAuthorized();
-    pubsub_writer->waitAuthorized();
+    pubsub_reader->wait_authorized();
+    pubsub_writer->wait_authorized();
 
     // 4.Wait for discovery.
     pubsub_reader->wait_discovery();
@@ -3210,7 +3193,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoSecureParticipantsWithDiffere
     ASSERT_TRUE(writer.isInitialized());
 
     //! Wait for the authorization to fail (~15secs)
-    writer.waitUnauthorized();
+    writer.wait_unauthorized();
 
     //! Wait for the discovery
     writer.wait_discovery();
@@ -3284,7 +3267,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoParticipantsDifferentCertific
     ASSERT_TRUE(writer.isInitialized());
 
     //! Wait for the authorization to fail (~15secs)
-    writer.waitUnauthorized();
+    writer.wait_unauthorized();
 
     //! Wait some time afterwards (this will time out)
     writer.wait_discovery(std::chrono::seconds(1));
@@ -3324,8 +3307,8 @@ TEST(Security, InANonSecureParticipantWithTwoSecureParticipantScenario_TheTwoSec
     ASSERT_TRUE(secure_reader.isInitialized());
 
     // Wait for the authorization
-    secure_reader.waitAuthorized();
-    secure_writer.waitAuthorized();
+    secure_reader.wait_authorized();
+    secure_writer.wait_authorized();
 
     // Wait for discovery
     secure_writer.wait_discovery(std::chrono::seconds(5));
@@ -4223,8 +4206,8 @@ TEST_P(Security, MaliciousParticipantRemovalIgnore)
     ASSERT_TRUE(reader.isInitialized());
     writer.init();
     ASSERT_TRUE(writer.isInitialized());
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
     reader.wait_discovery();
     writer.wait_discovery();
 
@@ -4357,12 +4340,12 @@ TEST(Security, ValidateAuthenticationHandshakeProperties)
     // or slower platforms
     std::chrono::duration<double, std::milli> max_time(500);
     auto t0 = std::chrono::steady_clock::now();
-    reader.waitAuthorized();
+    reader.wait_authorized();
     auto auth_elapsed_time = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - t0);
 
     // Both should be authorized
-    writer.waitAuthorized();
+    writer.wait_authorized();
 
     ASSERT_TRUE(auth_elapsed_time < max_time);
 }
@@ -4422,8 +4405,8 @@ TEST(Security, security_with_initial_peers_over_tcpv4_correctly_behaves)
     ASSERT_TRUE(tcp_server.isInitialized());
     ASSERT_TRUE(tcp_client.isInitialized());
 
-    tcp_server.waitAuthorized();
-    tcp_client.waitAuthorized();
+    tcp_server.wait_authorized();
+    tcp_client.wait_authorized();
 
     tcp_server.wait_discovery();
     tcp_client.wait_discovery();
@@ -4443,25 +4426,6 @@ TEST(Security, security_with_initial_peers_over_tcpv4_correctly_behaves)
 // participants secure stateless msgs pool
 TEST(Security, participant_stateless_secure_writer_pool_change_is_removed_upon_participant_authentication)
 {
-    struct TestConsumer : public eprosima::fastdds::dds::LogConsumer
-    {
-        TestConsumer(
-                std::atomic_size_t& n_logs_ref)
-            : n_logs_(n_logs_ref)
-        {
-        }
-
-        void Consume(
-                const eprosima::fastdds::dds::Log::Entry&) override
-        {
-            ++n_logs_;
-        }
-
-    private:
-
-        std::atomic_size_t& n_logs_;
-    };
-
     // Counter for log entries
     std::atomic<size_t>n_logs{};
 
@@ -4507,13 +4471,13 @@ TEST(Security, participant_stateless_secure_writer_pool_change_is_removed_upon_p
     }
 
     // Wait for the first participant to authenticate the rest
-    participants.front()->waitAuthorized(std::chrono::seconds::zero(), n_participants - 1);
+    participants.front()->wait_authorized(std::chrono::seconds::zero(), n_participants - 1);
 
     // Init the last one
     participants.back()->init();
     ASSERT_TRUE(participants.back()->isInitialized());
 
-    participants.front()->waitAuthorized(std::chrono::seconds::zero(), n_participants);
+    participants.front()->wait_authorized(std::chrono::seconds::zero(), n_participants);
 
     // No SECURITY error logs should have been produced
     eprosima::fastdds::dds::Log::Flush();
@@ -4589,8 +4553,8 @@ TEST(Security, legacy_token_algorithms_communicate)
                 ASSERT_TRUE(writer.isInitialized());
 
                 // Wait for discovery
-                reader.waitAuthorized();
-                writer.waitAuthorized();
+                reader.wait_authorized();
+                writer.wait_authorized();
                 reader.wait_discovery();
                 writer.wait_discovery();
                 ASSERT_TRUE(reader.is_matched());
@@ -4641,8 +4605,132 @@ TEST(Security, SerializationOfParticipantGenericMessageWhenAddingProperties)
     ASSERT_TRUE(writer.isInitialized());
 
     // Both should be authorized
-    reader.waitAuthorized();
-    writer.waitAuthorized();
+    reader.wait_authorized();
+    writer.wait_authorized();
+}
+
+/**
+ * This test is a regression test for Redmine issue #23431.
+ * On validation failed, the participant generic message
+ * shall be removed from the history and freed from the pool.
+ */
+TEST(Security, participant_stateless_secure_writer_pool_change_is_removed_upon_authentication_failure)
+{
+    // Counter for log entries
+    std::atomic<size_t>n_logs{};
+
+    // Prepare Log module to check that no SECURITY errors are produced
+    eprosima::fastdds::dds::Log::SetCategoryFilter(std::regex("SECURITY"));
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Error);
+    eprosima::fastdds::dds::Log::RegisterConsumer(std::unique_ptr<eprosima::fastdds::dds::LogConsumer>(new TestConsumer(
+                n_logs)));
+
+    const size_t n_participants = 100;
+    const uint32_t known_unicast_port = 7350;
+
+    // Configure security and handshake properties
+    const std::string governance_file("governance_helloworld_all_enable.smime");
+    const std::string permissions_file("permissions_helloworld.smime");
+
+    PropertyPolicy handshake_prop_policy;
+
+    // Set a configuration that fails the authentication fast
+    handshake_prop_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.max_handshake_requests",
+            "10"));
+    handshake_prop_policy.properties().emplace_back(Property(
+                "dds.sec.auth.builtin.PKI-DH.initial_handshake_resend_period",
+                "50"));
+
+    // Create the main participant (pointee by the rest)
+    PubSubWriter<HelloWorldPubSubType> main_participant("HelloWorldTopic");
+
+    // Create 100 secure participants pointing to the main one
+    // 100 is because of the history size for the participant stateless message writer
+    std::vector<std::shared_ptr<PubSubReader<HelloWorldPubSubType>>> participants;
+    participants.reserve(n_participants);
+
+    // Create a test transport that will drop the participant stateless messages only
+    auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
+
+    // Filter to drop participant stateless messages
+    test_transport->drop_data_messages_filter_ = [](eprosima::fastrtps::rtps::CDRMessage_t& msg)
+            -> bool
+            {
+                auto old_pos = msg.pos;
+
+                // Jump to writer entity id
+                msg.pos += 2 + 2 + 4;
+
+                // Read writer entity id
+                EntityId_t writer_entity_id;
+                writer_entity_id = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
+                msg.pos = old_pos;
+
+                if (writer_entity_id == eprosima::fastrtps::rtps::participant_stateless_message_writer_entity_id)
+                {
+                    // Drop the message if the message comes from participant generic message
+                    return true;
+                }
+
+                return false;
+            };
+
+    // Configure the main participant security
+    CommonPermissionsConfigure(main_participant, governance_file, permissions_file, handshake_prop_policy);
+
+    main_participant.disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .add_to_metatraffic_unicast_locator_list("127.0.0.1", known_unicast_port)
+            .init();
+    ASSERT_TRUE(main_participant.isInitialized());
+
+    // Set the initial peers for the rest of the participants
+    // They will all point to the main participant
+    LocatorList_t initial_peers;
+    Locator_t main_participant_locator;
+    main_participant_locator.kind = LOCATOR_KIND_UDPv4;
+    main_participant_locator.port = known_unicast_port;
+    IPLocator::setIPv4(main_participant_locator, "127.0.0.1");
+    initial_peers.push_back(main_participant_locator);
+
+    for (size_t i = 0; i < n_participants; ++i)
+    {
+        participants.emplace_back(std::make_shared<PubSubReader<HelloWorldPubSubType>>("HelloWorldTopic"));
+
+        // Configure security for the new participant
+        CommonPermissionsConfigure(*participants.back(), governance_file, permissions_file, handshake_prop_policy);
+
+        // Init participant with the main participant as initial peer
+        // and disable multicast so it does not try to discover noone else
+        participants.back()->disable_multicast(static_cast<int32_t>(i + 1))
+                .initial_peers(initial_peers)
+                .init();
+
+        ASSERT_TRUE(participants.back()->isInitialized());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // Wait for the main participant to fail authentication with the rest
+    main_participant.wait_unauthorized(std::chrono::seconds::zero(), n_participants);
+
+    // If the participant stateless messages history of the main participant is not correctly freed,
+    // the main participant will fail creating a new participant stateless message for him
+    auto failing_participant = std::make_shared<PubSubReader<HelloWorldPubSubType>>("HelloWorldTopic");
+    CommonPermissionsConfigure(*failing_participant, governance_file, permissions_file, handshake_prop_policy);
+    failing_participant->disable_multicast(static_cast<int32_t>(n_participants + 1))
+            .initial_peers(initial_peers)
+            .init();
+
+    // Wait for the main participant to unauthorize the new one
+    main_participant.wait_unauthorized(std::chrono::seconds::zero(), n_participants + 1);
+
+    // In case logs are not flushed immediately, we wait a bit
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    // No SECURITY error logs should have been produced
+    eprosima::fastdds::dds::Log::Flush();
+    EXPECT_EQ(0u, n_logs);
 }
 
 void blackbox_security_init()
@@ -4655,6 +4743,145 @@ void blackbox_security_init()
         exit(-1);
     }
 }
+
+/**
+ * This test serves as a regression test for several security advisories related to malicious
+ * datagrams received by a participant with security enabled.
+ *
+ * We should have a different test for each datagram, since each one could make the participant
+ * crash, and if one of them does, the rest won't be executed.
+ */
+static void security_datagram_injection_on_reader_test(
+        const std::string& topic_name,
+        const char* datagram_file)
+{
+    using eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
+    using eprosima::fastdds::rtps::DatagramInjectionTransport;
+
+    PubSubReader<HelloWorldPubSubType> reader(topic_name);
+
+    // Configure security
+    const std::string governance_file("governance_helloworld_all_enable.smime");
+    const std::string permissions_file("permissions_helloworld.smime");
+    CommonPermissionsConfigure(reader, governance_file, permissions_file, PropertyPolicy{});
+
+    // Prepare datagram injection transport
+    auto low_level_transport = std::make_shared<UDPv4TransportDescriptor>();
+    auto transport = std::make_shared<DatagramInjectionTransportDescriptor>(low_level_transport);
+    reader.disable_builtin_transport().add_user_transport_to_pparams(transport);
+
+    // Initialize reader
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+    auto receivers = transport->get_receivers();
+    ASSERT_FALSE(receivers.empty());
+
+    // Inject datagram
+    DatagramInjectionTransport::deliver_datagram_from_file(receivers, datagram_file);
+
+    // Allow some time for processing
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    // Clean up
+    reader.destroy();
+}
+
+/**
+ * This test is a regression test for redmine issue #23831.
+ */
+TEST(Security, DatagramInjectionOnReader_23831)
+{
+    using eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
+    using eprosima::fastdds::rtps::DatagramInjectionTransport;
+
+    // Force using UDP transport
+    auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+
+    PubSubWriter<HelloWorldPubSubType> writer("HelloWorldTopic_DatagramInjectionOnReader_23831");
+    PubSubReader<HelloWorldPubSubType> reader("HelloWorldTopic_DatagramInjectionOnReader_23831");
+
+    // Configure security
+    CommonPermissionsConfigure(reader, writer,
+            "governance_helloworld_all_enable.smime",
+            "permissions_helloworld.smime");
+
+    // Prepare datagram injection transport
+    auto low_level_transport = std::make_shared<UDPv4TransportDescriptor>();
+    auto transport = std::make_shared<DatagramInjectionTransportDescriptor>(low_level_transport);
+    reader.disable_builtin_transport().add_user_transport_to_pparams(transport);
+
+    // Initialize entities and wait for discovery
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+    auto receivers = transport->get_receivers();
+    ASSERT_FALSE(receivers.empty());
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
+    reader.wait_discovery();
+    writer.wait_discovery();
+
+    // Read malicious datagram
+    std::vector<uint8_t> datagram = DatagramInjectionTransport::read_datagram_from_file("datagrams/23831.bin");
+    ASSERT_FALSE(datagram.empty());
+    // Update datagram with GUID prefixes of our entities
+    static constexpr size_t sender_prefix_offset = 8;
+    static constexpr size_t receiver_prefix_offset = 24;
+    auto writer_guid = writer.datawriter_guid();
+    auto reader_guid = reader.datareader_guid();
+    std::memcpy(&datagram[sender_prefix_offset], writer_guid.guidPrefix.value, GuidPrefix_t::size);
+    std::memcpy(&datagram[receiver_prefix_offset], reader_guid.guidPrefix.value, GuidPrefix_t::size);
+
+    // Inject datagram
+    DatagramInjectionTransport::deliver_datagram(receivers, datagram.data(), datagram.size());
+
+    // Allow some time for processing
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    // Clean up
+    reader.destroy();
+    writer.destroy();
+}
+
+/**
+ * This test is a regression test for redmine issues #23832 and #23833.
+ */
+TEST(Security, DatagramInjectionOnReader_23832_23833)
+{
+    security_datagram_injection_on_reader_test(
+        "HelloWorldTopic_DatagramInjectionOnReader_23832_23833",
+        "datagrams/23833.bin");
+}
+
+/**
+ * This test is a regression test for redmine issue #23834.
+ */
+TEST(Security, DatagramInjectionOnReader_23834)
+{
+    security_datagram_injection_on_reader_test(
+        "HelloWorldTopic_DatagramInjectionOnReader_23834",
+        "datagrams/23834.bin");
+}
+
+/**
+ * This test is a regression test for redmine issue #23835.
+ */
+TEST(Security, DatagramInjectionOnReader_23835)
+{
+    security_datagram_injection_on_reader_test(
+        "HelloWorldTopic_DatagramInjectionOnReader_23835",
+        "datagrams/23835.bin");
+}
+
+/**
+ * This test is a regression test for redmine issue #23836.
+ */
+TEST(Security, DatagramInjectionOnReader_23836)
+{
+    security_datagram_injection_on_reader_test(
+        "HelloWorldTopic_DatagramInjectionOnReader_23836",
+        "datagrams/23836.bin");
+}
+
 
 #ifdef INSTANTIATE_TEST_SUITE_P
 #define GTEST_INSTANTIATE_TEST_MACRO(x, y, z, w) INSTANTIATE_TEST_SUITE_P(x, y, z, w)

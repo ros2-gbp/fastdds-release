@@ -614,7 +614,9 @@ bool StatefulReader::processDataMsg(
             if (!change_pool_->reserve_cache(change_to_add))
             {
                 EPROSIMA_LOG_WARNING(RTPS_MSG_IN,
-                        IDSTRING "Reached the maximum number of samples allowed by this reader's QoS. Rejecting change for reader: " <<
+                        IDSTRING
+                        "Reached the maximum number of samples allowed by this reader's QoS. Rejecting change for reader: "
+                        <<
                         m_guid );
                 return false;
             }
@@ -642,6 +644,16 @@ bool StatefulReader::processDataMsg(
                 }
                 datasharing_pool->get_payload(change->serializedPayload, payload_owner, *change_to_add);
             }
+            else if (change->serializedPayload.length == 0 && change->kind != ChangeKind_t::ALIVE &&
+                    change->instanceHandle.isDefined())
+            {
+                // A UNREGISTER or DISPOSE status change was sent without payload, but calling get_payload with size 0 might fail
+                // depending on the configured payload pool. However, those operations are still valid if and only if instanceHandle
+                // is defined so they are handled in this special case
+                // These conditions were already checked in change_is_relevant_for_filter, but it makes sense to have a proper case
+                // here
+                change_to_add->serializedPayload.length = 0;
+            }
             else if (payload_pool_->get_payload(change->serializedPayload, payload_owner, *change_to_add))
             {
                 change->payload_owner(payload_owner);
@@ -661,7 +673,10 @@ bool StatefulReader::processDataMsg(
             {
                 EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                         IDSTRING "Change " << change_to_add->sequenceNumber << " not added to history");
-                change_to_add->payload_owner()->release_payload(*change_to_add);
+                if (change_to_add->payload_owner())
+                {
+                    change_to_add->payload_owner()->release_payload(*change_to_add);
+                }
                 change_pool_->release_cache(change_to_add);
                 return false;
             }
@@ -728,7 +743,7 @@ bool StatefulReader::processDataFragMsg(
             if (!mp_history->get_change(change_to_add->sequenceNumber, change_to_add->writerGUID, &work_change))
             {
                 // A new change should be reserved
-                if (reserveCache(&work_change, sampleSize))
+                if (reserve_cache(sampleSize, change_to_add->getFragmentSize(), work_change))
                 {
                     if (work_change->serializedPayload.max_size < sampleSize)
                     {
@@ -919,47 +934,23 @@ bool StatefulReader::processGapMsg(
 
     if (acceptMsgFrom(writerGUID, &pWP) && pWP)
     {
-        // TODO (Miguel C): Refactor this inside WriterProxy
-        SequenceNumber_t auxSN;
-        SequenceNumber_t finalSN = gapList.base();
         History::const_iterator history_iterator = mp_history->changesBegin();
-        for (auxSN = gapStart; auxSN < finalSN; auxSN++)
-        {
-            if (pWP->irrelevant_change_set(auxSN))
-            {
-                CacheChange_t* to_remove = nullptr;
-                auto ret_iterator = findCacheInFragmentedProcess(auxSN, pWP->guid(), &to_remove, history_iterator);
-                if (to_remove != nullptr)
-                {
-                    // we called the History version to avoid callbacks
-                    history_iterator = mp_history->History::remove_change_nts(ret_iterator);
-                }
-                else if (ret_iterator != mp_history->changesEnd())
-                {
-                    history_iterator = ret_iterator;
-                }
-            }
-        }
-
-        gapList.for_each(
-            [&](SequenceNumber_t it)
-            {
-                if (pWP->irrelevant_change_set(it))
+        auto remove_fn = [this, &writerGUID, &history_iterator](const SequenceNumber_t& seq)
                 {
                     CacheChange_t* to_remove = nullptr;
-                    auto ret_iterator =
-                    findCacheInFragmentedProcess(auxSN, pWP->guid(), &to_remove, history_iterator);
+                    auto ret_iterator = findCacheInFragmentedProcess(seq, writerGUID, &to_remove, history_iterator);
                     if (to_remove != nullptr)
                     {
-                        // we called the History version to avoid callbacks
+                        // we call the History version to avoid callbacks
                         history_iterator = mp_history->History::remove_change_nts(ret_iterator);
                     }
                     else if (ret_iterator != mp_history->changesEnd())
                     {
                         history_iterator = ret_iterator;
                     }
-                }
-            });
+                };
+
+        pWP->process_gap(gapStart, gapList, remove_fn);
 
         // Maybe now we have to notify user from new CacheChanges.
         NotifyChanges(pWP);
@@ -1117,8 +1108,9 @@ bool StatefulReader::change_received(
                     }
                 }
 
-                EPROSIMA_LOG_INFO(RTPS_READER, "Change received from " << a_change->writerGUID << " with sequence number: "
-                                                                       << a_change->sequenceNumber <<
+                EPROSIMA_LOG_INFO(RTPS_READER,
+                        "Change received from " << a_change->writerGUID << " with sequence number: "
+                                                << a_change->sequenceNumber <<
                         " skipped. Higher sequence numbers have been received.");
                 return false;
             }
@@ -1226,12 +1218,11 @@ void StatefulReader::NotifyChanges(
         do
         {
             next_seq = prox->next_cache_change_to_be_notified();
-        } while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
+        }
+        while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
     }
     // Ensure correct state of proxy when max_seq is not present in history
-    while (c_SequenceNumber_Unknown != prox->next_cache_change_to_be_notified())
-    {
-    }
+    prox->consider_all_notified();
 
     // Notify listener if new data is available
     auto listener = getListener();
@@ -1471,15 +1462,17 @@ bool StatefulReader::begin_sample_access_nts(
 void StatefulReader::end_sample_access_nts(
         CacheChange_t* change,
         WriterProxy*& wp,
-        bool mark_as_read)
+        bool mark_as_read,
+        bool should_send_ack)
 {
-    change_read_by_user(change, wp, mark_as_read);
+    change_read_by_user(change, wp, mark_as_read, should_send_ack);
 }
 
 void StatefulReader::change_read_by_user(
         CacheChange_t* change,
         WriterProxy* writer,
-        bool mark_as_read)
+        bool mark_as_read,
+        bool should_send_ack)
 {
     assert(!writer || change->writerGUID == writer->guid());
 
@@ -1493,7 +1486,7 @@ void StatefulReader::change_read_by_user(
         }
     }
 
-    if (mark_as_read)
+    if (should_send_ack && mark_as_read)
     {
         send_ack_if_datasharing(this, mp_history, writer, change->sequenceNumber);
     }
