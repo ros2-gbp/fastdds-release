@@ -249,11 +249,11 @@ tracks:
     - git-bloom-generate -y rosrpm --prefix release/:{ros_distro} :{ros_distro} -i
       :{release_inc} --os-name rhel
     devel_branch: 2.14.x
-    last_release: v2.14.5
-    last_version: 2.14.5
+    last_release: v2.14.6
+    last_version: 2.14.6
     name: fastrtps
     patches: null
-    release_inc: '2'
+    release_inc: '1'
     release_repo_url: null
     release_tag: v:{version}
     ros_distro: jazzy
