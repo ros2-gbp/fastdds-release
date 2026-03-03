@@ -53,7 +53,7 @@
 #ifdef FASTDDS_STATISTICS
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 #include <statistics/types/monitorservice_types.h>
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
@@ -237,6 +237,15 @@ ReturnCode_t DataWriterImpl::enable()
 {
     assert(writer_ == nullptr);
 
+    pool_config_ = PoolConfig::from_history_attributes(history_.m_att);
+    // When the user requested PREALLOCATED_WITH_REALLOC, but we know the type cannot
+    // grow, we translate the policy into bare PREALLOCATED
+    if (PREALLOCATED_WITH_REALLOC_MEMORY_MODE == pool_config_.memory_policy &&
+            (type_->is_bounded() || type_->is_plain(data_representation_)))
+    {
+        pool_config_.memory_policy = PREALLOCATED_MEMORY_MODE;
+    }
+
     WriterAttributes w_att;
     w_att.throughputController = qos_.throughput_controller();
     w_att.endpoint.durabilityKind = qos_.durability().durabilityKind();
@@ -311,6 +320,20 @@ ReturnCode_t DataWriterImpl::enable()
             datasharing.add_domain_id(utils::default_domain_id());
         }
         w_att.endpoint.set_data_sharing_configuration(datasharing);
+
+        // Update pool config for KEEP_ALL when max_samples is infinite
+        if ((0 >= pool_config_.maximum_size) && (KEEP_ALL_HISTORY_QOS == qos_.history().kind))
+        {
+            // Override infinite with old default value for max_samples + extra samples
+            pool_config_.maximum_size = 5000;
+            if (0 < qos_.resource_limits().extra_samples)
+            {
+                pool_config_.maximum_size += static_cast<uint32_t>(qos_.resource_limits().extra_samples);
+            }
+            EPROSIMA_LOG_ERROR(DATA_WRITER,
+                    "DataWriter with KEEP_ALL history and infinite max_samples is not compatible with DataSharing. "
+                    "Setting max_samples to " << pool_config_.maximum_size);
+        }
     }
     else
     {
@@ -397,12 +420,7 @@ ReturnCode_t DataWriterImpl::enable()
     // In case it has been loaded from the persistence DB, rebuild instances on history
     history_.rebuild_instances();
 
-    deadline_timer_ = new TimedEvent(publisher_->get_participant()->get_resource_event(),
-                    [&]() -> bool
-                    {
-                        return deadline_missed();
-                    },
-                    qos_.deadline().period.to_ns() * 1e-6);
+    configure_deadline_timer_();
 
     lifespan_timer_ = new TimedEvent(publisher_->get_participant()->get_resource_event(),
                     [&]() -> bool
@@ -642,8 +660,8 @@ ReturnCode_t DataWriterImpl::check_write_preconditions(
         type_.get()->getKey(data, &instance_handle, is_key_protected);
     }
 
-    //Check if the Handle is different from the special value HANDLE_NIL and
-    //does not correspond with the instance referred by the data
+    // Check if the Handle is different from the special value HANDLE_NIL and
+    // does not correspond with the instance referred by the data
     if (handle.isDefined() && handle != instance_handle)
     {
         return ReturnCode_t::RETCODE_PRECONDITION_NOT_MET;
@@ -979,19 +997,36 @@ ReturnCode_t DataWriterImpl::perform_create_new_change(
     bool was_loaned = check_and_remove_loan(data, payload);
     if (!was_loaned)
     {
-        if (!get_free_payload_from_pool(type_->getSerializedSizeProvider(data), payload))
+        // Initialize payload to null state
+        payload.payload.length = 0;
+        payload.payload.max_size = 0;
+        payload.payload.data = nullptr;
+        payload.payload_owner = nullptr;
+        bool should_serialize = (change_kind == ALIVE);
+        if (should_serialize)
         {
-            return ReturnCode_t::RETCODE_OUT_OF_RESOURCES;
-        }
+            // Request payload from pool and proceed with serialization
+            if (!get_free_payload_from_pool(type_->getSerializedSizeProvider(data), payload))
+            {
+                // ALIVE changes need a payload and serialization
+                return ReturnCode_t::RETCODE_OUT_OF_RESOURCES;
+            }
 
-        if ((ALIVE == change_kind) && !type_->serialize(data, &payload.payload, data_representation_))
+            if (!type_->serialize(data, &payload.payload, data_representation_))
+            {
+                EPROSIMA_LOG_WARNING(DATA_WRITER, "Data serialization returned false");
+                return_payload_to_pool(payload);
+                return ReturnCode_t::RETCODE_ERROR;
+            }
+        }
+        else
         {
-            EPROSIMA_LOG_WARNING(DATA_WRITER, "Data serialization returned false");
-            return_payload_to_pool(payload);
-            return ReturnCode_t::RETCODE_ERROR;
+            // If not serializable (UNREGISTER or DISPOSE), the handle must be defined
+            assert(handle.isDefined());
         }
     }
 
+    // new_change seeds the next per-instance deadline and reschedules the timer for the next sample
     CacheChange_t* ch = writer_->new_change(change_kind, handle);
     if (ch != nullptr)
     {
@@ -1024,7 +1059,8 @@ ReturnCode_t DataWriterImpl::perform_create_new_change(
             return ReturnCode_t::RETCODE_TIMEOUT;
         }
 
-        if (qos_.deadline().period != c_TimeInfinite)
+        if (qos_.deadline().period.to_ns() > 0 && qos_.deadline().period != c_TimeInfinite &&
+                deadline_missed_status_.total_count < std::numeric_limits<uint32_t>::max())
         {
             if (!history_.set_next_deadline(
                         handle,
@@ -1135,7 +1171,7 @@ void DataWriterImpl::publisher_qos_updated()
 {
     if (writer_ != nullptr)
     {
-        //NOTIFY THE BUILTIN PROTOCOLS THAT THE WRITER HAS CHANGED
+        // NOTIFY THE BUILTIN PROTOCOLS THAT THE WRITER HAS CHANGED
         WriterQos wqos = qos_.get_writerqos(get_publisher()->get_qos(), topic_->get_qos());
         publisher_->rtps_participant()->updateWriter(writer_, get_topic_attributes(qos_, *topic_, type_), wqos);
     }
@@ -1170,6 +1206,9 @@ ReturnCode_t DataWriterImpl::set_qos(
         return ReturnCode_t::RETCODE_IMMUTABLE_POLICY;
     }
 
+    // Take a snapshot of the current QoS before mutating it
+    const DataWriterQos old_qos = qos_;
+
     set_qos(qos_, qos_to_set, !enabled);
 
     if (enabled)
@@ -1185,33 +1224,30 @@ ReturnCode_t DataWriterImpl::set_qos(
             writer_->updateAttributes(w_att);
         }
 
-        //Notify the participant that a Writer has changed its QOS
+        // Notify the participant that a Writer has changed its QOS
         fastrtps::TopicAttributes topic_att = get_topic_attributes(qos_, *topic_, type_);
         WriterQos wqos = qos_.get_writerqos(get_publisher()->get_qos(), topic_->get_qos());
         publisher_->rtps_participant()->updateWriter(writer_, topic_att, wqos);
 
-        // Deadline
-        if (qos_.deadline().period != c_TimeInfinite)
+        // If the deadline period actually changed, (re)configure the timer.
+        if (old_qos.deadline().period != qos_.deadline().period)
         {
-            deadline_duration_us_ =
-                    duration<double, std::ratio<1, 1000000>>(qos_.deadline().period.to_ns() * 1e-3);
-            deadline_timer_->update_interval_millisec(qos_.deadline().period.to_ns() * 1e-6);
-        }
-        else
-        {
-            deadline_timer_->cancel_timer();
+            configure_deadline_timer_();
         }
 
         // Lifespan
-        if (qos_.lifespan().duration != c_TimeInfinite)
+        if (old_qos.lifespan().duration != qos_.lifespan().duration)
         {
-            lifespan_duration_us_ =
-                    duration<double, std::ratio<1, 1000000>>(qos_.lifespan().duration.to_ns() * 1e-3);
-            lifespan_timer_->update_interval_millisec(qos_.lifespan().duration.to_ns() * 1e-6);
-        }
-        else
-        {
-            lifespan_timer_->cancel_timer();
+            if (qos_.lifespan().duration != c_TimeInfinite)
+            {
+                lifespan_duration_us_ =
+                        duration<double, std::ratio<1, 1000000>>(qos_.lifespan().duration.to_ns() * 1e-3);
+                lifespan_timer_->update_interval_millisec(qos_.lifespan().duration.to_ns() * 1e-6);
+            }
+            else
+            {
+                lifespan_timer_->cancel_timer();
+            }
         }
     }
 
@@ -1283,7 +1319,7 @@ void DataWriterImpl::InnerDataWriterListener::on_offered_incompatible_qos(
 
 #ifdef FASTDDS_STATISTICS
     notify_status_observer(statistics::INCOMPATIBLE_QOS);
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
     data_writer_->user_datawriter_->get_statuscondition().get_impl()->set_status(notify_status, true);
 }
@@ -1322,7 +1358,7 @@ void DataWriterImpl::InnerDataWriterListener::on_liveliness_lost(
 
 #ifdef FASTDDS_STATISTICS
     notify_status_observer(statistics::LIVELINESS_LOST);
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
     data_writer_->user_datawriter_->get_statuscondition().get_impl()->set_status(notify_status, true);
 }
@@ -1366,7 +1402,7 @@ void DataWriterImpl::InnerDataWriterListener::notify_status_observer(
     }
 }
 
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
 ReturnCode_t DataWriterImpl::wait_for_acknowledgments(
         const Duration_t& max_wait)
@@ -1459,9 +1495,11 @@ ReturnCode_t DataWriterImpl::get_publication_matched_status(
 
 bool DataWriterImpl::deadline_timer_reschedule()
 {
-    assert(qos_.deadline().period != c_TimeInfinite);
-
     std::unique_lock<RecursiveTimedMutex> lock(writer_->getMutex());
+
+    assert(qos_.deadline().period != c_TimeInfinite);
+    assert(deadline_timer_ != nullptr);
+    assert(deadline_missed_status_.total_count < std::numeric_limits<uint32_t>::max());
 
     steady_clock::time_point next_deadline_us;
     if (!history_.get_next_deadline(timer_owner_, next_deadline_us))
@@ -1475,18 +1513,57 @@ bool DataWriterImpl::deadline_timer_reschedule()
     return true;
 }
 
-bool DataWriterImpl::deadline_missed()
+void DataWriterImpl::configure_deadline_timer_()
 {
-    assert(qos_.deadline().period != c_TimeInfinite);
-
     std::unique_lock<RecursiveTimedMutex> lock(writer_->getMutex());
 
-    deadline_missed_status_.total_count++;
-    deadline_missed_status_.total_count_change++;
-    deadline_missed_status_.last_instance_handle = timer_owner_;
+    // Create the timer once
+    if (deadline_timer_ == nullptr)
+    {
+        deadline_timer_ = new TimedEvent(
+            publisher_->rtps_participant()->get_resource_event(),
+            [this]() -> bool
+            {
+                return deadline_missed();
+            },
+            // Park timer with a huge interval (prevents spurious callbacks); we'll arm/cancel explicitly
+            std::numeric_limits<double>::max()
+            );
+    }
+
+    // Handle "infinite" and "zero" outside the callback
+    if (qos_.deadline().period == c_TimeInfinite)
+    {
+        deadline_duration_us_ = std::chrono::duration<double, std::micro>::max();
+        deadline_timer_->cancel_timer();
+        return;
+    }
+
+    deadline_duration_us_ =
+            std::chrono::duration<double, std::ratio<1, 1000000>>(qos_.deadline().period.to_ns() * 1e-3);
+
+    if (qos_.deadline().period.to_ns() == 0)
+    {
+        deadline_timer_->cancel_timer();
+
+        deadline_missed_status_.total_count = std::numeric_limits<uint32_t>::max();
+        deadline_missed_status_.total_count_change = std::numeric_limits<uint32_t>::max();
+        EPROSIMA_LOG_WARNING(
+            DATA_WRITER,
+            "Deadline period is 0, it will be ignored from now on.");
+
+        // Bump once and notify listener exactly once.
+        notify_deadline_missed_nts_();
+        return;
+    }
+
+    deadline_timer_->update_interval_millisec(qos_.deadline().period.to_ns() * 1e-6);
+}
+
+void DataWriterImpl::notify_deadline_missed_nts_()
+{
     StatusMask notify_status = StatusMask::offered_deadline_missed();
-    auto listener = get_listener_for(notify_status);
-    if (nullptr != listener)
+    if (auto* listener = get_listener_for(notify_status))
     {
         listener->on_offered_deadline_missed(user_datawriter_, deadline_missed_status_);
         deadline_missed_status_.total_count_change = 0;
@@ -1494,9 +1571,31 @@ bool DataWriterImpl::deadline_missed()
 
 #ifdef FASTDDS_STATISTICS
     writer_listener_.notify_status_observer(statistics::DEADLINE_MISSED);
-#endif //FASTDDS_STATISTICS
+#endif // FASTDDS_STATISTICS
 
     user_datawriter_->get_statuscondition().get_impl()->set_status(notify_status, true);
+}
+
+bool DataWriterImpl::deadline_missed()
+{
+    std::unique_lock<RecursiveTimedMutex> lock(writer_->getMutex());
+
+    assert(qos_.deadline().period != c_TimeInfinite);
+
+    deadline_missed_status_.total_count++;
+    deadline_missed_status_.total_count_change++;
+    deadline_missed_status_.last_instance_handle = timer_owner_;
+
+    notify_deadline_missed_nts_();
+
+    // If we just reached the max -> log ONCE, stop timer, and bail.
+    if (deadline_missed_status_.total_count == std::numeric_limits<uint32_t>::max())
+    {
+        EPROSIMA_LOG_WARNING(DATA_WRITER,
+                "Maximum number of deadline missed messages reached. Stopping deadline timer.");
+        deadline_timer_->cancel_timer();
+        return false; // do not reschedule
+    }
 
     if (!history_.set_next_deadline(
                 timer_owner_,
@@ -1884,10 +1983,11 @@ ReturnCode_t DataWriterImpl::check_qos(
             qos.history().depth > qos.resource_limits().max_samples_per_instance)
     {
         EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
-                "HISTORY DEPTH '" << qos.history().depth <<
-                "' is inconsistent with max_samples_per_instance: '" << qos.resource_limits().max_samples_per_instance <<
-                "'. Consistency rule: depth <= max_samples_per_instance." <<
-                " Effectively using max_samples_per_instance as depth.");
+                "HISTORY DEPTH '" << qos.history().depth
+                                  << "' is inconsistent with max_samples_per_instance: '"
+                                  << qos.resource_limits().max_samples_per_instance
+                                  << "'. Consistency rule: depth <= max_samples_per_instance."
+                                  << " Effectively using max_samples_per_instance as depth.");
     }
     return ReturnCode_t::RETCODE_OK;
 }
@@ -1895,6 +1995,13 @@ ReturnCode_t DataWriterImpl::check_qos(
 ReturnCode_t DataWriterImpl::check_allocation_consistency(
         const DataWriterQos& qos)
 {
+    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
+            (qos.resource_limits().max_samples > 0))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
+                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+    }
     if ((qos.resource_limits().max_samples > 0) &&
             (qos.resource_limits().max_samples <
             (qos.resource_limits().max_instances * qos.resource_limits().max_samples_per_instance)))
@@ -1903,13 +2010,7 @@ ReturnCode_t DataWriterImpl::check_allocation_consistency(
                 "max_samples should be greater than max_instances * max_samples_per_instance");
         return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
     }
-    if ((qos.resource_limits().max_instances <= 0 || qos.resource_limits().max_samples_per_instance <= 0) &&
-            (qos.resource_limits().max_samples > 0))
-    {
-        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK,
-                "max_samples should be infinite when max_instances or max_samples_per_instance are infinite");
-        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
-    }
+
     return ReturnCode_t::RETCODE_OK;
 }
 
@@ -2002,42 +2103,33 @@ DataWriterListener* DataWriterImpl::get_listener_for(
 
 std::shared_ptr<IChangePool> DataWriterImpl::get_change_pool() const
 {
-    PoolConfig config = PoolConfig::from_history_attributes(history_.m_att);
     if (reader_filters_)
     {
         return std::make_shared<DataWriterFilteredChangePool>(
-            config, qos_.writer_resource_limits().reader_filters_allocation);
+            pool_config_, qos_.writer_resource_limits().reader_filters_allocation);
     }
 
-    return std::make_shared<fastrtps::rtps::CacheChangePool>(config);
+    return std::make_shared<fastrtps::rtps::CacheChangePool>(pool_config_);
 }
 
 std::shared_ptr<IPayloadPool> DataWriterImpl::get_payload_pool()
 {
     if (!payload_pool_)
     {
-        // When the user requested PREALLOCATED_WITH_REALLOC, but we know the type cannot
-        // grow, we translate the policy into bare PREALLOCATED
-        if (PREALLOCATED_WITH_REALLOC_MEMORY_MODE == history_.m_att.memoryPolicy &&
-                (type_->is_bounded() || type_->is_plain(data_representation_)))
-        {
-            history_.m_att.memoryPolicy = PREALLOCATED_MEMORY_MODE;
-        }
-
-        PoolConfig config = PoolConfig::from_history_attributes(history_.m_att);
 
         // Avoid calling the serialization size functors on PREALLOCATED mode
-        fixed_payload_size_ = config.memory_policy == PREALLOCATED_MEMORY_MODE ? config.payload_initial_size : 0u;
+        fixed_payload_size_ = pool_config_.memory_policy ==
+                PREALLOCATED_MEMORY_MODE ? pool_config_.payload_initial_size : 0u;
 
         // Get payload pool reference and allocate space for our history
         if (is_data_sharing_compatible_)
         {
-            payload_pool_ = DataSharingPayloadPool::get_writer_pool(config);
+            payload_pool_ = DataSharingPayloadPool::get_writer_pool(pool_config_);
         }
         else
         {
-            payload_pool_ = TopicPayloadPoolRegistry::get(topic_->get_name(), config);
-            if (!std::static_pointer_cast<ITopicPayloadPool>(payload_pool_)->reserve_history(config, false))
+            payload_pool_ = TopicPayloadPoolRegistry::get(topic_->get_name(), pool_config_);
+            if (!std::static_pointer_cast<ITopicPayloadPool>(payload_pool_)->reserve_history(pool_config_, false))
             {
                 payload_pool_.reset();
             }
@@ -2046,7 +2138,7 @@ std::shared_ptr<IPayloadPool> DataWriterImpl::get_payload_pool()
         // Prepare loans collection for plain types only
         if (type_->is_plain(data_representation_))
         {
-            loans_.reset(new LoanCollection(config));
+            loans_.reset(new LoanCollection(pool_config_));
         }
     }
 
@@ -2067,9 +2159,8 @@ bool DataWriterImpl::release_payload_pool()
     }
     else
     {
-        PoolConfig config = PoolConfig::from_history_attributes(history_.m_att);
         auto topic_pool = std::static_pointer_cast<ITopicPayloadPool>(payload_pool_);
-        result = topic_pool->release_history(config, false);
+        result = topic_pool->release_history(pool_config_, false);
     }
 
     payload_pool_.reset();
@@ -2131,8 +2222,8 @@ ReturnCode_t DataWriterImpl::check_datasharing_compatible(
 
             if (!has_bound_payload_size)
             {
-                EPROSIMA_LOG_ERROR(DATA_WRITER, "Data sharing cannot be used with " <<
-                        (type_.is_bounded() ? "memory policies other than PREALLOCATED" : "unbounded data types"));
+                EPROSIMA_LOG_ERROR(DATA_WRITER, "Data sharing cannot be used with "
+                        << (type_.is_bounded() ? "memory policies other than PREALLOCATED" : "unbounded data types"));
                 return ReturnCode_t::RETCODE_BAD_PARAMETER;
             }
 
@@ -2161,8 +2252,8 @@ ReturnCode_t DataWriterImpl::check_datasharing_compatible(
 
             if (!has_bound_payload_size)
             {
-                EPROSIMA_LOG_INFO(DATA_WRITER, "Data sharing disabled because " <<
-                        (type_.is_bounded() ? "memory policy is not PREALLOCATED" : "data type is not bounded"));
+                EPROSIMA_LOG_INFO(DATA_WRITER, "Data sharing disabled because "
+                        << (type_.is_bounded() ? "memory policy is not PREALLOCATED" : "data type is not bounded"));
                 return ReturnCode_t::RETCODE_OK;
             }
 
