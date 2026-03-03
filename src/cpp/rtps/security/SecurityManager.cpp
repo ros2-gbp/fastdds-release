@@ -1470,7 +1470,11 @@ void SecurityManager::process_participant_stateless_message(
 
     aux_msg.pos += 2;
 
-    CDRMessage::readParticipantGenericMessage(&aux_msg, message);
+    if (false == CDRMessage::readParticipantGenericMessage(&aux_msg, message))
+    {
+        EPROSIMA_LOG_INFO(SECURITY, "Cannot deserialize ParticipantGenericMessage");
+        return;
+    }
 
     if (message.message_class_id().compare(AUTHENTICATION_PARTICIPANT_STATELESS_MESSAGE) == 0)
     {
@@ -1705,7 +1709,11 @@ void SecurityManager::process_participant_volatile_message_secure(
 
     aux_msg.pos += 2;
 
-    CDRMessage::readParticipantGenericMessage(&aux_msg, message);
+    if (false == CDRMessage::readParticipantGenericMessage(&aux_msg, message))
+    {
+        EPROSIMA_LOG_INFO(SECURITY, "Cannot deserialize ParticipantGenericMessage");
+        return;
+    }
 
     if (message.message_class_id().compare(GMCLASSID_SECURITY_PARTICIPANT_CRYPTO_TOKENS) == 0)
     {
@@ -4255,6 +4263,19 @@ void SecurityManager::resend_handshake_message_token(
                     remote_participant_info->event_->cancel_timer();
                     remote_participant_info->auth_status_ = AUTHENTICATION_FAILED;
                     on_validation_failed(dp_it->second->participant_data(), exception);
+                    if (remote_participant_info->change_sequence_number_ != SequenceNumber_t::unknown())
+                    {
+                        participant_stateless_message_writer_history_->remove_change(
+                            remote_participant_info->change_sequence_number_);
+                        remote_participant_info->change_sequence_number_ = SequenceNumber_t::unknown();
+                        // Return the handshake handle
+                        if (remote_participant_info->handshake_handle_ != nullptr)
+                        {
+                            authentication_plugin_->return_handshake_handle(
+                                remote_participant_info->handshake_handle_, exception);
+                            remote_participant_info->handshake_handle_ = nullptr;
+                        }
+                    }
                 }
             }
             else
