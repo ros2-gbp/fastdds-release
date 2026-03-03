@@ -406,22 +406,13 @@ TEST_F(TCPv6Tests, non_blocking_send)
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
+    // Synchronous socket connection
     asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_context);
-    asio::async_connect(
-        socket,
-        endpoints,
-        [](std::error_code ec
-#if ASIO_VERSION >= 101200
-        , asio::ip::tcp::endpoint
-#else
-        , asio::ip::tcp::resolver::iterator
-#endif // if ASIO_VERSION >= 101200
-        )
-        {
-            ASSERT_TRUE(!ec);
-        }
-        );
+    std::error_code ec;
+    asio::connect(socket, endpoints, ec);
+    ASSERT_TRUE(!ec);
 
+    // Wait a bit until server accepts the connection
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     /*
@@ -436,13 +427,12 @@ TEST_F(TCPv6Tests, non_blocking_send)
             std::static_pointer_cast<TCPChannelResourceBasic>(sender_unbound_channel_resources[0]);
 
     // Prepare the message
-    asio::error_code ec;
-    std::vector<octet> message(msg_size * 2, 0);
+    std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
 
-    // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
-    // it should be able to send a message of msg_size*2.
+    // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
+    // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
     size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
@@ -451,16 +441,17 @@ TEST_F(TCPv6Tests, non_blocking_send)
     size_t bytes_read = asio::read(socket, asio::buffer(buffer, size), asio::transfer_exactly(size), ec);
     ASSERT_EQ(bytes_read, size);
 
-    // Now try to send a message that is bigger than the buffer size: (msg_size*2 + 1) + bytes_in_send_buffer(0) > 2*sendBufferSize
-    message.resize(msg_size * 2 + 1);
+    // Now try to send a message whose size surpasses the threshold to discard (sendBufferSize):
+    //  (msg_size + 1) + bytes_in_send_buffer(0) > sendBufferSize
+    message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
     bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
-    socket.shutdown(asio::ip::tcp::socket::shutdown_both);
-    socket.cancel();
-    socket.close();
+    socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+    socket.cancel(ec);
+    socket.close(ec);
 }
 #endif // ifndef _WIN32
 

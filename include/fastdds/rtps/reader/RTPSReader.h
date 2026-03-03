@@ -332,22 +332,26 @@ public:
      * @param [in] change        Pointer to the change being accessed.
      * @param [in] wp            Writer proxy the @c change belongs to.
      * @param [in] mark_as_read  Whether the @c change should be marked as read or not.
+     * @param [in] should_send_ack Whether an ACKNACK should be sent to the writer.
      */
     virtual void end_sample_access_nts(
             CacheChange_t* change,
             WriterProxy*& wp,
-            bool mark_as_read) = 0;
+            bool mark_as_read,
+            bool should_send_ack = false) = 0;
 
     /**
      * Called when the user has retrieved a change from the history.
      * @param change Pointer to the change to ACK
      * @param writer Writer proxy of the \c change.
      * @param mark_as_read Whether the \c change should be marked as read or not
+     * @param should_send_ack Whether an ACKNACK should be sent to the writer
      */
     virtual void change_read_by_user(
             CacheChange_t* change,
             WriterProxy* writer,
-            bool mark_as_read = true) = 0;
+            bool mark_as_read = true,
+            bool should_send_ack = false) = 0;
 
     /**
      * Checks whether the sample is still valid or is corrupted.
@@ -490,6 +494,20 @@ protected:
 
     bool is_datasharing_compatible_with(
             const WriterProxyData& wdata);
+
+    /**
+     * @brief Reserve a CacheChange_t.
+     *
+     * @param [in]  cdr_payload_size  Size of the received payload.
+     * @param [in]  fragment_size     Size of each fragment (0 if not fragmented).
+     * @param [out] change            Pointer to the reserved change.
+     *
+     * @return True if correctly reserved.
+     */
+    bool reserve_cache(
+            uint32_t cdr_payload_size,
+            uint16_t fragment_size,
+            CacheChange_t*& change);
 
     /**
      * @brief Retrieves the local pointer to this reader
