@@ -19,9 +19,9 @@
 #ifndef FASTDDS_RTPS_BUILTIN_DISCOVERY_PARTICIPANT__PDPENDPOINTS_HPP_
 #define FASTDDS_RTPS_BUILTIN_DISCOVERY_PARTICIPANT__PDPENDPOINTS_HPP_
 
-#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/common/Types.h>
 
-#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/participant/RTPSParticipantImpl.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -43,20 +43,20 @@ public:
      *
      * @return The list of builtin endpoints to announce.
      */
-    virtual fastdds::rtps::BuiltinEndpointSet_t builtin_endpoints() const = 0;
+    virtual fastrtps::rtps::BuiltinEndpointSet_t builtin_endpoints() const = 0;
 
-    virtual const std::unique_ptr<fastdds::rtps::ReaderListener>& main_listener() const = 0;
+    virtual const std::unique_ptr<fastrtps::rtps::ReaderListener>& main_listener() const = 0;
 
     virtual bool enable_pdp_readers(
-            fastdds::rtps::RTPSParticipantImpl* participant) = 0;
+            fastrtps::rtps::RTPSParticipantImpl* participant) = 0;
     virtual void disable_pdp_readers(
-            fastdds::rtps::RTPSParticipantImpl* participant) = 0;
+            fastrtps::rtps::RTPSParticipantImpl* participant) = 0;
     virtual void delete_pdp_endpoints(
-            fastdds::rtps::RTPSParticipantImpl* participant) = 0;
+            fastrtps::rtps::RTPSParticipantImpl* participant) = 0;
     virtual void remove_from_pdp_reader_history(
-            const fastdds::rtps::InstanceHandle_t& remote_participant) = 0;
+            const fastrtps::rtps::InstanceHandle_t& remote_participant) = 0;
     virtual void remove_from_pdp_reader_history(
-            fastdds::rtps::CacheChange_t* change) = 0;
+            fastrtps::rtps::CacheChange_t* change) = 0;
 
 protected:
 

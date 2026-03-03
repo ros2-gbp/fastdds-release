@@ -17,7 +17,7 @@
  *
  */
 
-#include <utils/StringMatching.hpp>
+#include <fastrtps/utils/StringMatching.h>
 #include <limits.h>
 #include <errno.h>
 
@@ -32,7 +32,7 @@
 #endif // if defined(__cplusplus_winrt)
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 StringMatching::StringMatching()
@@ -118,6 +118,6 @@ bool StringMatching::matchString(
     return do_match_pattern(str1, str2) || do_match_pattern(str2, str1);
 }
 
-} /* namespace rtps */
-} /* namespace fastdds */
-} /* namespace eprosima */
+} // namespace rtps
+} // namespace fastrtps
+} // namespace eprosima

@@ -25,13 +25,15 @@
 #include <string>
 
 #include <fastdds/dds/core/status/StatusMask.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/topic/TopicListener.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/topic/TopicImpl.hpp>
 #include <fastdds/topic/TopicProxy.hpp>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {

@@ -18,13 +18,16 @@
 #include <future>
 #include <thread>
 
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
+using Locator_t = fastrtps::rtps::Locator_t;
+using IPLocator = fastrtps::rtps::IPLocator;
+using octet = fastrtps::rtps::octet;
 using Log = fastdds::dds::Log;
 
 using namespace asio;
@@ -207,8 +210,8 @@ uint32_t TCPChannelResourceSecure::read(
 size_t TCPChannelResourceSecure::send(
         const octet* header,
         size_t header_size,
-        const std::vector<NetworkBuffer>& buffers,
-        uint32_t total_bytes,
+        const octet* data,
+        size_t size,
         asio::error_code& ec)
 {
     size_t bytes_sent = 0;
@@ -216,19 +219,18 @@ size_t TCPChannelResourceSecure::send(
     if (connected())
     {
         if (parent_->configuration()->non_blocking_send &&
-                !check_socket_send_buffer(header_size + total_bytes,
+                !check_socket_send_buffer(header_size + size,
                 secure_socket_->lowest_layer().native_handle()))
         {
             return 0;
         }
 
-        // Use a list of const_buffers to send the message
-        std::vector<asio::const_buffer> asio_buffers;
+        std::vector<asio::const_buffer> buffers;
         if (header_size > 0)
         {
-            asio_buffers.push_back(asio::buffer(header, header_size));
+            buffers.push_back(asio::buffer(header, header_size));
         }
-        asio_buffers.insert(asio_buffers.end(), buffers.begin(), buffers.end());
+        buffers.push_back(asio::buffer(data, size));
 
         // Work around meanwhile
         std::promise<size_t> write_bytes_promise;
@@ -239,7 +241,7 @@ size_t TCPChannelResourceSecure::send(
                 {
                     if (socket->lowest_layer().is_open())
                     {
-                        size_t bytes_transferred = asio::write(*socket, asio_buffers, ec);
+                        size_t bytes_transferred = asio::write(*socket, buffers, ec);
                         if (!ec)
                         {
                             write_bytes_promise.set_value(bytes_transferred);
@@ -352,5 +354,5 @@ void TCPChannelResourceSecure::shutdown(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

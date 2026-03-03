@@ -32,7 +32,7 @@
 
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -294,6 +294,6 @@ X509_CRL* FileProvider::load_crl(
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 

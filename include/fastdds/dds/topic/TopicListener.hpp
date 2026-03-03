@@ -13,13 +13,13 @@
 // limitations under the License.
 
 /**
- * @file TopicListener.hpp
+ * @file SubscriberListener.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__TOPICLISTENER_HPP
-#define FASTDDS_DDS_TOPIC__TOPICLISTENER_HPP
+#ifndef _FASTDDS_TOPICLISTENER_HPP_
+#define _FASTDDS_TOPICLISTENER_HPP_
 
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 #include <fastdds/dds/core/status/BaseStatus.hpp>
 
 namespace eprosima {
@@ -33,7 +33,7 @@ class Topic;
  *
  * @ingroup FASTDDS_MODULE
  */
-class FASTDDS_EXPORTED_API TopicListener
+class RTPS_DllAPI TopicListener
 {
 public:
 
@@ -68,8 +68,8 @@ public:
 
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace dds */
+} /* namespace fastdds */
+} /* namespace eprosima */
 
-#endif // FASTDDS_DDS_TOPIC__TOPICLISTENER_HPP
+#endif /* _FASTDDS_TOPICLISTENER_HPP_ */

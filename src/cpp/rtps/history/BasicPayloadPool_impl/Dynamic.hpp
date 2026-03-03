@@ -22,12 +22,12 @@ class Impl<DYNAMIC_RESERVE_MEMORY_MODE> : public BaseImpl
 public:
 
     bool release_payload(
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        assert(payload.payload_owner == this);
+        assert(cache_change.payload_owner() == this);
 
-        payload.payload_owner = nullptr;
-        payload.empty();
+        cache_change.serializedPayload.empty();
+        cache_change.payload_owner(nullptr);
 
         return true;
     }

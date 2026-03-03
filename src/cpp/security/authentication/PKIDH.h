@@ -19,13 +19,13 @@
 #ifndef _SECURITY_AUTHENTICATION_PKIDH_H_
 #define _SECURITY_AUTHENTICATION_PKIDH_H_
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/authentication/Authentication.h>
-#include <security/artifact_providers/Pkcs11Provider.hpp>
+#include <fastdds/rtps/security/authentication/Authentication.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
 #include <security/authentication/PKIHandshakeHandle.h>
+#include <security/artifact_providers/Pkcs11Provider.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -146,7 +146,7 @@ private:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_PKIDH_H_

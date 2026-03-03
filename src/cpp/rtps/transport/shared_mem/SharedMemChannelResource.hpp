@@ -16,12 +16,13 @@
 #define _FASTDDS_SHAREDMEM_CHANNEL_RESOURCE_
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/messages/MessageReceiver.h>
+#include <fastrtps/rtps/common/Locator.h>
 
-#include <rtps/messages/MessageReceiver.h>
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
 #include <rtps/transport/shared_mem/SharedMemTransport.h>
 #include <rtps/transport/ChannelResource.h>
+
 #include <utils/threading.hpp>
 
 namespace eprosima {
@@ -148,7 +149,7 @@ private:
             if (message_receiver() != nullptr)
             {
                 message_receiver()->OnDataReceived(
-                    static_cast<fastdds::rtps::octet*>(message->data()),
+                    static_cast<fastrtps::rtps::octet*>(message->data()),
                     message->size(),
                     input_locator, remote_locator);
             }

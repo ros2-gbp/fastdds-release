@@ -16,10 +16,8 @@
  * @file WriterDataLifecycleQosPolicy.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE_POLICY__WRITERDATALIFECYCLEQOSPOLICY_HPP
-#define FASTDDS_DDS_CORE_POLICY__WRITERDATALIFECYCLEQOSPOLICY_HPP
-
-#include <utility>
+#ifndef _FASTDDS_WRITERDATALIFECYCLEQOSPOLICY_HPP_
+#define _FASTDDS_WRITERDATALIFECYCLEQOSPOLICY_HPP_
 
 namespace eprosima {
 namespace fastdds {
@@ -43,14 +41,8 @@ public:
     /**
      * @brief Destructor
      */
-    virtual FASTDDS_EXPORTED_API ~WriterDataLifecycleQosPolicy()
+    virtual RTPS_DllAPI ~WriterDataLifecycleQosPolicy()
     {
-    }
-
-    inline void clear()
-    {
-        WriterDataLifecycleQosPolicy reset = WriterDataLifecycleQosPolicy();
-        std::swap(*this, reset);
     }
 
     bool operator ==(
@@ -75,4 +67,4 @@ public:
 } //namespace fastdds
 } //namespace eprosima
 
-#endif // FASTDDS_DDS_CORE_POLICY__WRITERDATALIFECYCLEQOSPOLICY_HPP
+#endif // _FASTDDS_WRITERDATALIFECYCLEQOSPOLICY_HPP_

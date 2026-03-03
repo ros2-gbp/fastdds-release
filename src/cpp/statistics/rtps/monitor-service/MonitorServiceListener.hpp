@@ -20,7 +20,7 @@
 #define _STATISTICS_RTPS_MONITOR_SERVICE_MONITORSERVICELISTENER_HPP_
 
 
-#include <fastdds/rtps/writer/WriterListener.hpp>
+#include <fastdds/rtps/writer/WriterListener.h>
 
 #include "Interfaces.hpp"
 
@@ -34,7 +34,7 @@ class MonitorService;
 #ifdef FASTDDS_STATISTICS
 
 class MonitorServiceListener :
-    public fastdds::rtps::WriterListener,
+    public fastrtps::rtps::WriterListener,
     public IStatusObserver,
     public IConnectionsObserver,
     public IProxyObserver
@@ -46,35 +46,31 @@ public:
             MonitorService* ms);
 
     bool on_local_entity_status_change(
-            const fastdds::rtps::GUID_t& guid,
+            const fastrtps::rtps::GUID_t& guid,
             const uint32_t& id) const override;
 
     bool on_local_entity_change(
-            const fastdds::rtps::GUID_t& guid,
+            const fastrtps::rtps::GUID_t& guid,
             bool is_alive) const override;
 
     bool on_local_entity_connections_change(
-            const fastdds::rtps::GUID_t& guid) const override;
+            const fastrtps::rtps::GUID_t& guid) const override;
 
-    void on_writer_matched(
-            fastdds::rtps::RTPSWriter* writer,
-            const fastdds::rtps::MatchingInfo& info) override;
+    void onWriterMatched(
+            fastrtps::rtps::RTPSWriter* writer,
+            fastrtps::rtps::MatchingInfo& info) override;
 
-    void on_writer_change_received_by_all(
-            fastdds::rtps::RTPSWriter* writer,
-            fastdds::rtps::CacheChange_t* change) override;
-
-    void on_incompatible_qos_matching(
-            const fastdds::rtps::GUID_t& local_guid,
-            const fastdds::rtps::GUID_t& remote_guid,
-            const fastdds::dds::PolicyMask& incompatible_qos) const override;
-
-    void on_remote_proxy_data_removed(
-            const fastdds::rtps::GUID_t& removed_proxy_guid) const override;
+    void onWriterChangeReceivedByAll(
+            fastrtps::rtps::RTPSWriter* writer,
+            fastrtps::rtps::CacheChange_t* change) override;
 
 protected:
 
     MonitorService* monitor_srv_;
+
+private:
+
+    using fastrtps::rtps::WriterListener::onWriterMatched;
 
 };
 

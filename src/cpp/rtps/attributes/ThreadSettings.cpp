@@ -14,9 +14,7 @@
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastdds::rtps;
 
 bool ThreadSettings::operator ==(
         const ThreadSettings& rhs) const
@@ -32,7 +30,3 @@ bool ThreadSettings::operator !=(
 {
     return !(*this == rhs);
 }
-
-}  // namespace rtps
-}  // namespace fastdds
-}  // namespace eprosima

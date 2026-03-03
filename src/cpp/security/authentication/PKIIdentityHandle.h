@@ -18,15 +18,15 @@
 #ifndef _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_
 #define _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/Token.hpp>
-#include <rtps/security/common/Handle.h>
+#include <fastdds/rtps/security/common/Handle.h>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/Token.h>
 
 #include <openssl/x509.h>
 #include <string>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -100,7 +100,7 @@ typedef HandleImpl<PKIIdentity, PKIDH> PKIIdentityHandle;
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_PKIIDENTITYHANDLE_H_

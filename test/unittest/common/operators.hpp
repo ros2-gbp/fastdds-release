@@ -15,10 +15,10 @@
 #include <algorithm>
 #include <cstdint>
 
-#include <fastdds/rtps/common/SequenceNumber.hpp>
+#include <fastdds/rtps/common/SequenceNumber.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 // Make SequenceNumberSet_t compatible with GMock macros
@@ -73,5 +73,5 @@ bool operator ==(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

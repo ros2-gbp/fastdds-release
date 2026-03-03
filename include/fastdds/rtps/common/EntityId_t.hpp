@@ -16,18 +16,18 @@
  * @file EntityId_t.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__ENTITYID_T_HPP
-#define FASTDDS_RTPS_COMMON__ENTITYID_T_HPP
+#ifndef _FASTDDS_RTPS_COMMON_ENTITYID_T_HPP_
+#define _FASTDDS_RTPS_COMMON_ENTITYID_T_HPP_
 
-#include <fastdds/fastdds_dll.hpp>
-#include <fastdds/rtps/common/Types.hpp>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/rtps/common/Types.h>
 
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 
@@ -73,7 +73,7 @@ namespace rtps {
 
 //!@brief Structure EntityId_t, entity id part of GUID_t.
 //!@ingroup COMMON_MODULE
-struct FASTDDS_EXPORTED_API EntityId_t
+struct RTPS_DllAPI EntityId_t
 {
     static constexpr unsigned int size = 4;
     octet value[size];
@@ -382,15 +382,15 @@ const EntityId_t monitor_service_status_writer = ENTITYID_MONITOR_SERVICE_WRITER
 #endif // if FASTDDS_STATISTICS
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 namespace std {
 template <>
-struct hash<eprosima::fastdds::rtps::EntityId_t>
+struct hash<eprosima::fastrtps::rtps::EntityId_t>
 {
     std::size_t operator ()(
-            const eprosima::fastdds::rtps::EntityId_t& k) const
+            const eprosima::fastrtps::rtps::EntityId_t& k) const
     {
         return (static_cast<size_t>(k.value[0]) << 16) |
                (static_cast<size_t>(k.value[1]) << 8) |
@@ -402,4 +402,4 @@ struct hash<eprosima::fastdds::rtps::EntityId_t>
 } // namespace std
 
 
-#endif // FASTDDS_RTPS_COMMON__ENTITYID_T_HPP
+#endif /* _FASTDDS_RTPS_COMMON_ENTITYID_T_HPP_ */

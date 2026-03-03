@@ -16,16 +16,16 @@
  * @file DataReaderListener.hpp
  */
 
-#ifndef FASTDDS_DDS_SUBSCRIBER__DATAREADERLISTENER_HPP
-#define FASTDDS_DDS_SUBSCRIBER__DATAREADERLISTENER_HPP
+#ifndef _FASTRTPS_DATAREADERLISTENER_HPP_
+#define _FASTRTPS_DATAREADERLISTENER_HPP_
 
-#include <fastdds/dds/core/status/BaseStatus.hpp>
-#include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/qos/DeadlineMissedStatus.h>
+#include <fastrtps/qos/LivelinessChangedStatus.h>
+#include <fastrtps/qos/SampleRejectedStatus.hpp>
 #include <fastdds/dds/core/status/IncompatibleQosStatus.hpp>
-#include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
-#include <fastdds/dds/core/status/SampleRejectedStatus.hpp>
+#include <fastdds/dds/core/status/BaseStatus.hpp>
 #include <fastdds/dds/core/status/SubscriptionMatchedStatus.hpp>
-#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -44,14 +44,14 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API DataReaderListener()
+    RTPS_DllAPI DataReaderListener()
     {
     }
 
     /**
      * @brief Destructor
      */
-    FASTDDS_EXPORTED_API virtual ~DataReaderListener()
+    RTPS_DllAPI virtual ~DataReaderListener()
     {
     }
 
@@ -60,7 +60,7 @@ public:
      *
      * @param reader DataReader
      */
-    FASTDDS_EXPORTED_API virtual void on_data_available(
+    RTPS_DllAPI virtual void on_data_available(
             DataReader* reader)
     {
         (void)reader;
@@ -72,7 +72,7 @@ public:
      * @param reader DataReader
      * @param info The subscription matched status
      */
-    FASTDDS_EXPORTED_API virtual void on_subscription_matched(
+    RTPS_DllAPI virtual void on_subscription_matched(
             DataReader* reader,
             const fastdds::dds::SubscriptionMatchedStatus& info)
     {
@@ -86,9 +86,9 @@ public:
      * @param reader DataReader
      * @param status The requested deadline missed status
      */
-    FASTDDS_EXPORTED_API virtual void on_requested_deadline_missed(
+    RTPS_DllAPI virtual void on_requested_deadline_missed(
             DataReader* reader,
-            const RequestedDeadlineMissedStatus& status)
+            const fastrtps::RequestedDeadlineMissedStatus& status)
     {
         (void)reader;
         (void)status;
@@ -100,9 +100,9 @@ public:
      * @param reader The DataReader
      * @param status The liveliness changed status
      */
-    FASTDDS_EXPORTED_API virtual void on_liveliness_changed(
+    RTPS_DllAPI virtual void on_liveliness_changed(
             DataReader* reader,
-            const LivelinessChangedStatus& status)
+            const fastrtps::LivelinessChangedStatus& status)
     {
         (void)reader;
         (void)status;
@@ -114,9 +114,9 @@ public:
      * @param reader The DataReader
      * @param status The rejected status
      */
-    FASTDDS_EXPORTED_API virtual void on_sample_rejected(
+    RTPS_DllAPI virtual void on_sample_rejected(
             DataReader* reader,
-            const SampleRejectedStatus& status)
+            const fastrtps::SampleRejectedStatus& status)
     {
         (void)reader;
         (void)status;
@@ -128,7 +128,7 @@ public:
      * @param reader The DataReader
      * @param status The requested incompatible QoS status
      */
-    FASTDDS_EXPORTED_API virtual void on_requested_incompatible_qos(
+    RTPS_DllAPI virtual void on_requested_incompatible_qos(
             DataReader* reader,
             const RequestedIncompatibleQosStatus& status)
     {
@@ -142,7 +142,7 @@ public:
      * @param reader The DataReader
      * @param status The sample lost status
      */
-    FASTDDS_EXPORTED_API virtual void on_sample_lost(
+    RTPS_DllAPI virtual void on_sample_lost(
             DataReader* reader,
             const SampleLostStatus& status)
     {
@@ -152,8 +152,8 @@ public:
 
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace dds */
+} /* namespace fastdds */
+} /* namespace eprosima */
 
-#endif // FASTDDS_DDS_SUBSCRIBER__DATAREADERLISTENER_HPP
+#endif /* _FASTRTPS_DATAREADERLISTENER_HPP_ */

@@ -4,15 +4,14 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
-
-#include <MessageReceiver.h>
+#include <fastrtps/rtps/messages/MessageReceiver.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
 
 #define MIN_SIZE RTPSMESSAGE_HEADER_SIZE
 #define MAX_SIZE 64000
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 static const Locator_t remoteLocator;
 static const Locator_t recvLocator;

@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_UDPV4_TRANSPORT_H
 #define _FASTDDS_UDPV4_TRANSPORT_H
 
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
 #include <rtps/transport/UDPTransportInterface.h>
 
 namespace eprosima {
@@ -43,7 +43,7 @@ class UDPv4Transport : public UDPTransportInterface
 {
 public:
 
-    FASTDDS_EXPORTED_API UDPv4Transport(
+    RTPS_DllAPI UDPv4Transport(
             const UDPv4TransportDescriptor&);
 
     ~UDPv4Transport() override;
@@ -124,7 +124,7 @@ protected:
             uint16_t port) override;
     asio::ip::udp generate_protocol() const override;
     bool get_ips(
-            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
     const std::string& localhost_name() override;
@@ -146,10 +146,6 @@ protected:
     //! Checks for whether locator is allowed.
     bool is_locator_allowed(
             const Locator&) const override;
-
-    //! Checks for whether locator is reachable.
-    bool is_locator_reachable(
-            const Locator_t&) override;
 
     //! Checks if the given interface is allowed by the white list.
     bool is_interface_allowed(

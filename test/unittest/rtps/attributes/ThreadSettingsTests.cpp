@@ -142,10 +142,8 @@ TEST(ThreadSettingsTests, EqualOperators)
     ASSERT_TRUE(settings_1 != settings_2);
 }
 
-int main(
-        int argc,
-        char** argv)
+int main()
 {
-    testing::InitGoogleTest(&argc, argv);
+    testing::InitGoogleTest();
     return RUN_ALL_TESTS();
 }

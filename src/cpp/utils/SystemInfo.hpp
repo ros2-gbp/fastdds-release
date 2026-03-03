@@ -27,8 +27,9 @@
 #include <string>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/utils/IPFinder.hpp>
+
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/utils/IPFinder.h>
 #include <utils/Host.hpp>
 
 #if defined(_WIN32) || defined(__unix__)
@@ -37,7 +38,7 @@
 
 namespace eprosima {
 
-using ReturnCode_t = eprosima::fastdds::dds::ReturnCode_t;
+using ReturnCode_t = fastrtps::types::ReturnCode_t;
 #if defined(_WIN32) || defined(__unix__)
 using FileWatchHandle = std::unique_ptr<filewatch::FileWatch<std::string>>;
 #else
@@ -75,16 +76,6 @@ public:
     inline uint16_t host_id() const
     {
         return Host::instance().id();
-    }
-
-    /**
-     * Get the identifier of the current machine.
-     *
-     * @return the identifier of the current host.
-     */
-    inline fastcdr::string_255 machine_id() const
-    {
-        return Host::instance().machine_id();
     }
 
     /**
@@ -263,7 +254,7 @@ public:
      * @return true if successful, false otherwise
      */
     static bool get_ips(
-            std::vector<fastdds::rtps::IPFinder::info_IP>& vec_name,
+            std::vector<fastrtps::rtps::IPFinder::info_IP>& vec_name,
             bool return_loopback,
             bool force_lookup);
 
@@ -274,7 +265,7 @@ private:
     static std::string environment_file_;
 
     static bool cached_interfaces_;
-    static std::vector<fastdds::rtps::IPFinder::info_IP> interfaces_;
+    static std::vector<fastrtps::rtps::IPFinder::info_IP> interfaces_;
     static std::mutex interfaces_mtx_;
 };
 

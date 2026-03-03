@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fastrtps/utils/StringMatching.h>
 #include <gtest/gtest.h>
-
 #include <fastdds/dds/log/Log.hpp>
 
-#include <utils/StringMatching.hpp>
-
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 class StringMatchingTests : public ::testing::Test
 {

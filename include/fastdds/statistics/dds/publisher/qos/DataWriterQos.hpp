@@ -16,11 +16,11 @@
  * @file DataWriterQos.hpp
  */
 
-#ifndef FASTDDS_STATISTICS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
-#define FASTDDS_STATISTICS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
+#ifndef _FASTDDS_STATISTICS_DDS_PUBLISHER_QOS_DATAWRITERQOS_HPP_
+#define _FASTDDS_STATISTICS_DDS_PUBLISHER_QOS_DATAWRITERQOS_HPP_
 
 #include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -39,7 +39,7 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API DataWriterQos();
+    RTPS_DllAPI DataWriterQos();
 };
 
 //! Constant to access default Statistics DataWriter Qos
@@ -50,4 +50,4 @@ const eprosima::fastdds::statistics::dds::DataWriterQos STATISTICS_DATAWRITER_QO
 } // fastdds
 } // eprosima
 
-#endif // FASTDDS_STATISTICS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
+#endif /* _FASTDDS_STATISTICS_DDS_PUBLISHER_QOS_DATAWRITERQOS_HPP_ */

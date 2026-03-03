@@ -16,11 +16,11 @@
  * @file GuidPrefix_t.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__GUIDPREFIX_T_HPP
-#define FASTDDS_RTPS_COMMON__GUIDPREFIX_T_HPP
+#ifndef _FASTDDS_RTPS_COMMON_GUIDPREFIX_T_HPP_
+#define _FASTDDS_RTPS_COMMON_GUIDPREFIX_T_HPP_
 
-#include <fastdds/fastdds_dll.hpp>
-#include <fastdds/rtps/common/Types.hpp>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/rtps/common/Types.h>
 
 #include <cstdint>
 #include <cstring>
@@ -28,12 +28,12 @@
 #include <iomanip>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 //!@brief Structure GuidPrefix_t, Guid Prefix of GUID_t.
 //!@ingroup COMMON_MODULE
-struct FASTDDS_EXPORTED_API GuidPrefix_t
+struct RTPS_DllAPI GuidPrefix_t
 {
     static constexpr unsigned int size = 12;
     octet value[size];
@@ -209,7 +209,7 @@ inline std::istream& operator >>(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_COMMON__GUIDPREFIX_T_HPP
+#endif /* _FASTDDS_RTPS_COMMON_GUIDPREFIX_T_HPP_ */

@@ -12,23 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/**
- * @file ReceiverResource.h
- *
- */
-
-#ifndef FASTDDS_RTPS_NETWORK__RECEIVERRESOURCE_H
-#define FASTDDS_RTPS_NETWORK__RECEIVERRESOURCE_H
+#ifndef _FASTDDS_RTPS_RECEIVER_RESOURCE_H
+#define _FASTDDS_RTPS_RECEIVER_RESOURCE_H
 
 #include <functional>
-#include <memory>
 #include <vector>
-
-#include <fastdds/rtps/Endpoint.hpp>
-#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <memory>
+#include <fastrtps/transport/TransportInterface.h>
+#include <fastrtps/rtps/Endpoint.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSWriter;
@@ -40,7 +34,7 @@ class RTPSParticipantImpl;
  * Mock ReceiverResource
  * @ingroup NETWORK_MODULE
  */
-class ReceiverResource : public fastdds::rtps::TransportReceiverInterface
+class ReceiverResource : public TransportReceiverInterface
 {
     friend class NetworkFactory;
 
@@ -105,7 +99,7 @@ public:
 protected:
 
     ReceiverResource(
-            fastdds::rtps::TransportInterface& transport,
+            TransportInterface& transport,
             const Locator_t& locator,
             uint32_t max_recv_buffer_size)
         : mValid(false)
@@ -144,7 +138,7 @@ private:
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_NETWORK__RECEIVERRESOURCE_H
+#endif // ifndef _FASTDDS_RTPS_RECEIVER_RESOURCE_H

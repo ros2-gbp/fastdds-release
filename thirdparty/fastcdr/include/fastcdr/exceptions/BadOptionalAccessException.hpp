@@ -24,7 +24,7 @@ namespace exception {
  * @brief This class is thrown as an exception when accessing the value of a null optional.
  * @ingroup EXCEPTIONMODULE
  */
-class Cdr_DllAPI BadOptionalAccessException : public Exception
+class BadOptionalAccessException : public Exception
 {
 public:
 
@@ -33,7 +33,7 @@ public:
      *
      * @param message An error message. This message pointer is copied.
      */
-    BadOptionalAccessException(
+    Cdr_DllAPI BadOptionalAccessException(
             const char* const& message) noexcept;
 
     /*!
@@ -41,7 +41,7 @@ public:
      *
      * @param ex BadOptionalAccessException that will be copied.
      */
-    BadOptionalAccessException(
+    Cdr_DllAPI BadOptionalAccessException(
             const BadOptionalAccessException& ex) noexcept;
 
     /*!
@@ -49,7 +49,7 @@ public:
      *
      * @param ex BadOptionalAccessException that will be moved.
      */
-    BadOptionalAccessException(
+    Cdr_DllAPI BadOptionalAccessException(
             BadOptionalAccessException&& ex) noexcept;
 
     /*!
@@ -57,7 +57,7 @@ public:
      *
      * @param ex BadOptionalAccessException that will be copied.
      */
-    BadOptionalAccessException& operator =(
+    Cdr_DllAPI BadOptionalAccessException& operator =(
             const BadOptionalAccessException& ex) noexcept;
 
     /*!
@@ -69,13 +69,13 @@ public:
             BadOptionalAccessException&& ex) noexcept;
 
     //! @brief Default destructor
-    virtual ~BadOptionalAccessException() noexcept;
+    virtual Cdr_DllAPI ~BadOptionalAccessException() noexcept;
 
     //! @brief This function throws the object as exception.
-    void raise() const override;
+    Cdr_DllAPI void raise() const override;
 
     //! @brief Default message used in the library.
-    static const char* const BAD_OPTIONAL_ACCESS_MESSAGE_DEFAULT;
+    static Cdr_DllAPI const char* const BAD_OPTIONAL_ACCESS_MESSAGE_DEFAULT;
 };
 }         //namespace exception
 }     //namespace fastcdr

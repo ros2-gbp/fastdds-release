@@ -190,29 +190,6 @@ struct InfoTimestampSubmessage
     detail::Timestamp timestamp;
 };
 
-union Submessage switch (char)
-{
-    case SubmessageKind::HEARTBEAT:
-        HeartBeatSubmessage heartbeat_submsg;
-
-    case SubmessageKind::INFO_TS:
-        InfoTimestampSubmessage info_ts_submsg;
-
-    case SubmessageKind::INFO_SRC:
-        InfoSourceSubmessage info_src_submsg;
-
-    case SubmessageKind::INFO_DST:
-        InfoDestinationSubmessage info_dst_submsg;
-
-    default:
-        SubmessageHeader unknown_submsg;
-};
-
-struct RTPSMessage
-{
-    Header msg_header; /* header is illegal */
-    sequence<Submessage> submessages;
-};
 
 }; // namespace core
 }; // namespace rtps

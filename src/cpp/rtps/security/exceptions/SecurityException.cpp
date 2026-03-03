@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "SecurityException.h"
+#include <fastdds/rtps/security/exceptions/SecurityException.h>
 
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps::security;
 
 SecurityException::SecurityException(
         const SecurityException& ex)

@@ -16,8 +16,8 @@
  * @file StackAllocatedSequence.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE__STACKALLOCATEDSEQUENCE_HPP
-#define FASTDDS_DDS_CORE__STACKALLOCATEDSEQUENCE_HPP
+#ifndef _FASTDDS_DDS_CORE_STACKALLOCATEDSEQUENCE_HPP_
+#define _FASTDDS_DDS_CORE_STACKALLOCATEDSEQUENCE_HPP_
 
 #include <array>
 #include <cassert>
@@ -88,4 +88,4 @@ private:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_CORE__STACKALLOCATEDSEQUENCE_HPP
+#endif // _FASTDDS_DDS_CORE_STACKALLOCATEDSEQUENCE_HPP_

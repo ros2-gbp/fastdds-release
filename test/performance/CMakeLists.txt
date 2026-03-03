@@ -26,6 +26,5 @@ option(VIDEO_TESTS "Activate the building and execution of performance tests" OF
 add_subdirectory(latency)
 add_subdirectory(throughput)
 if(VIDEO_TESTS)
-# // TODO(jlbueno): migrate to Fast DDS API
-#    add_subdirectory(video)
+    add_subdirectory(video)
 endif()

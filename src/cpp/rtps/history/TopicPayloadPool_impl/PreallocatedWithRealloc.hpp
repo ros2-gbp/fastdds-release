@@ -22,7 +22,7 @@
 #include <rtps/history/TopicPayloadPool.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class PreallocatedReallocTopicPayloadPool : public TopicPayloadPool
@@ -39,9 +39,9 @@ public:
 
     bool get_payload(
             uint32_t size,
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        return do_get_payload(std::max(size, min_payload_size_), payload, true);
+        return do_get_payload(std::max(size, min_payload_size_), cache_change, true);
     }
 
     bool reserve_history(
@@ -87,7 +87,7 @@ private:
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_HISTORY_TOPICPAYLOADPOOLIMPL_PREALLOCATED_REALLOC_HPP

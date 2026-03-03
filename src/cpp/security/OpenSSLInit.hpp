@@ -18,7 +18,7 @@
 #include <openssl/crypto.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -47,5 +47,5 @@ public:
 
 } // namespace security
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

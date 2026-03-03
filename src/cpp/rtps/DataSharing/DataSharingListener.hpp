@@ -25,7 +25,7 @@
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
 #include <rtps/DataSharing/IDataSharingListener.hpp>
 #include <rtps/DataSharing/DataSharingNotification.hpp>
@@ -33,24 +33,13 @@
 #include <utils/thread.hpp>
 
 namespace eprosima {
-
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
-class BaseReader;
-
-} // namespace rtps
-} // namespace fastdds
-
-namespace fastdds {
-namespace rtps {
-
+class RTPSReader;
 
 class DataSharingListener : public IDataSharingListener
 {
-
-    using BaseReader = fastdds::rtps::BaseReader;
-    using ThreadSettings = fastdds::rtps::ThreadSettings;
 
 public:
 
@@ -60,9 +49,9 @@ public:
     DataSharingListener(
             std::shared_ptr<DataSharingNotification> notification,
             const std::string& datasharing_pools_directory,
-            const ThreadSettings& thr_config,
+            const fastdds::rtps::ThreadSettings& thr_config,
             ResourceLimitedContainerConfig limits,
-            BaseReader* reader);
+            RTPSReader* reader);
 
     virtual ~DataSharingListener();
 
@@ -125,18 +114,18 @@ protected:
 
     std::shared_ptr<DataSharingNotification> notification_;
     std::atomic<bool> is_running_;
-    BaseReader* reader_;
+    RTPSReader* reader_;
     eprosima::thread listening_thread_;
     ResourceLimitedVector<WriterInfo> writer_pools_;
     std::atomic<bool> writer_pools_changed_;
     std::string datasharing_pools_directory_;
-    ThreadSettings thread_config_;
+    fastdds::rtps::ThreadSettings thread_config_;
     mutable std::mutex mutex_;
 
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_DATASHARING_DATASHARINGLISTENER_HPP

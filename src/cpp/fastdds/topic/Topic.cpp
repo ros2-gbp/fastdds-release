@@ -64,7 +64,7 @@ ReturnCode_t Topic::get_qos(
         TopicQos& qos) const
 {
     qos = impl_->get_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t Topic::set_qos(
@@ -83,7 +83,7 @@ ReturnCode_t Topic::set_listener(
         const StatusMask& mask)
 {
     impl_->set_listener(listener, mask);
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 DomainParticipant* Topic::get_participant() const
@@ -96,7 +96,7 @@ ReturnCode_t Topic::get_inconsistent_topic_status(
 {
     // TODO: return impl_->get_inconsistent_topic_status(status);
     (void)status;
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 TopicDescriptionImpl* Topic::get_impl() const

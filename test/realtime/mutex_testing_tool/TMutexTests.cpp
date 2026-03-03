@@ -23,7 +23,7 @@
 #include <chrono>
 #include <mutex>
 
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps;
 
 TEST(TMutexTests, record_mutexes)
 {

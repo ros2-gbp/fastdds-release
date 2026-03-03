@@ -18,10 +18,12 @@ if(SQLITE3_SUPPORT)
 
     set(PERSISTENCETESTS_SOURCE
         PersistenceTests.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/history/CacheChangePool.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -32,10 +34,8 @@ if(SQLITE3_SUPPORT)
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
         )
 
@@ -53,13 +53,15 @@ if(SQLITE3_SUPPORT)
         ${PROJECT_SOURCE_DIR}/src/cpp
         )
     target_link_libraries(PersistenceTests
-        fastcdr
-        fastdds::log
         foonathan_memory
-        GTest::gmock
-        $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+            GTest::gmock
         ${CMAKE_DL_LIBS}
         )
+    if(MSVC OR MSVC_IDE)
+        target_link_libraries(PersistenceTests ${PRIVACY}
+            iphlpapi Shlwapi
+            )
+    endif()
     gtest_discover_tests(PersistenceTests)
 
 endif(SQLITE3_SUPPORT)

@@ -16,10 +16,10 @@
  * @file LocatorsIterator.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__LOCATORSITERATOR_HPP
-#define FASTDDS_RTPS_COMMON__LOCATORSITERATOR_HPP
+#ifndef _FASTDDS_RTPS_COMMON_LOCATORSITERATOR_HPP_
+#define _FASTDDS_RTPS_COMMON_LOCATORSITERATOR_HPP_
 
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/Locator.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -63,10 +63,8 @@ struct LocatorsIterator
     virtual const Locator& operator *() const = 0;
 };
 
-using LocatorsIterator = eprosima::fastdds::rtps::LocatorsIterator;
-
 } // namespace rtps
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_COMMON__LOCATORSITERATOR_HPP
+#endif /* _FASTDDS_RTPS_COMMON_LOCATORSITERATOR_HPP_ */

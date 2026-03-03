@@ -16,11 +16,9 @@
  * @file Token.cpp
  */
 
-#include <fastdds/rtps/common/Token.hpp>
+#include <fastdds/rtps/common/Token.h>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastrtps::rtps;
 
 std::string* DataHolderHelper::find_property_value(
         DataHolder& data_holder,
@@ -197,7 +195,3 @@ size_t DataHolderHelper::serialized_size(
 
     return current_alignment - initial_alignment;
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

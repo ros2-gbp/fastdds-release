@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FASTDDS_DDS_LOG__STDOUTERRCONSUMER_HPP
-#define FASTDDS_DDS_LOG__STDOUTERRCONSUMER_HPP
+#ifndef _FASTDDS_DDS_LOG_STDOUTERRCONSUMER_HPP_
+#define _FASTDDS_DDS_LOG_STDOUTERRCONSUMER_HPP_
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/OStreamConsumer.hpp>
@@ -44,14 +44,14 @@ public:
      * std::cout.
      * @param kind The Log::Kind to which stderr_threshold is set.
      */
-    FASTDDS_EXPORTED_API virtual void stderr_threshold(
+    RTPS_DllAPI virtual void stderr_threshold(
             const Log::Kind& kind);
 
     /**
      * @brief Retrieve the stderr_threshold.
      * @return The Log::Kind to which stderr_threshold is set.
      */
-    FASTDDS_EXPORTED_API virtual Log::Kind stderr_threshold() const;
+    RTPS_DllAPI virtual Log::Kind stderr_threshold() const;
 
     /**
      * @brief Default value of stderr_threshold.
@@ -64,7 +64,7 @@ protected:
      * Called by Log consume to get the correct stream
      * @param Log::Entry to consume.
      */
-    FASTDDS_EXPORTED_API virtual std::ostream& get_stream(
+    RTPS_DllAPI virtual std::ostream& get_stream(
             const Log::Entry& entry) override;
 
 private:
@@ -77,4 +77,4 @@ private:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_LOG__STDOUTERRCONSUMER_HPP
+#endif // ifndef _FASTDDS_DDS_LOG_STDOUTERRCONSUMER_HPP_

@@ -26,41 +26,34 @@
 #include <set>
 #include <vector>
 
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
-#include <fastdds/rtps/transport/NetworkBuffer.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
-#include <fastdds/utils/TimedMutex.hpp>
-
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/writer/StatelessWriter.hpp>
+#include <fastrtps/rtps/history/WriterHistory.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 PDPStatelessWriter::PDPStatelessWriter(
         RTPSParticipantImpl* participant,
         const GUID_t& guid,
         const WriterAttributes& attributes,
-        FlowController* flow_controller,
+        fastdds::rtps::FlowController* flow_controller,
         WriterHistory* history,
         WriterListener* listener)
     : StatelessWriter(participant, guid, attributes, flow_controller, history, listener)
-    , interested_readers_(participant->get_attributes().allocation.participants)
+    , interested_readers_(participant->getRTPSParticipantAttributes().allocation.participants)
 {
 }
 
-bool PDPStatelessWriter::matched_reader_add_edp(
+bool PDPStatelessWriter::matched_reader_add(
         const ReaderProxyData& data)
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
-    bool ret = StatelessWriter::matched_reader_add_edp(data);
+    bool ret = StatelessWriter::matched_reader_add(data);
     if (ret)
     {
         // Mark new reader as interested
-        add_interested_reader(data.guid);
+        add_interested_reader(data.guid());
         // Send announcement to new reader
         reschedule_all_samples();
     }
@@ -90,7 +83,7 @@ void PDPStatelessWriter::unsent_change_added_to_history(
 }
 
 void PDPStatelessWriter::set_initial_peers(
-        const LocatorList& locator_list)
+        const fastdds::rtps::LocatorList& locator_list)
 {
     std::lock_guard<std::mutex> guard(interested_readers_mutex_);
 
@@ -105,8 +98,7 @@ void PDPStatelessWriter::send_periodic_announcement()
 }
 
 bool PDPStatelessWriter::send_to_fixed_locators(
-        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
-        const uint32_t& total_bytes,
+        CDRMessage_t* message,
         std::chrono::steady_clock::time_point& max_blocking_time_point) const
 {
     std::lock_guard<std::mutex> guard(interested_readers_mutex_);
@@ -116,9 +108,9 @@ bool PDPStatelessWriter::send_to_fixed_locators(
     if (should_reach_all_destinations_)
     {
         ret = initial_peers_.empty() ||
-                mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid,
+                mp_RTPSParticipant->sendSync(message, m_guid,
                         Locators(initial_peers_.begin()), Locators(initial_peers_.end()),
-                        max_blocking_time_point, transport_priority_);
+                        max_blocking_time_point);
 
         if (ret)
         {
@@ -135,8 +127,8 @@ bool PDPStatelessWriter::send_to_fixed_locators(
 }
 
 bool PDPStatelessWriter::is_relevant(
-        const fastdds::rtps::CacheChange_t& /* change */,
-        const fastdds::rtps::GUID_t& reader_guid) const
+        const CacheChange_t& /* change */,
+        const GUID_t& reader_guid) const
 {
     std::lock_guard<std::mutex> guard(interested_readers_mutex_);
     return interested_readers_.end() !=
@@ -180,11 +172,11 @@ void PDPStatelessWriter::remove_interested_reader(
 void PDPStatelessWriter::reschedule_all_samples()
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
-    size_t n_samples = history_->getHistorySize();
+    size_t n_samples = mp_history->getHistorySize();
     if (0 < n_samples)
     {
         assert(1 == n_samples);
-        auto it = history_->changesBegin();
+        auto it = mp_history->changesBegin();
         CacheChange_t* change = *it;
         flow_controller_->add_new_sample(this, change, std::chrono::steady_clock::now() + std::chrono::hours(24));
     }

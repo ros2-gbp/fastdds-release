@@ -24,7 +24,7 @@ namespace exception {
  * @brief This class is thrown as an exception when accessing to set the value of a locked external.
  * @ingroup EXCEPTIONMODULE
  */
-class Cdr_DllAPI LockedExternalAccessException : public Exception
+class LockedExternalAccessException : public Exception
 {
 public:
 
@@ -33,7 +33,7 @@ public:
      *
      * @param message An error message. This message pointer is copied.
      */
-    LockedExternalAccessException(
+    Cdr_DllAPI LockedExternalAccessException(
             const char* const& message) noexcept;
 
     /*!
@@ -41,7 +41,7 @@ public:
      *
      * @param ex LockedExternalAccessException that will be copied.
      */
-    LockedExternalAccessException(
+    Cdr_DllAPI LockedExternalAccessException(
             const LockedExternalAccessException& ex) noexcept;
 
     /*!
@@ -49,7 +49,7 @@ public:
      *
      * @param ex LockedExternalAccessException that will be moved.
      */
-    LockedExternalAccessException(
+    Cdr_DllAPI LockedExternalAccessException(
             LockedExternalAccessException&& ex) noexcept;
 
     /*!
@@ -57,7 +57,7 @@ public:
      *
      * @param ex LockedExternalAccessException that will be copied.
      */
-    LockedExternalAccessException& operator =(
+    Cdr_DllAPI LockedExternalAccessException& operator =(
             const LockedExternalAccessException& ex) noexcept;
 
     /*!
@@ -69,13 +69,13 @@ public:
             LockedExternalAccessException&& ex) noexcept;
 
     //! @brief Default destructor
-    virtual ~LockedExternalAccessException() noexcept;
+    virtual Cdr_DllAPI ~LockedExternalAccessException() noexcept;
 
     //! @brief This function throws the object as exception.
-    void raise() const override;
+    Cdr_DllAPI void raise() const override;
 
     //! @brief Default message used in the library.
-    static const char* const LOCKED_EXTERNAL_ACCESS_MESSAGE_DEFAULT;
+    static Cdr_DllAPI const char* const LOCKED_EXTERNAL_ACCESS_MESSAGE_DEFAULT;
 };
 }         //namespace exception
 }     //namespace fastcdr

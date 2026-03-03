@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fastrtps/rtps/common/Time_t.h>
+
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/common/Time_t.hpp>
-
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 /*
  * Test << operator

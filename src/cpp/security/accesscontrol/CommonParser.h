@@ -20,7 +20,7 @@
 #include <tinyxml2.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -30,7 +30,7 @@ bool parse_domain_id_set(
 
 } // namespace security
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif // __SECURITY_ACCESSCONTROL_COMMON_H__

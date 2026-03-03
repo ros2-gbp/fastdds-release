@@ -17,7 +17,10 @@ if(WIN32)
 endif()
 
 set(LOG_COMMON_SOURCE
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -25,10 +28,8 @@ set(LOG_COMMON_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
@@ -50,11 +51,7 @@ target_include_directories(LogMacrosAllActiveTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosAllActiveTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosAllActiveTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosAllActiveTests)
@@ -78,11 +75,7 @@ target_include_directories(LogMacrosNoInfoTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosNoInfoTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosNoInfoTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosNoInfoTests)
@@ -106,11 +99,7 @@ target_include_directories(LogMacrosNoWarningTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosNoWarningTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosNoWarningTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosNoWarningTests)
@@ -134,11 +123,7 @@ target_include_directories(LogMacrosNoErrorTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosNoErrorTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosNoErrorTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosNoErrorTests)
@@ -162,11 +147,7 @@ target_include_directories(LogMacrosDefaultTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosDefaultTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosDefaultTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosDefaultTests)
@@ -192,11 +173,7 @@ target_include_directories(LogMacrosInternalDebugOffTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogMacrosInternalDebugOffTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(LogMacrosInternalDebugOffTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogMacrosInternalDebugOffTests)
@@ -219,11 +196,7 @@ target_include_directories(OldLogMacrosTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(OldLogMacrosTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(OldLogMacrosTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(OldLogMacrosTests)
@@ -247,11 +220,7 @@ target_include_directories(OldLogMacrosDisableTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(OldLogMacrosDisableTests
-    fastcdr
-    fastdds::log
-    GTest::gtest
-    ${MOCKS}
+target_link_libraries(OldLogMacrosDisableTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(OldLogMacrosDisableTests)

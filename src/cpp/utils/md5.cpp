@@ -32,14 +32,12 @@
  */
 
 /* interface header */
-#include <fastdds/utils/md5.hpp>
+#include <fastrtps/utils/md5.h>
 
 /* system implementation headers */
 #include <cstdio>
 #include <stdio.h>
 
-namespace eprosima {
-namespace fastdds {
 
 // Constants for MD5Transform routine.
 #define S11 7
@@ -453,6 +451,3 @@ std::string md5(
 
     return md5.hexdigest();
 }
-
-}   // namespace fastdds
-}   // namespace eprosima

@@ -13,27 +13,26 @@
 // limitations under the License.
 
 #include <chrono>
-#include <thread>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <thread>
 
 #define TEST_FRIENDS \
     FRIEND_TEST(WriterProxyAcknackTests, AcknackBackoff);
 
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/reader/StatefulReader.hpp>
 #include <rtps/reader/WriterProxy.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
+#include <fastrtps/rtps/reader/RTPSReader.h>
+#include <fastrtps/rtps/reader/StatefulReader.h>
+#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
+#include <fastrtps/rtps/resources/TimedEvent.h>
+
 #include <rtps/reader/WriterProxy.cpp>
-#include <rtps/resources/TimedEvent.h>
 
 #include "../../common/operators.hpp"
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 TEST(WriterProxyAcknackTests, AcknackBackoff)
@@ -50,13 +49,13 @@ TEST(WriterProxyAcknackTests, AcknackBackoff)
     SequenceNumberSet_t t1(SequenceNumber_t(0, 0));
     EXPECT_CALL(readerMock, simp_send_acknack(t1)).Times(2u);
     EXPECT_EQ ( wproxy.initial_acknack_->getIntervalMilliSec(),
-            readerMock.getTimes().initial_acknack_delay.to_ns() / 1000000);
+            readerMock.getTimes().initialAcknackDelay.to_ns() / 1000000);
     wproxy.perform_initial_ack_nack();
     EXPECT_EQ ( wproxy.initial_acknack_->getIntervalMilliSec(),
-            readerMock.getTimes().initial_acknack_delay.to_ns() * 2 / 1000000);
+            readerMock.getTimes().initialAcknackDelay.to_ns() * 2 / 1000000);
     wproxy.perform_initial_ack_nack();
     EXPECT_EQ ( wproxy.initial_acknack_->getIntervalMilliSec(),
-            readerMock.getTimes().initial_acknack_delay.to_ns() * 4 / 1000000);
+            readerMock.getTimes().initialAcknackDelay.to_ns() * 4 / 1000000);
 
     // Simulate heartbeat reception and check if the delay cannot be updated again
     bool assert_liveliness = false;
@@ -74,15 +73,15 @@ TEST(WriterProxyAcknackTests, AcknackBackoff)
         current_sample_lost);
 
     EXPECT_EQ ( wproxy.initial_acknack_->getIntervalMilliSec(),
-            readerMock.getTimes().initial_acknack_delay.to_ns() * 4 / 1000000);
+            readerMock.getTimes().initialAcknackDelay.to_ns() * 4 / 1000000);
     wproxy.perform_initial_ack_nack();
     EXPECT_EQ ( wproxy.initial_acknack_->getIntervalMilliSec(),
-            readerMock.getTimes().initial_acknack_delay.to_ns() * 4 / 1000000);
+            readerMock.getTimes().initialAcknackDelay.to_ns() * 4 / 1000000);
 
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 int main(

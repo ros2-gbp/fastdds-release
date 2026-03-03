@@ -17,20 +17,17 @@
  */
 
 #include "SendBuffersManager.hpp"
-
-#include "RTPSMessageGroup.hpp"
-#include "../participant/RTPSParticipantImpl.hpp"
+#include "../participant/RTPSParticipantImpl.h"
+#include <fastdds/rtps/messages/RTPSMessageGroup.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 SendBuffersManager::SendBuffersManager(
         size_t reserved_size,
-        bool allow_growing,
-        ResourceLimitedContainerConfig network_buffers_config)
+        bool allow_growing)
     : allow_growing_(allow_growing)
-    , network_buffers_config_(network_buffers_config)
 {
     pool_.reserve(reserved_size);
 }
@@ -69,7 +66,7 @@ void SendBuffersManager::init(
 #if HAVE_SECURITY
                         secure,
 #endif // if HAVE_SECURITY
-                        payload_size, guid_prefix, network_buffers_config_
+                        payload_size, guid_prefix
                         ));
             raw_buffer += advance;
             ++n_created_;
@@ -136,5 +133,5 @@ void SendBuffersManager::add_one_buffer(
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

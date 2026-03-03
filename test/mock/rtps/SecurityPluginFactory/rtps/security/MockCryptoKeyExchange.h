@@ -15,16 +15,15 @@
 /*!
  * @file MockCryptoKeyExchange.h
  */
-#ifndef FASTDDS_RTPS_SECURITY__MOCKCRYPTOKEYEXCHANGE_H
-#define FASTDDS_RTPS_SECURITY__MOCKCRYPTOKEYEXCHANGE_H
+#ifndef _RTPS_SECURITY_MOCKCRYPTOKEYEXCHANGE_H_
+#define _RTPS_SECURITY_MOCKCRYPTOKEYEXCHANGE_H_
 
+#include <fastrtps/rtps/security/cryptography/CryptoKeyExchange.h>
+#include <fastrtps/rtps/security/cryptography/CryptoTypes.h>
 #include <gmock/gmock.h>
 
-#include <rtps/security/cryptography/CryptoKeyExchange.h>
-#include <rtps/security/cryptography/CryptoTypes.h>
-
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -80,7 +79,7 @@ public:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
-#endif //FASTDDS_RTPS_SECURITY__MOCKCRYPTOKEYEXCHANGE_H
+#endif //_RTPS_SECURITY_MOCKCRYPTOKEYEXCHANGE_H_

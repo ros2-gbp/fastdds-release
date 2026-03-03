@@ -11,13 +11,12 @@ if(NOT foonathan_memory_FOUND)
     find_package(foonathan_memory REQUIRED)
 endif()
 
-if(NOT fastdds_FOUND)
-    find_package(fastdds 3 REQUIRED)
+if(NOT fastrtps_FOUND)
+    find_package(fastrtps 2.12 REQUIRED)
 endif()
 
 message(STATUS "Configuring fuzz_processCDRMsg...")
 file(GLOB SOURCES_CXX "fuzz_*.cxx")
 
 add_executable(fuzz_processCDRMsg ${SOURCES_CXX})
-target_include_directories(fuzz_processCDRMsg PRIVATE ${CMAKE_SOURCE_DIR}/src/cpp/rtps/messages)
-target_link_libraries(fuzz_processCDRMsg fastdds fastcdr foonathan_memory $ENV{LIB_FUZZING_ENGINE})
+target_link_libraries(fuzz_processCDRMsg fastrtps fastcdr foonathan_memory $ENV{LIB_FUZZING_ENGINE})

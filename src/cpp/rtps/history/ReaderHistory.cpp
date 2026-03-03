@@ -17,24 +17,21 @@
  *
  */
 
-#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/history/ReaderHistory.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-#include <fastdds/rtps/reader/ReaderListener.hpp>
+#include <fastrtps/utils/Semaphore.h>
+#include <fastdds/rtps/reader/RTPSReader.h>
+#include <fastdds/rtps/reader/ReaderListener.h>
 
 #include <rtps/common/ChangeComparison.hpp>
-#include <rtps/reader/BaseReader.hpp>
 #include <utils/collections/sorted_vector_insert.hpp>
-#include <utils/Semaphore.hpp>
 
 #include <mutex>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
-
-using BaseReader = fastdds::rtps::BaseReader;
 
 ReaderHistory::ReaderHistory(
         const HistoryAttributes& att)
@@ -151,11 +148,10 @@ History::iterator ReaderHistory::remove_change_nts(
     auto ret_val = m_changes.erase(removal);
     m_isHistoryFull = false;
 
-    auto base_reader = BaseReader::downcast(mp_reader);
-    base_reader->change_removed_by_history(change);
+    mp_reader->change_removed_by_history(change);
     if (release)
     {
-        base_reader->release_cache(change);
+        mp_reader->releaseCache(change);
     }
 
     return ret_val;
@@ -256,12 +252,19 @@ bool ReaderHistory::get_min_change_from(
     return ret;
 }
 
+bool ReaderHistory::do_reserve_cache(
+        CacheChange_t** change,
+        uint32_t size)
+{
+    return mp_reader->reserveCache(change, size);
+}
+
 void ReaderHistory::do_release_cache(
         CacheChange_t* ch)
 {
-    BaseReader::downcast(mp_reader)->release_cache(ch);
+    mp_reader->releaseCache(ch);
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

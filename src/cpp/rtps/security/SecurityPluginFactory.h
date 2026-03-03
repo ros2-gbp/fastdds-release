@@ -18,15 +18,16 @@
 #ifndef _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
 #define _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/accesscontrol/AccessControl.h>
-#include <rtps/security/authentication/Authentication.h>
-#include <rtps/security/cryptography/Cryptography.h>
+#include <fastdds/rtps/security/authentication/Authentication.h>
+#include <fastdds/rtps/security/accesscontrol/AccessControl.h>
+#include <fastdds/rtps/security/cryptography/Cryptography.h>
+#include <fastdds/rtps/security/logging/Logging.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
+
 #include <rtps/security/ISecurityPluginFactory.h>
-#include <rtps/security/logging/Logging.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -59,7 +60,7 @@ protected:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _RTPS_SECURITY_SECURITYPLUGINFACTORY_H_

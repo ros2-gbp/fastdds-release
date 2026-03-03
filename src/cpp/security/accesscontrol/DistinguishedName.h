@@ -23,7 +23,7 @@
 #include <string>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -213,7 +213,7 @@ protected:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_ACCESSCONTROL_DISTINGUISHEDNAME_H_

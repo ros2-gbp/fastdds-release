@@ -22,11 +22,8 @@
 #include <security/cryptography/AESGCMGMAC.h>
 #include <security/logging/LogTopic.h>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
-
-using namespace security;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 Authentication* SecurityPluginFactory::create_authentication_plugin(
         const PropertyPolicy& property_policy)
@@ -120,7 +117,3 @@ Logging* SecurityPluginFactory::create_builtin_logging_plugin()
 {
     return new LogTopic();
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

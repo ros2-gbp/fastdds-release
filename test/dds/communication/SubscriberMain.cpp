@@ -15,10 +15,10 @@
 /**
  * @file SubscriberMain.cpp
  */
+#include "SubscriberModule.hpp"
 
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-
-#include "SubscriberModule.hpp"
+#include <fastrtps/Domain.h>
 
 using namespace eprosima::fastdds::dds;
 
@@ -107,7 +107,7 @@ int main(
         {
             if (++arg_count >= argc)
             {
-                std::cout << "--run-for expects a parameter" << std::endl;
+                std::cout << "--timeout expects a parameter" << std::endl;
                 return -1;
             }
 

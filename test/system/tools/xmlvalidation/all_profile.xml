@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<dds xmlns="http://www.eprosima.com" >
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles" >
     <profiles>
         <participant profile_name="domainparticipant_profile_name">
             <domainId>1</domainId>
@@ -110,12 +110,16 @@
                         <discoveryProtocol>CLIENT</discoveryProtocol>
 
                         <discoveryServersList>
-                            <locator>
-                                <udpv4>
-                                    <address>192.168.10.57</address>
-                                    <port>56542</port>
-                                </udpv4>
-                            </locator>
+                            <RemoteServer prefix="72.61.73.70.66.61.72.6d.74.65.73.74">
+                                <metatrafficUnicastLocatorList>
+                                    <locator>
+                                        <udpv4>
+                                            <address>192.168.10.57</address>
+                                            <port>56542</port>
+                                        </udpv4>
+                                    </locator>
+                                </metatrafficUnicastLocatorList>
+                            </RemoteServer>
                         </discoveryServersList>
 
                         <ignoreParticipantFlags>FILTER_DIFFERENT_HOST</ignoreParticipantFlags>
@@ -289,6 +293,10 @@
 
                     <mutation_tries>55</mutation_tries>
 
+                    <typelookup_config>
+                        <use_client>true</use_client>
+                        <use_server>true</use_server>
+                    </typelookup_config>
                 </builtin>
 
                 <port>
@@ -299,7 +307,6 @@
                     <offsetd1>1</offsetd1>
                     <offsetd2>2</offsetd2>
                     <offsetd3>3</offsetd3>
-                    <offsetd4>4</offsetd4>
                 </port>
 
                 <participantID>99</participantID>
@@ -369,11 +376,6 @@
                     <send_buffers>
                         <preallocated_number>113</preallocated_number>
                         <dynamic>false</dynamic>
-                        <network_buffers_config>
-                            <initial>16</initial>
-                            <maximum>0</maximum>
-                            <increment>16</increment>
-                        </network_buffers_config>
                     </send_buffers>
                 </allocation>
             </rtps>
@@ -459,21 +461,21 @@
             </qos>
 
             <times>
-                <initial_heartbeat_delay>
+                <initialHeartbeatDelay>
                     <nanosec>12</nanosec>
-                </initial_heartbeat_delay>
+                </initialHeartbeatDelay>
 
-                <heartbeat_period>
+                <heartbeatPeriod>
                     <sec>3</sec>
-                </heartbeat_period>
+                </heartbeatPeriod>
 
-                <nack_response_delay>
+                <nackResponseDelay>
                     <nanosec>5</nanosec>
-                </nack_response_delay>
+                </nackResponseDelay>
 
-                <nack_supression_duration>
+                <nackSupressionDuration>
                     <sec>0</sec>
-                </nack_supression_duration>
+                </nackSupressionDuration>
             </times>
 
             <unicastLocatorList>
@@ -672,13 +674,13 @@
             </qos>
 
             <times>
-                <initial_acknack_delay>
+                <initialAcknackDelay>
                     <nanosec>12</nanosec>
-                </initial_acknack_delay>
+                </initialAcknackDelay>
 
-                <heartbeat_response_delay>
+                <heartbeatResponseDelay>
                     <sec>3</sec>
-                </heartbeat_response_delay>
+                </heartbeatResponseDelay>
             </times>
 
             <unicastLocatorList>
@@ -779,7 +781,7 @@
 
             <ignore_non_matching_locators>true</ignore_non_matching_locators>
 
-            <expects_inline_qos>false</expects_inline_qos>
+            <expectsInlineQos>false</expectsInlineQos>
 
             <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
 

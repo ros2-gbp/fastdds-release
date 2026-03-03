@@ -18,7 +18,7 @@
 #include <atomic>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/CDRMessage_t.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.h>
 
 #include <utils/thread.hpp>
 
@@ -60,7 +60,7 @@ public:
         alive_.store(false);
     }
 
-    inline CDRMessage_t& message_buffer()
+    inline fastrtps::rtps::CDRMessage_t& message_buffer()
     {
         return message_buffer_;
     }
@@ -68,7 +68,7 @@ public:
 protected:
 
     //!Received message
-    CDRMessage_t message_buffer_;
+    fastrtps::rtps::CDRMessage_t message_buffer_;
 
     std::atomic<bool> alive_;
     eprosima::thread thread_;

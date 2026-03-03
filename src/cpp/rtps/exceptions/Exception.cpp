@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Exception.h"
+#include <fastdds/rtps/exceptions/Exception.h>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastrtps::rtps;
 
 Exception::Exception(
         const char* const& message)
@@ -82,7 +80,3 @@ const char* Exception::what() const throw()
 {
     return message_.c_str();
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

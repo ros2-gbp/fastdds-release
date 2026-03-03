@@ -16,15 +16,15 @@
  * @file ReaderPool.hpp
  */
 
-#ifndef FASTDDS_RTPS_DATASHARING__READERPOOL_HPP
-#define FASTDDS_RTPS_DATASHARING__READERPOOL_HPP
+#ifndef RTPS_DATASHARING_READERPOOL_HPP
+#define RTPS_DATASHARING_READERPOOL_HPP
 
 #include <rtps/DataSharing/DataSharingPayloadPool.hpp>
 
 #include <memory>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class ReaderPool : public DataSharingPayloadPool
@@ -34,7 +34,7 @@ class ReaderPool : public DataSharingPayloadPool
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
-#endif  // FASTDDS_RTPS_DATASHARING__READERPOOL_HPP
+#endif  // RTPS_DATASHARING_DATASHARINGPAYLOADPOOLIMPL_READERPOOL_HPP

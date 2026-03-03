@@ -26,23 +26,22 @@
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/reader/RTPSReader.h>
 
 #include <fastdds/subscriber/DataReaderImpl/ReadTakeCommand.hpp>
 
 #include <rtps/common/ChangeComparison.hpp>
-#include <rtps/reader/BaseReader.hpp>
 #include <rtps/reader/WriterProxy.h>
 #include <utils/collections/sorted_vector_insert.hpp>
 
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
 namespace detail {
 
-using fastdds::RecursiveTimedMutex;
+using eprosima::fastrtps::RecursiveTimedMutex;
 
 static HistoryAttributes to_history_attributes(
         const TypeSupport& type,
@@ -52,7 +51,7 @@ static HistoryAttributes to_history_attributes(
     auto max_samples = qos.resource_limits().max_samples;
 
     auto mempolicy = qos.endpoint().history_memory_policy;
-    auto payloadMaxSize = type->max_serialized_type_size + 3; // possible alignment
+    auto payloadMaxSize = type->m_typeSize + 3; // possible alignment
 
     return HistoryAttributes(mempolicy, payloadMaxSize, initial_samples, max_samples);
 }
@@ -67,8 +66,9 @@ DataReaderHistory::DataReaderHistory(
     , resource_limited_qos_(qos.resource_limits())
     , topic_name_(topic.get_name())
     , type_name_(topic.get_type_name())
-    , has_keys_(type->is_compute_key_provided)
+    , has_keys_(type->m_isGetKeyDefined)
     , type_(type.get())
+    , get_key_object_(nullptr)
 {
     if (resource_limited_qos_.max_samples <= 0)
     {
@@ -85,8 +85,10 @@ DataReaderHistory::DataReaderHistory(
         resource_limited_qos_.max_samples_per_instance = std::numeric_limits<int32_t>::max();
     }
 
-    if (type_->is_compute_key_provided)
+    if (type_->m_isGetKeyDefined)
     {
+        get_key_object_ = type_->createData();
+
         if (resource_limited_qos_.max_samples_per_instance < std::numeric_limits<int32_t>::max())
         {
             key_changes_allocation_.maximum = resource_limited_qos_.max_samples_per_instance;
@@ -150,12 +152,12 @@ DataReaderHistory::DataReaderHistory(
                     if (type_ != nullptr)
                     {
                         EPROSIMA_LOG_INFO(SUBSCRIBER, "Getting Key of change with no Key transmitted");
+                        type_->deserialize(&a_change->serializedPayload, get_key_object_);
                         bool is_key_protected = false;
 #if HAVE_SECURITY
                         is_key_protected = mp_reader->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-                        return type_->compute_key(a_change->serializedPayload, a_change->instanceHandle,
-                                       is_key_protected);
+                        return type_->getKey(get_key_object_, &a_change->instanceHandle, is_key_protected);
                     }
 
                     EPROSIMA_LOG_WARNING(SUBSCRIBER, "NO KEY in topic: " << topic_name_
@@ -167,6 +169,10 @@ DataReaderHistory::DataReaderHistory(
 
 DataReaderHistory::~DataReaderHistory()
 {
+    if (type_->m_isGetKeyDefined)
+    {
+        type_->deleteData(get_key_object_);
+    }
 }
 
 bool DataReaderHistory::can_change_be_added_nts(
@@ -222,15 +228,8 @@ bool DataReaderHistory::received_change_keep_all(
 {
     if (!compute_key_for_change_fn_(a_change))
     {
-        if (!a_change->is_fully_assembled())
-        {
-            // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
-            return add_to_reader_history_if_not_full(a_change, rejection_reason);
-        }
-
-        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-        rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
-        return false;
+        // Store the sample temporally only in ReaderHistory. When completed it will be stored in DataReaderHistory too.
+        return add_to_reader_history_if_not_full(a_change, rejection_reason);
     }
 
     bool ret_value = false;
@@ -265,15 +264,8 @@ bool DataReaderHistory::received_change_keep_last(
 {
     if (!compute_key_for_change_fn_(a_change))
     {
-        if (!a_change->is_fully_assembled())
-        {
-            // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
-            return add_to_reader_history_if_not_full(a_change, rejection_reason);
-        }
-
-        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-        rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
-        return false;
+        // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
+        return add_to_reader_history_if_not_full(a_change, rejection_reason);
     }
 
     bool ret_value = false;
@@ -377,10 +369,9 @@ bool DataReaderHistory::get_first_untaken_info(
             WriterProxy* wp = nullptr;
             bool is_future_change = false;
 
-            auto base_reader = rtps::BaseReader::downcast(mp_reader);
-            if (base_reader->begin_sample_access_nts(instance_change, wp, is_future_change))
+            if (mp_reader->begin_sample_access_nts(instance_change, wp, is_future_change))
             {
-                base_reader->end_sample_access_nts(instance_change, wp, false);
+                mp_reader->end_sample_access_nts(instance_change, wp, false);
                 if (is_future_change)
                 {
                     continue;
@@ -388,13 +379,6 @@ bool DataReaderHistory::get_first_untaken_info(
             }
 
             ReadTakeCommand::generate_info(info, *(it.second), instance_change);
-            return true;
-        }
-
-        if (it.second->has_state_notification_sample)
-        {
-            // Generate SampleInfo for state notification sample
-            ReadTakeCommand::generate_instance_info(info, it.first, *(it.second));
             return true;
         }
     }
@@ -690,7 +674,7 @@ void DataReaderHistory::check_and_remove_instance(
 {
     DataReaderInstance* instance = instance_info->second.get();
 
-    if (instance->cache_changes.empty() && (false == instance->has_state_notification_sample))
+    if (instance->cache_changes.empty())
     {
         if (InstanceStateKind::ALIVE_INSTANCE_STATE != instance->instance_state &&
                 instance->alive_writers.empty() &&
@@ -917,26 +901,15 @@ bool DataReaderHistory::update_instance_nts(
     return ret;
 }
 
-bool DataReaderHistory::writer_not_alive(
+void DataReaderHistory::writer_not_alive(
         const GUID_t& writer_guid)
 {
     std::lock_guard<RecursiveTimedMutex> guard(*getMutex());
 
-    bool ret_val = false;
-
     for (auto& it : instances_)
     {
-        bool had_notification_sample = it.second->has_state_notification_sample;
         it.second->writer_removed(counters_, writer_guid);
-        if (it.second->has_state_notification_sample && !had_notification_sample)
-        {
-            // Mark instance as data available
-            data_available_instances_[it.first] = it.second;
-            ret_val = true;
-        }
     }
-
-    return ret_val;
 }
 
 StateFilter DataReaderHistory::get_mask_status() const noexcept

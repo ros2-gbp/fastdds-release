@@ -18,7 +18,7 @@
 
 #include <security/accesscontrol/DistinguishedName.h>
 
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps::security;
 
 namespace test {
 

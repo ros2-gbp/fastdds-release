@@ -16,12 +16,11 @@
  * @file NetworkConfiguration.hpp
  */
 
-#ifndef FASTDDS_RTPS_NETWORK__NETWORKCONFIGURATION_HPP
-#define FASTDDS_RTPS_NETWORK__NETWORKCONFIGURATION_HPP
+#ifndef _RTPS_NETWORK_NETWORKCONFIGURATION_HPP_
+#define _RTPS_NETWORK_NETWORKCONFIGURATION_HPP_
 
-#include <fastdds/rtps/common/Types.hpp>
-
-#define DISC_NETWORK_CONFIGURATION_LISTENING_LOCALHOST_ALL                         (0x0000000F)
+#include <fastdds/rtps/builtin/data/NetworkConfiguration.hpp>
+#include <fastdds/rtps/common/Types.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -39,11 +38,11 @@ namespace network {
  */
 void add_localhost_capability(
         int32_t kind,
-        NetworkConfigSet_t& network_config);
+        fastrtps::rtps::NetworkConfigSet_t& network_config);
 
 } // namespace network
 } // namespace rtps
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_RTPS_NETWORK__NETWORKCONFIGURATION_HPP
+#endif // _RTPS_NETWORK_NETWORKCONFIGURATION_HPP_

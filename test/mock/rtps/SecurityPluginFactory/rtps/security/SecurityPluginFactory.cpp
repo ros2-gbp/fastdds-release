@@ -18,8 +18,8 @@
 
 #include "SecurityPluginFactory.h"
 
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 Authentication* SecurityPluginFactory::auth_plugin_ = nullptr;
 

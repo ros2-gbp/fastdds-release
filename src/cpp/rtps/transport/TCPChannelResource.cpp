@@ -17,8 +17,7 @@
 #include <chrono>
 #include <thread>
 
-#include <fastdds/utils/IPLocator.hpp>
-
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/transport/asio_helpers.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 
@@ -26,6 +25,7 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
+using IPLocator = fastrtps::rtps::IPLocator;
 using Log = fastdds::dds::Log;
 
 /**

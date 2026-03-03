@@ -17,10 +17,11 @@
  */
 
 
-#ifndef FASTDDS_DDS_TOPIC_QOS__TOPICQOS_HPP
-#define FASTDDS_DDS_TOPIC_QOS__TOPICQOS_HPP
+#ifndef _FASTDDS_TOPICQOS_HPP
+#define _FASTDDS_TOPICQOS_HPP
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastrtps/attributes/TopicAttributes.h>
 
 #include <fastdds/dds/log/Log.hpp>
 
@@ -43,7 +44,7 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API TopicQos();
+    RTPS_DllAPI TopicQos();
 
     bool operator ==(
             const TopicQos& b) const
@@ -529,7 +530,7 @@ private:
     //!Resource Limits Qos, implemented in the library.
     ResourceLimitsQosPolicy resource_limits_;
 
-    //!Transport Priority Qos, implemented in the library.
+    //!Transport Priority Qos, NOT implemented in the library.
     TransportPriorityQosPolicy transport_priority_;
 
     //!Lifespan Qos, implemented in the library.
@@ -542,10 +543,10 @@ private:
     DataRepresentationQosPolicy representation_;
 };
 
-FASTDDS_EXPORTED_API extern const TopicQos TOPIC_QOS_DEFAULT;
+RTPS_DllAPI extern const TopicQos TOPIC_QOS_DEFAULT;
 
 } // namespace dds
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_TOPIC_QOS__TOPICQOS_HPP
+#endif // _FASTDDS_TOPICQOS_HPP

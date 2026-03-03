@@ -1,5 +1,5 @@
 names:
-    fastdds:
+    fastrtps:
         cmake-args:
             - "-DCOMPILE_TOOLS=ON"
             - "-DINSTALL_TOOLS=ON"

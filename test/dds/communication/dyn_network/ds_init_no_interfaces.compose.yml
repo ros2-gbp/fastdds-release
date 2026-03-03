@@ -14,9 +14,7 @@
 
 services:
   server-pub-sub:
-    build:
-        context: .
-        dockerfile: cli.Dockerfile
+    build: .
     image: ubuntu-cli:22.04
     volumes:
       - @PROJECT_BINARY_DIR@:@PROJECT_BINARY_DIR@

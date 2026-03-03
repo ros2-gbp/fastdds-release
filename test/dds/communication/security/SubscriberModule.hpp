@@ -25,13 +25,13 @@
 #include <map>
 #include <mutex>
 
-#include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/subscriber/SubscriberListener.hpp>
+#include <fastdds/rtps/participant/ParticipantDiscoveryInfo.h>
 
-#include "types/FixedSizedPubSubTypes.hpp"
-#include "types/HelloWorldPubSubTypes.hpp"
+#include "types/FixedSizedPubSubTypes.h"
+#include "types/HelloWorldPubSubTypes.h"
 
 namespace eprosima {
 namespace fastdds {
@@ -60,14 +60,12 @@ public:
 
     void on_participant_discovery(
             DomainParticipant* /*participant*/,
-            fastdds::rtps::ParticipantDiscoveryStatus status,
-            const ParticipantBuiltinTopicData& info,
-            bool& should_be_ignored) override;
+            fastrtps::rtps::ParticipantDiscoveryInfo&& info) override;
 
 #if HAVE_SECURITY
     void onParticipantAuthentication(
             DomainParticipant* /*participant*/,
-            fastdds::rtps::ParticipantAuthenticationInfo&& info) override;
+            fastrtps::rtps::ParticipantAuthenticationInfo&& info) override;
 #endif // if HAVE_SECURITY
 
     void on_subscription_matched(
@@ -102,7 +100,7 @@ private:
     std::condition_variable cv_;
     const uint32_t publishers_ = 0;
     const uint32_t max_number_samples_ = 0;
-    std::map<eprosima::fastdds::rtps::GUID_t, uint32_t> number_samples_;
+    std::map<eprosima::fastrtps::rtps::GUID_t, uint32_t> number_samples_;
     bool fixed_type_ = false;
     bool zero_copy_ = false;
     std::atomic_bool run_{true};

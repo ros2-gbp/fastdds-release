@@ -17,15 +17,15 @@
  *
  */
 
-#ifndef FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
-#define FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#ifndef FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#define FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
 
 #include <assert.h>
 #include <memory>
 #include <type_traits>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 
 /**
  * A queue with a preallocated fixed size.
@@ -684,7 +684,7 @@ protected:
 
 };
 
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
-#endif /* FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */
+#endif /* FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */

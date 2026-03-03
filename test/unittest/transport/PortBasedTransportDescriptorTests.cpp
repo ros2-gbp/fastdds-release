@@ -16,7 +16,7 @@
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
 #include <fastdds/rtps/transport/PortBasedTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/rtps/transport/TransportInterface.h>
 
 using namespace eprosima::fastdds::rtps;
 

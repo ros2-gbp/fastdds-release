@@ -18,10 +18,10 @@
 #include <thread>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastrtps/utils/DBQueue.h>
 
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
-#include <utils/DBQueue.hpp>
 #include <utils/SystemInfo.hpp>
 #include <utils/thread.hpp>
 #include <utils/threading.hpp>
@@ -94,7 +94,7 @@ public:
             const std::string& timestamp,
             const Locator& from,
             const Locator& to,
-            const octet* buf,
+            const fastrtps::rtps::octet* buf,
             const uint32_t len)
     {
         try
@@ -113,7 +113,7 @@ public:
                 fprintf(f_, "000000 45 00 %02x %02x %02x %02x 00 00 11 11 00 00\n", (ipSize >> 8) & 0xFF, ipSize & 0xFF,
                         (dump_id_ >> 8) & 0xFF, dump_id_ & 0xFF);
 
-                if (from.kind == 1 && IsAddressDefined(from))
+                if (from.kind == 1 && fastrtps::rtps::IsAddressDefined(from))
                 {
                     fprintf(f_, "00000c %02x %02x %02x %02x\n", from.address[12], from.address[13], from.address[14],
                             from.address[15]);
@@ -127,7 +127,7 @@ public:
                     fprintf(f_, "00000c %02x %02x %02x %02x\n", addr[0], addr[1], addr[2], addr[3]);
                 }
 
-                if (to.kind == 1 && IsAddressDefined(to))
+                if (to.kind == 1 && fastrtps::rtps::IsAddressDefined(to))
                 {
                     fprintf(f_, "000010 %02x %02x %02x %02x\n", to.address[12], to.address[13], to.address[14],
                             to.address[15]);
@@ -334,7 +334,7 @@ private:
 
     struct Resources
     {
-        DBQueue<typename TPacketConsumer::Pkt> logs;
+        eprosima::fastrtps::DBQueue<typename TPacketConsumer::Pkt> logs;
         std::vector<std::unique_ptr<SHMPacketFileConsumer>> consumers;
         eprosima::thread logging_thread;
 

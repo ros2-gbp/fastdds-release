@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps;
 
 // Power of two has been chosen to allow for ASSERT_EQ on capacity, as
 // some implementations of std::vector would enforce power of two capacities

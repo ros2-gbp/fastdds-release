@@ -51,6 +51,10 @@ Tier 1 compilers and minimum supported versions:
 * Clang 16
 * MSVC v142 (Visual Studio 2019)
 
+Tier 2 compilers:
+
+* MSVC v141 (Visual Studio 2017)
+
 [^d]: Using GCC's Thread Sanitizer flags in conjunction with GCC 11 to analyze Fast DDS threaded behavior produces
 false positives on some uninstrumented synchronization calls.
 Fast DDS's Thread Sanitizer Github Action uses GCC 12 for threading issues testing.

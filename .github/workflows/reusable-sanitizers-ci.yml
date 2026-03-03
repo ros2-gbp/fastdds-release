@@ -43,7 +43,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: '2.3.x'
+        default: '2.2.x'
       discovery_server_ref:
         description: >
           Branch or tag of Discovery Server repository (https://github.com/eProsima/Discovery-Server)
@@ -66,7 +66,7 @@ jobs:
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
-          path: src/fastdds
+          path: src/fastrtps
           submodules: true
           ref: ${{ inputs.fastdds_ref }}
 
@@ -116,27 +116,27 @@ jobs:
       - name: Fetch Fast DDS dependencies
         uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/fastdds.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Show .meta file
         id: show_meta
         run: |
-          cat ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          cat ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
 
       - name: Colcon build
         continue-on-error: false
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
           cmake_args: ${{ inputs.cmake_args }}
           cmake_args_default: ''
@@ -185,7 +185,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas psutil
+          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas
 
       - name: Set up hosts file for DNS testing
         run: |
@@ -208,16 +208,16 @@ jobs:
       - name: Show .meta file
         id: show_meta
         run: |
-          cat ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          cat ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
 
       - name: Colcon build
         continue-on-error: false
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
           cmake_args: ${{ inputs.cmake_args }}
-          cmake_args_default: -DEPROSIMA_BUILD_TESTS=ON -DRTPS_API_TESTS=ON -DFASTDDS_PIM_API_TESTS=ON -DPERFORMANCE_TESTS=ON
+          cmake_args_default: -DEPROSIMA_BUILD_TESTS=ON -DRTPS_API_TESTS=ON -DFASTRTPS_API_TESTS=ON -DFASTDDS_PIM_API_TESTS=ON -DPERFORMANCE_TESTS=ON
           cmake_build_type: 'Debug'
           workspace: ${{ github.workspace }}
           workspace_dependencies: ''
@@ -232,20 +232,20 @@ jobs:
           colcon_test_args_default: '--event-handlers=console_direct+ --return-code-on-test-failure'
           ctest_args: ${{ inputs.ctest_args }}
           ctest_args_default: '--timeout 300 --label-exclude "xfail"'
-          packages_names: fastdds
+          packages_names: fastrtps
           workspace: ${{ github.workspace }}
           workspace_dependencies: ''
           test_report_artifact: ${{ format('test_report_{0}_{1}', inputs.label, github.job) }}
 
       - name: Report sanitizer errors
         run: |
-          bash src/fastdds/.github/workflows/utils/specific_errors_filter.sh \
+          bash src/fastrtps/.github/workflows/utils/specific_errors_filter.sh \
             "==ERROR:" \
-            log/latest_test/fastdds/stdout_stderr.log \
+            log/latest_test/fastrtps/stdout_stderr.log \
             _tmp_specific_error_file.log
 
-          python3 src/fastdds/.github/workflows/utils/log_parser.py \
-            --log-file log/latest_test/fastdds/stdout_stderr.log \
+          python3 src/fastrtps/.github/workflows/utils/log_parser.py \
+            --log-file log/latest_test/fastrtps/stdout_stderr.log \
             --specific-error-file _tmp_specific_error_file.log \
             --output-file $GITHUB_STEP_SUMMARY  \
             --sanitizer asan
@@ -285,7 +285,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas psutil
+          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -310,13 +310,13 @@ jobs:
       - name: Show .meta file
         id: show_meta
         run: |
-          cat ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          cat ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
 
       - name: Colcon build
         continue-on-error: false
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/asan.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
           cmake_args: ${{ inputs.cmake_args }}
           cmake_args_default: ''
@@ -341,12 +341,12 @@ jobs:
 
       - name: Report sanitizer errors
         run: |
-          bash src/fastdds/.github/workflows/utils/specific_errors_filter.sh \
+          bash src/fastrtps/.github/workflows/utils/specific_errors_filter.sh \
             "==ERROR:" \
             log/latest_test/discovery-server/stdout_stderr.log \
             _tmp_specific_error_file.log
 
-          python3 src/fastdds/.github/workflows/utils/log_parser.py \
+          python3 src/fastrtps/.github/workflows/utils/log_parser.py \
             --log-file log/latest_test/discovery-server/stdout_stderr.log \
             --specific-error-file _tmp_specific_error_file.log \
             --output-file $GITHUB_STEP_SUMMARY \
@@ -368,7 +368,7 @@ jobs:
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
-          path: src/fastdds
+          path: src/fastrtps
           submodules: true
           ref: ${{ inputs.fastdds_ref }}
 
@@ -393,7 +393,7 @@ jobs:
       - name: Install Python dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
         with:
-          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas psutil
+          packages: vcstool setuptools gcovr tomark xmltodict jsondiff pandas
 
       - name: Setup CCache
         uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
@@ -418,7 +418,7 @@ jobs:
       - name: Fetch Fast DDS dependencies
         uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/fastdds.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
           destination_workspace: src
           skip_existing: 'true'
 
@@ -437,20 +437,20 @@ jobs:
       - name: Fetch Fast DDS CI dependencies
         uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
+          vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Show .meta file
         id: show_meta
         run: |
-          cat ${{ github.workspace }}/src/fastdds/.github/workflows/config/tsan.meta
+          cat ${{ github.workspace }}/src/fastrtps/.github/workflows/config/tsan.meta
 
       - name: Colcon build
         continue-on-error: false
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/tsan.meta
+          colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/tsan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
           cmake_args: ${{ inputs.cmake_args }}
           cmake_args_default: ''
@@ -468,7 +468,7 @@ jobs:
           colcon_test_args_default: '--event-handlers=console_direct+ --return-code-on-test-failure'
           ctest_args: ${{ inputs.ctest_args }}
           ctest_args_default: '--timeout 300 --label-exclude "xfail" -V -E DDSSQLFilterValueTests'
-          packages_names: fastdds
+          packages_names: fastrtps
           workspace: ${{ github.workspace }}
           workspace_dependencies: ''
           test_report_artifact: ${{ format('test_report_{0}_{1}', inputs.label, github.job) }}
@@ -481,7 +481,7 @@ jobs:
           # Create a dir for the exports
           $exports = New-Item -ItemType Directory -Path ./exports
           # Move to the reports dir
-          pushd ./log/latest_test/fastdds
+          pushd ./log/latest_test/fastrtps
           # Make sure the NuGet provider exists
           if (-not (Get-PackageProvider -ListAvailable | Where-Object Name -eq 'NuGet')) {
             Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force

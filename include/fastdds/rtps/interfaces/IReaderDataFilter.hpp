@@ -17,11 +17,11 @@
  *
  */
 
-#ifndef FASTDDS_RTPS_INTERFACES__IREADERDATAFILTER_HPP
-#define FASTDDS_RTPS_INTERFACES__IREADERDATAFILTER_HPP
+#ifndef _FASTDDS_RTPS_IREADERDATAFILTER_HPP_
+#define _FASTDDS_RTPS_IREADERDATAFILTER_HPP_
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/Guid.h>
 
 
 namespace eprosima {
@@ -44,12 +44,12 @@ public:
      * @return true if relevant, false otherwise.
      */
     virtual bool is_relevant(
-            const fastdds::rtps::CacheChange_t& change,
-            const fastdds::rtps::GUID_t& reader_guid) const = 0;
+            const fastrtps::rtps::CacheChange_t& change,
+            const fastrtps::rtps::GUID_t& reader_guid) const = 0;
 };
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastdds */
+} /* namespace eprosima */
 
-#endif // FASTDDS_RTPS_INTERFACES__IREADERDATAFILTER_HPP
+#endif /* _FASTDDS_RTPS_IREADERDATAFILTER_HPP_ */

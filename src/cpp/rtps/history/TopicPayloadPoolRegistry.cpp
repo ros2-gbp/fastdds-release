@@ -25,7 +25,7 @@
 #include <rtps/history/TopicPayloadPoolRegistry_impl/TopicPayloadPoolRegistry.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 const TopicPayloadPoolRegistry::reference& TopicPayloadPoolRegistry::instance()
@@ -41,5 +41,5 @@ std::shared_ptr<ITopicPayloadPool> TopicPayloadPoolRegistry::get(
 }
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima

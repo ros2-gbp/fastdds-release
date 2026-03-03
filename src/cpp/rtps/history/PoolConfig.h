@@ -19,11 +19,11 @@
 #ifndef RTPS_HISTORY_POOLCONFIG_H_
 #define RTPS_HISTORY_POOLCONFIG_H_
 
-#include <fastdds/rtps/attributes/HistoryAttributes.hpp>
-#include <fastdds/rtps/attributes/ResourceManagement.hpp>
+#include <fastdds/rtps/attributes/HistoryAttributes.h>
+#include <fastdds/rtps/resources/ResourceManagement.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 struct BasicPoolConfig
@@ -86,7 +86,7 @@ struct PoolConfig : public BasicPoolConfig
 };
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 
 #endif /* RTPS_HISTORY_POOLCONFIG_H_ */
