@@ -57,9 +57,12 @@ defaults:
 
 jobs:
   asan_fastdds_build:
-    if: ${{ inputs.run_asan_fastdds == true }}
+    if: ${{ inputs.run_asan_fastdds == true || inputs.run_asan_discovery_server == true }}
     runs-on: ubuntu-22.04
     steps:
+      - name: Free disk space
+        uses: eProsima/eProsima-CI/ubuntu/free_disk_space@v0
+
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
@@ -111,14 +114,14 @@ jobs:
           ref: ${{ steps.get_fastcdr_branch.outputs.deduced_branch }}
 
       - name: Fetch Fast DDS dependencies
-        uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
+        uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
           vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
           destination_workspace: src
           skip_existing: 'true'
 
       - name: Fetch Fast DDS CI dependencies
-        uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
+        uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
           vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.repos
           destination_workspace: src
@@ -131,7 +134,7 @@ jobs:
 
       - name: Colcon build
         continue-on-error: false
-        uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
@@ -148,9 +151,13 @@ jobs:
           path: ${{ github.workspace }}
 
   asan_fastdds_test:
+    if: ${{ inputs.run_asan_fastdds == true }}
     needs: asan_fastdds_build
     runs-on: ubuntu-22.04
     steps:
+      - name: Free disk space
+        uses: eProsima/eProsima-CI/ubuntu/free_disk_space@v0
+
       - name: Download build artifacts
         uses: eProsima/eProsima-CI/external/download-artifact@v0
         with:
@@ -205,7 +212,7 @@ jobs:
 
       - name: Colcon build
         continue-on-error: false
-        uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
@@ -216,11 +223,11 @@ jobs:
           workspace_dependencies: ''
 
       - name: Colcon test
-        if: ${{ inputs.run_asan_fastdds == true }}
         id: test
         continue-on-error: true
-        uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_test@v0
         with:
+          colcon_args_default: ''
           colcon_test_args: ${{ inputs.colcon_test_args }}
           colcon_test_args_default: '--event-handlers=console_direct+ --return-code-on-test-failure'
           ctest_args: ${{ inputs.ctest_args }}
@@ -231,7 +238,6 @@ jobs:
           test_report_artifact: ${{ format('test_report_{0}_{1}', inputs.label, github.job) }}
 
       - name: Report sanitizer errors
-        if: ${{ inputs.run_asan_fastdds == true }}
         run: |
           bash src/fastrtps/.github/workflows/utils/specific_errors_filter.sh \
             "==ERROR:" \
@@ -249,6 +255,9 @@ jobs:
     needs: asan_fastdds_build
     runs-on: ubuntu-22.04
     steps:
+      - name: Free disk space
+        uses: eProsima/eProsima-CI/ubuntu/free_disk_space@v0
+
       - name: Download build artifacts
         uses: eProsima/eProsima-CI/external/download-artifact@v0
         with:
@@ -305,7 +314,7 @@ jobs:
 
       - name: Colcon build
         continue-on-error: false
-        uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/asan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
@@ -316,11 +325,11 @@ jobs:
           workspace_dependencies: ''
 
       - name: Colcon test
-        if: ${{ inputs.run_asan_fastdds == true }}
         id: test
         continue-on-error: true
-        uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_test@v0
         with:
+          colcon_args_default: ''
           colcon_test_args: ${{ inputs.colcon_test_args }}
           colcon_test_args_default: '--event-handlers=console_direct+ --return-code-on-test-failure'
           ctest_args: ${{ inputs.ctest_args }}
@@ -331,7 +340,6 @@ jobs:
           test_report_artifact: ${{ format('test_report_{0}_{1}', inputs.label, github.job) }}
 
       - name: Report sanitizer errors
-        if: ${{ inputs.run_asan_discovery_server == true }}
         run: |
           bash src/fastrtps/.github/workflows/utils/specific_errors_filter.sh \
             "==ERROR:" \
@@ -354,6 +362,9 @@ jobs:
       CC: gcc-12
       CXX: g++-12
     steps:
+      - name: Free disk space
+        uses: eProsima/eProsima-CI/ubuntu/free_disk_space@v0
+
       - name: Sync eProsima/Fast-DDS repository
         uses: eProsima/eProsima-CI/external/checkout@v0
         with:
@@ -405,7 +416,7 @@ jobs:
           ref: ${{ steps.get_fastcdr_branch.outputs.deduced_branch }}
 
       - name: Fetch Fast DDS dependencies
-        uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
+        uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
           vcs_repos_file: ${{ github.workspace }}/src/fastrtps/fastrtps.repos
           destination_workspace: src
@@ -424,7 +435,7 @@ jobs:
           sudo echo "ff1e::ffff:efff:1 acme.org.test" | sudo tee -a /etc/hosts
 
       - name: Fetch Fast DDS CI dependencies
-        uses: eProsima/eProsima-CI/multiplatform/vcs_import@v0
+        uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
         with:
           vcs_repos_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/fastdds_test.repos
           destination_workspace: src
@@ -437,22 +448,22 @@ jobs:
 
       - name: Colcon build
         continue-on-error: false
-        uses: eProsima/eProsima-CI/multiplatform/colcon_build@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastrtps/.github/workflows/config/tsan.meta
           colcon_build_args: ${{ inputs.colcon_build_args }}
           cmake_args: ${{ inputs.cmake_args }}
           cmake_args_default: ''
-          cmake_build_type: 'Debug'
+          cmake_build_type: 'RelWithDebInfo'
           workspace: ${{ github.workspace }}
           workspace_dependencies: ''
 
       - name: Colcon test
-        if: ${{ inputs.run_asan_fastdds == true }}
         id: test
         continue-on-error: true
-        uses: eProsima/eProsima-CI/multiplatform/colcon_test@v0
+        uses: eProsima/eProsima-CI/ubuntu/colcon_test@v0
         with:
+          colcon_args_default: ''
           colcon_test_args: ${{ inputs.colcon_test_args }}
           colcon_test_args_default: '--event-handlers=console_direct+ --return-code-on-test-failure'
           ctest_args: ${{ inputs.ctest_args }}
@@ -471,6 +482,20 @@ jobs:
           $exports = New-Item -ItemType Directory -Path ./exports
           # Move to the reports dir
           pushd ./log/latest_test/fastrtps
+          # Make sure the NuGet provider exists
+          if (-not (Get-PackageProvider -ListAvailable | Where-Object Name -eq 'NuGet')) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+          }
+          # (Re)register & trust PSGallery if needed
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Name 'PSGallery' `
+              -SourceLocation 'https://www.powershellgallery.com/api/v2' `
+              -ScriptSourceLocation 'https://www.powershellgallery.com/api/v2' `
+              -PackageManagementProvider 'NuGet' `
+              -InstallationPolicy Trusted
+          } else {
+            Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+          }
           # Install the report parser module
           Find-Module -Repository PSGallery -Name SanReportParser | Install-Module -Scope CurrentUser -Force
           # Parse the report files

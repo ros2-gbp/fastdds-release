@@ -66,7 +66,7 @@ TCPChannelResource::TCPChannelResource(
     , parent_(parent)
     , locator_()
     , waiting_for_keep_alive_(false)
-    , connection_status_(eConnectionStatus::eConnected)
+    , connection_status_(eConnectionStatus::eDisconnected)
     , tcp_connection_type_(TCPConnectionType::TCP_ACCEPT_TYPE)
 {
 }
@@ -363,9 +363,10 @@ bool TCPChannelResource::check_socket_send_buffer(
 
 
     size_t future_queue_size = size_t(bytesInSendQueue) + msg_size;
-    // TCP actually allocates twice the size of the buffer requested.
-    if (future_queue_size > size_t(2 * parent_->configuration()->sendBufferSize))
+    if (future_queue_size > size_t(parent_->configuration()->sendBufferSize))
     {
+        // NOTE: TCP actually allocates about twice the size of the buffer requested, still we use the user-provided
+        // value as threshold to avoid blocking if the actual allocated space falls below our estimation
         return false;
     }
     return true;
@@ -375,6 +376,9 @@ void TCPChannelResource::set_socket_options(
         asio::basic_socket<asio::ip::tcp>& socket,
         const TCPTransportDescriptor* options)
 {
+    // Options setting should be done before connection is established
+    assert(!connected());
+
     uint32_t minimum_value = options->maxMessageSize;
 
     // Set the send buffer size
