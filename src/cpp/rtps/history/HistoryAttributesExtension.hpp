@@ -61,7 +61,7 @@ static constexpr int32_t get_min_max_samples(
         int32_t a,
         int32_t b)
 {
-    return (a > 0 && b > 0) ? (a < b ? a : b) : (a > 0 ? a : b);
+    return (0 < a && 0 < b) ? (a < b ? a : b) : (0 < a ? a : b);
 }
 
 } // namespace rtps

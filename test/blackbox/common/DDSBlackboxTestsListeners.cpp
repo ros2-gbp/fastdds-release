@@ -56,7 +56,8 @@ public:
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery =
                         eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -74,7 +75,8 @@ public:
         {
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -3710,8 +3712,7 @@ TEST(DDSStatus, keyed_sample_discard_by_unknown_instance)
                 std::lock_guard<std::mutex> lock(test_mtx);
                 test_status.total_count = status.total_count;
                 test_status.total_count_change += status.total_count_change;
-                FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-                ASSERT_EQ(eprosima::fastdds::dds::REJECTED_BY_INSTANCES_LIMIT, status.last_reason);
+                ASSERT_EQ(eprosima::fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE, status.last_reason);
                 test_status.last_reason = status.last_reason;
                 test_status.last_instance_handle = status.last_instance_handle;
                 test_cv.notify_one();
@@ -3800,8 +3801,7 @@ TEST(DDSStatus, keyed_sample_discard_by_unknown_instance)
     ASSERT_EQ(1u, test_status.total_count);
     ASSERT_EQ(1u, test_status.total_count_change);
     // The rejection reason and instance handle are as expected
-    FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-    ASSERT_EQ(eprosima::fastdds::dds::REJECTED_BY_INSTANCES_LIMIT, test_status.last_reason);
+    ASSERT_EQ(eprosima::fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE, test_status.last_reason);
     ASSERT_EQ(c_InstanceHandle_Unknown, test_status.last_instance_handle);
 }
 
