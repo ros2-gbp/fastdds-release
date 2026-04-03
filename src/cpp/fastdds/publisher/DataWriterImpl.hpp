@@ -446,10 +446,21 @@ public:
      * @return RETCODE_ILLEGAL_OPERATION if this entity is enabled.
      * @return RETCODE_PRECONDITION_NOT_MET if the entity does not belong to the same participant.
      * @return RETCODE_BAD_PARAMETER if the provided GUID is unknown
+     * @return RETCODE_UNSUPPORTED if the implementation does not support RPC over DDS
      * or the pointer is not valid.
      */
     ReturnCode_t set_related_datareader(
             const DataReader* related_reader);
+
+    /**
+     * @brief Set the type support context to be used when serializing data for this DataWriter.
+     *
+     * @param context Shared pointer to the type support context to be used for serialization.
+     *
+     * @pre The DataWriter must not be enabled.
+     */
+    void set_type_support_context(
+            const std::shared_ptr<TopicDataType::Context>& context);
 
 protected:
 
@@ -574,8 +585,7 @@ protected:
     mutable std::mutex filters_mtx_;
     std::shared_ptr<IContentFilter> sample_prefilter_;
 
-    //RPC over DDS
-    rtps::GUID_t related_datareader_key_{rtps::c_Guid_Unknown};
+    std::shared_ptr<TopicDataType::Context> type_support_context_ {};
 
     ReturnCode_t check_write_preconditions(
             const void* const data,

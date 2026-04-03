@@ -504,15 +504,17 @@ void DiscoveryDataBase::process_pdp_data_queue()
         if (data_queue_info.change()->kind == eprosima::fastdds::rtps::ALIVE)
         {
             // Update participants map
-            EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "DATA(p) of entity " << data_queue_info.change()->instanceHandle <<
-                    " received from: " << data_queue_info.change()->writerGUID);
+            EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "DATA(p) of entity " << data_queue_info.change()->instanceHandle
+                                                                       << " received from: "
+                                                                       << data_queue_info.change()->writerGUID);
             create_participant_from_change_(data_queue_info.change(), data_queue_info.participant_change_data());
         }
         // If the change is a DATA(Up)
         else
         {
-            EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "DATA(Up) of entity " << data_queue_info.change()->instanceHandle <<
-                    " received from: " << data_queue_info.change()->writerGUID);
+            EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "DATA(Up) of entity " << data_queue_info.change()->instanceHandle
+                                                                        << " received from: "
+                                                                        << data_queue_info.change()->writerGUID);
             process_dispose_participant_(data_queue_info.change());
         }
     }
@@ -604,7 +606,7 @@ void DiscoveryDataBase::create_participant_from_change_(
 
 void DiscoveryDataBase::match_new_server_(
         eprosima::fastdds::rtps::GuidPrefix_t& participant_prefix,
-        bool is_superclient)
+        bool is_client)
 {
     // Send Our DATA(p) to the new participant.
     // If this is not done, our data could be skipped afterwards because of a gap sent in newer DATA(p)s,
@@ -613,7 +615,7 @@ void DiscoveryDataBase::match_new_server_(
     assert(our_data_it != participants_.end());
     add_pdp_to_send_(our_data_it->second.change());
 
-    if (!is_superclient)
+    if (!is_client)
     {
         // To obtain a mesh topology with servers, we need to:
         // - Make all known servers relevant to the new server
@@ -622,7 +624,7 @@ void DiscoveryDataBase::match_new_server_(
         // - Send Data(p) of the new server to all other servers
         for (auto& part : participants_)
         {
-            if (part.first != server_guid_prefix_ && !part.second.is_client() && !part.second.is_superclient())
+            if (part.first != server_guid_prefix_ && !part.second.is_client())
             {
                 if (part.first == participant_prefix)
                 {
@@ -722,8 +724,7 @@ bool DiscoveryDataBase::participant_data_has_changed_(
         const DiscoveryParticipantChangeData& new_change_data)
 {
     return !(participant_info.is_local() == new_change_data.is_local() &&
-           participant_info.is_client() == new_change_data.is_client() &&
-           participant_info.is_superclient() == new_change_data.is_superclient());
+           participant_info.is_client() == new_change_data.is_client());
 }
 
 void DiscoveryDataBase::create_new_participant_from_change_(
@@ -762,11 +763,10 @@ void DiscoveryDataBase::create_new_participant_from_change_(
         }
 
         // If it is local and server we have to create virtual endpoints, except for our own server
-        if (change_guid.guidPrefix != server_guid_prefix_ &&
-                !ret.first->second.is_client() && ret.first->second.is_local())
+        if (change_guid.guidPrefix != server_guid_prefix_ && ret.first->second.is_local())
         {
             // Match new server and create virtual endpoints
-            match_new_server_(change_guid.guidPrefix, change_data.is_superclient());
+            match_new_server_(change_guid.guidPrefix, change_data.is_client());
         }
     }
     else
@@ -809,7 +809,7 @@ void DiscoveryDataBase::update_participant_from_change_(
             // Match new server and create virtual endpoints
             // NOTE: match after having updated the change, so virtual endpoints are not discarded for having
             // an associated unalive participant
-            match_new_server_(change_guid.guidPrefix, change_data.is_superclient());
+            match_new_server_(change_guid.guidPrefix, change_data.is_client());
         }
 
         // Treat as a new participant found
@@ -838,7 +838,7 @@ void DiscoveryDataBase::update_participant_from_change_(
         if (!change_data.is_client())
         {
             // NOTE: match after having updated the change in order to send the new Data(P)
-            match_new_server_(change_guid.guidPrefix, change_data.is_superclient());
+            match_new_server_(change_guid.guidPrefix, change_data.is_client());
         }
 
         // Treat as a new participant found
@@ -1199,113 +1199,58 @@ void DiscoveryDataBase::match_writer_reader_(
     }
     DiscoveryParticipantInfo& reader_participant_info = p_rit->second;
 
-    // virtual              - needs info and give none
-    // local                - needs info and give info
-    // external             - needs none and give info
-    // writer needs info    = add writer participant in reader ack list
-    // writer give info     = add reader participant in writer ack list
-
-    // TODO reduce number of cases. This is more visual, but can be reduce joining them
-    if (writer_info.is_virtual())
+    // Virtual endpoints do not exchange info
+    if (writer_info.is_virtual() && reader_info.is_virtual())
     {
-        // Writer virtual
+        return;
+    }
 
-        // If reader is virtual OR not local, do not exchange info. Servers do not redirect Data(p) of remote clients.
-        // Otherwise, writer needs all the info from this endpoint
-        if (!reader_info.is_virtual() &&
-                (reader_participant_info.is_local() || writer_participant_info.is_superclient()))
+    // Classify writer and reader types
+    const bool writer_is_virtual = writer_info.is_virtual();
+    const bool writer_is_local_not_virtual = !writer_is_virtual && writer_participant_info.is_local();
+    const bool writer_is_external_not_virtual = !writer_is_virtual && !writer_is_local_not_virtual;
+
+    const bool reader_is_virtual = reader_info.is_virtual();
+    const bool reader_is_local_not_virtual = !reader_is_virtual && reader_participant_info.is_local();
+    const bool reader_is_external_not_virtual = !reader_is_virtual && !reader_is_local_not_virtual;
+
+    // Determine info exchange based on endpoint types:
+    // - Local endpoints both need and give info
+    // - Virtual endpoints only need info (never give)
+    // - External endpoints only give info (never need)
+    // Additionally, servers do not redirect between remote clients,
+    // so external endpoints only exchange with local endpoints
+    const bool writer_needs_info = writer_is_virtual || writer_is_local_not_virtual;
+    const bool writer_gives_info = writer_is_local_not_virtual ||
+            (writer_is_external_not_virtual && reader_is_local_not_virtual);
+
+    const bool reader_needs_info = reader_is_virtual || reader_is_local_not_virtual;
+    const bool reader_gives_info = reader_is_local_not_virtual ||
+            (reader_is_external_not_virtual && writer_is_local_not_virtual);
+
+    // Writer needs info from reader: add writer's guid prefix to reader's ack lists
+    if (writer_needs_info && reader_gives_info)
+    {
+        if (!reader_participant_info.is_relevant_participant(writer_guid.guidPrefix))
         {
-            // Only if they do not have the info yet
-            if (!reader_participant_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_participant_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
-
-            if (!reader_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
+            reader_participant_info.add_or_update_ack_participant(writer_guid.guidPrefix);
+        }
+        if (!reader_info.is_relevant_participant(writer_guid.guidPrefix))
+        {
+            reader_info.add_or_update_ack_participant(writer_guid.guidPrefix);
         }
     }
-    else if (writer_participant_info.is_local())
+
+    // Reader needs info from writer: add reader's guid prefix to writer's ack lists
+    if (reader_needs_info && writer_gives_info)
     {
-        // Writer local
-
-        if (reader_info.is_virtual())
+        if (!writer_participant_info.is_relevant_participant(reader_guid.guidPrefix))
         {
-            // Reader virtual
-            // Writer gives info to reader
-            // Only if they do not have the info yet
-            if (!writer_participant_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_participant_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
-
-            if (!writer_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
+            writer_participant_info.add_or_update_ack_participant(reader_guid.guidPrefix);
         }
-        else if (reader_participant_info.is_local())
+        if (!writer_info.is_relevant_participant(reader_guid.guidPrefix))
         {
-            // Reader local
-            // Both exchange info
-            // Only if they do not have the info yet
-            if (!writer_participant_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_participant_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
-
-            if (!writer_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
-
-            if (!reader_participant_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_participant_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
-
-            if (!reader_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
-        }
-        else
-        {
-            // Reader external
-            // Reader gives info to writer
-            // Only if they do not have the info yet
-            if (!reader_participant_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_participant_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
-
-            if (!reader_info.is_relevant_participant(writer_guid.guidPrefix))
-            {
-                reader_info.add_or_update_ack_participant(writer_guid.guidPrefix);
-            }
-        }
-    }
-    else
-    {
-        // Writer external
-
-        // If reader is external OR virtual, do not exchange info. Servers do not redirect Data(p) of remote clients.
-        // Otherwise, reader needs all the info from this endpoint
-        if (reader_participant_info.is_local() &&
-                (!reader_info.is_virtual() || reader_participant_info.is_superclient()))
-        {
-            // Only if they do not have the info yet
-            if (!writer_participant_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_participant_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
-
-            if (!writer_info.is_relevant_participant(reader_guid.guidPrefix))
-            {
-                writer_info.add_or_update_ack_participant(reader_guid.guidPrefix);
-            }
+            writer_info.add_or_update_ack_participant(reader_guid.guidPrefix);
         }
     }
 }
@@ -1860,8 +1805,10 @@ void DiscoveryDataBase::AckedFunctor::operator () (
                     auto remote_server_it = db_->participants_.find(*it);
                     if (remote_server_it == db_->participants_.end())
                     {
-                        EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "Change " << change_->instanceHandle <<
-                                "check as acked for " << reader_proxy->guid() << " as it has not answered pinging yet");
+                        EPROSIMA_LOG_INFO(DISCOVERY_DATABASE, "Change " << change_->instanceHandle
+                                                                        << "check as acked for "
+                                                                        << reader_proxy->guid()
+                                                                        << " as it has not answered pinging yet");
                         return;
                     }
 
@@ -2629,8 +2576,8 @@ bool DiscoveryDataBase::from_json(
             }
 
             EPROSIMA_LOG_INFO(DISCOVERY_DATABASE,
-                    "Writer " << guid_aux << " created with instance handle " <<
-                    wit.first->second.change()->instanceHandle);
+                    "Writer " << guid_aux << " created with instance handle "
+                              << wit.first->second.change()->instanceHandle);
 
             if (change->kind != fastdds::rtps::ALIVE)
             {
