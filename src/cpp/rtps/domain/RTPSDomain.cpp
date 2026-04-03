@@ -29,6 +29,7 @@
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/LibrarySettings.hpp>
+#include <fastdds/log/LogResources.hpp>
 #include <fastdds/rtps/history/WriterHistory.hpp>
 #include <fastdds/rtps/participant/RTPSParticipant.hpp>
 #include <fastdds/rtps/reader/RTPSReader.hpp>
@@ -39,12 +40,13 @@
 
 #include <rtps/attributes/ServerAttributes.hpp>
 #include <rtps/common/GuidUtils.hpp>
+#include <rtps/domain/IDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <rtps/network/utils/external_locators.hpp>
+#include <rtps/participant/rtps_participant_types.hpp>
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/reader/BaseReader.hpp>
 #include <rtps/reader/LocalReaderPointer.hpp>
-#include <rtps/domain/IDomainImpl.hpp>
-#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <rtps/transport/TCPv4Transport.h>
 #include <rtps/transport/TCPv6Transport.h>
 #include <rtps/transport/test_UDPv4Transport.h>
@@ -177,6 +179,11 @@ bool RTPSDomain::removeRTPSParticipant(
     return false;
 }
 
+RTPSDomainImpl::RTPSDomainImpl()
+    : log_resources_(dds::detail::get_log_resources())
+{
+}
+
 void RTPSDomainImpl::stop_all()
 {
     std::unique_lock<std::mutex> lock(m_mutex);
@@ -268,7 +275,7 @@ RTPSParticipant* RTPSDomainImpl::create_participant(
     // would ensure builtin endpoints are able to differentiate between a communication loss and a participant recovery
     if (PParam.prefix != c_GuidPrefix_Unknown)
     {
-        pimpl = new RTPSParticipantImpl(domain_id, PParam, PParam.prefix, guidP, p, listen);
+        pimpl = new RTPSParticipantImplType(domain_id, PParam, PParam.prefix, guidP, p, listen);
     }
     else
     {
@@ -277,7 +284,7 @@ RTPSParticipant* RTPSDomainImpl::create_participant(
             EPROSIMA_LOG_ERROR(RTPS_PARTICIPANT, "Specifying a GUID prefix is mandatory for BACKUP Discovery Servers.");
             return nullptr;
         }
-        pimpl = new RTPSParticipantImpl(domain_id, PParam, guidP, p, listen);
+        pimpl = new RTPSParticipantImplType(domain_id, PParam, guidP, p, listen);
     }
 
     // Check implementation was correctly initialized
@@ -734,7 +741,8 @@ bool RTPSDomainImpl::client_server_environment_attributes_override(
         else
         {
             // There is already a profile with the given name. Do not overwrite it
-            EPROSIMA_LOG_WARNING(RTPS_DOMAIN, "An XML profile for 'service' was found. When using ROS2_EASY_MODE, please ensure"
+            EPROSIMA_LOG_WARNING(RTPS_DOMAIN,
+                    "An XML profile for 'service' was found. When using ROS2_EASY_MODE, please ensure"
                     " the max_blocking_time is configured with a value higher than the default.");
         }
     }

@@ -862,10 +862,12 @@ TEST(DataWriterTests, InvalidQos)
     EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos)); // KEEP LAST 0 is inconsistent
     qos.history().depth = 2;
     EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos)); // KEEP LAST 2 is OK
-    // KEEP LAST 2000 but max_samples_per_instance default (400) is inconsistent but right now it only shows a warning
-    // This test will fail whenever we enforce the consistency between depth and max_samples_per_instance.
+    // KEEP LAST 2000 and max_samples_per_instance default (UNLIMITED) is consistent.
     qos.history().depth = 2000;
     EXPECT_EQ(RETCODE_OK, datawriter->set_qos(qos));
+    qos.resource_limits().max_samples_per_instance = 1000;
+    // KEEP LAST 2000 and max_samples_per_instance 1000 is inconsistent
+    EXPECT_EQ(inconsistent_code, datawriter->set_qos(qos));
 
     ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
     ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
@@ -2659,10 +2661,10 @@ TEST(DataWriterTests, CustomPoolCreation)
     DomainParticipantFactory::get_instance()->delete_participant(participant);
 }
 
-TEST(DataWriterTests, history_depth_max_samples_per_instance_warning)
+TEST(DataWriterTests, history_depth_max_samples_per_instance_error)
 {
 
-    /* Setup log so it may catch the expected warning */
+    /* Setup log so it may catch the expected error */
     Log::ClearConsumers();
     MockConsumer* mockConsumer = new MockConsumer("RTPS_QOS_CHECK");
     Log::RegisterConsumer(std::unique_ptr<LogConsumer>(mockConsumer));
@@ -2682,14 +2684,14 @@ TEST(DataWriterTests, history_depth_max_samples_per_instance_warning)
     Publisher* publisher = participant->create_publisher(PUBLISHER_QOS_DEFAULT);
     ASSERT_NE(publisher, nullptr);
 
-    /* Create a datawriter with the QoS that should generate a warning */
+    /* Create a datawriter with the QoS that should generate an error */
     DataWriterQos qos;
     qos.history().depth = 10;
     qos.resource_limits().max_samples_per_instance = 5;
     DataWriter* datawriter_1 = publisher->create_datawriter(topic, qos);
-    ASSERT_NE(datawriter_1, nullptr);
+    ASSERT_EQ(datawriter_1, nullptr);
 
-    /* Check that the config generated a warning */
+    /* Check that the config generated an error */
     auto wait_for_log_entries =
             [&mockConsumer](const uint32_t amount, const uint32_t retries, const uint32_t wait_ms) -> size_t
             {
@@ -2711,11 +2713,7 @@ TEST(DataWriterTests, history_depth_max_samples_per_instance_warning)
     const uint32_t wait_ms = 25;
     ASSERT_EQ(wait_for_log_entries(expected_entries, retries, wait_ms), expected_entries);
 
-    /* Check that the datawriter can send data */
-    FooType data;
-    ASSERT_EQ(RETCODE_OK, datawriter_1->write(&data, HANDLE_NIL));
-
-    /* Check that a correctly initialized writer does not produce any warning */
+    /* Check that a correctly initialized writer does not produce any error or warning */
     qos.history().depth = 10;
     qos.resource_limits().max_samples_per_instance = 10;
     DataWriter* datawriter_2 = publisher->create_datawriter(topic, qos);
@@ -2801,77 +2799,49 @@ TEST(DataWriterTests, data_type_is_plain_data_representation)
     DomainParticipantFactory::get_instance()->delete_participant(participant);
 }
 
-TEST(DataWriterTests, set_related_datareader)
+/**
+ * @test Tests that set_type_support_context returns RETCODE_OK on a disabled DataWriter,
+ *       RETCODE_ILLEGAL_OPERATION on an enabled one.
+ */
+TEST(DataWriterTests, set_type_support_context)
 {
-    // Create entities
     DomainParticipant* participant =
             DomainParticipantFactory::get_instance()->create_participant(0, PARTICIPANT_QOS_DEFAULT);
     ASSERT_NE(participant, nullptr);
 
-    Publisher* publisher = participant->create_publisher(PUBLISHER_QOS_DEFAULT);
+    // The DataWriters must start disabled
+    PublisherQos pub_qos = PUBLISHER_QOS_DEFAULT;
+    pub_qos.entity_factory().autoenable_created_entities = false;
+    Publisher* publisher = participant->create_publisher(pub_qos);
     ASSERT_NE(publisher, nullptr);
-
-    Subscriber* subscriber = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
-    ASSERT_NE(subscriber, nullptr);
 
     TypeSupport type(new TopicDataTypeMock());
     type.register_type(participant);
 
-    Topic* topic = participant->create_topic("footopic", type.get_type_name(), TOPIC_QOS_DEFAULT);
+    Topic* topic = participant->create_topic("footopic_ctx", type.get_type_name(), TOPIC_QOS_DEFAULT);
     ASSERT_NE(topic, nullptr);
 
     DataWriter* datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
     ASSERT_NE(datawriter, nullptr);
 
-    DataReader* datareader = subscriber->create_datareader(topic, DATAREADER_QOS_DEFAULT);
-    ASSERT_NE(datareader, nullptr);
+    auto ctx = std::make_shared<TopicDataType::Context>();
 
-    // Assert set_related_datareader returns error on an enabled entity
-    ASSERT_TRUE(datawriter->is_enabled());
-    ASSERT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->set_related_datareader(datareader));
+    // Writer is disabled: any context (including null) must return RETCODE_OK
+    EXPECT_EQ(RETCODE_OK, datawriter->set_type_support_context(ctx));
+    EXPECT_EQ(RETCODE_OK, datawriter->set_type_support_context(nullptr));
 
-    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
-    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
+    // Enable the writer
+    ASSERT_EQ(RETCODE_OK, datawriter->enable());
 
-    // Disable autoenable_created_entities
-    PublisherQos publisher_qos;
-    publisher_qos.entity_factory().autoenable_created_entities = false;
-
-    publisher = participant->create_publisher(publisher_qos);
-    ASSERT_NE(publisher, nullptr);
-    datawriter = publisher->create_datawriter(topic, DATAWRITER_QOS_DEFAULT);
-    ASSERT_NE(datawriter, nullptr);
-
-    ASSERT_FALSE(datawriter->is_enabled());
-    // Assert set_related_datareader returns error on a nullptr entity
-    ASSERT_EQ(RETCODE_BAD_PARAMETER, datawriter->set_related_datareader(nullptr));
-
-    DomainParticipant* another_participant =
-            DomainParticipantFactory::get_instance()->create_participant(0, PARTICIPANT_QOS_DEFAULT);
-    ASSERT_NE(participant, nullptr);
-
-    type.register_type(another_participant);
-
-    Subscriber* another_subscriber = another_participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
-    ASSERT_NE(another_subscriber, nullptr);
-
-    Topic* another_topic = another_participant->create_topic("another_footopic",
-                    type.get_type_name(), TOPIC_QOS_DEFAULT);
-
-    DataReader* another_datareader =
-            another_subscriber->create_datareader(another_topic, DATAREADER_QOS_DEFAULT);
-    ASSERT_NE(another_datareader, nullptr);
-
-    // Assert set_related_datareader returns error on a different participant
-    ASSERT_EQ(RETCODE_PRECONDITION_NOT_MET, datawriter->set_related_datareader(another_datareader));
-    // Assert set_related_datareader returns OK when reader in the same participant
-    ASSERT_EQ(RETCODE_OK, datawriter->set_related_datareader(datareader));
+    // Writer is enabled: must return RETCODE_ILLEGAL_OPERATION
+    EXPECT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->set_type_support_context(ctx));
+    EXPECT_EQ(RETCODE_ILLEGAL_OPERATION, datawriter->set_type_support_context(nullptr));
 
     // Tear down
-    participant->delete_contained_entities();
-    another_participant->delete_contained_entities();
-    DomainParticipantFactory::get_instance()->delete_participant(participant);
-    DomainParticipantFactory::get_instance()->delete_participant(another_participant);
+    ASSERT_TRUE(publisher->delete_datawriter(datawriter) == RETCODE_OK);
+    ASSERT_TRUE(participant->delete_topic(topic) == RETCODE_OK);
+    ASSERT_TRUE(participant->delete_publisher(publisher) == RETCODE_OK);
+    ASSERT_TRUE(DomainParticipantFactory::get_instance()->delete_participant(participant) == RETCODE_OK);
 }
 
 } // namespace dds
