@@ -228,8 +228,7 @@ bool DataReaderHistory::received_change_keep_all(
             return add_to_reader_history_if_not_full(a_change, rejection_reason);
         }
 
-        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-        rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
+        rejection_reason = REJECTED_BY_UNKNOWN_INSTANCE;
         return false;
     }
 
@@ -271,8 +270,7 @@ bool DataReaderHistory::received_change_keep_last(
             return add_to_reader_history_if_not_full(a_change, rejection_reason);
         }
 
-        FASTDDS_TODO_BEFORE(3, 5, "Change REJECTED_BY_INSTANCES_LIMIT for REJECTED_BY_UNKNOWN_INSTANCE");
-        rejection_reason = REJECTED_BY_INSTANCES_LIMIT;
+        rejection_reason = REJECTED_BY_UNKNOWN_INSTANCE;
         return false;
     }
 
@@ -281,8 +279,7 @@ bool DataReaderHistory::received_change_keep_last(
     if (find_key(a_change->instanceHandle, vit))
     {
         DataReaderInstance::ChangeCollection& instance_changes = vit->second->cache_changes;
-        auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
-        if (instance_changes.size() < static_cast<size_t>(effective_depth))
+        if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
         {
             ret_value = true;
         }
@@ -824,8 +821,7 @@ bool DataReaderHistory::completed_change_keep_last(
 {
     bool ret_value = false;
     DataReaderInstance::ChangeCollection& instance_changes = instance.cache_changes;
-    auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
-    if (instance_changes.size() < static_cast<size_t>(effective_depth))
+    if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
     {
         ret_value = true;
     }

@@ -239,7 +239,7 @@ bool DynamicPubSubType::serialize(
     }
     ser.set_encoding_flag(get_fastcdr_encoding_flag(type_impl->get_descriptor().extensibility_kind(),
             fastdds::dds::DataRepresentationId_t::XCDR_DATA_REPRESENTATION == data_representation?
-            eprosima::fastcdr::CdrVersion:: XCDRv1 :
+            eprosima::fastcdr::CdrVersion::XCDRv1 :
             eprosima::fastcdr::CdrVersion::XCDRv2));
 
     try
@@ -319,17 +319,21 @@ void DynamicPubSubType::update_dynamic_type()
     if (TK_STRUCTURE == dynamic_type_->get_kind())
     {
         auto type_impl = traits<DynamicType>::narrow<DynamicTypeImpl>(dynamic_type_);
-        for (auto& member : type_impl->get_all_members_by_index())
+
+        if (type_impl)
         {
-            auto member_impl = traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(member);
-            if (!member_impl)
+            for (auto& member : type_impl->get_all_members_by_index())
             {
-                continue;
-            }
-            if (member_impl->get_descriptor().is_key())
-            {
-                is_compute_key_provided = true;
-                break;
+                auto member_impl = traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(member);
+                if (!member_impl)
+                {
+                    continue;
+                }
+                if (member_impl->get_descriptor().is_key())
+                {
+                    is_compute_key_provided = true;
+                    break;
+                }
             }
         }
     }
