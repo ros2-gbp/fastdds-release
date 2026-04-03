@@ -21,19 +21,17 @@
 #include <asio.hpp>
 #include <gtest/gtest.h>
 
-#include <fastrtps/transport/TCPv4TransportDescriptor.h>
-#include <fastrtps/transport/TCPv6TransportDescriptor.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
 #include <rtps/transport/tcp/RTCPHeader.h>
 
-#include "../api/dds-pim/TCPReqRepHelloWorldRequester.hpp"
-#include "../api/dds-pim/TCPReqRepHelloWorldReplier.hpp"
 #include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 #include "DatagramInjectionTransport.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 enum communication_type
 {
@@ -54,11 +52,11 @@ public:
             // TODO: fix IPv6 issues related with zone ID
             GTEST_SKIP() << "TCPv6 tests are disabled in Mac";
 #endif // ifdef __APPLE__
-            test_transport_ = std::make_shared<TCPv6TransportDescriptor>();
+            test_transport_ = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
         }
         else
         {
-            test_transport_ = std::make_shared<TCPv4TransportDescriptor>();
+            test_transport_ = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
         }
     }
 
@@ -67,462 +65,8 @@ public:
         use_ipv6 = false;
     }
 
-    std::shared_ptr<TCPTransportDescriptor> test_transport_;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> test_transport_;
 };
-
-// TCP and Domain management with logical ports tests
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P1_D0_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-    const uint16_t nmsgs = 5;
-
-    requester.init(0, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(1, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester.send(count);
-        requester.block();
-    }
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P1_D0_D1)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(1, 1, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P1_D1_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 1, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(1, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P3_D0_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-    const uint16_t nmsgs = 5;
-
-    requester.init(0, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester.send(count);
-        requester.block();
-    }
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P3_D0_D1)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 1, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P0_P3_D1_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 1, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P3_P0_D0_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-    const uint16_t nmsgs = 5;
-
-    requester.init(3, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(0, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester.send(count);
-        requester.block();
-    }
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P3_P0_D0_D1)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(3, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(0, 1, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P3_P0_D1_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(3, 1, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(0, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P2_P3_D0_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-    const uint16_t nmsgs = 5;
-
-    requester.init(2, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester.send(count);
-        requester.block();
-    }
-
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P2_P3_D0_D1)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(2, 0, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 1, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPDomainHelloWorld_P2_P3_D1_D0)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(2, 1, global_port);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery. They must not discover each other.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPMaxInitialPeer_P0_4_P3)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port, 4);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(3, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPMaxInitialPeer_P0_4_P4)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port, 4);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(4, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery(std::chrono::seconds(10));
-
-    ASSERT_FALSE(requester.is_matched());
-    ASSERT_FALSE(replier.is_matched());
-}
-
-TEST_P(TransportTCP, TCPMaxInitialPeer_P0_5_P4)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port, 5);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(4, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-}
-
-#if TLS_FOUND
-TEST_P(TransportTCP, TCP_TLS)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-
-    requester.init(0, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(4, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-}
-
-// Test successful removal of client after previously matched server is removed
-TEST_P(TransportTCP, TCP_TLS_client_disconnect_after_server)
-{
-    TCPReqRepHelloWorldRequester* requester = new TCPReqRepHelloWorldRequester();
-    TCPReqRepHelloWorldReplier* replier = new TCPReqRepHelloWorldReplier();
-
-    requester->init(0, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(requester->isInitialized());
-
-    replier->init(4, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(replier->isInitialized());
-
-    // Wait for discovery.
-    requester->wait_discovery();
-    replier->wait_discovery();
-
-    ASSERT_TRUE(requester->is_matched());
-    ASSERT_TRUE(replier->is_matched());
-
-    // Completely remove server prior to deleting client
-    delete replier;
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    delete requester;
-}
-
-// Test successful removal of server after previously matched client is removed
-// Issue -> https://eprosima.easyredmine.com/issues/16288
-TEST_P(TransportTCP, TCP_TLS_server_disconnect_after_client)
-{
-    TCPReqRepHelloWorldReplier* replier = new TCPReqRepHelloWorldReplier();
-    TCPReqRepHelloWorldRequester* requester = new TCPReqRepHelloWorldRequester();
-
-    requester->init(0, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(requester->isInitialized());
-
-    replier->init(4, 0, global_port, 5, certs_path);
-
-    ASSERT_TRUE(replier->isInitialized());
-
-    // Wait for discovery.
-    requester->wait_discovery();
-    replier->wait_discovery();
-
-    ASSERT_TRUE(requester->is_matched());
-    ASSERT_TRUE(replier->is_matched());
-
-    // Completely remove client prior to deleting server
-    delete requester;
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    delete replier;
-}
-
-void tls_init()
-{
-    certs_path = std::getenv("CERTS_PATH");
-
-    if (certs_path == nullptr)
-    {
-        std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
-        exit(-1);
-    }
-}
-
-#endif // if TLS_FOUND
-
-// Regression test for ShrinkLocators/transform_remote_locators mechanism.
-TEST_P(TransportTCP, TCPLocalhost)
-{
-    TCPReqRepHelloWorldRequester requester;
-    TCPReqRepHelloWorldReplier replier;
-    const uint16_t nmsgs = 5;
-
-    requester.init(0, 0, global_port, 0, nullptr, true);
-
-    ASSERT_TRUE(requester.isInitialized());
-
-    replier.init(1, 0, global_port);
-
-    ASSERT_TRUE(replier.isInitialized());
-
-    // Wait for discovery.
-    requester.wait_discovery();
-    replier.wait_discovery();
-
-    ASSERT_TRUE(requester.is_matched());
-    ASSERT_TRUE(replier.is_matched());
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester.send(count);
-        requester.block();
-    }
-}
 
 // Test for ==operator TCPTransportDescriptor is not required as it is an abstract class and in TCPv6 is same method
 // Test for copy TCPTransportDescriptor is not required as it is an abstract class and in TCPv6 is same method
@@ -605,70 +149,9 @@ TEST_P(TransportTCP, TCP_copy)
 TEST(TransportTCP, TCPv4_get_WAN_address)
 {
     // TCPv4TransportDescriptor
-    TCPv4TransportDescriptor tcpv4_transport;
+    eprosima::fastdds::rtps::TCPv4TransportDescriptor tcpv4_transport;
     tcpv4_transport.set_WAN_address("80.80.99.45");
     ASSERT_EQ(tcpv4_transport.get_WAN_address(), "80.80.99.45");
-}
-
-// Test connection is successfully restablished after dropping and relaunching a TCP client (requester)
-// Issue -> https://github.com/eProsima/Fast-DDS/issues/2409
-TEST_P(TransportTCP, Client_reconnection)
-{
-    TCPReqRepHelloWorldReplier* replier;
-    TCPReqRepHelloWorldRequester* requester;
-    const uint16_t nmsgs = 5;
-
-    replier = new TCPReqRepHelloWorldReplier;
-    replier->init(1, 0, global_port);
-
-    ASSERT_TRUE(replier->isInitialized());
-
-    requester = new TCPReqRepHelloWorldRequester;
-    requester->init(0, 0, global_port);
-
-    ASSERT_TRUE(requester->isInitialized());
-
-    // Wait for discovery.
-    replier->wait_discovery();
-    requester->wait_discovery();
-
-    ASSERT_TRUE(replier->is_matched());
-    ASSERT_TRUE(requester->is_matched());
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester->send(count);
-        requester->block();
-    }
-
-    // Release TCP client resources.
-    delete requester;
-
-    // Wait until unmatched.
-    replier->wait_unmatched();
-    ASSERT_FALSE(replier->is_matched());
-
-    // Create new TCP client instance.
-    requester = new TCPReqRepHelloWorldRequester;
-    requester->init(0, 0, global_port);
-
-    ASSERT_TRUE(requester->isInitialized());
-
-    // Wait for discovery.
-    replier->wait_discovery();
-    requester->wait_discovery();
-
-    ASSERT_TRUE(replier->is_matched());
-    ASSERT_TRUE(requester->is_matched());
-
-    for (uint16_t count = 0; count < nmsgs; ++count)
-    {
-        requester->send(count);
-        requester->block();
-    }
-
-    delete replier;
-    delete requester;
 }
 
 // Test zero listening port for TCPv4/v6
@@ -745,17 +228,17 @@ TEST_P(TransportTCP, large_data_topology)
     // Reliable Keep_all to wait for all acked as end condition
     for (uint16_t i = 0; i < n_participants; i++)
     {
-        writers[i]->reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-                .durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
-                .lease_duration(eprosima::fastrtps::c_TimeInfinite, eprosima::fastrtps::Duration_t(3, 0))
+        writers[i]->reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+                .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
+                .lease_duration(eprosima::fastdds::dds::c_TimeInfinite, eprosima::fastdds::dds::Duration_t(3, 0))
                 .resource_limits_max_instances(1)
                 .resource_limits_max_samples_per_instance(samples_per_participant);
 
-        readers[i]->reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
-                .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-                .durability_kind(eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
-                .lease_duration(eprosima::fastrtps::c_TimeInfinite, eprosima::fastrtps::Duration_t(3, 0))
+        readers[i]->reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+                .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
+                .lease_duration(eprosima::fastdds::dds::c_TimeInfinite, eprosima::fastdds::dds::Duration_t(3, 0))
                 .resource_limits_max_instances(n_participants)
                 .resource_limits_max_samples_per_instance(samples_per_participant);
 
@@ -839,14 +322,14 @@ TEST_P(TransportTCP, multiple_listening_ports)
     // Create two clients each one connecting to a different port
     PubSubWriter<HelloWorldPubSubType>* client_1 = new PubSubWriter<HelloWorldPubSubType>(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType>* client_2 = new PubSubWriter<HelloWorldPubSubType>(TEST_TOPIC_NAME);
-    std::shared_ptr<TCPTransportDescriptor> client_transport_1;
-    std::shared_ptr<TCPTransportDescriptor> client_transport_2;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport_1;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport_2;
     Locator_t initialPeerLocator_1;
     Locator_t initialPeerLocator_2;
     if (use_ipv6)
     {
-        client_transport_1 = std::make_shared<TCPv6TransportDescriptor>();
-        client_transport_2 = std::make_shared<TCPv6TransportDescriptor>();
+        client_transport_1 = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
+        client_transport_2 = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
         initialPeerLocator_1.kind = LOCATOR_KIND_TCPv6;
         initialPeerLocator_2.kind = LOCATOR_KIND_TCPv6;
         IPLocator::setIPv6(initialPeerLocator_1, "::1");
@@ -854,8 +337,8 @@ TEST_P(TransportTCP, multiple_listening_ports)
     }
     else
     {
-        client_transport_1 = std::make_shared<TCPv4TransportDescriptor>();
-        client_transport_2 = std::make_shared<TCPv4TransportDescriptor>();
+        client_transport_1 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
+        client_transport_2 = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
         initialPeerLocator_1.kind = LOCATOR_KIND_TCPv4;
         initialPeerLocator_2.kind = LOCATOR_KIND_TCPv4;
         IPLocator::setIPv4(initialPeerLocator_1, 127, 0, 0, 1);
@@ -960,17 +443,17 @@ TEST_P(TransportTCP, send_resource_cleanup)
     // Client
     auto initialize_client = [&](PubSubWriter<HelloWorldPubSubType>* client)
             {
-                std::shared_ptr<TCPTransportDescriptor> client_transport;
+                std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> client_transport;
                 Locator_t initialPeerLocator;
                 if (use_ipv6)
                 {
-                    client_transport = std::make_shared<TCPv6TransportDescriptor>();
+                    client_transport = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
                     initialPeerLocator.kind = LOCATOR_KIND_TCPv6;
                     IPLocator::setIPv6(initialPeerLocator, "::1");
                 }
                 else
                 {
-                    client_transport = std::make_shared<TCPv4TransportDescriptor>();
+                    client_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
                     initialPeerLocator.kind = LOCATOR_KIND_TCPv4;
                     IPLocator::setIPv4(initialPeerLocator, 127, 0, 0, 1);
                 }
@@ -983,7 +466,7 @@ TEST_P(TransportTCP, send_resource_cleanup)
             };
     auto initialize_udp_participant = [&](PubSubWriter<HelloWorldPubSubType>* udp_participant)
             {
-                auto udp_participant_transport = std::make_shared<UDPv4TransportDescriptor>();
+                auto udp_participant_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
                 udp_participant->disable_builtin_transport().add_user_transport_to_pparams(udp_participant_transport);
                 udp_participant->init();
             };
@@ -1103,7 +586,7 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
     initial_peer_list.push_back(initialPeerLocator);
     client->initial_peers(initial_peer_list);
 
-    auto low_level_transport = std::make_shared<UDPv4TransportDescriptor>();
+    auto low_level_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
     auto client_chaining_transport = std::make_shared<DatagramInjectionTransportDescriptor>(low_level_transport);
     client->disable_builtin_transport().add_user_transport_to_pparams(test_transport_).add_user_transport_to_pparams(
         client_chaining_transport).init();
@@ -1112,14 +595,14 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
     // Server
     auto initialize_server = [&](PubSubReader<HelloWorldPubSubType>* server)
             {
-                std::shared_ptr<TCPTransportDescriptor> server_transport;
+                std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> server_transport;
                 if (use_ipv6)
                 {
-                    server_transport = std::make_shared<TCPv6TransportDescriptor>();
+                    server_transport = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
                 }
                 else
                 {
-                    server_transport = std::make_shared<TCPv4TransportDescriptor>();
+                    server_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
                 }
                 server_transport->add_listener_port(server_port);
                 server->disable_builtin_transport().add_user_transport_to_pparams(server_transport);
@@ -1127,7 +610,7 @@ TEST_P(TransportTCP, send_resource_cleanup_initial_peer)
             };
     auto initialize_udp_participant = [&](PubSubReader<HelloWorldPubSubType>* udp_participant)
             {
-                auto udp_participant_transport = std::make_shared<UDPv4TransportDescriptor>();
+                auto udp_participant_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
                 udp_participant->disable_builtin_transport().add_user_transport_to_pparams(udp_participant_transport);
                 udp_participant->init();
             };
@@ -1204,8 +687,8 @@ TEST_P(TransportTCP, large_message_send_receive)
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
-    std::shared_ptr<TCPTransportDescriptor> writer_transport;
-    std::shared_ptr<TCPTransportDescriptor> reader_transport;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> writer_transport;
+    std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor> reader_transport;
     Locator_t initialPeerLocator;
     if (use_ipv6)
     {
@@ -1273,7 +756,7 @@ TEST_P(TransportTCP, large_message_large_data_send_receive)
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
-    eprosima::fastdds::rtps::BuiltinTransportsOptions options;
+    BuiltinTransportsOptions options;
     options.tcp_negotiation_timeout = 100;
     writer.setup_large_data_tcp(use_ipv6, 0, options);
     reader.setup_large_data_tcp(use_ipv6, 0, options);
@@ -1463,19 +946,19 @@ TEST_P(TransportTCP, tcp_unique_network_flows_communication)
     properties.properties().emplace_back("fastdds.unique_network_flows", "");
     readers.disable_builtin_transport().add_user_transport_to_pparams(test_transport_);
 
-    Locator_t initial_peer_locator;
+    eprosima::fastdds::rtps::Locator_t initial_peer_locator;
     if (use_ipv6)
     {
         initial_peer_locator.kind = LOCATOR_KIND_TCPv6;
-        IPLocator::setIPv6(initial_peer_locator, "::1");
+        eprosima::fastdds::rtps::IPLocator::setIPv6(initial_peer_locator, "::1");
     }
     else
     {
         initial_peer_locator.kind = LOCATOR_KIND_TCPv4;
-        IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
+        eprosima::fastdds::rtps::IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
     }
-    IPLocator::setPhysicalPort(initial_peer_locator, global_port);
-    LocatorList_t initial_peer_list;
+    eprosima::fastdds::rtps::IPLocator::setPhysicalPort(initial_peer_locator, global_port);
+    eprosima::fastdds::rtps::LocatorList_t initial_peer_list;
     initial_peer_list.push_back(initial_peer_locator);
 
     readers.sub_topic_name(TEST_TOPIC_NAME)
@@ -1522,10 +1005,10 @@ TEST_P(TransportTCP, best_effort_reader_tcp_resources_creation)
     // Large data setup is reused to enable UDP for multicast and TCP for data.
     // However, the metatraffic unicast needs to be replaced for UDP to ensure that the TCP
     // locator is not announced in the Data(P) (In large data the metatraffic unicast is TCP).
-    eprosima::fastdds::rtps::LocatorList metatraffic_unicast;
-    Locator_t udp_locator;
+    LocatorList metatraffic_unicast;
+    eprosima::fastdds::rtps::Locator_t udp_locator;
     udp_locator.kind = LOCATOR_KIND_UDPv4;
-    IPLocator::setIPv4(udp_locator, "127.0.0.1");
+    eprosima::fastdds::rtps::IPLocator::setIPv4(udp_locator, "127.0.0.1");
     metatraffic_unicast.push_back(udp_locator);
 
     // Writer with highest listening port will wait for connection
@@ -1602,58 +1085,6 @@ TEST_P(TransportTCP, large_data_tcp_no_frag)
     // Wait for reception acknowledgement
     reader.block_for_all();
     EXPECT_TRUE(writer.waitForAllAcked(std::chrono::seconds(3)));
-}
-
-/**
- * This is a regression test for issue #23655, corresponding to a deadlock produced when destroying the TCP transport of
- * a participant while a read operation is still ongoing.
- *
- * The test creates a replier using TCP transport (TCP server), then creates a raw TCP socket to connect to the replier.
- * Once connection is established, a partial header is sent to the replier, after which the latter is deleted,
- * expecting the read operation to be safely aborted and no deadlock to occur.
- *
- * This test also verifies thread safety in this particular scenario; the mutex causing the deadlock was introduced
- * to correct a non-thread-safe access to the socket attribute, so this test also checks thread safety is still present
- * after solving the deadlock issue.
- *
- */
-TEST_P(TransportTCP, stop_during_incomplete_read)
-{
-    // Create replier (TCP server)
-    TCPReqRepHelloWorldReplier* replier = new TCPReqRepHelloWorldReplier();
-    replier->init(0, 0, global_port);
-
-    ASSERT_TRUE(replier->isInitialized());
-
-    // Create raw TCP socket and connect to the server
-    asio::io_context io_context;
-    asio::ip::tcp::resolver resolver(io_context);
-    auto endpoints = resolver.resolve(
-        use_ipv6 ? "::1" : "127.0.0.1",
-        std::to_string(global_port));
-
-    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_context);
-
-    // Synchronous socket connection
-    std::error_code ec;
-    asio::connect(socket, endpoints, ec);
-    ASSERT_TRUE(!ec);
-
-    // Send an incomplete header
-    eprosima::fastdds::rtps::TCPHeader h;
-    asio::write(socket, asio::buffer(&h, 3), ec);
-    ASSERT_TRUE(!ec);
-
-    // Wait for data to be received by the server
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-
-    // Destroy participant (and its TCP transport) while read is ongoing
-    delete replier;
-
-    // Close client's socket
-    socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
-    socket.cancel(ec);
-    socket.close(ec);
 }
 
 #ifdef INSTANTIATE_TEST_SUITE_P

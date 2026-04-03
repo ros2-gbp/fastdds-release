@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _FASTDDS_SHAREDMEM_SEGMENT_H_
-#define _FASTDDS_SHAREDMEM_SEGMENT_H_
+#ifndef FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
+#define FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
 
 #include <boostconfig.hpp>
 
@@ -61,7 +61,7 @@ class SharedSegmentBase
 {
 public:
 
-    template <class M>
+    template<class M>
     using sharable_lock = boost::interprocess::sharable_lock<M>;
     using sharable_mutex = boost::interprocess::interprocess_sharable_mutex;
 
@@ -483,4 +483,4 @@ using SharedFileSegment = SharedSegment<
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTDDS_SHAREDMEM_SEGMENT_H_
+#endif // FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP

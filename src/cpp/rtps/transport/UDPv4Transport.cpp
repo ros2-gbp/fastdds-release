@@ -19,12 +19,12 @@
 #include <utility>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
-#include <fastdds/rtps/messages/MessageReceiver.h>
-#include <fastdds/rtps/transport/SenderResource.h>
-#include <fastdds/rtps/transport/TransportInterface.h>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/transport/SenderResource.hpp>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
+#include <rtps/messages/CDRMessage.hpp>
+#include <rtps/messages/MessageReceiver.h>
 #include <rtps/network/ReceiverResource.h>
 #include <rtps/network/utils/netmask_filter.hpp>
 #include <rtps/transport/asio_helpers.hpp>
@@ -38,8 +38,6 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using IPFinder = fastrtps::rtps::IPFinder;
-using IPLocator = fastrtps::rtps::IPLocator;
 using Log = fastdds::dds::Log;
 
 static bool get_ipv4s(
@@ -196,9 +194,10 @@ UDPv4Transport::UDPv4Transport(
                     {
                         EPROSIMA_LOG_WARNING(TRANSPORT_UDPV4,
                                 "Ignoring allowed interface " << infoIP.dev << ": " << infoIP.name
-                                                              << " as its netmask filter configuration (" << netmask_filter << ") is incompatible"
-                                                              << " with descriptor's (" << descriptor.netmask_filter <<
-                                ").");
+                                                              << " as its netmask filter configuration ("
+                                                              << netmask_filter << ") is incompatible"
+                                                              << " with descriptor's (" << descriptor.netmask_filter
+                                                              << ").");
                     }
                 }
             }
@@ -492,9 +491,11 @@ bool UDPv4Transport::OpenInputChannel(
                 catch (asio::system_error const& e)
                 {
                     (void)e;
-                    EPROSIMA_LOG_WARNING(TRANSPORT_UDPV4, "UDPTransport Error binding " << locatorAddressStr << " at port: (" << IPLocator::getPhysicalPort(
+                    EPROSIMA_LOG_WARNING(TRANSPORT_UDPV4,
+                            "UDPTransport Error binding " << locatorAddressStr << " at port: ("
+                                                          << IPLocator::getPhysicalPort(
                                 locator) << ")"
-                                                                                        << " with msg: " << e.what());
+                                                          << " with msg: " << e.what());
                 }
             }
         }
@@ -603,6 +604,12 @@ bool UDPv4Transport::is_locator_allowed(
         return true;
     }
     return is_interface_allowed(IPLocator::toIPv4string(locator));
+}
+
+bool UDPv4Transport::is_locator_reachable(
+        const Locator_t& locator)
+{
+    return IsLocatorSupported(locator);
 }
 
 LocatorList UDPv4Transport::NormalizeLocator(
@@ -734,5 +741,5 @@ void UDPv4Transport::update_network_interfaces()
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

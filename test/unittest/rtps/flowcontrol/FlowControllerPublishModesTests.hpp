@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 std::ostream& operator <<(
@@ -18,7 +18,7 @@ std::ostream& operator <<(
         const CacheChange_t* change);
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 template<typename T>
@@ -29,7 +29,6 @@ protected:
     void TearDown() override
     {
         changes_delivered.clear();
-        current_bytes_processed = 0;
     }
 
     void wait_changes_was_delivered(
@@ -44,13 +43,11 @@ protected:
 
     std::thread::id last_thread_delivering_sample;
 
-    std::vector<eprosima::fastrtps::rtps::CacheChange_t*> changes_delivered;
+    std::vector<eprosima::fastdds::rtps::CacheChange_t*> changes_delivered;
 
     std::mutex changes_delivered_mutex;
 
     std::condition_variable number_changes_delivered_cv;
-
-    uint32_t current_bytes_processed = 0;
 };
 
 using Schedulers = ::testing::Types<eprosima::fastdds::rtps::FlowControllerFifoSchedule,

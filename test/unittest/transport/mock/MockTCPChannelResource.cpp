@@ -15,7 +15,7 @@
 #include "MockTCPChannelResource.h"
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 MockTCPChannelResource::MockTCPChannelResource(
@@ -50,6 +50,16 @@ size_t MockTCPChannelResource::send(
         size_t,
         const octet*,
         size_t,
+        asio::error_code&)
+{
+    return 0;
+}
+
+size_t MockTCPChannelResource::send(
+        const octet*,
+        size_t,
+        const std::vector<NetworkBuffer>&,
+        uint32_t,
         asio::error_code&)
 {
     return 0;
@@ -102,5 +112,5 @@ void MockTCPChannelResource::shutdown(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

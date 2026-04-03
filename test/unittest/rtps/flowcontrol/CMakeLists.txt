@@ -17,22 +17,22 @@ if(WIN32)
 endif()
 
 set(FLOWCONTROLLER_COMMON_SOURCE
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/flowcontrol/FlowControllerConsts.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/flowcontrol/ThroughputControllerDescriptor.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/network.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/writer/LocatorSelectorSender.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
@@ -52,19 +52,19 @@ target_compile_definitions(FlowControllerFactoryTests PRIVATE
 target_include_directories(FlowControllerFactoryTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSMessageGroup
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
     )
 target_link_libraries(FlowControllerFactoryTests
     fastcdr
+    fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerFactoryTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerFactoryTests)
 
 set(FLOWCONTROLLERPUBLISHMODESTESTS_SOURCE
@@ -86,19 +86,19 @@ target_compile_definitions(FlowControllerPublishModesTests PRIVATE
 target_include_directories(FlowControllerPublishModesTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSMessageGroup
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
     )
 target_link_libraries(FlowControllerPublishModesTests
     fastcdr
+    fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerPublishModesTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerPublishModesTests)
 
 set(FLOWCONTROLLERSCHEDULERSTESTS_SOURCE
@@ -116,17 +116,17 @@ target_compile_definitions(FlowControllerSchedulersTests PRIVATE
 target_include_directories(FlowControllerSchedulersTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSMessageGroup
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
     )
 target_link_libraries(FlowControllerSchedulersTests
     fastcdr
+    fastdds::log
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(FlowControllerSchedulersTests ${PRIVACY}
-        iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(FlowControllerSchedulersTests)

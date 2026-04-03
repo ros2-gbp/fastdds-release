@@ -17,14 +17,14 @@
  *
  */
 
-#ifndef RTPSGAPBUILDER_HPP
-#define RTPSGAPBUILDER_HPP
+#ifndef FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP
+#define FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastrtps/rtps/messages/RTPSMessageGroup.h>
+#include "RTPSMessageGroup.hpp"
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 /**
@@ -99,9 +99,9 @@ private:
     GUID_t reader_guid_;                      ///< Specific destination reader guid.
 };
 
-} /* namespace rtps */
-} /* namespace fastrtps */
-} /* namespace eprosima */
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima
 
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif /* RTPSGAPBUILDER_HPP */
+#endif // FASTDDS_RTPS_MESSAGES__RTPSGAPBUILDER_HPP

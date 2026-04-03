@@ -16,14 +16,13 @@
  * @file LocatorWithMask.hpp
  */
 
-#ifndef _FASTDDS_RTPS_COMMON_LOCATORWITHMASK_HPP_
-#define _FASTDDS_RTPS_COMMON_LOCATORWITHMASK_HPP_
+#ifndef FASTDDS_RTPS_COMMON__LOCATORWITHMASK_HPP
+#define FASTDDS_RTPS_COMMON__LOCATORWITHMASK_HPP
 
 #include <sstream>
 
-#include <fastrtps/fastrtps_dll.h>
-
-#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/fastdds_dll.hpp>
+#include <fastdds/rtps/common/Locator.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -32,7 +31,7 @@ namespace rtps {
 /**
  * A Locator with a mask that defines the number of significant bits of its address.
  */
-class RTPS_DllAPI LocatorWithMask : public Locator
+class FASTDDS_EXPORTED_API LocatorWithMask : public Locator
 {
 public:
 
@@ -70,7 +69,7 @@ private:
     uint8_t mask_ = 24;
 };
 
-RTPS_DllAPI std::ostream& operator <<(
+FASTDDS_EXPORTED_API std::ostream& operator <<(
         std::ostream& output,
         const LocatorWithMask& loc);
 
@@ -78,4 +77,4 @@ RTPS_DllAPI std::ostream& operator <<(
 } // namespace fastdds
 } // namespace eprosima
 
-#endif /* _FASTDDS_RTPS_COMMON_LOCATORWITHMASK_HPP_ */
+#endif // FASTDDS_RTPS_COMMON__LOCATORWITHMASK_HPP

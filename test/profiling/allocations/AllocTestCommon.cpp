@@ -23,7 +23,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "osrf_testing_tools_cpp/memory_tools/memory_tools.hpp"
+
+#include <osrf_testing_tools_cpp/memory_tools/memory_tools.hpp>
 
 using MemoryToolsService = osrf_testing_tools_cpp::memory_tools::MemoryToolsService;
 
@@ -56,14 +57,14 @@ static std::atomic_size_t g_phase(0u);
 static std::atomic<std::atomic_size_t*> g_allocationsPtr(g_allocations);
 static std::atomic<std::atomic_size_t*> g_deallocationsPtr(g_deallocations);
 
-const std::regex is_fastrtps("fastrtps");
+const std::regex is_fastdds("fastdds");
 
 static void allocation_account(
         MemoryToolsService& service)
 {
     // It makes no sense to track allocations if they don't come from our library
     auto stack = service.get_stack_trace();
-    if (stack != nullptr && stack->matches_any_object_function(is_fastrtps))
+    if (stack != nullptr && stack->matches_any_object_function(is_fastdds))
     {
         (*g_allocationsPtr.load())++;
         if (g_print_alloc_traces)
@@ -79,7 +80,7 @@ static void deallocation_account(
 {
     // It makes no sense to track allocations if they don't come from our library
     auto stack = service.get_stack_trace();
-    if (stack != nullptr && stack->matches_any_object_function(is_fastrtps))
+    if (stack != nullptr && stack->matches_any_object_function(is_fastdds))
     {
         (*g_deallocationsPtr.load())++;
         if (g_print_dealloc_traces)

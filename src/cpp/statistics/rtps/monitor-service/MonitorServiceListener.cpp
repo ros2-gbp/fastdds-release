@@ -19,6 +19,7 @@
 #include <statistics/rtps/monitor-service/MonitorServiceListener.hpp>
 
 #include <statistics/rtps/monitor-service/MonitorService.hpp>
+#include <statistics/rtps/StatisticsBase.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -33,21 +34,21 @@ MonitorServiceListener::MonitorServiceListener(
 }
 
 bool MonitorServiceListener::on_local_entity_status_change(
-        const fastrtps::rtps::GUID_t& guid,
+        const fastdds::rtps::GUID_t& guid,
         const uint32_t& id) const
 {
     return monitor_srv_->push_entity_update(guid.entityId, id);
 }
 
 bool MonitorServiceListener::on_local_entity_change(
-        const fastrtps::rtps::GUID_t& guid,
+        const fastdds::rtps::GUID_t& guid,
         bool is_alive) const
 {
     bool ret = false;
 
     if (is_alive)
     {
-        ret = monitor_srv_->push_entity_update(guid.entityId, PROXY);
+        ret = monitor_srv_->push_entity_update(guid.entityId, StatusKind::PROXY);
     }
     else
     {
@@ -58,32 +59,52 @@ bool MonitorServiceListener::on_local_entity_change(
 }
 
 bool MonitorServiceListener::on_local_entity_connections_change(
-        const fastrtps::rtps::GUID_t& guid) const
+        const fastdds::rtps::GUID_t& guid) const
 {
-    return monitor_srv_->push_entity_update(guid.entityId, CONNECTION_LIST);
+    return monitor_srv_->push_entity_update(guid.entityId, StatusKind::CONNECTION_LIST);
 }
 
-void MonitorServiceListener::onWriterMatched(
-        fastrtps::rtps::RTPSWriter*,
-        fastrtps::rtps::MatchingInfo& info)
+void MonitorServiceListener::on_writer_matched(
+        fastdds::rtps::RTPSWriter*,
+        const fastdds::rtps::MatchingInfo& info)
 {
-    if (info.status == eprosima::fastrtps::rtps::MATCHED_MATCHING)
+    if (info.status == eprosima::fastdds::rtps::MATCHED_MATCHING)
     {
         EPROSIMA_LOG_INFO(MONITOR_SERVICE, "Status writer matched with " << info.remoteEndpointGuid);
     }
-    else if (info.status == eprosima::fastrtps::rtps::REMOVED_MATCHING)
+    else if (info.status == eprosima::fastdds::rtps::REMOVED_MATCHING)
     {
         EPROSIMA_LOG_INFO(MONITOR_SERVICE, "Status writer unmatched with " << info.remoteEndpointGuid);
     }
 }
 
-void MonitorServiceListener::onWriterChangeReceivedByAll(
-        fastrtps::rtps::RTPSWriter* writer,
-        fastrtps::rtps::CacheChange_t* change)
+void MonitorServiceListener::on_writer_change_received_by_all(
+        fastdds::rtps::RTPSWriter* writer,
+        fastdds::rtps::CacheChange_t* change)
 {
     //! Do nothing for the moment, no relevant info
     static_cast<void>(writer);
     static_cast<void>(change);
+}
+
+void MonitorServiceListener::on_incompatible_qos_matching(
+        const fastdds::rtps::GUID_t& local_guid,
+        const fastdds::rtps::GUID_t& remote_guid,
+        const fastdds::dds::PolicyMask& incompatible_qos_policies) const
+{
+    if (monitor_srv_)
+    {
+        monitor_srv_->on_incompatible_qos_matching(local_guid, remote_guid, incompatible_qos_policies);
+    }
+}
+
+void MonitorServiceListener::on_remote_proxy_data_removed(
+        const fastdds::rtps::GUID_t& removed_proxy_guid) const
+{
+    if (monitor_srv_)
+    {
+        monitor_srv_->on_remote_proxy_data_removed(removed_proxy_guid);
+    }
 }
 
 } // namespace rtps

@@ -14,21 +14,18 @@
 
 #include <thread>
 
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/LibrarySettings.hpp>
 #include <gtest/gtest.h>
-
-#include <fastrtps/utils/TimeConversion.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
-#include "ReqRepAsReliableHelloWorldReplier.hpp"
-#include "ReqRepAsReliableHelloWorldRequester.hpp"
 
 #include <LogCounter.hpp>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 using fastlog = eprosima::fastdds::dds::Log;
 
 enum communication_type
@@ -44,13 +41,13 @@ public:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery =
-                        IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -63,12 +60,13 @@ public:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -270,7 +268,7 @@ TEST_P(DeadlineQos, KeyedTopicNoReaderVolatileWriterSetDeadline)
 {
     PubSubWriter<KeyedHelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
-    writer.durability_kind(VOLATILE_DURABILITY_QOS);
+    writer.durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS);
 
     uint32_t deadline_period_ms = 50;
 
@@ -295,7 +293,7 @@ TEST_P(DeadlineQos, KeyedTopicBestEffortReaderVolatileWriterSetDeadline)
     PubSubWriter<KeyedHelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     PubSubReader<KeyedHelloWorldPubSubType> reader(TEST_TOPIC_NAME);
 
-    writer.durability_kind(VOLATILE_DURABILITY_QOS);
+    writer.durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS);
 
     uint32_t deadline_period_ms = 50;
 

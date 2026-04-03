@@ -18,10 +18,11 @@
 #include <cstring>
 #include <algorithm>
 
-#include <asio.hpp>
+#include "../network/asio.hpp"
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
 #include <rtps/network/utils/netmask_filter.hpp>
 #include <utils/SystemInfo.hpp>
 
@@ -32,9 +33,6 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using IPFinder = fastrtps::rtps::IPFinder;
-using octet = fastrtps::rtps::octet;
-using IPLocator = fastrtps::rtps::IPLocator;
 using Log = fastdds::dds::Log;
 
 static bool get_ipv4s(
@@ -164,9 +162,10 @@ TCPv4Transport::TCPv4Transport(
                     {
                         EPROSIMA_LOG_WARNING(TRANSPORT_TCPV4,
                                 "Ignoring allowed interface " << infoIP.dev << ": " << infoIP.name
-                                                              << " as its netmask filter configuration (" << netmask_filter << ") is incompatible"
-                                                              << " with descriptor's (" << descriptor.netmask_filter <<
-                                ").");
+                                                              << " as its netmask filter configuration ("
+                                                              << netmask_filter << ") is incompatible"
+                                                              << " with descriptor's (" << descriptor.netmask_filter
+                                                              << ").");
                     }
                 }
             }
@@ -436,6 +435,12 @@ bool TCPv4Transport::is_locator_allowed(
     return is_interface_allowed(IPLocator::toIPv4string(locator));
 }
 
+bool TCPv4Transport::is_locator_reachable(
+        const Locator_t& locator)
+{
+    return IsLocatorSupported(locator);
+}
+
 bool TCPv4Transport::compare_locator_ip(
         const Locator& lh,
         const Locator& rh) const
@@ -540,5 +545,5 @@ bool TCPv4Transport::fillUnicastLocator(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

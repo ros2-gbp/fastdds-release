@@ -19,8 +19,8 @@
 #ifndef _FASTDDS_RTPS_READER_READERUTILS_H_
 #define _FASTDDS_RTPS_READER_READERUTILS_H_
 
-#include <fastdds/rtps/common/CacheChange.h>
-#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/Guid.hpp>
 #include <fastdds/rtps/interfaces/IReaderDataFilter.hpp>
 #include <fastdds/rtps/common/ChangeKind_t.hpp>
 
@@ -28,8 +28,8 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using CacheChange = fastrtps::rtps::CacheChange_t;
-using GUID = fastrtps::rtps::GUID_t;
+using CacheChange = fastdds::rtps::CacheChange_t;
+using GUID = fastdds::rtps::GUID_t;
 
 /**
  * @brief Check if a change is relevant for a reader.

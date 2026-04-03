@@ -16,32 +16,106 @@
  *
  */
 
-#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/history/WriterHistory.hpp>
 
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/writer/RTPSWriter.h>
-#include <fastdds/rtps/common/WriteParams.h>
-#include <fastdds/core/policy//ParameterSerializer.hpp>
-
+#include <cassert>
+#include <chrono>
+#include <cstdint>
+#include <memory>
 #include <mutex>
+#include <utility>
+
+#include <fastdds/dds/core/policy/ParameterTypes.hpp>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/attributes/HistoryAttributes.hpp>
+#include <fastdds/rtps/common/CacheChange.hpp>
+#include <fastdds/rtps/common/ChangeKind_t.hpp>
+#include <fastdds/rtps/common/InstanceHandle.hpp>
+#include <fastdds/rtps/common/SampleIdentity.hpp>
+#include <fastdds/rtps/common/SequenceNumber.hpp>
+#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/common/VendorId_t.hpp>
+#include <fastdds/rtps/common/WriteParams.hpp>
+#include <fastdds/rtps/history/History.hpp>
+#include <fastdds/rtps/history/IChangePool.hpp>
+#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.hpp>
+#include <fastdds/utils/TimedMutex.hpp>
+
+#include <fastdds/core/policy/ParameterSerializer.hpp>
+#include <rtps/history/BasicPayloadPool.hpp>
+#include <rtps/history/CacheChangePool.h>
+#include <rtps/history/PoolConfig.h>
+#include <rtps/messages/RTPSMessageGroup.hpp>
+#include <rtps/writer/BaseWriter.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
+
+static CacheChange_t* initialize_change(
+        CacheChange_t* reserved_change,
+        ChangeKind_t change_kind,
+        InstanceHandle_t handle,
+        RTPSWriter* writer)
+{
+    reserved_change->kind = change_kind;
+    reserved_change->instanceHandle = handle;
+    reserved_change->writerGUID = writer->getGuid();
+    reserved_change->writer_info.previous = nullptr;
+    reserved_change->writer_info.next = nullptr;
+    reserved_change->writer_info.num_sent_submessages = 0;
+    reserved_change->vendor_id = c_VendorId_eProsima;
+    return reserved_change;
+}
 
 WriteParams WriteParams::WRITE_PARAM_DEFAULT;
 
 WriterHistory::WriterHistory(
         const HistoryAttributes& att)
     : History(att)
-    , mp_writer(nullptr)
 {
+    PoolConfig cfg = PoolConfig::from_history_attributes(att);
+    payload_pool_ = BasicPayloadPool::get(cfg, change_pool_);
+}
 
+WriterHistory::WriterHistory(
+        const HistoryAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool)
+    : History(att)
+    , change_pool_(std::make_shared<CacheChangePool>(PoolConfig::from_history_attributes(att)))
+    , payload_pool_(payload_pool)
+{
+}
+
+WriterHistory::WriterHistory(
+        const HistoryAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        const std::shared_ptr<IChangePool>& change_pool)
+    : History(att)
+    , change_pool_(change_pool)
+    , payload_pool_(payload_pool)
+{
 }
 
 WriterHistory::~WriterHistory()
 {
-    // TODO Auto-generated destructor stub
+    // As releasing the change pool will delete the cache changes it owns,
+    // the payload pool may be called to release their payloads, so we should
+    // ensure that the payload pool is destroyed after the change pool.
+    change_pool_.reset();
+    payload_pool_.reset();
+}
+
+const std::shared_ptr<IPayloadPool>& WriterHistory::get_payload_pool() const
+{
+    return payload_pool_;
+}
+
+const std::shared_ptr<IChangePool>& WriterHistory::get_change_pool() const
+{
+    return change_pool_;
 }
 
 bool WriterHistory::add_change(
@@ -65,16 +139,24 @@ bool WriterHistory::prepare_and_add_change(
     if (a_change->writerGUID != mp_writer->getGuid())
     {
         EPROSIMA_LOG_ERROR(RTPS_WRITER_HISTORY,
-                "Change writerGUID " << a_change->writerGUID << " different than Writer GUID " <<
-                mp_writer->getGuid());
+                "Change writerGUID " << a_change->writerGUID << " different than Writer GUID "
+                                     << mp_writer->getGuid());
         return false;
     }
     if ((m_att.memoryPolicy == PREALLOCATED_MEMORY_MODE) && a_change->serializedPayload.length > m_att.payloadMaxSize)
     {
         EPROSIMA_LOG_ERROR(RTPS_WRITER_HISTORY,
-                "Change payload size of '" << a_change->serializedPayload.length <<
-                "' bytes is larger than the history payload size of '" << m_att.payloadMaxSize <<
-                "' bytes and cannot be resized.");
+                "Change payload size of '" << a_change->serializedPayload.length
+                                           << "' bytes is larger than the history payload size of '"
+                                           << m_att.payloadMaxSize
+                                           << "' bytes and cannot be resized.");
+        return false;
+    }
+    if (TopicKind_t::WITH_KEY == mp_writer->getAttributes().topicKind && !a_change->instanceHandle.isDefined() &&
+            a_change->kind != ALIVE && a_change->serializedPayload.length == 0)
+    {
+        EPROSIMA_LOG_ERROR(RTPS_WRITER_HISTORY,
+                "Changes of type not equal to ALIVE in KEYED Writers need a valid instanceHandle or the payload to be transmitted");
         return false;
     }
 
@@ -160,8 +242,8 @@ bool WriterHistory::matches_change(
     if (outer_change->writerGUID != mp_writer->getGuid())
     {
         EPROSIMA_LOG_ERROR(RTPS_WRITER_HISTORY,
-                "Change writerGUID " << outer_change->writerGUID << " different than Writer GUID " <<
-                mp_writer->getGuid());
+                "Change writerGUID " << outer_change->writerGUID << " different than Writer GUID "
+                                     << mp_writer->getGuid());
         return false;
     }
 
@@ -206,7 +288,7 @@ History::iterator WriterHistory::remove_change_nts(
         // Release from pools
         if ( release )
         {
-            mp_writer->release_change(change);
+            release_change(change);
         }
 
         return ret_val;
@@ -237,7 +319,7 @@ bool WriterHistory::remove_change(
 
     if (nullptr != p )
     {
-        mp_writer->release_change(p);
+        release_change(p);
         return true;
     }
 
@@ -314,22 +396,70 @@ bool WriterHistory::remove_min_change(
 
 //TODO Hacer metodos de remove_all_changes. y hacer los metodos correspondientes en los writers y publishers.
 
-bool WriterHistory::do_reserve_cache(
-        CacheChange_t** change,
-        uint32_t size)
+CacheChange_t* WriterHistory::create_change(
+        ChangeKind_t changeKind,
+        InstanceHandle_t handle)
 {
-    *change = mp_writer->new_change(
-        [size]()
-        {
-            return size;
-        }, ALIVE);
-    return *change != nullptr;
+    EPROSIMA_LOG_INFO(RTPS_WRITER, "Creating new change");
+
+    std::lock_guard<RecursiveTimedMutex> guard(*mp_mutex);
+    CacheChange_t* reserved_change = nullptr;
+    if (!change_pool_->reserve_cache(reserved_change))
+    {
+        EPROSIMA_LOG_WARNING(RTPS_WRITER, "Problem reserving cache from pool");
+        return nullptr;
+    }
+
+    return initialize_change(reserved_change, changeKind, handle, mp_writer);
+}
+
+CacheChange_t* WriterHistory::create_change(
+        uint32_t payload_size,
+        ChangeKind_t changeKind,
+        InstanceHandle_t handle)
+{
+    EPROSIMA_LOG_INFO(RTPS_WRITER, "Creating new change");
+
+    std::lock_guard<RecursiveTimedMutex> guard(*mp_mutex);
+    CacheChange_t* reserved_change = nullptr;
+    if (!change_pool_->reserve_cache(reserved_change))
+    {
+        EPROSIMA_LOG_WARNING(RTPS_WRITER, "Problem reserving cache from pool");
+        return nullptr;
+    }
+
+    if (!payload_pool_->get_payload(payload_size, reserved_change->serializedPayload))
+    {
+        change_pool_->release_cache(reserved_change);
+        EPROSIMA_LOG_WARNING(RTPS_WRITER, "Problem reserving payload from pool");
+        return nullptr;
+    }
+
+    return initialize_change(reserved_change, changeKind, handle, mp_writer);
+}
+
+bool WriterHistory::release_change(
+        CacheChange_t* ch)
+{
+    // Asserting preconditions
+    assert(mp_writer != nullptr);
+    assert(ch != nullptr);
+    assert(ch->writerGUID == mp_writer->getGuid());
+
+    std::lock_guard<RecursiveTimedMutex> guard(*mp_mutex);
+
+    IPayloadPool* pool = ch->serializedPayload.payload_owner;
+    if (pool)
+    {
+        pool->release_payload(ch->serializedPayload);
+    }
+    return change_pool_->release_cache(ch);
 }
 
 void WriterHistory::do_release_cache(
         CacheChange_t* ch)
 {
-    mp_writer->release_change(ch);
+    release_change(ch);
 }
 
 void WriterHistory::set_fragments(
@@ -338,7 +468,7 @@ void WriterHistory::set_fragments(
     // Fragment if necessary
     if (high_mark_for_frag_ == 0)
     {
-        high_mark_for_frag_ = mp_writer->getMaxDataSize();
+        high_mark_for_frag_ = mp_writer->get_max_allowed_payload_size();
     }
 
     uint32_t final_high_mark_for_frag = high_mark_for_frag_;
@@ -349,10 +479,25 @@ void WriterHistory::set_fragments(
     {
         inline_qos_size += (2 * fastdds::dds::ParameterSerializer<Parameter_t>::PARAMETER_SAMPLE_IDENTITY_SIZE);
     }
-    if (ChangeKind_t::ALIVE != change->kind && TopicKind_t::WITH_KEY == mp_writer->m_att.topicKind)
+    if (change->write_params.original_writer_info().original_writer_guid() != GUID_t::unknown())
     {
+        inline_qos_size += fastdds::dds::ParameterSerializer<Parameter_t>::PARAMETER_ORIGINAL_WRITER_INFO_SIZE;
+    }
+    if (change->write_params.has_more_replies())
+    {
+        inline_qos_size += 4u;
+    }
+    if (change->instanceHandle.isDefined() && TopicKind_t::WITH_KEY == mp_writer->getAttributes().topicKind)
+    {
+        // KEY_HASH inlineQoS could be added even if the change is ALIVE. It could always be sent.
+        // The only restriction is that it MUST be present if the change is not ALIVE (DISPOSE or UNREGISTER).
+        // It is sent it always as long as the instanceHandle is defined.
         inline_qos_size += fastdds::dds::ParameterSerializer<Parameter_t>::PARAMETER_KEY_SIZE;
-        inline_qos_size += fastdds::dds::ParameterSerializer<Parameter_t>::PARAMETER_STATUS_SIZE;
+        if (change->kind != ALIVE)
+        {
+            // If the change is not ALIVE, STATUS inlineQoS will also be added.
+            inline_qos_size += fastdds::dds::ParameterSerializer<Parameter_t>::PARAMETER_STATUS_SIZE;
+        }
     }
 
     // If inlineqos for related_sample_identity is required, then remove its size from the final fragment size.
@@ -381,5 +526,5 @@ void WriterHistory::set_fragments(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

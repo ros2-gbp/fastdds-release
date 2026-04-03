@@ -16,11 +16,11 @@
  * @file AllowedNetworkInterface.hpp
  */
 
-#ifndef _FASTDDS_RTPS_TRANSPORT_NETWORK_ALLOWEDNETWORKINTERFACE_HPP_
-#define _FASTDDS_RTPS_TRANSPORT_NETWORK_ALLOWEDNETWORKINTERFACE_HPP_
+#ifndef FASTDDS_RTPS_TRANSPORT_NETWORK__ALLOWEDNETWORKINTERFACE_HPP
+#define FASTDDS_RTPS_TRANSPORT_NETWORK__ALLOWEDNETWORKINTERFACE_HPP
 
 #include <fastdds/rtps/transport/network/NetworkInterfaceWithFilter.hpp>
-#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,22 +37,22 @@ struct AllowedNetworkInterface : public NetworkInterfaceWithFilter
     using NetworkInterfaceWithFilter::NetworkInterfaceWithFilter;
 
     //! Destructor
-    virtual RTPS_DllAPI ~AllowedNetworkInterface() = default;
+    virtual FASTDDS_EXPORTED_API ~AllowedNetworkInterface() = default;
 
     //! Copy constructor
-    RTPS_DllAPI AllowedNetworkInterface(
+    FASTDDS_EXPORTED_API AllowedNetworkInterface(
             const AllowedNetworkInterface& iface) = default;
 
     //! Copy assignment
-    RTPS_DllAPI AllowedNetworkInterface& operator =(
+    FASTDDS_EXPORTED_API AllowedNetworkInterface& operator =(
             const AllowedNetworkInterface& iface) = default;
 
     //! Move constructor
-    RTPS_DllAPI AllowedNetworkInterface(
+    FASTDDS_EXPORTED_API AllowedNetworkInterface(
             AllowedNetworkInterface&& iface) = default;
 
     //! Move assignment
-    RTPS_DllAPI AllowedNetworkInterface& operator =(
+    FASTDDS_EXPORTED_API AllowedNetworkInterface& operator =(
             AllowedNetworkInterface&& iface) = default;
 };
 
@@ -60,4 +60,4 @@ struct AllowedNetworkInterface : public NetworkInterfaceWithFilter
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTDDS_RTPS_TRANSPORT_NETWORK_ALLOWEDNETWORKINTERFACE_HPP_
+#endif // FASTDDS_RTPS_TRANSPORT_NETWORK__ALLOWEDNETWORKINTERFACE_HPP

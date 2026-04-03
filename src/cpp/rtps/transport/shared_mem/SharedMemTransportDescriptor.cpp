@@ -14,12 +14,14 @@
 
 #include <cstdint>
 
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
 
 #include <fastdds/rtps/transport/PortBasedTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/TransportInterface.h>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
 
-using namespace eprosima::fastdds::rtps;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
 
 //*********************************************************
 // SharedMemTransportDescriptor
@@ -48,3 +50,7 @@ TransportInterface* SharedMemTransportDescriptor::create_transport() const
 }
 
 #endif // ifdef FASTDDS_SHM_TRANSPORT_DISABLED
+
+} // rtps
+} // fastdds
+} // eprosima

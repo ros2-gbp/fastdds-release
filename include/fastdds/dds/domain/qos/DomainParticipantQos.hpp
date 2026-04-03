@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef _FASTDDS_PARTICIPANTQOS_HPP_
-#define _FASTDDS_PARTICIPANTQOS_HPP_
+#ifndef FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTQOS_HPP
+#define FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTQOS_HPP
 
 #include <string>
 
@@ -26,7 +26,7 @@
 #include <fastdds/rtps/attributes/BuiltinTransports.hpp>
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
 #include <fastdds/rtps/flowcontrol/FlowControllerDescriptor.hpp>
-#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -42,6 +42,8 @@ class DomainParticipantQos
 {
 public:
 
+    friend class DomainParticipantExtendedQos;
+
     /*!
      * User defined flow controllers to use alongside.
      *
@@ -52,7 +54,7 @@ public:
     /**
      * @brief Constructor
      */
-    RTPS_DllAPI DomainParticipantQos()
+    FASTDDS_EXPORTED_API DomainParticipantQos()
     {
 #ifdef FASTDDS_STATISTICS
         /*
@@ -69,11 +71,11 @@ public:
     /**
      * @brief Destructor
      */
-    RTPS_DllAPI virtual ~DomainParticipantQos()
+    FASTDDS_EXPORTED_API virtual ~DomainParticipantQos()
     {
     }
 
-    bool operator ==(
+    virtual bool operator ==(
             const DomainParticipantQos& b) const
     {
         return (this->user_data_ == b.user_data()) &&
@@ -86,10 +88,11 @@ public:
                (this->builtin_controllers_sender_thread_ == b.builtin_controllers_sender_thread()) &&
                (this->timed_events_thread_ == b.timed_events_thread()) &&
                (this->discovery_server_thread_ == b.discovery_server_thread()) &&
+               (this->typelookup_service_thread_ == b.typelookup_service_thread()) &&
 #if HAVE_SECURITY
                (this->security_log_thread_ == b.security_log_thread()) &&
 #endif // if HAVE_SECURITY
-               (this->flow_controllers_ == b.flow_controllers());
+               (compare_flow_controllers(b));
     }
 
     /**
@@ -283,7 +286,7 @@ public:
      *
      * @return name
      */
-    const fastrtps::string_255& name() const
+    const fastcdr::string_255& name() const
     {
         return name_;
     }
@@ -293,7 +296,7 @@ public:
      *
      * @return name
      */
-    fastrtps::string_255& name()
+    fastcdr::string_255& name()
     {
         return name_;
     }
@@ -304,7 +307,7 @@ public:
      * @param value New name to be set
      */
     void name(
-            const fastrtps::string_255& value)
+            const fastcdr::string_255& value)
     {
         name_ = value;
     }
@@ -318,6 +321,15 @@ public:
     {
         return flow_controllers_;
     }
+
+    /**
+     * Compares the flow controllers of two DomainParticipantQos element-wise.
+     *
+     * @param qos The DomainParticipantQos to compare with.
+     * @return true if the flow controllers are the same, false otherwise.
+     */
+    FASTDDS_EXPORTED_API bool compare_flow_controllers(
+            const DomainParticipantQos& qos) const;
 
     /**
      * Getter for FlowControllerDescriptorList
@@ -356,7 +368,7 @@ public:
      * @param transports Defines the transport configuration scenario to setup.
      * @param options Defines the options to be used in the transport configuration.
      */
-    RTPS_DllAPI void setup_transports(
+    FASTDDS_EXPORTED_API void setup_transports(
             rtps::BuiltinTransports transports,
             const rtps::BuiltinTransportsOptions& options = rtps::BuiltinTransportsOptions());
 
@@ -433,6 +445,37 @@ public:
         discovery_server_thread_ = value;
     }
 
+    /**
+     * Getter for TypeLookup service ThreadSettings
+     *
+     * @return rtps::ThreadSettings reference
+     */
+    rtps::ThreadSettings& typelookup_service_thread()
+    {
+        return typelookup_service_thread_;
+    }
+
+    /**
+     * Getter for TypeLookup service ThreadSettings
+     *
+     * @return rtps::ThreadSettings reference
+     */
+    const rtps::ThreadSettings& typelookup_service_thread() const
+    {
+        return typelookup_service_thread_;
+    }
+
+    /**
+     * Setter for the TypeLookup service ThreadSettings
+     *
+     * @param value New ThreadSettings to be set
+     */
+    void typelookup_service_thread(
+            const rtps::ThreadSettings& value)
+    {
+        typelookup_service_thread_ = value;
+    }
+
 #if HAVE_SECURITY
     /**
      * Getter for security log ThreadSettings
@@ -488,7 +531,7 @@ private:
     TransportConfigQos transport_;
 
     //!Name of the participant.
-    fastrtps::string_255 name_ = "RTPSParticipant";
+    fastcdr::string_255 name_ = "RTPSParticipant";
 
     /*! User defined flow controller to use alongside.
      *
@@ -505,6 +548,9 @@ private:
     //! Thread settings for the discovery server thread
     rtps::ThreadSettings discovery_server_thread_;
 
+    //! Thread settings for the builtin TypeLookup service requests and replies threads
+    rtps::ThreadSettings typelookup_service_thread_;
+
 #if HAVE_SECURITY
     //! Thread settings for the security log thread
     rtps::ThreadSettings security_log_thread_;
@@ -512,11 +558,11 @@ private:
 
 };
 
-RTPS_DllAPI extern const DomainParticipantQos PARTICIPANT_QOS_DEFAULT;
+FASTDDS_EXPORTED_API extern const DomainParticipantQos PARTICIPANT_QOS_DEFAULT;
 
 
-} /* namespace dds */
-} /* namespace fastdds */
-} /* namespace eprosima */
+} // namespace dds
+} // namespace fastdds
+} // namespace eprosima
 
-#endif /* _FASTDDS_PARTICIPANTQOS_HPP_ */
+#endif // FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTQOS_HPP

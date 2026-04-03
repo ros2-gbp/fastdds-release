@@ -17,14 +17,13 @@
  *
  */
 
-#include "AllocTestPublisher.h"
-#include "AllocTestSubscriber.h"
-
-#include <fastrtps/Domain.h>
 #include <fastdds/dds/log/Log.hpp>
 
+#include "AllocTestPublisher.hpp"
+#include "AllocTestSubscriber.hpp"
+
 using namespace eprosima;
-using namespace fastrtps;
+using namespace fastdds;
 using namespace rtps;
 
 int main(
@@ -99,7 +98,6 @@ int main(
         }
     }
 
-    Domain::stopAll();
     eprosima::fastdds::dds::Log::Reset();
 
     return 0;

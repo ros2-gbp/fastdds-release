@@ -17,27 +17,30 @@
  *
  */
 
-#include <fastdds/rtps/writer/ReaderLocator.h>
+#include <rtps/writer/ReaderLocator.hpp>
 
-#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/CacheChange.hpp>
 #include <fastdds/rtps/common/LocatorListComparisons.hpp>
-#include <fastdds/rtps/reader/RTPSReader.h>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.hpp>
 
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/reader/BaseReader.hpp>
+#include <rtps/writer/BaseWriter.hpp>
 #include <rtps/DataSharing/DataSharingListener.hpp>
 #include <rtps/DataSharing/DataSharingNotifier.hpp>
-#include "rtps/RTPSDomainImpl.hpp"
+#include "rtps/domain/RTPSDomainImpl.hpp"
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 ReaderLocator::ReaderLocator(
-        RTPSWriter* owner,
+        BaseWriter* owner,
         size_t max_unicast_locators,
         size_t max_multicast_locators)
     : owner_(owner)
-    , participant_owner_(owner->getRTPSParticipant())
+    , participant_owner_(owner->get_participant_impl())
     , general_locator_info_(max_unicast_locators, max_multicast_locators)
     , async_locator_info_(max_unicast_locators, max_multicast_locators)
     , expects_inline_qos_(false)
@@ -178,24 +181,27 @@ void ReaderLocator::stop()
 }
 
 bool ReaderLocator::send(
-        CDRMessage_t* message,
-        std::chrono::steady_clock::time_point max_blocking_time_point) const
+        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+        const uint32_t& total_bytes,
+        std::chrono::steady_clock::time_point max_blocking_time_point)
 {
     if (general_locator_info_.remote_guid != c_Guid_Unknown && !is_local_reader_)
     {
+        int32_t transport_priority = owner_->get_transport_priority();
+
         if (general_locator_info_.unicast.size() > 0)
         {
-            return participant_owner_->sendSync(message, owner_->getGuid(),
+            return participant_owner_->sendSync(buffers, total_bytes, owner_->getGuid(),
                            Locators(general_locator_info_.unicast.begin()), Locators(
                                general_locator_info_.unicast.end()),
-                           max_blocking_time_point);
+                           max_blocking_time_point, transport_priority);
         }
         else
         {
-            return participant_owner_->sendSync(message, owner_->getGuid(),
+            return participant_owner_->sendSync(buffers, total_bytes, owner_->getGuid(),
                            Locators(general_locator_info_.multicast.begin()),
                            Locators(general_locator_info_.multicast.end()),
-                           max_blocking_time_point);
+                           max_blocking_time_point, transport_priority);
         }
     }
 
@@ -204,7 +210,7 @@ bool ReaderLocator::send(
 
 LocalReaderPointer::Instance ReaderLocator::local_reader()
 {
-    RTPSDomainImpl::find_local_reader(local_reader_, general_locator_info_.remote_guid);
+    RTPSDomainImpl::get_instance()->find_reader(local_reader_, general_locator_info_.remote_guid);
     return LocalReaderPointer::Instance(local_reader_);
 }
 
@@ -230,5 +236,5 @@ void ReaderLocator::datasharing_notify()
 }
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

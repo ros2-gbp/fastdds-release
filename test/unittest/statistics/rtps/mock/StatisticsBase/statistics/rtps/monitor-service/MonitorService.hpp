@@ -27,20 +27,28 @@
 #include <mutex>
 #include <vector>
 
-#include <fastdds/rtps/common/Guid.h>
-#include <fastdds/rtps/history/WriterHistory.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-#include <fastdds/rtps/writer/StatefulWriter.h>
-#include <fastrtps/qos/WriterQos.h>
+#include <fastdds/dds/publisher/qos/WriterQos.hpp>
+#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/dds/builtin/topic/PublicationBuiltinTopicData.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
 
 #include <rtps/history/ITopicPayloadPool.h>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/writer/StatefulWriter.hpp>
 #include <statistics/rtps/monitor-service/Interfaces.hpp>
 #include <statistics/rtps/monitor-service/MonitorServiceListener.hpp>
-#include <statistics/types/monitorservice_types.h>
-#include <statistics/types/monitorservice_typesPubSubTypes.h>
+#include <statistics/types/monitorservice_types.hpp>
+#include <statistics/types/monitorservice_typesPubSubTypes.hpp>
 
 namespace eprosima {
 namespace fastdds {
+
+namespace rtps {
+
+struct TopicDescription;
+
+} // namespace rtps
+
 namespace statistics {
 namespace rtps {
 
@@ -50,34 +58,35 @@ class MonitorService
 {
     static constexpr int MIN_TIME_BETWEEN_PUBS_MS = 500;
 
+    friend class MonitorServiceListener;
+
 public:
 
-    using endpoint_creator_t = std::function<bool (fastrtps::rtps::RTPSWriter**,
-                    fastrtps::rtps::WriterAttributes&,
-                    const std::shared_ptr<fastrtps::rtps::IPayloadPool>&,
-                    fastrtps::rtps::WriterHistory*,
-                    fastrtps::rtps::WriterListener*,
-                    const fastrtps::rtps::EntityId_t&,
+    using endpoint_creator_t = std::function<bool (fastdds::rtps::RTPSWriter**,
+                    fastdds::rtps::WriterAttributes&,
+                    fastdds::rtps::WriterHistory*,
+                    fastdds::rtps::WriterListener*,
+                    const fastdds::rtps::EntityId_t&,
                     bool)>;
 
     using endpoint_registrator_t = std::function<bool (
-                        fastrtps::rtps::RTPSWriter*,
-                        const fastrtps::TopicAttributes&,
-                        const fastrtps::WriterQos&)>;
+                        fastdds::rtps::RTPSWriter*,
+                        const eprosima::fastdds::rtps::TopicDescription&,
+                        const eprosima::fastdds::dds::WriterQos&)>;
 
     MonitorService(
-            const fastrtps::rtps::GUID_t& guid,
+            const fastdds::rtps::GUID_t& guid,
             IProxyQueryable* proxy_q,
             IConnectionsQueryable* conns_q,
             IStatusQueryable& status_q,
             endpoint_creator_t endpoint_creator,
             endpoint_registrator_t endpoint_registrator,
-            fastrtps::rtps::ResourceEvent& event_service);
+            fastdds::rtps::ResourceEvent& event_service);
 
     void set_writer(
-            fastrtps::rtps::RTPSWriter* writer)
+            fastdds::rtps::RTPSWriter* writer)
     {
-        status_writer_ = static_cast<fastrtps::rtps::StatefulWriter*>(writer);
+        status_writer_ = static_cast<fastdds::rtps::StatefulWriter*>(writer);
     }
 
     ~MonitorService();
@@ -139,7 +148,7 @@ public:
      * @return True if the operation succeeds.
      */
     bool remove_local_entity(
-            const fastrtps::rtps::EntityId_t& entity_id);
+            const fastdds::rtps::EntityId_t& entity_id);
 
     /**
      * @brief Adds a new entity status update to the queue
@@ -154,8 +163,32 @@ public:
      * @return True if the operation succeeds.
      */
     bool push_entity_update(
-            const fastrtps::rtps::EntityId_t& entity_id,
+            const fastdds::rtps::EntityId_t& entity_id,
             const uint32_t& status_id);
+
+    /**
+     * @brief Process any updates regarding
+     * remote entities incompatible QoS matching.
+     *
+     * @param local_guid The GUID_t identifying the local entity
+     * @param remote_guid The GUID_t identifying the remote entity
+     * @param incompatible_qos The PolicyMask with the incompatible QoS
+     *
+     */
+    void on_incompatible_qos_matching(
+            const fastdds::rtps::GUID_t& local_guid,
+            const fastdds::rtps::GUID_t& remote_guid,
+            const fastdds::dds::PolicyMask& incompatible_qos_policies);
+
+    /**
+     * @brief Notifies that a remote proxy data has been removed.
+     * This is interesting to notify proxy removals independently
+     * of the remote entity being matched or not.
+     *
+     * @param removed_proxy_guid GUID of the removed proxy.
+     */
+    void on_remote_proxy_data_removed(
+            const fastdds::rtps::GUID_t& removed_proxy_guid);
 
 private:
 
@@ -166,8 +199,8 @@ private:
      * @return True if the operation succeeds.
      */
     bool write_status(
-            const fastrtps::rtps::EntityId_t& entity_id,
-            const std::bitset<STATUSES_SIZE>& changed_statuses,
+            const fastdds::rtps::EntityId_t& entity_id,
+            const std::bitset<StatusKind::STATUSES_SIZE>& changed_statuses,
             const bool& entity_disposed);
 
     /**
@@ -204,7 +237,7 @@ private:
      * @return true if the entity was correctly initialized
      */
     bool initialize_entity(
-            const fastrtps::rtps::EntityId_t& entity_id);
+            const fastdds::rtps::EntityId_t& entity_id);
 
     /**
      * @brief Frees the Payload Pool
@@ -218,7 +251,7 @@ private:
 
     std::atomic<bool> timer_active_;
 
-    const fastrtps::rtps::GUID_t local_participant_guid_;
+    const fastdds::rtps::GUID_t local_participant_guid_;
 
     IProxyQueryable* proxy_queryable_;
 
@@ -231,29 +264,34 @@ private:
     //! status id that needs to be updated, alongside
     //! with a bool that prevents the entity_id from being
     //! inserted twice.
-    std::map<fastrtps::rtps::EntityId_t,
+    std::map<fastdds::rtps::EntityId_t,
             std::pair<
-                std::bitset<statistics::STATUSES_SIZE>, bool>> local_entities_;
+                std::bitset<StatusKind::STATUSES_SIZE>, bool>> local_entities_;
 
-    std::unique_ptr<fastrtps::rtps::TimedEvent> event_;
+    std::unique_ptr<fastdds::rtps::TimedEvent> event_;
 
-    std::vector<fastrtps::rtps::EntityId_t> changed_entities_;
+    std::vector<fastdds::rtps::EntityId_t> changed_entities_;
 
     std::mutex mtx_;
 
     MonitorServiceListener* listener_;
 
-    fastrtps::rtps::StatefulWriter* status_writer_;
+    fastdds::rtps::StatefulWriter* status_writer_;
 
-    std::unique_ptr<fastrtps::rtps::WriterHistory> status_writer_history_;
+    std::unique_ptr<fastdds::rtps::WriterHistory> status_writer_history_;
 
-    std::shared_ptr<fastrtps::rtps::ITopicPayloadPool> status_writer_payload_pool_;
+    std::shared_ptr<fastdds::rtps::ITopicPayloadPool> status_writer_payload_pool_;
 
     endpoint_creator_t endpoint_creator_;
 
     endpoint_registrator_t endpoint_registrator_;
 
     MonitorServiceStatusDataPubSubType type_;
+
+    std::map<fastdds::rtps::GUID_t, ExtendedIncompatibleQoSStatusSeq_s>
+    extended_incompatible_qos_collection_;
+
+    std::mutex extended_incompatible_qos_mtx_;
 };
 
 #endif // FASTDDS_STATISTICS

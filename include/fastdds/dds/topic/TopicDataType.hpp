@@ -16,20 +16,20 @@
  * @file TopicDataType.hpp
  */
 
-#ifndef _FASTDDS_TOPICDATATYPE_HPP_
-#define _FASTDDS_TOPICDATATYPE_HPP_
+#ifndef FASTDDS_DDS_TOPIC__TOPICDATATYPE_HPP
+#define FASTDDS_DDS_TOPIC__TOPICDATATYPE_HPP
 
 #include <functional>
 #include <memory>
 #include <string>
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastdds/dds/xtypes/type_representation/detail/dds_xtypes_typeobject.hpp>
+#include <fastdds/fastdds_dll.hpp>
 #include <fastdds/rtps/common/CdrSerialization.hpp>
-#include <fastdds/rtps/common/InstanceHandle.h>
-#include <fastdds/rtps/common/SerializedPayload.h>
-
-#include <fastrtps/fastrtps_dll.h>
-#include <fastrtps/utils/md5.h>
+#include <fastdds/rtps/common/InstanceHandle.hpp>
+#include <fastdds/rtps/common/SerializedPayload.hpp>
+#include <fastdds/utils/md5.hpp>
 
 // This version of TypeSupport has `is_bounded()`
 #define TOPIC_DATA_TYPE_API_HAS_IS_BOUNDED
@@ -41,15 +41,13 @@
 #define TOPIC_DATA_TYPE_API_HAS_CONSTRUCT_SAMPLE
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 namespace rtps {
 struct SerializedPayload_t;
 struct InstanceHandle_t;
 } // namespace rtps
-} // namespace fastrtps
 
-namespace fastdds {
 namespace dds {
 
 class TypeSupport;
@@ -57,117 +55,264 @@ class TypeSupport;
 /**
  * Class TopicDataType used to provide the DomainRTPSParticipant with the methods to serialize, deserialize and get the key of a specific data type.
  * The user should created a class that inherits from this one, where Serialize and deserialize methods MUST be implemented.
- * @ingroup FASTRTPS_MODULE, FASTDDS_MODULE
+ * @ingroup FASTDDS_MODULE
  */
 class TopicDataType
 {
 public:
 
     /**
+     * An interface to provide the user with a context when serializing and deserializing data.
+     *
+     * This context can be used to store specific information of the data type that can be used during serialization and deserialization.
+     * For example, it can be used to store the upper bounds of strings and sequences.
+     */
+    struct FASTDDS_EXPORTED_API Context
+    {
+        virtual ~Context() = default;
+    };
+
+    /**
      * @brief Constructor
      */
-    RTPS_DllAPI TopicDataType();
+    FASTDDS_EXPORTED_API TopicDataType() = default;
 
     /**
      * @brief Destructor
      */
-    RTPS_DllAPI virtual ~TopicDataType();
-
-    /**
-     * Serialize method, it should be implemented by the user, since it is abstract.
-     * It is VERY IMPORTANT that the user sets the SerializedPayload length correctly.
-     *
-     * @param[in] data Pointer to the data
-     * @param[out] payload Pointer to the payload
-     * @return True if correct.
-     */
-    // FASTDDS_TODO_BEFORE(3, 0, "Remove this overload")
-    RTPS_DllAPI virtual bool serialize(
-            void* data,
-            fastrtps::rtps::SerializedPayload_t* payload) = 0;
+    FASTDDS_EXPORTED_API virtual ~TopicDataType() = default;
 
     /**
      * Serialize method, it should be implemented by the user, since it is abstract. If not implemented, this method
      * will call the serialize method in which the topic data representation is not considered.
      * It is VERY IMPORTANT that the user sets the SerializedPayload length correctly.
      *
-     * @param[in] data Pointer to the data
-     * @param[out] payload Pointer to the payload
-     * @param[in] data_representation Representation that should be used to encode the data into the payload.
+     * @param [in] data Pointer to the data
+     * @param [out] payload Pointer to the payload
+     * @param [in] data_representation Representation that should be used to encode the data into the payload.
      * @return True if correct.
      */
-    RTPS_DllAPI virtual bool serialize(
-            void* data,
-            fastrtps::rtps::SerializedPayload_t* payload,
-            DataRepresentationId_t data_representation);
+    FASTDDS_EXPORTED_API virtual bool serialize(
+            const void* const data,
+            rtps::SerializedPayload_t& payload,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation) = 0;
+
+    /**
+     * Serialize method with context, it can be reimplemented by the user to perform
+     * custom serialization depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     * It is VERY IMPORTANT that the user sets the SerializedPayload length correctly.
+     *
+     * @param [in] context Context that can be used during serialization.
+     * @param [in] data Pointer to the data
+     * @param [out] payload Pointer to the payload
+     * @param [in] data_representation Representation that should be used to encode the data into the payload.
+     * @return True if correct.
+     */
+    FASTDDS_EXPORTED_API virtual bool serialize_ctx(
+            const std::shared_ptr<Context>& context,
+            const void* const data,
+            rtps::SerializedPayload_t& payload,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation)
+    {
+        static_cast<void>(context);
+        return serialize(data, payload, data_representation);
+    }
 
     /**
      * Deserialize method, it should be implemented by the user, since it is abstract.
      *
-     * @param[in] payload Pointer to the payload
-     * @param[out] data Pointer to the data
+     * @param [in] payload Pointer to the payload
+     * @param [out] data Pointer to the data
      * @return True if correct.
      */
-    RTPS_DllAPI virtual bool deserialize(
-            fastrtps::rtps::SerializedPayload_t* payload,
+    FASTDDS_EXPORTED_API virtual bool deserialize(
+            rtps::SerializedPayload_t& payload,
             void* data) = 0;
 
-    /*!
-     * @brief Returns a function which can be used to calculate the serialized size of the provided data.
+    /**
+     * Deserialize method with context, it can be reimplemented by the user to perform
+     * custom deserialization depending on the context received.
+     * The default implementation falls back to using the callback without context.
      *
-     * @param[in] data Pointer to data.
-     * @return Functor which calculates the serialized size of the data.
+     * @param [in] context Context that can be used during deserialization.
+     * @param [in] payload Pointer to the payload
+     * @param [out] data Pointer to the data
+     * @return True if correct.
      */
-    RTPS_DllAPI virtual std::function<uint32_t()> getSerializedSizeProvider(
-            void* data) = 0;
+    FASTDDS_EXPORTED_API virtual bool deserialize_ctx(
+            const std::shared_ptr<Context>& context,
+            rtps::SerializedPayload_t& payload,
+            void* data)
+    {
+        static_cast<void>(context);
+        return deserialize(payload, data);
+    }
 
     /*!
-     * @brief Returns a function which can be used to calculate the serialized size of the provided data.
+     * @brief Calculates the serialized size of the provided data.
      *
-     * @param[in] data Pointer to data.
-     * @param[in] data_representation Representation that should be used for calculating the serialized size.
-     * @return Functor which calculates the serialized size of the data.
+     * @param [in] data Pointer to data.
+     * @param [in] data_representation Representation that should be used for calculating the serialized size.
+     * @return Serialized size of the data.
      */
-    RTPS_DllAPI virtual std::function<uint32_t()> getSerializedSizeProvider(
-            void* data,
-            DataRepresentationId_t data_representation);
+    FASTDDS_EXPORTED_API virtual uint32_t calculate_serialized_size(
+            const void* const data,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation) = 0;
+
+    /*!
+     * @brief Calculates the serialized size of the provided data with context.
+     * It can be reimplemented by the user to perform custom calculations depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during computation.
+     * @param [in] data Pointer to data.
+     * @param [in] data_representation Representation that should be used for calculating the serialized size.
+     * @return Serialized size of the data.
+     */
+    FASTDDS_EXPORTED_API virtual uint32_t calculate_serialized_size_ctx(
+            const std::shared_ptr<Context>& context,
+            const void* const data,
+            eprosima::fastdds::dds::DataRepresentationId_t data_representation)
+    {
+        static_cast<void>(context);
+        return calculate_serialized_size(data, data_representation);
+    }
 
     /**
      * Create a Data Type.
      *
      * @return Void pointer to the created object.
      */
-    RTPS_DllAPI virtual void* createData() = 0;
+    FASTDDS_EXPORTED_API virtual void* create_data() = 0;
+
+    /**
+     * Create a Data Type with context.
+     * It can be reimplemented by the user to perform custom creation depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param context Context that can be used during creation.
+     * @return Void pointer to the created object.
+     */
+    FASTDDS_EXPORTED_API virtual void* create_data_ctx(
+            const std::shared_ptr<Context>& context)
+    {
+        static_cast<void>(context);
+        return create_data();
+    }
+
     /**
      * Remove a previously created object.
      *
      * @param data Pointer to the created Data.
      */
-    RTPS_DllAPI virtual void deleteData(
+    FASTDDS_EXPORTED_API virtual void delete_data(
             void* data) = 0;
+
+    /**
+     * Remove a previously created object with context.
+     * It can be reimplemented by the user to perform custom deletion depending on the context received
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param context Context that can be used during deletion.
+     * @param data Pointer to the created Data.
+     */
+    FASTDDS_EXPORTED_API virtual void delete_data_ctx(
+            const std::shared_ptr<Context>& context,
+            void* data)
+    {
+        static_cast<void>(context);
+        delete_data(data);
+    }
 
     /**
      * Get the key associated with the data.
      *
-     * @param[in] data Pointer to the data.
-     * @param[out] ihandle Pointer to the Handle.
-     * @param[in] force_md5 Force MD5 checking.
+     * @param [in] payload Pointer to the payload containing the data.
+     * @param [out] ihandle Pointer to the Handle.
+     * @param [in] force_md5 Force MD5 checking.
      * @return True if correct.
      */
-    RTPS_DllAPI virtual bool getKey(
-            void* data,
-            fastrtps::rtps::InstanceHandle_t* ihandle,
+    FASTDDS_EXPORTED_API virtual bool compute_key(
+            rtps::SerializedPayload_t& payload,
+            rtps::InstanceHandle_t& ihandle,
             bool force_md5 = false) = 0;
+
+    /**
+     * Get the key associated with the data with context.
+     * It can be reimplemented by the user to perform custom key computation depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during computation.
+     * @param [in] payload Pointer to the payload containing the data.
+     * @param [out] ihandle Pointer to the Handle.
+     * @param [in] force_md5 Force MD5 checking.
+     * @return True if correct.
+     */
+    FASTDDS_EXPORTED_API virtual bool compute_key_ctx(
+            const std::shared_ptr<Context>& context,
+            rtps::SerializedPayload_t& payload,
+            rtps::InstanceHandle_t& ihandle,
+            bool force_md5 = false)
+    {
+        static_cast<void>(context);
+        return compute_key(payload, ihandle, force_md5);
+    }
+
+    /**
+     * Get the key associated with the data.
+     *
+     * @param [in] data Pointer to the data.
+     * @param [out] ihandle Pointer to the Handle.
+     * @param [in] force_md5 Force MD5 checking.
+     * @return True if correct.
+     */
+    FASTDDS_EXPORTED_API virtual bool compute_key(
+            const void* const data,
+            rtps::InstanceHandle_t& ihandle,
+            bool force_md5 = false) = 0;
+
+    /**
+     * Get the key associated with the data with context.
+     * It can be reimplemented by the user to perform custom key computation depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during computation.
+     * @param [in] data Pointer to the data.
+     * @param [out] ihandle Pointer to the Handle.
+     * @param [in] force_md5 Force MD5 checking.
+     * @return True if correct.
+     */
+    FASTDDS_EXPORTED_API virtual bool compute_key_ctx(
+            const std::shared_ptr<Context>& context,
+            const void* const data,
+            rtps::InstanceHandle_t& ihandle,
+            bool force_md5 = false)
+    {
+        static_cast<void>(context);
+        return compute_key(data, ihandle, force_md5);
+    }
 
     /**
      * Set topic data type name
      *
      * @param nam Topic data type name
      */
-    RTPS_DllAPI inline void setName(
-            const char* nam)
+    FASTDDS_EXPORTED_API inline void set_name(
+            const std::string& nam)
     {
-        m_topicDataTypeName = std::string(nam);
+        topic_data_typename_ = nam;
+    }
+
+    /**
+     * Set topic data type name
+     *
+     * @param nam Topic data type name
+     */
+    FASTDDS_EXPORTED_API inline void set_name(
+            std::string&& nam)
+    {
+        topic_data_typename_ = std::move(nam);
     }
 
     /**
@@ -175,172 +320,66 @@ public:
      *
      * @return Topic data type name
      */
-    RTPS_DllAPI inline const char* getName() const
+    FASTDDS_EXPORTED_API inline const std::string& get_name() const
     {
-        return m_topicDataTypeName.c_str();
+        return topic_data_typename_;
     }
 
     /**
-     * Get the type object auto-fill configuration
+     * Get the type identifiers
      *
-     * @return true if the type object should be auto-filled
+     * @return @ref xtypes::TypeIdentifierPair
      */
-    RTPS_DllAPI inline bool auto_fill_type_object() const
+    FASTDDS_EXPORTED_API inline const xtypes::TypeIdentifierPair& type_identifiers() const
     {
-        return auto_fill_type_object_;
-    }
-
-    /**
-     * Set the type object auto-fill configuration
-     *
-     * @param auto_fill_type_object new value to set
-     */
-    RTPS_DllAPI inline void auto_fill_type_object(
-            bool auto_fill_type_object)
-    {
-        auto_fill_type_object_ = auto_fill_type_object;
-    }
-
-    /**
-     * Get the type information auto-fill configuration
-     *
-     * @return true if the type information should be auto-filled
-     */
-    RTPS_DllAPI inline bool auto_fill_type_information() const
-    {
-        return auto_fill_type_information_;
-    }
-
-    /**
-     * Set type information auto-fill configuration
-     *
-     * @param auto_fill_type_information new value to set
-     */
-    RTPS_DllAPI inline void auto_fill_type_information(
-            bool auto_fill_type_information)
-    {
-        auto_fill_type_information_ = auto_fill_type_information;
-    }
-
-    /**
-     * Get the type identifier
-     *
-     * @return TypeIdV1
-     */
-    RTPS_DllAPI inline const std::shared_ptr<TypeIdV1> type_identifier() const
-    {
-        return type_identifier_;
-    }
-
-    /**
-     * Set type identifier
-     *
-     * @param id new value for TypeIdV1
-     */
-    RTPS_DllAPI inline void type_identifier(
-            const TypeIdV1& id)
-    {
-        type_identifier_ = std::make_shared<TypeIdV1>(id);
-    }
-
-    /**
-     * Set type identifier
-     *
-     * @param id shared pointer to TypeIdV1
-     */
-    RTPS_DllAPI inline void type_identifier(
-            const std::shared_ptr<TypeIdV1> id)
-    {
-        type_identifier_ = std::move(id);
-    }
-
-    /**
-     * Get the type object
-     *
-     * @return TypeObjectV1
-     */
-    RTPS_DllAPI inline const std::shared_ptr<TypeObjectV1> type_object() const
-    {
-        return type_object_;
-    }
-
-    /**
-     * Set type object
-     *
-     * @param object new value for TypeObjectV1
-     */
-    RTPS_DllAPI inline void type_object(
-            const TypeObjectV1& object)
-    {
-        type_object_ = std::make_shared<TypeObjectV1>(object);
-    }
-
-    /**
-     * Set type object
-     *
-     * @param object shared pointer to TypeObjectV1
-     */
-    RTPS_DllAPI inline void type_object(
-            std::shared_ptr<TypeObjectV1> object)
-    {
-        type_object_ = std::move(object);
-    }
-
-    /**
-     * Get the type information
-     *
-     * @return TypeInformation
-     */
-    RTPS_DllAPI inline const std::shared_ptr<xtypes::TypeInformation> type_information() const
-    {
-        return type_information_;
-    }
-
-    /**
-     * Set type information
-     *
-     * @param info new value for TypeInformation
-     */
-    RTPS_DllAPI inline void type_information(
-            const xtypes::TypeInformation& info)
-    {
-        type_information_ = std::make_shared<xtypes::TypeInformation>(info);
-    }
-
-    /**
-     * Set type information
-     *
-     * @param info shared pointer to TypeInformation
-     */
-    RTPS_DllAPI inline void type_information(
-            std::shared_ptr<xtypes::TypeInformation> info)
-    {
-        type_information_ = std::move(info);
+        return type_identifiers_;
     }
 
     /**
      * Checks if the type is bounded.
      */
-    RTPS_DllAPI virtual inline bool is_bounded() const
+    FASTDDS_EXPORTED_API virtual inline bool is_bounded() const
     {
         return false;
     }
 
     /**
-     * Checks if the type is plain when using default encoding.
+     * Checks if the type is bounded with context.
+     * It can be reimplemented by the user to perform custom checks depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during check.
      */
-    RTPS_DllAPI virtual inline bool is_plain() const
+    FASTDDS_EXPORTED_API virtual inline bool is_bounded_ctx(
+            const std::shared_ptr<Context>& context) const
     {
-        return false;
+        static_cast<void>(context);
+        return is_bounded();
     }
 
     /**
      * Checks if the type is plain when using a specific encoding.
      */
-    RTPS_DllAPI virtual inline bool is_plain(
+    FASTDDS_EXPORTED_API virtual inline bool is_plain(
             DataRepresentationId_t) const
     {
         return false;
+    }
+
+    /**
+     * Checks if the type is plain when using a specific encoding and a context
+     * It can be reimplemented by the user to perform custom checks depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during check.
+     * @param [in] representation Representation of the data.
+     */
+    FASTDDS_EXPORTED_API virtual inline bool is_plain_ctx(
+            const std::shared_ptr<Context>& context,
+            DataRepresentationId_t representation) const
+    {
+        static_cast<void>(context);
+        return is_plain(representation);
     }
 
     /**
@@ -350,43 +389,87 @@ public:
      *
      * @return whether this type supports in-place construction or not.
      */
-    RTPS_DllAPI virtual inline bool construct_sample(
+    FASTDDS_EXPORTED_API virtual inline bool construct_sample(
             void* memory) const
     {
         static_cast<void>(memory);
         return false;
     }
 
+    /**
+     * Construct a sample on a memory location using a context.
+     * It can be reimplemented by the user to perform custom construction depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during construction.
+     * @param memory Pointer to the memory location where the sample should be constructed.
+     *
+     * @return whether this type supports in-place construction or not.
+     */
+    FASTDDS_EXPORTED_API virtual inline bool construct_sample_ctx(
+            const std::shared_ptr<Context>& context,
+            void* memory) const
+    {
+        static_cast<void>(context);
+        return construct_sample(memory);
+    }
+
+    /**
+     * @brief Register TypeObject type representation
+     */
+    FASTDDS_EXPORTED_API virtual inline void register_type_object_representation()
+    {
+    }
+
+    /**
+     * @brief Register TypeObject type representation
+     * It can be reimplemented by the user to perform custom registration depending on the context received.
+     * The default implementation falls back to using the callback without context.
+     *
+     * @param [in] context Context that can be used during registration.
+     */
+    FASTDDS_EXPORTED_API virtual inline void register_type_object_representation_ctx(
+            const std::shared_ptr<Context>& context)
+    {
+        static_cast<void>(context);
+        register_type_object_representation();
+    }
+
+    /**
+     * @brief Get the maximum serialized size of the type using a context
+     * It can be reimplemented by the user to perform custom calculations depending on the context received.
+     * The default implementation just returns the maximum serialized size without using the context.
+     *
+     * @param [in] context Context that can be used during computation.
+     * @return Maximum serialized size of the type in bytes.
+     */
+    FASTDDS_EXPORTED_API virtual inline uint32_t get_max_serialized_size_ctx(
+            const std::shared_ptr<Context>& context)
+    {
+        static_cast<void>(context);
+        return max_serialized_type_size;
+    }
+
     //! Maximum serialized size of the type in bytes.
     //! If the type has unbounded fields, and therefore cannot have a maximum size, use 0.
-    uint32_t m_typeSize;
+    uint32_t max_serialized_type_size {0};
 
     //! Indicates whether the method to obtain the key has been implemented.
-    bool m_isGetKeyDefined;
+    bool is_compute_key_provided {false};
 
 protected:
 
-    //!Type Identifier XTYPES 1.1
-    std::shared_ptr<TypeIdV1> type_identifier_;
-    //!Type Object XTYPES 1.1
-    std::shared_ptr<TypeObjectV1> type_object_;
-    //!XTYPES 1.2
-    std::shared_ptr<xtypes::TypeInformation> type_information_;
+    xtypes::TypeIdentifierPair type_identifiers_;
 
 private:
 
     //! Data Type Name.
-    std::string m_topicDataTypeName;
-
-    bool auto_fill_type_object_;
-    bool auto_fill_type_information_;
-
-    friend class fastdds::dds::TypeSupport;
+    std::string topic_data_typename_;
 
 };
 
-} /* namespace dds */
-} /* namespace fastdds */
-} /* namespace eprosima */
+} // namespace dds
+} // namespace fastdds
+} // namespace eprosima
 
-#endif /* _FASTDDS_TOPICDATATYPE_HPP_ */
+#endif // FASTDDS_DDS_TOPIC__TOPICDATATYPE_HPP

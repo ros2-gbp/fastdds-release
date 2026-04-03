@@ -18,10 +18,10 @@
  */
 
 
-#include <fastdds/rtps/history/History.h>
+#include <fastdds/rtps/history/History.hpp>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/CacheChange.hpp>
 
 #include <rtps/common/ChangeComparison.hpp>
 #include <rtps/history/BasicPayloadPool.hpp>
@@ -30,7 +30,7 @@
 #include <mutex>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 History::History(
@@ -56,7 +56,7 @@ History::const_iterator History::find_change_nts(
     }
 
     // Use binary search to find the first change with the same sequence number
-    auto lb = std::lower_bound(changesBegin(), changesEnd(), ch, fastdds::rtps::history_order_cmp);
+    auto lb = std::lower_bound(changesBegin(), changesEnd(), ch, history_order_cmp);
 
     if (lb != changesEnd() && matches_change(*lb, ch))
     {
@@ -274,7 +274,7 @@ History::iterator History::remove_iterator_constness(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 
@@ -282,7 +282,7 @@ History::iterator History::remove_iterator_constness(
 #include <sstream>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 void History::print_changes_seqNum2()

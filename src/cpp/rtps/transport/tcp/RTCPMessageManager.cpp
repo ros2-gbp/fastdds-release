@@ -21,11 +21,10 @@
 
 #include <thread>
 
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/utils/System.h>
+#include <fastdds/utils/IPLocator.hpp>
 #include <rtps/transport/tcp/RTCPHeader.h>
 #include <rtps/transport/TCPChannelResource.h>
 #include <rtps/transport/TCPTransportInterface.h>
@@ -34,18 +33,10 @@
 
 #define IDSTRING "(ID:" << std::this_thread::get_id() << ") " <<
 
-//using namespace eprosima::fastrtps;
-
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using IPLocator = fastrtps::rtps::IPLocator;
-using SerializedPayload_t = fastrtps::rtps::SerializedPayload_t;
-using octet = fastrtps::rtps::octet;
-using CDRMessage_t = fastrtps::rtps::CDRMessage_t;
-using RTPSMessageCreator = fastrtps::rtps::RTPSMessageCreator;
-using ProtocolVersion_t = fastrtps::rtps::ProtocolVersion_t;
 using Log = fastdds::dds::Log;
 
 static void endpoint_to_locator(
@@ -143,7 +134,7 @@ bool RTCPMessageManager::sendData(
     TCPHeader header;
     TCPControlMsgHeader ctrlHeader;
     CDRMessage_t msg(this->mTransport->get_configuration()->max_message_size());
-    fastrtps::rtps::CDRMessage::initCDRMsg(&msg);
+    fastdds::rtps::CDRMessage::initCDRMsg(&msg);
     const ResponseCode* code = (respCode != RETCODE_VOID) ? &respCode : nullptr;
 
     fillHeaders(kind, transaction_id, ctrlHeader, header, payload, code);
@@ -215,7 +206,7 @@ void RTCPMessageManager::fillHeaders(
             break;
     }
 
-    retCtrlHeader.endianess(fastrtps::rtps::DEFAULT_ENDIAN); // Override "false" endianess set on the switch
+    retCtrlHeader.endianess(fastdds::rtps::DEFAULT_ENDIAN); // Override "false" endianess set on the switch
     header.logical_port = 0; // This is a control message
     header.length = static_cast<uint32_t>(retCtrlHeader.length() + TCPHeader::size());
 
@@ -455,8 +446,8 @@ ResponseCode RTCPMessageManager::processBindConnectionRequest(
     {
         sendData(channel, BIND_CONNECTION_RESPONSE, transaction_id, &payload, RETCODE_INCOMPATIBLE_VERSION);
         EPROSIMA_LOG_WARNING(RTCP, "Rejected client due to INCOMPATIBLE_VERSION: Expected: " << c_rtcpProtocolVersion
-                                                                                             << " but received " <<
-                request.protocolVersion());
+                                                                                             << " but received "
+                                                                                             << request.protocolVersion());
         return RETCODE_INCOMPATIBLE_VERSION;
     }
 
@@ -654,7 +645,7 @@ ResponseCode RTCPMessageManager::processOpenLogicalPortResponse(
 }
 
 ResponseCode RTCPMessageManager::processKeepAliveResponse(
-        std::shared_ptr<TCPChannelResource>& channel,
+        std::shared_ptr<TCPChannelResource>& /*channel*/,
         ResponseCode respCode,
         const TCPTransactionId& transaction_id)
 {
@@ -663,7 +654,6 @@ ResponseCode RTCPMessageManager::processKeepAliveResponse(
         switch (respCode)
         {
             case RETCODE_OK:
-                channel->waiting_for_keep_alive_ = false;
                 break;
             case RETCODE_UNKNOWN_LOCATOR:
                 return RETCODE_UNKNOWN_LOCATOR;
@@ -684,7 +674,7 @@ ResponseCode RTCPMessageManager::processRTCPMessage(
         std::shared_ptr<TCPChannelResource>& channel,
         octet* receive_buffer,
         size_t receivedSize,
-        fastrtps::rtps::Endianness_t msg_endian)
+        fastdds::rtps::Endianness_t msg_endian)
 {
     ResponseCode responseCode(RETCODE_OK);
 
@@ -715,10 +705,10 @@ ResponseCode RTCPMessageManager::processRTCPMessage(
             readSerializedPayload(payload, &(receive_buffer[TCPControlMsgHeader::size()]), dataSize);
             request.deserialize(&payload);
 
-            EPROSIMA_LOG_INFO(RTCP_MSG, "Receive [BIND_CONNECTION_REQUEST] " <<
-                    "LogicalPort: " << IPLocator::getLogicalPort(
+            EPROSIMA_LOG_INFO(RTCP_MSG, "Receive [BIND_CONNECTION_REQUEST] "
+                    << "LogicalPort: " << IPLocator::getLogicalPort(
                         request.transportLocator())
-                                                                             << ", Physical remote: " << IPLocator::getPhysicalPort(
+                    << ", Physical remote: " << IPLocator::getPhysicalPort(
                         request.transportLocator()));
 
             responseCode = processBindConnectionRequest(channel, request, controlHeader.transaction_id(), myLocator);
@@ -859,5 +849,5 @@ bool RTCPMessageManager::isCompatibleProtocol(
 }
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

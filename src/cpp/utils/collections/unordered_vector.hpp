@@ -19,17 +19,17 @@
 #ifndef SRC_CPP_UTILS_COLLECTIONS_UNORDERED_VECTOR_HPP_
 #define SRC_CPP_UTILS_COLLECTIONS_UNORDERED_VECTOR_HPP_
 
-#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
 
 namespace eprosima {
 namespace utilities {
 namespace collections {
 
-template <
+template<
     typename _Ty,
     typename _Alloc = std::allocator<_Ty>>
-using unordered_vector = eprosima::fastrtps::ResourceLimitedVector<
-    _Ty, std::false_type, eprosima::fastrtps::ResourceLimitedContainerConfig, _Alloc>;
+using unordered_vector = eprosima::fastdds::ResourceLimitedVector<
+    _Ty, std::false_type, eprosima::fastdds::ResourceLimitedContainerConfig, _Alloc>;
 
 } // namespace collections
 } // namespace utilities

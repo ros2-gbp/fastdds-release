@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_UDPV6_TRANSPORT_H_
 #define _FASTDDS_UDPV6_TRANSPORT_H_
 
-#include <fastdds/rtps/transport/UDPv6TransportDescriptor.h>
+#include <fastdds/rtps/transport/UDPv6TransportDescriptor.hpp>
 #include <rtps/transport/UDPTransportInterface.h>
 
 namespace eprosima {
@@ -43,7 +43,7 @@ class UDPv6Transport : public UDPTransportInterface
 {
 public:
 
-    RTPS_DllAPI UDPv6Transport(
+    FASTDDS_EXPORTED_API UDPv6Transport(
             const UDPv6TransportDescriptor&);
 
     ~UDPv6Transport() override;
@@ -121,7 +121,7 @@ protected:
             uint16_t port) override;
     asio::ip::udp generate_protocol() const override;
     bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
     const std::string& localhost_name() override;
@@ -133,6 +133,10 @@ protected:
     //! Checks for whether locator is allowed.
     bool is_locator_allowed(
             const Locator&) const override;
+
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
 
     /**
      * Method to get a list of interfaces to bind the socket associated to the given locator.

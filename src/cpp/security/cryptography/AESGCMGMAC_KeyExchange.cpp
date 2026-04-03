@@ -26,15 +26,16 @@
 #include <openssl/rand.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/BinaryProperty.h>
-#include <fastdds/rtps/common/Token.h>
+#include <fastdds/rtps/common/BinaryProperty.hpp>
+#include <fastdds/rtps/common/Token.hpp>
+#include <rtps/security/exceptions/SecurityException.h>
 
 // Solve error with Win32 macro
 #ifdef WIN32
 #undef max
 #endif // ifdef WIN32
 
-using namespace eprosima::fastrtps::rtps::security;
+using namespace eprosima::fastdds::rtps::security;
 
 AESGCMGMAC_KeyExchange::AESGCMGMAC_KeyExchange()
 {
@@ -72,7 +73,8 @@ bool AESGCMGMAC_KeyExchange::create_local_participant_crypto_tokens(
         temp.class_id() = std::string("DDS:Crypto:AES_GCM_GMAC");
         BinaryProperty prop;
         prop.name() = std::string("dds.cryp.keymat");
-        std::vector<uint8_t> plaintext = KeyMaterialCDRSerialize(remote_participant->Participant2ParticipantKeyMaterial.at(
+        std::vector<uint8_t> plaintext =
+                KeyMaterialCDRSerialize(remote_participant->Participant2ParticipantKeyMaterial.at(
                             0));
         prop.value() = plaintext; //  aes_128_gcm_encrypt(plaintext, remote_participant->Participant2ParticipantKxKeyMaterial.at(0).master_sender_key);
         prop.propagate(true);

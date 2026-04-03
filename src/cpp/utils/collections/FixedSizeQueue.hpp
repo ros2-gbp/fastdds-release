@@ -17,15 +17,15 @@
  *
  */
 
-#ifndef FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
-#define FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#ifndef FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#define FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
 
 #include <assert.h>
 #include <memory>
 #include <type_traits>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 /**
  * A queue with a preallocated fixed size.
@@ -38,7 +38,7 @@ namespace fastrtps {
  *
  * @ingroup UTILITIES_MODULE
  */
-template <
+template<
     typename _Ty,
     typename _Alloc = std::allocator<_Ty>>
 class FixedSizeQueue
@@ -259,7 +259,9 @@ public:
      */
     FixedSizeQueue(
             const FixedSizeQueue& other)
-        : FixedSizeQueue(other.capacity(), other.get_allocator())
+        : FixedSizeQueue(
+                other.capacity(),
+                other.get_allocator())
     {
         for (const_reference item : other)
         {
@@ -684,7 +686,7 @@ protected:
 
 };
 
-}  // namespace fastrtps
+}  // namespace fastdds
 }  // namespace eprosima
 
-#endif /* FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */
+#endif /* FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */

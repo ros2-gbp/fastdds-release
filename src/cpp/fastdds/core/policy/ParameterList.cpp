@@ -31,21 +31,21 @@ namespace dds {
 
 
 bool ParameterList::writeEncapsulationToCDRMsg(
-        fastrtps::rtps::CDRMessage_t* msg)
+        rtps::CDRMessage_t* msg)
 {
-    bool valid = fastrtps::rtps::CDRMessage::addOctet(msg, 0);
-    valid &= fastrtps::rtps::CDRMessage::addOctet(msg, static_cast<fastrtps::rtps::octet>(PL_CDR_LE - msg->msg_endian));
-    valid &= fastrtps::rtps::CDRMessage::addUInt16(msg, 0);
+    bool valid = rtps::CDRMessage::addOctet(msg, 0);
+    valid &= rtps::CDRMessage::addOctet(msg, static_cast<rtps::octet>(PL_CDR_LE - msg->msg_endian));
+    valid &= rtps::CDRMessage::addUInt16(msg, 0);
     return valid;
 }
 
 bool ParameterList::updateCacheChangeFromInlineQos(
-        fastrtps::rtps::CacheChange_t& change,
-        fastrtps::rtps::CDRMessage_t* msg,
+        rtps::CacheChange_t& change,
+        rtps::CDRMessage_t* msg,
         uint32_t& qos_size)
 {
     auto parameter_process = [&](
-        fastrtps::rtps::CDRMessage_t* msg,
+        rtps::CDRMessage_t* msg,
         const ParameterId_t pid,
         uint16_t plength)
             {
@@ -54,7 +54,7 @@ bool ParameterList::updateCacheChangeFromInlineQos(
                     case PID_KEY_HASH:
                     {
                         ParameterKey_t p(pid, plength);
-                        if (!fastdds::dds::ParameterSerializer<ParameterKey_t>::read_from_cdr_message(p, msg, plength))
+                        if (!dds::ParameterSerializer<ParameterKey_t>::read_from_cdr_message(p, msg, plength))
                         {
                             return false;
                         }
@@ -81,7 +81,7 @@ bool ParameterList::updateCacheChangeFromInlineQos(
                         if (plength >= 24)
                         {
                             ParameterSampleIdentity_t p(pid, plength);
-                            if (!fastdds::dds::ParameterSerializer<ParameterSampleIdentity_t>::read_from_cdr_message(p,
+                            if (!dds::ParameterSerializer<ParameterSampleIdentity_t>::read_from_cdr_message(p,
                                     msg, plength))
                             {
                                 return false;
@@ -93,16 +93,47 @@ bool ParameterList::updateCacheChangeFromInlineQos(
                              * Changing this here implies a behaviour change in the
                              * RTPS layer, so it is postponed until the next major release.
                              */
-                            FASTDDS_TODO_BEFORE(3, 0, "Fill related sample identity instead");
+                            FASTDDS_TODO_BEFORE(4, 0, "Fill related sample identity instead");
                             change.write_params.sample_identity(p.sample_id);
                         }
+                        break;
+                    }
+
+                    case PID_RPC_MORE_REPLIES:
+                    {
+                        // Ignore custom PID when coming from other vendors
+                        if (rtps::c_VendorId_eProsima != change.vendor_id)
+                        {
+                            return true;
+                        }
+
+                        change.write_params.has_more_replies(true);
+
+                        break;
+                    }
+
+                    case PID_ORIGINAL_WRITER_INFO:
+                    {
+                        /* A valid original writer info must have, at least, 24 bytes */
+                        if (plength >= 24)
+                        {
+                            ParameterOriginalWriterInfo_t p(pid, plength);
+                            if (!dds::ParameterSerializer<ParameterOriginalWriterInfo_t>::read_from_cdr_message(p,
+                                    msg, plength))
+                            {
+                                return false;
+                            }
+
+                            change.write_params.original_writer_info(p.original_writer_info);
+                        }
+
                         break;
                     }
 
                     case PID_STATUS_INFO:
                     {
                         ParameterStatusInfo_t p(pid, plength);
-                        if (!fastdds::dds::ParameterSerializer<ParameterStatusInfo_t>::read_from_cdr_message(p, msg,
+                        if (!dds::ParameterSerializer<ParameterStatusInfo_t>::read_from_cdr_message(p, msg,
                                 plength))
                         {
                             return false;
@@ -110,15 +141,15 @@ bool ParameterList::updateCacheChangeFromInlineQos(
 
                         if (p.status == 1)
                         {
-                            change.kind = fastrtps::rtps::ChangeKind_t::NOT_ALIVE_DISPOSED;
+                            change.kind = rtps::ChangeKind_t::NOT_ALIVE_DISPOSED;
                         }
                         else if (p.status == 2)
                         {
-                            change.kind = fastrtps::rtps::ChangeKind_t::NOT_ALIVE_UNREGISTERED;
+                            change.kind = rtps::ChangeKind_t::NOT_ALIVE_UNREGISTERED;
                         }
                         else if (p.status == 3)
                         {
-                            change.kind = fastrtps::rtps::ChangeKind_t::NOT_ALIVE_DISPOSED_UNREGISTERED;
+                            change.kind = rtps::ChangeKind_t::NOT_ALIVE_DISPOSED_UNREGISTERED;
                         }
                         break;
                     }
@@ -134,9 +165,9 @@ bool ParameterList::updateCacheChangeFromInlineQos(
 }
 
 bool ParameterList::read_guid_from_cdr_msg(
-        fastrtps::rtps::CDRMessage_t& msg,
+        rtps::CDRMessage_t& msg,
         uint16_t search_pid,
-        fastrtps::rtps::GUID_t& guid)
+        rtps::GUID_t& guid)
 {
     bool valid = false;
     uint16_t pid = 0;
@@ -144,18 +175,17 @@ bool ParameterList::read_guid_from_cdr_msg(
     while (msg.pos < msg.length)
     {
         valid = true;
-        valid = valid && fastrtps::rtps::CDRMessage::readUInt16(&msg, &pid);
-        valid = valid && fastrtps::rtps::CDRMessage::readUInt16(&msg, &plength);
+        valid = valid && rtps::CDRMessage::readUInt16(&msg, &pid);
+        valid = valid && rtps::CDRMessage::readUInt16(&msg, &plength);
         if (!valid || (pid == PID_SENTINEL))
         {
             break;
         }
         if (pid == search_pid)
         {
-            valid = valid && fastrtps::rtps::CDRMessage::readData(&msg, guid.guidPrefix.value,
-                            fastrtps::rtps::GuidPrefix_t::size);
-            valid = valid && fastrtps::rtps::CDRMessage::readData(&msg, guid.entityId.value,
-                            fastrtps::rtps::EntityId_t::size);
+            valid = valid && rtps::CDRMessage::readData(&msg, guid.guidPrefix.value,
+                            rtps::GuidPrefix_t::size);
+            valid = valid && rtps::CDRMessage::readData(&msg, guid.entityId.value, rtps::EntityId_t::size);
             return valid;
         }
         uint64_t aligned_length = (static_cast<uint64_t>(plength) + 3u) & ~3u;
@@ -170,7 +200,7 @@ bool ParameterList::read_guid_from_cdr_msg(
 }
 
 bool ParameterList::readInstanceHandleFromCDRMsg(
-        fastrtps::rtps::CacheChange_t* change,
+        rtps::CacheChange_t* change,
         const uint16_t search_pid)
 {
     assert(change != nullptr);
@@ -182,22 +212,22 @@ bool ParameterList::readInstanceHandleFromCDRMsg(
     }
 
     // Use a temporary wraping message
-    fastrtps::rtps::CDRMessage_t msg(change->serializedPayload);
+    rtps::CDRMessage_t msg(change->serializedPayload);
 
     // Read encapsulation
     msg.pos += 1;
-    fastrtps::rtps::octet encapsulation = 0;
-    if (!fastrtps::rtps::CDRMessage::readOctet(&msg, &encapsulation))
+    rtps::octet encapsulation = 0;
+    if (!rtps::CDRMessage::readOctet(&msg, &encapsulation))
     {
         return false;
     }
     if (encapsulation == PL_CDR_BE)
     {
-        msg.msg_endian = fastrtps::rtps::Endianness_t::BIGEND;
+        msg.msg_endian = rtps::Endianness_t::BIGEND;
     }
     else if (encapsulation == PL_CDR_LE)
     {
-        msg.msg_endian = fastrtps::rtps::Endianness_t::LITTLEEND;
+        msg.msg_endian = rtps::Endianness_t::LITTLEEND;
     }
     else
     {
@@ -214,20 +244,20 @@ bool ParameterList::readInstanceHandleFromCDRMsg(
     uint16_t plength = 0;
     while (msg.pos < msg.length)
     {
-        valid = fastrtps::rtps::CDRMessage::readUInt16(&msg, &pid);
-        valid = valid && fastrtps::rtps::CDRMessage::readUInt16(&msg, &plength);
+        valid = rtps::CDRMessage::readUInt16(&msg, &pid);
+        valid = valid && rtps::CDRMessage::readUInt16(&msg, &plength);
         if ((pid == PID_SENTINEL) || !valid)
         {
             break;
         }
         if (pid == PID_KEY_HASH)
         {
-            valid = valid && fastrtps::rtps::CDRMessage::readData(&msg, change->instanceHandle.value, 16);
+            valid = valid && rtps::CDRMessage::readData(&msg, change->instanceHandle.value, 16);
             return valid;
         }
         if (pid == search_pid)
         {
-            valid = valid && fastrtps::rtps::CDRMessage::readData(&msg, change->instanceHandle.value, 16);
+            valid = valid && rtps::CDRMessage::readData(&msg, change->instanceHandle.value, 16);
             return valid;
         }
         uint64_t aligned_length = (static_cast<uint64_t>(plength) + 3u) & ~3u;

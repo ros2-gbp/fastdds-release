@@ -17,21 +17,24 @@
  *
  */
 
-#include <fastdds/rtps/history/ReaderHistory.h>
+#include <fastdds/rtps/history/ReaderHistory.hpp>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastrtps/utils/Semaphore.h>
-#include <fastdds/rtps/reader/RTPSReader.h>
-#include <fastdds/rtps/reader/ReaderListener.h>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/reader/ReaderListener.hpp>
 
 #include <rtps/common/ChangeComparison.hpp>
+#include <rtps/reader/BaseReader.hpp>
 #include <utils/collections/sorted_vector_insert.hpp>
+#include <utils/Semaphore.hpp>
 
 #include <mutex>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
+
+using BaseReader = fastdds::rtps::BaseReader;
 
 ReaderHistory::ReaderHistory(
         const HistoryAttributes& att)
@@ -57,9 +60,10 @@ bool ReaderHistory::can_change_be_added_nts(
     if (m_att.memoryPolicy == PREALLOCATED_MEMORY_MODE && total_payload_size > m_att.payloadMaxSize)
     {
         EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY,
-                "Change payload size of '" << total_payload_size <<
-                "' bytes is larger than the history payload size of '" << m_att.payloadMaxSize <<
-                "' bytes and cannot be resized.");
+                "Change payload size of '" << total_payload_size
+                                           << "' bytes is larger than the history payload size of '"
+                                           << m_att.payloadMaxSize
+                                           << "' bytes and cannot be resized.");
         will_never_be_accepted = true;
         return false;
     }
@@ -95,9 +99,10 @@ bool ReaderHistory::add_change(
     if (m_att.memoryPolicy == PREALLOCATED_MEMORY_MODE && a_change->serializedPayload.length > m_att.payloadMaxSize)
     {
         EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY,
-                "Change payload size of '" << a_change->serializedPayload.length <<
-                "' bytes is larger than the history payload size of '" << m_att.payloadMaxSize <<
-                "' bytes and cannot be resized.");
+                "Change payload size of '" << a_change->serializedPayload.length
+                                           << "' bytes is larger than the history payload size of '"
+                                           << m_att.payloadMaxSize
+                                           << "' bytes and cannot be resized.");
         return false;
     }
     if (a_change->writerGUID == c_Guid_Unknown)
@@ -148,10 +153,11 @@ History::iterator ReaderHistory::remove_change_nts(
     auto ret_val = m_changes.erase(removal);
     m_isHistoryFull = false;
 
-    mp_reader->change_removed_by_history(change);
+    auto base_reader = BaseReader::downcast(mp_reader);
+    base_reader->change_removed_by_history(change);
     if (release)
     {
-        mp_reader->releaseCache(change);
+        base_reader->release_cache(change);
     }
 
     return ret_val;
@@ -252,19 +258,12 @@ bool ReaderHistory::get_min_change_from(
     return ret;
 }
 
-bool ReaderHistory::do_reserve_cache(
-        CacheChange_t** change,
-        uint32_t size)
-{
-    return mp_reader->reserveCache(change, size);
-}
-
 void ReaderHistory::do_release_cache(
         CacheChange_t* ch)
 {
-    mp_reader->releaseCache(ch);
+    BaseReader::downcast(mp_reader)->release_cache(ch);
 }
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

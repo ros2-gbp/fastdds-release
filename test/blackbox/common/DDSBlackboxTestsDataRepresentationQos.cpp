@@ -12,31 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BlackboxTests.hpp"
-
-#include <vector>
 #include <tuple>
-
-#include <gtest/gtest.h>
+#include <vector>
 
 #include <fastcdr/Cdr.h>
+#include <gtest/gtest.h>
 
+#include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 
-#include <fastrtps/xmlparser/XMLProfileManager.h>
-
 using namespace eprosima::fastdds::dds;
-
-#if FASTCDR_VERSION_MAJOR > 1
 
 class MockHelloWorldPubSubType : public HelloWorldPubSubType
 {
 public:
 
     bool serialize(
-            void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            const void* const data,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             DataRepresentationId_t data_representation) override
     {
         last_data_representation = data_representation;
@@ -45,11 +39,11 @@ public:
     }
 
     bool deserialize(
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            eprosima::fastdds::rtps::SerializedPayload_t& payload,
             void* data) override
     {
         // Object that manages the raw buffer.
-        eprosima::fastcdr::FastBuffer fastbuffer(reinterpret_cast<char*>(payload->data), payload->length);
+        eprosima::fastcdr::FastBuffer fastbuffer(reinterpret_cast<char*>(payload.data), payload.length);
 
         // Object that deserializes the data.
         eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN);
@@ -154,5 +148,3 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(XCDR2_VECTOR, XCDR2_VECTOR, true, XCDR2_DATA_REPRESENTATION, eprosima::fastcdr::PLAIN_CDR2),
         std::make_tuple(XCDR2_VECTOR, BOTH_XCDR_VECTOR, true, XCDR2_DATA_REPRESENTATION, eprosima::fastcdr::PLAIN_CDR2)
         ));
-
-#endif // FASTCDR_VERSION_MAJOR > 1

@@ -18,10 +18,11 @@
 #include <cstring>
 #include <algorithm>
 
-#include <asio.hpp>
+#include "../network/asio.hpp"
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
 #include <rtps/network/utils/netmask_filter.hpp>
 #include <utils/SystemInfo.hpp>
 
@@ -32,10 +33,6 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using IPFinder = fastrtps::rtps::IPFinder;
-using octet = fastrtps::rtps::octet;
-using IPLocator = fastrtps::rtps::IPLocator;
-using octet = fastrtps::rtps::octet;
 using Log = fastdds::dds::Log;
 
 static bool get_ipv6s(
@@ -130,7 +127,7 @@ TCPv6Transport::TCPv6Transport(
                         [infoIP](const AllowedNetworkInterface& allowlist_element)
                         {
                             return allowlist_element.name == infoIP.dev ||
-                            compare_ips(allowlist_element.name, infoIP.name);
+                                   compare_ips(allowlist_element.name, infoIP.name);
                         }) != allow_end ))
                 {
                     EPROSIMA_LOG_WARNING(TRANSPORT_TCPV6,
@@ -154,7 +151,7 @@ TCPv6Transport::TCPv6Transport(
                     [&infoIP](const AllowedNetworkInterface& allowlist_element)
                     {
                         return allowlist_element.name == infoIP.dev || compare_ips(allowlist_element.name,
-                        infoIP.name);
+                               infoIP.name);
                     });
                 if (allow_it != allow_end)
                 {
@@ -170,9 +167,10 @@ TCPv6Transport::TCPv6Transport(
                     {
                         EPROSIMA_LOG_WARNING(TRANSPORT_TCPV6,
                                 "Ignoring allowed interface " << infoIP.dev << ": " << infoIP.name
-                                                              << " as its netmask filter configuration (" << netmask_filter << ") is incompatible"
-                                                              << " with descriptor's (" << descriptor.netmask_filter <<
-                                ").");
+                                                              << " as its netmask filter configuration ("
+                                                              << netmask_filter << ") is incompatible"
+                                                              << " with descriptor's (" << descriptor.netmask_filter
+                                                              << ").");
                     }
                 }
             }
@@ -318,6 +316,12 @@ bool TCPv6Transport::is_locator_allowed(
         return true;
     }
     return is_interface_allowed(IPLocator::toIPv6string(locator));
+}
+
+bool TCPv6Transport::is_locator_reachable(
+        const Locator_t& locator)
+{
+    return IsLocatorSupported(locator);
 }
 
 bool TCPv6Transport::is_interface_whitelist_empty() const
@@ -510,5 +514,5 @@ bool TCPv6Transport::compare_ips(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

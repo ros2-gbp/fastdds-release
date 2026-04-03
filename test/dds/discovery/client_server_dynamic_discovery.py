@@ -59,12 +59,18 @@ def first_step(outq):
             print(line)
             sys.stdout.flush()
 
-            assert '44.53.00.5f.45.50.52.4f.53.49.4d.41' in line
-            assert 'discovered participant' in line
-            count = count + 1
-            if 'discovered participant 44.53.00.5f.45.50.52.4f.53.49.4d.41|0.0.1.c1: 1' in line:
-                print('CLIENT OVERRIDE discovered SERVER 1')
-                server_1_discover_client = True
+            if 'discovered participant' in line:
+                assert '44.53.00.5f.45.50.52.4f.53.49.4d.41' in line
+                count = count + 1
+                if 'discovered participant 44.53.00.5f.45.50.52.4f.53.49.4d.41|0.0.1.c1: 1' in line:
+                    print('CLIENT OVERRIDE discovered SERVER 1')
+                    server_1_discover_client = True
+            elif 'Warning' in line:
+                # SUPER_CLIENT or non-overriden CLIENT participants may generate this warning
+                assert 'Trying to add Discovery Servers to a participant which is not a SERVER, BACKUP or an' in line
+                assert 'overriden CLIENT (SIMPLE participant transformed into CLIENT with the environment variable)' in line
+            else:
+                assert 'detected changes on participant' in line
         except queue.Empty:
             # Ensure that 2 s has passed so the file watch can detect that the file has changed
             if server_1_discover_client and count >= 2 and (time.time() - initial_time) > 2:
@@ -162,7 +168,6 @@ def third_step(outq):
 
 def fourth_step(outq):
     fourth_step_fulfilled = False
-    warning_client_1 = False
     warning_client_2 = False
     count = 0
     initial_time = time.time()
@@ -178,13 +183,11 @@ def fourth_step(outq):
             if 'Trying to add Discovery Servers to a participant which is not a SERVER, BACKUP or an' in line \
                 and 'overriden CLIENT (SIMPLE participant transformed into CLIENT with the environment variable)' in line:
                 warning_client_2 = True
-            elif 'Discovery Servers cannot be removed from the list; they can only be added' in line:
-                warning_client_1 = True
             elif 'discovered participant' in line:
                 count = count + 1
         except queue.Empty:
             # Ensure that 2 s has passed so the file watch can detect that the file has changed
-            if warning_client_1 and warning_client_2 and count == 0 and (time.time() - initial_time) > 2:
+            if warning_client_2 and count == 0 and (time.time() - initial_time) > 2:
                 fourth_step_fulfilled = True
             elif count > 0:
                 print('ERROR: More discoveries than expected')
@@ -199,7 +202,6 @@ def fourth_step(outq):
 
 def fifth_step(outq):
     fifth_step_fulfilled = False
-    warning = False
     count = 0
     initial_time = time.time()
     while not fifth_step_fulfilled:
@@ -211,13 +213,11 @@ def fifth_step(outq):
             print(line)
             sys.stdout.flush()
 
-            if 'Discovery Servers cannot be removed from the list; they can only be added' in line:
-                warning = True
-            elif 'discovered participant' in line:
+            if 'discovered participant' in line:
                 count = count + 1
         except queue.Empty:
             # Ensure that 2 s has passed so the file watch can detect that the file has changed
-            if warning and count == 0 and (time.time() - initial_time) > 2:
+            if count == 0 and (time.time() - initial_time) > 2:
                 fifth_step_fulfilled = True
             elif count > 0:
                 print('ERROR: More discoveries than expected')
@@ -282,11 +282,11 @@ def communication(proc, outq, outt, cv):
                     cv.acquire()
                     cv.notify()
                     cv.release()
-                
- 
+
+
             except queue.Empty:
                 sys.stdout.flush()
-            
+
             time.sleep(0.1)
     finally:
         proc.terminate()

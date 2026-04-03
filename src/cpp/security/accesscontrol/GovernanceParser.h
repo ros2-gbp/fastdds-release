@@ -20,7 +20,7 @@
 #include <string>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 
@@ -96,7 +96,7 @@ private:
 
 } // namespace security
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif // __SECURITY_ACCESSCONTROL_GOVERNANCEPARSER_H__

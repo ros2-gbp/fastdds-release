@@ -14,7 +14,7 @@
 
 #include <cassert>
 
-#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/Locator.hpp>
 
 #include <rtps/network/NetworkConfiguration.hpp>
 
@@ -25,7 +25,7 @@ namespace network {
 
 void add_localhost_capability(
         int32_t kind,
-        fastrtps::rtps::NetworkConfigSet_t& network_config)
+        NetworkConfigSet_t& network_config)
 {
     // Only add localhost capability for transports that support it
     if (kind == LOCATOR_KIND_UDPv4 || kind == LOCATOR_KIND_UDPv6 ||

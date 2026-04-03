@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BlackboxTests.hpp"
-
 #if HAVE_SQLITE3
 
 #include <cstring>
-#include <thread>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
+#include <thread>
 
-#include "RTPSWithRegistrationWriter.hpp"
-#include "RTPSWithRegistrationReader.hpp"
-
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/rtps/RTPSDomain.hpp>
 #include <gtest/gtest.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+#include "BlackboxTests.hpp"
+#include "RTPSWithRegistrationReader.hpp"
+#include "RTPSWithRegistrationWriter.hpp"
+
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 enum communication_type
 {
@@ -42,12 +42,12 @@ protected:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(att);
                 break;
             case TRANSPORT:
             default:
@@ -57,12 +57,12 @@ protected:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (GetParam())
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::rtps::RTPSDomain::set_library_settings(att);
                 break;
             case TRANSPORT:
             default:
@@ -76,11 +76,11 @@ protected:
         int32_t pid = static_cast<int32_t>(GET_PID());
         uint8_t* bytes = reinterpret_cast<uint8_t*>(&pid);
         std::stringstream gp;
-        gp << std::hex <<
-            std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[0]) << "." <<
-            std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[1]) << "." <<
-            std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[2]) << "." <<
-            std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[3]);
+        gp << std::hex
+           << std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[0]) << "."
+           << std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[1]) << "."
+           << std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[2]) << "."
+           << std::setfill('0') << std::setw(2) << static_cast<uint16_t>(bytes[3]);
         return gp.str();
     }
 
@@ -151,29 +151,29 @@ TEST_P(PersistenceGuid, SetPersistenceGuidThroughRTPSLayer)
     std::stringstream command;
 #ifdef WIN32
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"writers_histories\" \"77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"writers_histories\" \"77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64\"";
     int result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result1, 1);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"readers\" \"77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"readers\" \"77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65\"";
     int result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result2, 1);
 #else
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'writers_histories' '77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'writers_histories' '77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64'";
     int result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result1 >> 8), 1);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'readers' '77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'readers' '77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65'";
     int result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result2 >> 8), 1);
@@ -201,13 +201,13 @@ TEST_P(PersistenceGuid, CheckPrevalenceBetweenManualAndPropertyConfiguration)
     std::string guidprefix_4 = persistence_lastfour_guidprefix();
     std::stringstream guid;
     // Create the persistence guid to set manually
-    eprosima::fastrtps::rtps::GuidPrefix_t guidPrefix;
+    eprosima::fastdds::rtps::GuidPrefix_t guidPrefix;
     int32_t pid = static_cast<int32_t>(GET_PID());
     guidPrefix.value[8] = reinterpret_cast<uint8_t*>(&pid)[0];
     guidPrefix.value[9] = reinterpret_cast<uint8_t*>(&pid)[1];
     guidPrefix.value[10] = reinterpret_cast<uint8_t*>(&pid)[2];
     guidPrefix.value[11] = reinterpret_cast<uint8_t*>(&pid)[3];
-    eprosima::fastrtps::rtps::EntityId_t entityId;
+    eprosima::fastdds::rtps::EntityId_t entityId;
     entityId.value[3] = 1;
 
     // Create RTPSWriter that use the already created attributes
@@ -255,57 +255,57 @@ TEST_P(PersistenceGuid, CheckPrevalenceBetweenManualAndPropertyConfiguration)
     std::stringstream command;
 #ifdef WIN32
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"writers_histories\" \"77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"writers_histories\" \"77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64\"";
     int result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result1, 0);
 
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"writers_histories\" \"00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.1\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"writers_histories\" \"00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.1\"";
     result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result1, 1);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"readers\" \"77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"readers\" \"77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65\"";
     int result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result2, 0);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python check_guid.py \"" << persistence_db <<
-        "\" \"readers\" \"00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.2\"";
+    command << "python check_guid.py \"" << persistence_db
+            << "\" \"readers\" \"00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.2\"";
     result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ(result2, 1);
 #else
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'writers_histories' '77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'writers_histories' '77.72.69.74.65.72.5f.70." << guidprefix_4 << "|67.75.69.64'";
     int result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result1 >> 8), 0);
 
     // Check if there is one entry in the writers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'writers_histories' '00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.1'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'writers_histories' '00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.1'";
     result1 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result1 >> 8), 1);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'readers' '77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'readers' '77.65.61.64.65.72.5f.70." << guidprefix_4 << "|68.76.70.65'";
     int result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result2 >> 8), 0);
 
     // Check if there is one entry in the readers database table with the stated persistence guid
-    command << "python3 check_guid.py '" << persistence_db <<
-        "' 'readers' '00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.2'";
+    command << "python3 check_guid.py '" << persistence_db
+            << "' 'readers' '00.00.00.00.00.00.00.00." << guidprefix_4 << "|0.0.0.2'";
     result2 = system(command.str().c_str());
     command.str("");
     ASSERT_EQ((result2 >> 8), 1);

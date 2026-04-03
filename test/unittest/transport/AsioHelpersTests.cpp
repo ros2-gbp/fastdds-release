@@ -20,11 +20,11 @@
 #include <gtest/gtest.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
-#include <fastrtps/utils/IPFinder.h>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
-#include <fastrtps/utils/Semaphore.h>
+#include <utils/Semaphore.hpp>
 
 #include <MockReceiverResource.h>
 #include <rtps/transport/asio_helpers.hpp>
@@ -35,7 +35,7 @@ using namespace eprosima::fastdds::rtps;
 
 // Regression tests for redmine issue #22210
 
-template <typename BufferOption, typename SocketType, typename Protocol>
+template<typename BufferOption, typename SocketType, typename Protocol>
 void test_buffer_setting(
         int initial_buffer_value,
         int minimum_buffer_value)
