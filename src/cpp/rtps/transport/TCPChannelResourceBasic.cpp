@@ -18,7 +18,7 @@
 #include <future>
 #include <mutex>
 
-#include "../network/asio.hpp"
+#include <asio.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 

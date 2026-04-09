@@ -418,50 +418,6 @@ public:
     ReturnCode_t get_publication_builtin_topic_data(
             PublicationBuiltinTopicData& publication_data) const;
 
-    /**
-     *  @brief Set a sample prefilter to be used. This filter is always
-     *  evaluated before sending the sample to any DataReader and prior to
-     *  any content filtering.
-     *  Passing a nullptr disables prefiltering.
-     *
-     * @param prefilter The prefilter to be set.
-     *
-     * @return RETCODE_OK if the prefilter is set correctly.
-     *
-     * @note Prefiltering is currently incompatible with DataSharing.
-     */
-    ReturnCode_t set_sample_prefilter(
-            std::shared_ptr<IContentFilter> prefilter);
-
-    /**
-     * This operation sets the key of the DataReader that is related to this DataWriter.
-     * This is used to establish a relationship between a DataReader and a DataWriter
-     * in the context of RPC over DDS.
-     *
-     * @warning This operation is only valid if the entity is not enabled.
-     *
-     * @param [in] related_reader Pointer to the DataReader to set as related.
-     *
-     * @return RETCODE_OK if the key is set successfully.
-     * @return RETCODE_ILLEGAL_OPERATION if this entity is enabled.
-     * @return RETCODE_PRECONDITION_NOT_MET if the entity does not belong to the same participant.
-     * @return RETCODE_BAD_PARAMETER if the provided GUID is unknown
-     * @return RETCODE_UNSUPPORTED if the implementation does not support RPC over DDS
-     * or the pointer is not valid.
-     */
-    ReturnCode_t set_related_datareader(
-            const DataReader* related_reader);
-
-    /**
-     * @brief Set the type support context to be used when serializing data for this DataWriter.
-     *
-     * @param context Shared pointer to the type support context to be used for serialization.
-     *
-     * @pre The DataWriter must not be enabled.
-     */
-    void set_type_support_context(
-            const std::shared_ptr<TopicDataType::Context>& context);
-
 protected:
 
     using IChangePool = eprosima::fastdds::rtps::IChangePool;
@@ -581,11 +537,6 @@ protected:
     std::unique_ptr<ReaderFilterCollection> reader_filters_;
 
     DataRepresentationId_t data_representation_ {DEFAULT_DATA_REPRESENTATION};
-
-    mutable std::mutex filters_mtx_;
-    std::shared_ptr<IContentFilter> sample_prefilter_;
-
-    std::shared_ptr<TopicDataType::Context> type_support_context_ {};
 
     ReturnCode_t check_write_preconditions(
             const void* const data,

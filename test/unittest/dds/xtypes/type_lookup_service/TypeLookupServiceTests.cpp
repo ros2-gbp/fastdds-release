@@ -30,7 +30,7 @@
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/reader/StatefulReader.hpp>
 #include <rtps/writer/StatefulWriter.hpp>
-#include <rtps/domain/RTPSDomainImpl.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
 
 using ::testing::Mock;
 using ::testing::NiceMock;

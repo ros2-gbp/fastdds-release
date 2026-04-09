@@ -1729,27 +1729,27 @@ public:
      * @brief Specifies the maximum number of data-samples the DataWriter (or DataReader) can manage across all the
      * instances associated with it. Represents the maximum samples the middleware can store for any one DataWriter
      * (or DataReader). <br>
-     * Value less or equal to 0 means infinite resources. By default, LENGTH_UNLIMITED.
+     * Value less or equal to 0 means infinite resources. By default, 5000.
      *
      * @warning It is inconsistent if `max_samples < (max_instances * max_samples_per_instance)`.
      */
     int32_t max_samples;
     /**
      * @brief Represents the maximum number of instances DataWriter (or DataReader) can manage. <br>
-     * Value less or equal to 0 means infinite resources. By default, LENGTH_UNLIMITED.
+     * Value less or equal to 0 means infinite resources. By default, 10.
      *
      * @warning It is inconsistent if `(max_instances * max_samples_per_instance) > max_samples`.
      */
     int32_t max_instances;
     /**
      * @brief Represents the maximum number of samples of any one instance a DataWriter(or DataReader) can manage. <br>
-     * Value less or equal to 0 means infinite resources. By default, LENGTH_UNLIMITED.
+     * Value less or equal to 0 means infinite resources. By default, 400.
      *
      * @warning It is inconsistent if `(max_instances * max_samples_per_instance) > max_samples`.
      */
     int32_t max_samples_per_instance;
     /**
-     * @brief Number of samples initially allocated. <br>
+     * @brief Number of samples currently allocated. <br>
      * By default, 100.
      */
     int32_t allocated_samples;
@@ -1765,9 +1765,9 @@ public:
     FASTDDS_EXPORTED_API ResourceLimitsQosPolicy()
         : Parameter_t(PID_RESOURCE_LIMITS, 4 * 5)
         , QosPolicy(false)
-        , max_samples(LENGTH_UNLIMITED)
-        , max_instances(LENGTH_UNLIMITED)
-        , max_samples_per_instance(LENGTH_UNLIMITED)
+        , max_samples(5000)
+        , max_instances(10)
+        , max_samples_per_instance(400)
         , allocated_samples(100)
         , extra_samples(1)
     {
@@ -1984,6 +1984,8 @@ public:
 /**
  * This policy is a hint to the infrastructure as to how to set the priority of the underlying transport used to send the data.
  *
+ * @warning This QosPolicy can be defined and is transmitted to the rest of the network but is not implemented in this version.
+ *
  * @note Mutable Qos Policy
  */
 class TransportPriorityQosPolicy : public Parameter_t, public QosPolicy
@@ -1991,7 +1993,7 @@ class TransportPriorityQosPolicy : public Parameter_t, public QosPolicy
 public:
 
     //!Priority <br> By default, 0.
-    int32_t value;
+    uint32_t value;
 
     /**
      * @brief Constructor

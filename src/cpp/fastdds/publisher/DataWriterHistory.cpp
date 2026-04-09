@@ -49,7 +49,7 @@ HistoryAttributes DataWriterHistory::to_history_attributes(
 
     if (history_qos.kind != KEEP_ALL_HISTORY_QOS)
     {
-        max_samples = history_qos.depth;
+        max_samples = get_min_max_samples(history_qos.depth, resource_limits_qos.max_samples_per_instance);
         if (topic_kind != NO_KEY)
         {
             if (0 < resource_limits_qos.max_instances)
@@ -62,7 +62,10 @@ HistoryAttributes DataWriterHistory::to_history_attributes(
             }
         }
 
-        initial_samples = get_min_max_samples(initial_samples, max_samples);
+        if (0 < initial_samples)
+        {
+            initial_samples = get_min_max_samples(initial_samples, max_samples);
+        }
     }
 
     return HistoryAttributes(mempolicy, payloadMaxSize, initial_samples, max_samples, extra_samples);

@@ -32,10 +32,8 @@ set(WRITERPROXYTESTS_SOURCE WriterProxyTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
@@ -62,13 +60,10 @@ target_include_directories(WriterProxyTests PRIVATE
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/ResourceEvent
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     )
 target_link_libraries(WriterProxyTests
     fastcdr
     fastdds::log
-    fastdds::xtypes::dynamic-types::impl
-    fastdds::xtypes::type-representation
     foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
@@ -92,10 +87,8 @@ set(WRITERPROXYSTOPTEST_SOURCE WriterProxyStopTest.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/TimedConditionVariable.cpp
     )
@@ -121,13 +114,10 @@ target_include_directories(WriterProxyStopTest PRIVATE
     ${PROJECT_SOURCE_DIR}/test/mock/dds/QosPolicies
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     )
 target_link_libraries(WriterProxyStopTest
     fastcdr
     fastdds::log
-    fastdds::xtypes::dynamic-types::impl
-    fastdds::xtypes::type-representation
     foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
@@ -150,10 +140,8 @@ set(WRITERPROXYACKNACKTESTS_SOURCE WriterProxyAcknackTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
@@ -179,13 +167,10 @@ target_include_directories(WriterProxyAcknackTests PRIVATE
     ${PROJECT_SOURCE_DIR}/test/mock/rtps/ResourceEvent
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     )
 target_link_libraries(WriterProxyAcknackTests
     fastcdr
     fastdds::log
-    fastdds::xtypes::dynamic-types::impl
-    fastdds::xtypes::type-representation
     foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
@@ -277,8 +262,7 @@ set(STATEFUL_READER_TESTS_SOURCE StatefulReaderTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/ResourceEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomain.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomainExtras.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/RTPSDomain.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/ChannelResource.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
@@ -335,7 +319,6 @@ set(STATEFUL_READER_TESTS_SOURCE StatefulReaderTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
 
     )
@@ -452,6 +435,14 @@ target_link_libraries(StatefulReaderTests
     ${THIRDPARTY_BOOST_LINK_LIBS}
     eProsima_atomic
     )
+if(MSVC OR MSVC_IDE)
+    target_link_libraries(StatefulReaderTests ${PRIVACY}
+        iphlpapi Shlwapi
+        )
+endif()
+if (APPLE)
+    target_link_libraries(StatefulReaderTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
+endif()
 gtest_discover_tests(StatefulReaderTests)
 
 ###########################################################################
@@ -540,8 +531,7 @@ set(STATELESS_READER_TESTS_SOURCE StatelessReaderTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/ResourceEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomain.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomainExtras.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/RTPSDomain.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/ChannelResource.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
@@ -598,7 +588,6 @@ set(STATELESS_READER_TESTS_SOURCE StatelessReaderTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
 
     )
@@ -715,4 +704,7 @@ target_link_libraries(StatelessReaderTests
     ${THIRDPARTY_BOOST_LINK_LIBS}
     eProsima_atomic
     )
+if (APPLE)
+    target_link_libraries(StatelessReaderTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
+endif()
 gtest_discover_tests(StatelessReaderTests)

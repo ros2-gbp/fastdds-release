@@ -42,7 +42,6 @@ namespace rtps {
 
 class BaseReader;
 class StatefulWriter;
-class StatefulWriterListener;
 class TimedEvent;
 class RTPSReader;
 class IDataSharingNotifier;
@@ -63,13 +62,11 @@ public:
      * @param times WriterTimes to use in the ReaderProxy.
      * @param loc_alloc Maximum number of remote locators to keep in the ReaderProxy.
      * @param writer Pointer to the StatefulWriter creating the reader proxy.
-     * @param stateful_listener Pointer to the StatefulWriterListener associated to the writer.
      */
     ReaderProxy(
             const WriterTimes& times,
             const RemoteLocatorsAllocationAttributes& loc_alloc,
-            StatefulWriter* writer,
-            StatefulWriterListener* stateful_listener);
+            StatefulWriter* writer);
 
     /**
      * Activate this proxy associating it to a remote reader.
@@ -486,9 +483,6 @@ private:
 
     bool active_ = false;
 
-    //! Listener to notify about data acknowledgements and resends.
-    StatefulWriterListener* const stateful_writer_listener_ = nullptr;
-
     using ChangeIterator = ResourceLimitedVector<ChangeForReader_t, std::true_type>::iterator;
     using ChangeConstIterator = ResourceLimitedVector<ChangeForReader_t, std::true_type>::const_iterator;
 
@@ -504,7 +498,6 @@ private:
     uint32_t convert_status_on_all_changes(
             ChangeForReaderStatus_t previous,
             ChangeForReaderStatus_t next,
-            bool notify_resend,
             const std::function<void(ChangeForReader_t& change)>& func = {});
 
     /*!
@@ -539,23 +532,6 @@ private:
      */
     ChangeConstIterator find_change(
             const SequenceNumber_t& seq_num) const;
-
-    /**
-     * @brief Notifies that a change has been acknowledged by this ReaderProxy.
-     *
-     * @param chiange  Reference to the ChangeForReader_t that has been acknowledged.
-     */
-    void notify_acknowledged(
-            const ChangeForReader_t& change) const;
-
-    /**
-     * @brief Notifies that a change has been resent to this ReaderProxy.
-     *
-     * @param change  Reference to the ChangeForReader_t that has been resent.
-     */
-    void notify_resent(
-            const ChangeForReader_t& change) const;
-
 };
 
 } /* namespace rtps */

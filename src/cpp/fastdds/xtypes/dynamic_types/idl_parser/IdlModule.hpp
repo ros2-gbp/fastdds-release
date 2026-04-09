@@ -44,83 +44,78 @@ public:
     Module(
             const Module& other) = delete;
 
-    Module& create_submodule(
-            const std::string& submodule)
-    {
-        std::shared_ptr<Module> new_submodule(new Module(this, submodule));
-        auto result = inner_.emplace(submodule, new_submodule);
-        return *result.first->second.get();
-    }
+    // Module& create_submodule(
+    //         const std::string& submodule)
+    // {
+    //     std::shared_ptr<Module> new_submodule(new Module(this, submodule));
+    //     auto result = inner_.emplace(submodule, new_submodule);
+    //     return *result.first->second.get();
+    // }
 
-    const Module* outer() const
-    {
-        return outer_;
-    }
+    // std::shared_ptr<Module> submodule(
+    //         const std::string& submodule)
+    // {
+    //     return inner_[submodule];
+    // }
 
-    std::shared_ptr<Module> submodule(
-            const std::string& submodule)
-    {
-        return inner_[submodule];
-    }
+    // size_t submodule_size()
+    // {
+    //     return inner_.size();
+    // }
 
-    size_t submodule_size()
-    {
-        return inner_.size();
-    }
+    // using ModuleVisitor = std::function<void(const Module& mod)>;
 
-    using ModuleVisitor = std::function<void (const Module& mod)>;
+    // void for_each_submodule(
+    //         ModuleVisitor visitor,
+    //         const Module* module,
+    //         bool recursive = true) const
+    // {
+    //     for (const auto& inner : module->inner_)
+    //     {
+    //         visitor(*inner.second.get());
+    //         if (recursive)
+    //         {
+    //             for_each_submodule(visitor, inner.second.get());
+    //         }
+    //     }
+    // }
 
-    void for_each_submodule(
-            ModuleVisitor visitor,
-            const Module* module,
-            bool recursive = true) const
-    {
-        for (const auto& inner : module->inner_)
-        {
-            visitor(*inner.second.get());
-            if (recursive)
-            {
-                for_each_submodule(visitor, inner.second.get());
-            }
-        }
-    }
+    // void for_each_submodule(
+    //         ModuleVisitor visitor,
+    //         bool recursive = true) const
+    // {
+    //     for_each_submodule(visitor, this, recursive);
+    // }
 
-    void for_each_submodule(
-            ModuleVisitor visitor,
-            bool recursive = true) const
-    {
-        for_each_submodule(visitor, this, recursive);
-    }
+    // void for_each(
+    //         ModuleVisitor visitor) const
+    // {
+    //     visitor(*this);
+    //     for_each_submodule(visitor, this);
+    // }
 
-    void for_each(
-            ModuleVisitor visitor) const
-    {
-        visitor(*this);
-        for_each_submodule(visitor, this);
-    }
+    // bool has_submodule(
+    //         const std::string& submodule) const
+    // {
+    //     return inner_.count(submodule) > 0;
+    // }
 
-    bool has_submodule(
-            const std::string& submodule) const
-    {
-        return inner_.count(submodule) > 0;
-    }
+    // Module& operator [] (
+    //         const std::string& submodule)
+    // {
+    //     return *inner_[submodule];
+    // }
 
-    Module& operator [] (
-            const std::string& submodule)
-    {
-        return *inner_[submodule];
-    }
+    // const Module& operator [] (
+    //         const std::string& submodule) const
+    // {
+    //     return *inner_.at(submodule);
+    // }
 
-    const Module& operator [] (
-            const std::string& submodule) const
-    {
-        return *inner_.at(submodule);
-    }
-
-    const std::string& name() const
-    {
-        return name_;
-    }
+    // const std::string& name() const
+    // {
+    //     return name_;
+    // }
 
     std::string scope() const
     {
@@ -139,7 +134,7 @@ public:
                 || unions_.count(ident) > 0
                 || aliases_.count(ident) > 0
                 || constants_.count(ident) > 0
-                || enumerations_.count(ident) > 0
+                || enumerations_32_.count(ident) > 0
                 || inner_.count(ident) > 0;
 
         if (has_it)
@@ -239,6 +234,11 @@ public:
             bool replace = false)
     {
         std::string name(builder->get_name());
+        if (name.find("::") != std::string::npos)
+        {
+            return false; // Cannot add a symbol with scoped name.
+        }
+
         if (replace)
         {
             auto it = structs_.find(name);
@@ -248,6 +248,10 @@ public:
             }
         }
 
+        std::string name_space = scope();
+        TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
+        builder->get_descriptor(type_descriptor);
+        type_descriptor->name(name_space + (name_space.empty() ? "" : "::") + name);
         auto result = structs_.emplace(name, builder);
 
         return result.second;
@@ -311,6 +315,15 @@ public:
             DynamicTypeBuilder::_ref_type builder)
     {
         std::string name(builder->get_name());
+        if (name.find("::") != std::string::npos)
+        {
+            return false; // Cannot add a symbol with scoped name.
+        }
+
+        std::string name_space = scope();
+        TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
+        builder->get_descriptor(type_descriptor);
+        type_descriptor->name(name_space + (name_space.empty() ? "" : "::") + name);
         auto result = unions_.emplace(name, builder);
 
         return result.second;
@@ -385,6 +398,11 @@ public:
             bool replace = false,
             bool from_enumeration = false)
     {
+        if (name.find("::") != std::string::npos)
+        {
+            return false; // Cannot add a symbol with scoped name.
+        }
+
         if (replace)
         {
             auto it = constants_.find(name);
@@ -402,27 +420,36 @@ public:
         return result.second;
     }
 
-    bool has_enum(
+    bool has_enum_32(
             const std::string& name) const
     {
-        return enumerations_.count(name) > 0;
+        return enumerations_32_.count(name) > 0;
     }
 
-    bool enumeration(
+    bool enum_32(
             const std::string& name,
             DynamicTypeBuilder::_ref_type builder,
             bool replace = false)
     {
+        if (name.find("::") != std::string::npos)
+        {
+            return false; // Cannot add a symbol with scoped name.
+        }
+
         if (replace)
         {
-            auto it = enumerations_.find(name);
-            if (it != enumerations_.end())
+            auto it = enumerations_32_.find(name);
+            if (it != enumerations_32_.end())
             {
-                enumerations_.erase(it);
+                enumerations_32_.erase(it);
             }
         }
 
-        auto result = enumerations_.emplace(name, builder);
+        std::string name_space = scope();
+        TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
+        builder->get_descriptor(type_descriptor);
+        type_descriptor->name(name_space + (name_space.empty() ? "" : "::") + name);
+        auto result = enumerations_32_.emplace(name, builder);
 
         return result.second;
     }
@@ -445,6 +472,11 @@ public:
             const std::string& name,
             DynamicTypeBuilder::_ref_type builder)
     {
+        if (name.find("::") != std::string::npos || has_alias(name))
+        {
+            return false; // Cannot define alias with scoped name (or already defined).
+        }
+
         std::string name_space = scope();
         TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
         builder->get_descriptor(type_descriptor);
@@ -478,9 +510,9 @@ public:
         }
 
         // Check enums
-        if (module.first->has_enum(module.second))
+        if (module.first->has_enum_32(module.second))
         {
-            builder = module.first->enumerations_.at(module.second);
+            builder = module.first->enumerations_32_.at(module.second);
         }
 
         // Check structs
@@ -501,6 +533,14 @@ public:
             builder = module.first->aliases_.at(module.second);
         }
 
+        if (name.find("::") == 0)
+        {
+            // Scope ambiguity solver was originally used, add it to the retrieved DynamicTypeBuilder
+            TypeDescriptor::_ref_type type_descriptor {traits<TypeDescriptor>::make_shared()};
+            builder->get_descriptor(type_descriptor);
+            type_descriptor->name(name);
+        }
+
         // Check bitsets
         // TODO
 
@@ -510,24 +550,16 @@ public:
         return builder;
     }
 
-    std::string create_scoped_name(
-            const std::string& plain_name) const
-    {
-        assert(plain_name.find("::") == std::string::npos);
-        const std::string& name_space = scope();
-        return name_space.empty() ? plain_name : name_space + "::" + plain_name;
-    }
-
 protected:
 
-    // NOTE: Builders are stored using the scoped name as key
     std::map<std::string, DynamicTypeBuilder::_ref_type> aliases_;
     // std::map<std::string, Type> constants_types_;
     std::map<std::string, DynamicData::_ref_type> constants_;
     std::vector<std::string> from_enum_;
-    std::map<std::string, DynamicTypeBuilder::_ref_type> enumerations_;
+    std::map<std::string, DynamicTypeBuilder::_ref_type> enumerations_32_;
     std::map<std::string, DynamicTypeBuilder::_ref_type> structs_;
     std::map<std::string, DynamicTypeBuilder::_ref_type> unions_;
+    //std::map<std::string, std::shared_ptr<AnnotationType>> annotations_;
     Module* outer_;
     std::map<std::string, std::shared_ptr<Module>> inner_;
     std::string name_;
@@ -564,7 +596,6 @@ protected:
         }
 
         std::string name = symbol_name;
-        std::string name_space = scope();
         // Solve scope
         if (symbol_name.find("::") != std::string::npos) // It is an scoped name
         {
@@ -585,38 +616,16 @@ protected:
                 // Maybe the current scope its me?
                 if (inner_scope == name_)
                 {
-                    std::string inner_name = symbol_name.substr(symbol_name.find("::") + 2);
-                    // inner_name is a scoped name (i.e: is this in the scope of one my submodules)?
-                    if (inner_name.find("::") != std::string::npos)
+                    std::string innest_scope = inner_scope.substr(0, inner_scope.find("::"));
+                    if (inner_.count(innest_scope) > 0)
                     {
-                        // We should be in the scope of one of my submodules, go down.
-                        const auto& it = inner_.find(inner_name.substr(0, inner_name.find("::")));
-                        if (it == inner_.end())
+                        std::string inner_name = symbol_name.substr(symbol_name.find("::") + 2);
+                        const auto& it = inner_.find(innest_scope);
+                        PairModuleSymbol result = it->second->resolve_scope(inner_name, original_name);
+                        if (result.first != nullptr)
                         {
-                            EPROSIMA_LOG_ERROR(IDLPARSER, "Cannot find inner scope '" << inner_name << "'.");
-                            // Unknown scope
-                            PairModuleSymbol pair;
-                            pair.first = nullptr;
-                            pair.second = original_name;
-                            return pair;
+                            return result;
                         }
-                        // Resolve from the inner submodule
-                        return it->second->resolve_scope(inner_name, original_name);
-                    }
-                    else
-                    {
-                        // Symbol should be stored in the current module
-                        std::string scoped_name = name_space.empty() ? inner_name : name_space + "::" + inner_name;
-                        if (has_symbol(scoped_name, false))
-                        {
-                            return std::make_pair<const Module*, std::string>(this, std::move(scoped_name));
-                        }
-
-                        // Failed, not found
-                        PairModuleSymbol pair;
-                        pair.first = nullptr;
-                        pair.second = original_name;
-                        return pair;
                     }
                 }
                 // Do we have a inner scope that matches?
@@ -639,10 +648,9 @@ protected:
             }
         }
 
-        std::string scoped_name = name_space.empty() ? name : name_space + "::" + name;
-        if (has_symbol(scoped_name, false))
+        if (has_symbol(name, false))
         {
-            return std::make_pair<const Module*, std::string>(this, std::move(scoped_name));
+            return std::make_pair<const Module*, std::string>(this, std::move(name));
         }
 
         if (outer_ != nullptr)

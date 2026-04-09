@@ -50,7 +50,6 @@ PublisherApp::PublisherApp(
     , writer_(nullptr)
     , matched_(0)
     , samples_(config.samples)
-    , expected_matches_(config.matched)
     , stop_(false)
 {
     // Create the participant
@@ -204,7 +203,7 @@ bool PublisherApp::publish()
     cv_.wait(matched_lock, [&]()
             {
                 // at least one has been discovered
-                return ((matched_ >= expected_matches_) || is_stopped());
+                return ((matched_ > 0) || is_stopped());
             });
 
     if (!is_stopped())
@@ -241,8 +240,8 @@ DynamicType::_ref_type PublisherApp::create_type(
                 DomainParticipantFactory::get_instance()->get_dynamic_type_builder_from_xml_by_name("HelloWorld",
                 struct_builder))
         {
-            std::cout
-                << "Error getting dynamic type \"HelloWorld\"." << std::endl;
+            std::cout <<
+                "Error getting dynamic type \"HelloWorld\"." << std::endl;
             return nullptr;
         }
     }

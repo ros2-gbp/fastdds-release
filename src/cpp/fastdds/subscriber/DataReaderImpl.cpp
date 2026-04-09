@@ -53,14 +53,12 @@
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/resources/TimedEvent.h>
 #include <rtps/resources/ResourceEvent.h>
-#include <rtps/domain/RTPSDomainImpl.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
 #include <utils/TimeConversion.hpp>
 #include <utils/BuiltinTopicKeyConversions.hpp>
 #ifdef FASTDDS_STATISTICS
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 #include <statistics/types/monitorservice_types.hpp>
-#else
-#include <fastdds/dds/publisher/DataWriter.hpp>
 #endif // FASTDDS_STATISTICS
 
 using eprosima::fastdds::RecursiveTimedMutex;
@@ -385,28 +383,6 @@ bool DataReaderImpl::wait_for_unread_message(
 void DataReaderImpl::set_read_communication_status(
         bool trigger_value)
 {
-    if (trigger_value)
-    {
-        auto user_reader = user_datareader_;
-
-        // First check if we can handle with on_data_on_readers
-        SubscriberListener* subscriber_listener =
-                subscriber_->get_listener_for(StatusMask::data_on_readers());
-        if (subscriber_listener != nullptr)
-        {
-            subscriber_listener->on_data_on_readers(subscriber_->user_subscriber_);
-        }
-        else
-        {
-            // If not, try with on_data_available
-            DataReaderListener* listener = get_listener_for(StatusMask::data_available());
-            if (listener != nullptr)
-            {
-                listener->on_data_available(user_reader);
-            }
-        }
-    }
-
     StatusMask notify_status = StatusMask::data_on_readers();
     subscriber_->user_subscriber_->get_statuscondition().get_impl()->set_status(notify_status, trigger_value);
 
@@ -738,6 +714,11 @@ ReturnCode_t DataReaderImpl::read_or_take_next_sample(
         return RETCODE_NOT_ENABLED;
     }
 
+    if (history_.getHistorySize() == 0)
+    {
+        return RETCODE_NO_DATA;
+    }
+
 #if HAVE_STRICT_REALTIME
     auto max_blocking_time = std::chrono::steady_clock::now() +
             std::chrono::microseconds(::TimeConv::Time_t2MicroSecondsInt64(qos_.reliability().max_blocking_time));
@@ -933,6 +914,25 @@ void DataReaderImpl::InnerDataReaderListener::on_data_available(
 
     if (data_reader_->on_data_available(writer_guid, first_sequence, last_sequence))
     {
+        auto user_reader = data_reader_->user_datareader_;
+
+        // First check if we can handle with on_data_on_readers
+        SubscriberListener* subscriber_listener =
+                data_reader_->subscriber_->get_listener_for(StatusMask::data_on_readers());
+        if (subscriber_listener != nullptr)
+        {
+            subscriber_listener->on_data_on_readers(data_reader_->subscriber_->user_subscriber_);
+        }
+        else
+        {
+            // If not, try with on_data_available
+            DataReaderListener* listener = data_reader_->get_listener_for(StatusMask::data_available());
+            if (listener != nullptr)
+            {
+                listener->on_data_available(user_reader);
+            }
+        }
+
         data_reader_->set_read_communication_status(true);
     }
 }
@@ -1173,10 +1173,7 @@ void DataReaderImpl::update_subscription_matched_status(
 
     if (count_change < 0)
     {
-        if (history_.writer_not_alive(status.remoteEndpointGuid))
-        {
-            set_read_communication_status(true);
-        }
+        history_.writer_not_alive(status.remoteEndpointGuid);
         try_notify_read_conditions();
     }
 }
@@ -1555,10 +1552,7 @@ LivelinessChangedStatus& DataReaderImpl::update_liveliness_status(
 {
     if (0 < status.not_alive_count_change)
     {
-        if (history_.writer_not_alive(iHandle2GUID(status.last_publication_handle)))
-        {
-            set_read_communication_status(true);
-        }
+        history_.writer_not_alive(iHandle2GUID(status.last_publication_handle));
         try_notify_read_conditions();
     }
 
@@ -1620,10 +1614,12 @@ ReturnCode_t DataReaderImpl::check_qos(
             qos.resource_limits().max_samples_per_instance > 0 &&
             qos.history().depth > qos.resource_limits().max_samples_per_instance)
     {
-        EPROSIMA_LOG_ERROR(RTPS_QOS_CHECK,
-                "HISTORY DEPTH '" << qos.history().depth << "' is higher than max_samples_per_instance "
-                                  << "'" << qos.resource_limits().max_samples_per_instance << "'.");
-        return RETCODE_INCONSISTENT_POLICY;
+        EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
+                "HISTORY DEPTH '" << qos.history().depth <<
+                "' is inconsistent with max_samples_per_instance: '" <<
+                qos.resource_limits().max_samples_per_instance <<
+                "'. Consistency rule: depth <= max_samples_per_instance." <<
+                " Effectively using max_samples_per_instance as depth.");
     }
     return RETCODE_OK;
 }
@@ -1870,20 +1866,20 @@ std::shared_ptr<IPayloadPool> DataReaderImpl::get_payload_pool()
     {
         for (auto data_representation : qos_.representation().m_value)
         {
-            is_plain = is_plain && type_->is_plain_ctx(type_support_context_, data_representation);
+            is_plain = is_plain && type_->is_plain(data_representation);
         }
     }
     // If data representation is not defined, consider both XCDR representations
     else
     {
-        is_plain = type_->is_plain_ctx(type_support_context_, DataRepresentationId_t::XCDR_DATA_REPRESENTATION)
-                && type_->is_plain_ctx(type_support_context_, DataRepresentationId_t::XCDR2_DATA_REPRESENTATION);
+        is_plain = type_->is_plain(DataRepresentationId_t::XCDR_DATA_REPRESENTATION)
+                && type_->is_plain(DataRepresentationId_t::XCDR2_DATA_REPRESENTATION);
     }
 
     // When the user requested PREALLOCATED_WITH_REALLOC, but we know the type cannot
     // grow, we translate the policy into bare PREALLOCATED
     if (PREALLOCATED_WITH_REALLOC_MEMORY_MODE == history_.m_att.memoryPolicy &&
-            (type_->is_bounded_ctx(type_support_context_) || is_plain))
+            (type_->is_bounded() || is_plain))
     {
         history_.m_att.memoryPolicy = PREALLOCATED_MEMORY_MODE;
     }
@@ -1892,7 +1888,7 @@ std::shared_ptr<IPayloadPool> DataReaderImpl::get_payload_pool()
 
     if (!sample_pool_)
     {
-        sample_pool_ = std::make_shared<detail::SampleLoanManager>(config, type_, type_support_context_, is_plain);
+        sample_pool_ = std::make_shared<detail::SampleLoanManager>(config, type_, is_plain);
     }
     if (!is_custom_payload_pool_)
     {
@@ -1945,7 +1941,7 @@ ReturnCode_t DataReaderImpl::check_datasharing_compatible(
                 return RETCODE_NOT_ALLOWED_BY_SECURITY;
             }
 #endif // if HAVE_SECURITY
-            if (!type_->is_bounded_ctx(type_support_context_))
+            if (!type_.is_bounded())
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing cannot be used with unbounded data types");
                 return RETCODE_BAD_PARAMETER;
@@ -1969,7 +1965,7 @@ ReturnCode_t DataReaderImpl::check_datasharing_compatible(
             }
 #endif // if HAVE_SECURITY
 
-            if (!type_->is_bounded_ctx(type_support_context_))
+            if (!type_.is_bounded())
             {
                 EPROSIMA_LOG_INFO(DATA_READER, "Data sharing disabled because data type is not bounded");
                 return RETCODE_OK;
@@ -2039,11 +2035,12 @@ InstanceHandle_t DataReaderImpl::lookup_instance(
         const void* instance) const
 {
     InstanceHandle_t handle = HANDLE_NIL;
+
     if (instance && type_->is_compute_key_provided)
     {
-        if (type_->compute_key_ctx(type_support_context_, const_cast<void*>(instance), handle, false))
+        if (type_->compute_key(const_cast<void*>(instance), handle, false))
         {
-            if (!history_.is_instance_present(handle) || !handle.isDefined())
+            if (!history_.is_instance_present(handle))
             {
                 handle = HANDLE_NIL;
             }
@@ -2345,18 +2342,6 @@ ReturnCode_t DataReaderImpl::get_subscription_builtin_topic_data(
     subscription_data.reader_resource_limits = qos_.reader_resource_limits();
 
     return RETCODE_OK;
-}
-
-ReturnCode_t DataReaderImpl::set_related_datawriter(
-        const DataWriter* /*related_writer*/)
-{
-    return RETCODE_UNSUPPORTED;
-}
-
-void DataReaderImpl::set_type_support_context(
-        const std::shared_ptr<TopicDataType::Context>& context)
-{
-    type_support_context_ = context;
 }
 
 }  // namespace dds

@@ -94,7 +94,8 @@ public:
     void update_attributes(
             const WriterAttributes& att) final
     {
-        BaseWriter::update_attributes(att);
+        static_cast<void>(att);
+        //FOR NOW THERE IS NOTHING TO UPDATE.
     }
 
     bool get_disable_positive_acks() const final;

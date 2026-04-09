@@ -44,7 +44,7 @@
 #include <rtps/network/utils/external_locators.hpp>
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/reader/BaseReader.hpp>
-#include <rtps/domain/RTPSDomainImpl.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
 #include <rtps/writer/BaseWriter.hpp>
 
 namespace eprosima {
@@ -738,7 +738,7 @@ bool StatelessWriter::send_to_fixed_locators(
     return fixed_locators_.empty() ||
            mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid,
                    Locators(fixed_locators_.begin()), Locators(fixed_locators_.end()),
-                   max_blocking_time_point, transport_priority_);
+                   max_blocking_time_point);
 }
 
 DeliveryRetCode StatelessWriter::deliver_sample_nts(
@@ -793,8 +793,8 @@ DeliveryRetCode StatelessWriter::deliver_sample_nts(
                             else
                             {
                                 EPROSIMA_LOG_ERROR(RTPS_WRITER,
-                                        "Error sending fragment (" << cache_change->sequenceNumber << ", " << frag
-                                                                   << ")");
+                                        "Error sending fragment (" << cache_change->sequenceNumber << ", " << frag <<
+                                        ")");
                                 ret_code = DeliveryRetCode::NOT_DELIVERED;
                             }
                         }

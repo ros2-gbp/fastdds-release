@@ -99,37 +99,6 @@ bool ParameterList::updateCacheChangeFromInlineQos(
                         break;
                     }
 
-                    case PID_RPC_MORE_REPLIES:
-                    {
-                        // Ignore custom PID when coming from other vendors
-                        if (rtps::c_VendorId_eProsima != change.vendor_id)
-                        {
-                            return true;
-                        }
-
-                        change.write_params.has_more_replies(true);
-
-                        break;
-                    }
-
-                    case PID_ORIGINAL_WRITER_INFO:
-                    {
-                        /* A valid original writer info must have, at least, 24 bytes */
-                        if (plength >= 24)
-                        {
-                            ParameterOriginalWriterInfo_t p(pid, plength);
-                            if (!dds::ParameterSerializer<ParameterOriginalWriterInfo_t>::read_from_cdr_message(p,
-                                    msg, plength))
-                            {
-                                return false;
-                            }
-
-                            change.write_params.original_writer_info(p.original_writer_info);
-                        }
-
-                        break;
-                    }
-
                     case PID_STATUS_INFO:
                     {
                         ParameterStatusInfo_t p(pid, plength);

@@ -95,9 +95,7 @@ private:
 
     std::condition_variable cv_;
 
-    int16_t matched_;
-
-    uint16_t expected_matches_;
+    int32_t matched_;
 
     std::mutex mutex_;
 

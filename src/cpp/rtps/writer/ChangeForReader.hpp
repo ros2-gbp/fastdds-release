@@ -19,8 +19,6 @@
 #ifndef RTPS_WRITER__CHANGEFORREADER_HPP
 #define RTPS_WRITER__CHANGEFORREADER_HPP
 
-#include <chrono>
-
 #include <fastdds/rtps/common/CacheChange.hpp>
 #include <fastdds/rtps/common/FragmentNumber.hpp>
 #include <fastdds/rtps/common/SequenceNumber.hpp>
@@ -59,7 +57,6 @@ public:
         : status_(UNSENT)
         , seq_num_(change->sequenceNumber)
         , change_(change)
-        , creation_time_(std::chrono::steady_clock::now())
     {
         if (change->getFragmentSize() != 0)
         {
@@ -122,7 +119,6 @@ public:
     void markFragmentsAsSent(
             const FragmentNumber_t& sentFragment)
     {
-        set_first_send_time();
         unsent_fragments_.remove(sentFragment);
 
         // We only use the running window mechanism during the first stage, until all fragments have been delivered
@@ -179,33 +175,10 @@ public:
 
     void set_delivered()
     {
-        set_first_send_time();
         delivered_ = true;
     }
 
-    std::chrono::steady_clock::duration time_since_creation() const
-    {
-        return std::chrono::steady_clock::now() - creation_time_;
-    }
-
-    std::chrono::steady_clock::duration time_since_first_send() const
-    {
-        if (first_send_time_ == std::chrono::steady_clock::time_point())
-        {
-            return time_since_creation();
-        }
-        return std::chrono::steady_clock::now() - first_send_time_;
-    }
-
 private:
-
-    void set_first_send_time()
-    {
-        if (first_send_time_ == std::chrono::steady_clock::time_point())
-        {
-            first_send_time_ =  std::chrono::steady_clock::now();
-        }
-    }
 
     //!Status
     ChangeForReaderStatus_t status_;
@@ -219,12 +192,6 @@ private:
 
     //! Indicates if was delivered at least once.
     bool delivered_ = false;
-
-    //! Creation time
-    std::chrono::steady_clock::time_point creation_time_;
-
-    //! First send time
-    std::chrono::steady_clock::time_point first_send_time_;
 };
 
 struct ChangeForReaderCmp

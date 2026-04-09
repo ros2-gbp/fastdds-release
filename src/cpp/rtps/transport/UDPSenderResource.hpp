@@ -46,17 +46,16 @@ public:
                     transport.SenderResourceHasBeenClosed(socket_);
                 };
 
-        send_lambda_ = [this, &transport](
+        send_buffers_lambda_ = [this, &transport](
             const std::vector<NetworkBuffer>& buffers,
             uint32_t total_bytes,
             LocatorsIterator* destination_locators_begin,
             LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point,
-            int32_t transport_priority) -> bool
+            const std::chrono::steady_clock::time_point& max_blocking_time_point) -> bool
                 {
                     return transport.send(buffers, total_bytes, socket_, destination_locators_begin,
                                    destination_locators_end, only_multicast_purpose_, whitelisted_,
-                                   max_blocking_time_point, transport_priority);
+                                   max_blocking_time_point);
                 };
     }
 

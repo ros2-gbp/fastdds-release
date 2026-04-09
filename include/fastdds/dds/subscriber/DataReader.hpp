@@ -21,7 +21,6 @@
 #define FASTDDS_DDS_SUBSCRIBER__DATAREADER_HPP
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include <fastdds/dds/builtin/topic/PublicationBuiltinTopicData.hpp>
@@ -38,7 +37,6 @@
 #include <fastdds/dds/core/status/SubscriptionMatchedStatus.hpp>
 #include <fastdds/dds/subscriber/ReadCondition.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
-#include <fastdds/dds/topic/TopicDataType.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
 #include <fastdds/fastdds_dll.hpp>
@@ -67,7 +65,6 @@ class SubscriberImpl;
 class DataReaderImpl;
 class DataReaderListener;
 class DataReaderQos;
-class DataWriter;
 class TopicDescription;
 struct LivelinessChangedStatus;
 
@@ -1090,36 +1087,6 @@ public:
      */
     FASTDDS_EXPORTED_API ReturnCode_t get_subscription_builtin_topic_data(
             SubscriptionBuiltinTopicData& subscription_data) const;
-
-    /**
-     * This operation sets the key of the DataWriter that is related to this DataReader.
-     * This is used to establish a relationship between a DataReader and a DataWriter
-     * in the context of RPC over DDS.
-     *
-     * @warning This operation is only valid if the entity is not enabled.
-     *
-     * @param [in] related_writer Pointer to the DataWriter to set as related.
-     *
-     * @return RETCODE_OK if the key is set successfully.
-     * @return RETCODE_ILLEGAL_OPERATION if this entity is enabled.
-     * @return RETCODE_PRECONDITION_NOT_MET if the entity does not belong to the same participant.
-     * @return RETCODE_BAD_PARAMETER if the provided GUID is unknown
-     * or the pointer is not valid.
-     */
-    FASTDDS_EXPORTED_API ReturnCode_t set_related_datawriter(
-            const DataWriter* related_writer);
-
-    /**
-     * @brief Set the type support context to be used when deserializing data for this DataReader.
-     *        Cannot be called on an enabled DataReader.
-     *
-     * @param [in] context Shared pointer to the context to be used when serializing data.
-     *
-     * @return RETCODE_OK if the context is set successfully.
-     *         RETCODE_ILLEGAL_OPERATION if this entity is enabled.
-     */
-    FASTDDS_EXPORTED_API ReturnCode_t set_type_support_context(
-            const std::shared_ptr<TopicDataType::Context>& context);
 
 protected:
 

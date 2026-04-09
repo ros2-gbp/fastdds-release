@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "../../../rtps/network/asio.hpp"
+#include <asio.hpp>
 
 #include <fastdds/core/policy/QosPolicyUtils.hpp>
 #include <fastdds/dds/core/ReturnCode.hpp>
@@ -585,8 +585,8 @@ bool DomainParticipantImpl::find_or_create_topic_and_type(
         if (topic_desc->get_type_name() != type->get_name())
         {
             EPROSIMA_LOG_ERROR(STATISTICS_DOMAIN_PARTICIPANT,
-                    topic_name << " is not using expected type " << type->get_name()
-                               << " and is using instead type " << topic_desc->get_type_name());
+                    topic_name << " is not using expected type " << type->get_name() <<
+                    " and is using instead type " << topic_desc->get_type_name());
             return false;
         }
         else
@@ -616,28 +616,18 @@ bool DomainParticipantImpl::delete_topic_and_type(
 {
     efd::TopicDescription* topic_desc = lookup_topicdescription(topic_name);
     assert(nullptr != topic_desc);
-
-    if (topic_desc)
+    efd::Topic* topic = dynamic_cast<efd::Topic*>(topic_desc);
+    std::string type_name = topic->get_type_name();
+    // delete_topic can fail if the topic is referenced by any other entity. This case could happen even if
+    // it should not. It also fails if topic is a nullptr (dynamic_cast failure).
+    if (efd::RETCODE_OK != delete_topic(topic))
     {
-        efd::Topic* topic = dynamic_cast<efd::Topic*>(topic_desc);
-
-        if (topic)
-        {
-            std::string type_name = topic->get_type_name();
-            // delete_topic can fail if the topic is referenced by any other entity. This case could happen even if
-            // it should not. It also fails if topic is a nullptr (dynamic_cast failure).
-            if (efd::RETCODE_OK != delete_topic(topic))
-            {
-                return false;
-            }
-            // unregister_type failures are of no concern here. It will fail if the type is still in use (something
-            // expected) and if the type_name is empty (which is not going to happen).
-            unregister_type(type_name);
-            return true;
-        }
+        return false;
     }
-
-    return false;
+    // unregister_type failures are of no concern here. It will fail if the type is still in use (something
+    // expected) and if the type_name is empty (which is not going to happen).
+    unregister_type(type_name);
+    return true;
 }
 
 bool DomainParticipantImpl::get_monitoring_status(

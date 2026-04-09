@@ -137,11 +137,6 @@ bool AnnotationDescriptorImpl::is_consistent() noexcept
         {
             return false;
         }
-
-        if (!ann_param_type)
-        {
-            return false;
-        }
         //}}}
 
         //{{{ Check the parameter value is convertible to its type.

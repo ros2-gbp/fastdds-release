@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_TCP_CHANNEL_RESOURCE_BASE_
 #define _FASTDDS_TCP_CHANNEL_RESOURCE_BASE_
 
-#include "../network/asio.hpp"
+#include <asio.hpp>
 #include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
 #include <fastdds/rtps/transport/TransportReceiverInterface.hpp>
 #include <fastdds/rtps/common/Locator.hpp>
@@ -65,6 +65,7 @@ protected:
 
     TCPTransportInterface* parent_;
     Locator locator_;
+    bool waiting_for_keep_alive_;
     // Must be accessed after lock pending_logical_mutex_
     std::map<TCPTransactionId, uint16_t> negotiating_logical_ports_;
     std::map<TCPTransactionId, uint16_t> last_checked_logical_port_;

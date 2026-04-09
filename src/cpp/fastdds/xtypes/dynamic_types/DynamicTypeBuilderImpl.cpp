@@ -44,8 +44,7 @@ DynamicTypeBuilderImpl::DynamicTypeBuilderImpl(
     {
         // Get the members of the base type.
         auto base_type =
-                traits<DynamicType>::narrow<DynamicTypeImpl>(
-            type_descriptor_.base_type())->resolve_alias_enclosed_type();
+                traits<DynamicType>::narrow<DynamicTypeImpl>(type_descriptor_.base_type())->resolve_alias_enclosed_type();
         member_ = base_type->member_;
         member_by_name_ = base_type->member_by_name_;
         members_ = base_type->members_;
@@ -60,16 +59,8 @@ DynamicTypeBuilderImpl::DynamicTypeBuilderImpl(
         {
             traits<DynamicTypeMemberImpl>::ref_type member_impl {traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(
                                                                      members_.back())};
-            if (!member_impl)
-            {
-                EPROSIMA_LOG_ERROR(DYN_TYPES,
-                        "Internal error: last member is not a DynamicTypeMemberImpl.");
-            }
-            else
-            {
-                assert(MEMBER_ID_INVALID != member_impl->get_descriptor().id());
-                next_id_ = member_impl->get_descriptor().id() + 1;
-            }
+            assert(MEMBER_ID_INVALID != member_impl->get_descriptor().id());
+            next_id_ = member_impl->get_descriptor().id() + 1;
         }
 
         next_index_ = static_cast<uint32_t>(members_.size());
@@ -288,8 +279,6 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
 
     RollbackSetting<uint32_t> id_reverter{next_id_}, index_reverter{next_index_};
     RollbackSetting<int32_t> default_value_reverter{default_value_};
-    RollbackSetting<int32_t> literal_value_reverter{literal_value_};
-    RollbackSetting<ObjectName> default_literal_reverter{default_literal_};
 
     if (TK_ANNOTATION != type_descriptor_kind &&
             TK_BITMASK != type_descriptor_kind &&
@@ -339,17 +328,7 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
     }
     //}}}
 
-    // Get the identifier associated to the member, depending on the member type
-    MemberId member_id;
-    if (TK_BITMASK == type_descriptor_kind)
-    {
-        // Member identifier of a BITMASK member is the member's position
-        member_id = descriptor_impl->position();
-    }
-    else
-    {
-        member_id = descriptor_impl->id();
-    }
+    auto member_id = descriptor_impl->id();
 
     //{{{ If member_id is MEMBER_ID_INVALID and type is aggregated, find a new one.
     if (TK_ANNOTATION == type_descriptor_kind ||
@@ -397,14 +376,7 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
     //}}}
 
     traits<DynamicTypeMemberImpl>::ref_type dyn_member = std::make_shared<DynamicTypeMemberImpl>(*descriptor_impl);
-    if (TK_BITMASK == type_descriptor_kind)
-    {
-        dyn_member->get_descriptor().position(member_id);
-    }
-    else
-    {
-        dyn_member->get_descriptor().id(member_id);
-    }
+    dyn_member->get_descriptor().id(member_id);
     //{{{ Set index
     dyn_member->get_descriptor().index(next_index_++);
     index_reverter.activate = true;
@@ -439,8 +411,8 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
             if (descriptor_impl->is_default_label() && member_impl->member_descriptor_.is_default_label())
             {
                 EPROSIMA_LOG_ERROR(DYN_TYPES,
-                        "Member " << member_impl->member_descriptor_.name().c_str()
-                                  << " already defined as default_label");
+                        "Member " << member_impl->member_descriptor_.name().c_str() <<
+                        " already defined as default_label");
                 return RETCODE_BAD_PARAMETER;
             }
             for (const int32_t new_label : descriptor_impl->label())
@@ -450,9 +422,8 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
                     if (new_label == label)
                     {
                         EPROSIMA_LOG_ERROR(DYN_TYPES,
-                                "Member " << member_impl->member_descriptor_.name().c_str()
-                                          << " already contains the label "
-                                          << label);
+                                "Member " << member_impl->member_descriptor_.name().c_str() << " already contains the label " <<
+                                label);
                         return RETCODE_BAD_PARAMETER;
                     }
                 }
@@ -482,17 +453,12 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
         {
             const MemberId mid {member.first};
             const auto member_impl {traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(member.second)};
-            if (!member_impl)
-            {
-                EPROSIMA_LOG_ERROR(DYN_TYPES, "Member with id " << mid << " is not a DynamicTypeMemberImpl");
-                return RETCODE_BAD_PARAMETER;
-            }
             const auto member_index {member_impl->get_descriptor().index()};
 
             if (mid == new_member_id)
             {
-                EPROSIMA_LOG_ERROR(DYN_TYPES, "Inconsistency in the new MemberId because it is equal to MemberId("
-                        << mid << ")");
+                EPROSIMA_LOG_ERROR(DYN_TYPES, "Inconsistency in the new MemberId because it is equal to MemberId(" <<
+                        mid << ")");
                 return RETCODE_BAD_PARAMETER;
             }
             else if (mid < new_member_id)
@@ -501,8 +467,8 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
 
                 if (new_member_id < mid + bound)
                 {
-                    EPROSIMA_LOG_ERROR(DYN_TYPES, "Inconsistency in the new MemberId because is less than MemberId("
-                            << mid << ") + Bound(" << bound << ")");
+                    EPROSIMA_LOG_ERROR(DYN_TYPES, "Inconsistency in the new MemberId because is less than MemberId(" <<
+                            mid << ") + Bound(" << bound << ")");
                     return RETCODE_BAD_PARAMETER;
                 }
             }
@@ -533,12 +499,6 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
         {
             const auto member_impl = traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(members_.at(0));
 
-            if (!member_impl)
-            {
-                EPROSIMA_LOG_ERROR(DYN_TYPES, "Member is not a DynamicTypeMemberImpl");
-                return RETCODE_BAD_PARAMETER;
-            }
-
             if (member_impl->get_descriptor().type()->get_kind() != descriptor->type()->get_kind())
             {
                 EPROSIMA_LOG_ERROR(DYN_TYPES, "Descriptor type kind differs from the current member types.");
@@ -546,54 +506,33 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
             }
         }
 
-        // Member type and enum's literal type must be the same, if literal type is specified
-        if (type_descriptor_.literal_type() &&
-                descriptor->type()->get_kind() != type_descriptor_.literal_type()->get_kind())
-        {
-            EPROSIMA_LOG_ERROR(DYN_TYPES, "Descriptor type kind differs from the literal type kind.");
-            return RETCODE_BAD_PARAMETER;
-        }
-
-        if (descriptor_impl->is_default_literal())
-        {
-            if (default_literal_.size() > 0)
-            {
-                EPROSIMA_LOG_ERROR(DYN_TYPES, "There is already a member annotated as default literal: "
-                        << default_literal_);
-                return RETCODE_BAD_PARAMETER;
-            }
-
-            default_literal_ = member_name;
-            default_literal_reverter.activate = true;
-        }
-
-        if (!descriptor->literal_value().empty())
+        if (!descriptor->default_value().empty())
         {
             for (auto member : members_)
             {
                 const auto member_impl {traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(member)};
 
-                // Check that there isn't already any member with the same literal value.
-                if (0 == descriptor->literal_value().compare(member_impl->get_descriptor().literal_value()))
+                // Check that there isn't already any member with the same default value.
+                if (0 == descriptor->default_value().compare(member_impl->get_descriptor().default_value()))
                 {
                     EPROSIMA_LOG_ERROR(DYN_TYPES,
-                            "Member " << member_impl->member_descriptor_.name().c_str()
-                                      << " has already the value " << member_impl->get_descriptor().literal_value());
+                            "Member " << member_impl->member_descriptor_.name().c_str() <<
+                            " has already the value");
                     return RETCODE_BAD_PARAMETER;
                 }
             }
-            TypeForKind<TK_INT32> value = TypeValueConverter::sto(descriptor->literal_value());
+            TypeForKind<TK_INT32> value = TypeValueConverter::sto(descriptor->default_value());
 
-            if (value >= literal_value_)
+            if (value >= default_value_)
             {
-                literal_value_ = value + 1;
-                literal_value_reverter.activate = true;
+                default_value_ = value + 1;
+                default_value_reverter.activate = true;
             }
         }
         else
         {
-            dyn_member->get_descriptor().literal_value(std::to_string(literal_value_++));
-            literal_value_reverter.activate = true;
+            dyn_member->get_descriptor().default_value(std::to_string(default_value_++));
+            default_value_reverter.activate = true;
         }
     }
     //}}}
@@ -615,11 +554,6 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
         for (++it; it != members_.end(); ++it)
         {
             auto next_member = traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(*it);
-            if (!next_member)
-            {
-                EPROSIMA_LOG_ERROR(DYN_TYPES, "Member is not a DynamicTypeMemberImpl");
-                return RETCODE_BAD_PARAMETER;
-            }
             next_member->get_descriptor().index(next_member->get_descriptor().index() + 1);
         }
         ++next_index_;
@@ -628,9 +562,8 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
     {
         members_.push_back(dyn_member);
     }
-    auto member_impl = traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(*members_.rbegin());
-    static_cast<void>(member_impl);
-    assert(member_impl && next_index_ == member_impl->get_descriptor().index() + 1);
+    assert(next_index_ == traits<DynamicTypeMember>::narrow<DynamicTypeMemberImpl>(
+                *members_.rbegin())->get_descriptor().index() + 1);
 
     member_by_name_.emplace(std::make_pair(member_name, dyn_member));
     if (TK_ANNOTATION == type_descriptor_kind ||
@@ -645,8 +578,6 @@ ReturnCode_t DynamicTypeBuilderImpl::add_member(
     id_reverter.activate = false;
     index_reverter.activate = false;
     default_value_reverter.activate = false;
-    literal_value_reverter.activate = false;
-    default_literal_reverter.activate = false;
     return RETCODE_OK;
 }
 
@@ -748,7 +679,6 @@ traits<DynamicType>::ref_type DynamicTypeBuilderImpl::build() noexcept
             ret_val->members_ = members_;
             ret_val->default_value_ = default_value_;
             ret_val->default_union_member_ = default_union_member_;
-            ret_val->default_literal_ = default_literal_;
             ret_val->index_own_members_ = index_own_members_;
         }
     }

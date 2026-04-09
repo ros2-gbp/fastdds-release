@@ -40,24 +40,24 @@ std::ostream& operator <<(
 
 using namespace testing;
 
-struct FlowControllerLimitedAsyncPublishModeMock : public FlowControllerLimitedAsyncPublishMode
+struct FlowControllerLimitedAsyncPublishModeMock : FlowControllerLimitedAsyncPublishMode
 {
     FlowControllerLimitedAsyncPublishModeMock(
             RTPSParticipantImpl* participant,
             const FlowControllerDescriptor* descriptor)
         : FlowControllerLimitedAsyncPublishMode(participant, descriptor)
     {
-        publish_mode = this;
+        group_mock = &group;
     }
 
-    static FlowControllerLimitedAsyncPublishMode& get_publish_mode()
+    static RTPSMessageGroup* get_group()
     {
-        return *publish_mode;
+        return group_mock;
     }
 
-    static FlowControllerLimitedAsyncPublishMode* publish_mode;
+    static RTPSMessageGroup* group_mock;
 };
-FlowControllerLimitedAsyncPublishMode* FlowControllerLimitedAsyncPublishModeMock::publish_mode {nullptr};
+RTPSMessageGroup* FlowControllerLimitedAsyncPublishModeMock::group_mock = nullptr;
 
 class FlowControllerSchedulers :  public testing::Test
 {
@@ -66,6 +66,7 @@ protected:
     void TearDown() override
     {
         changes_delivered.clear();
+        current_bytes_processed = 0;
     }
 
     void wait_changes_was_delivered(
@@ -83,6 +84,10 @@ protected:
     std::mutex changes_delivered_mutex;
 
     std::condition_variable number_changes_delivered_cv;
+
+    uint32_t current_bytes_processed = 0;
+
+    bool allow_resetting = false;
 };
 
 #define INIT_CACHE_CHANGE(change, writer, seq) \
@@ -95,7 +100,7 @@ protected:
 TEST_F(FlowControllerSchedulers, Fifo)
 {
     FlowControllerDescriptor flow_controller_descr;
-    flow_controller_descr.max_bytes_per_period = 102000;
+    flow_controller_descr.max_bytes_per_period = 10200;
     flow_controller_descr.period_ms = 10;
     FlowControllerImpl<FlowControllerLimitedAsyncPublishModeMock, FlowControllerFifoSchedule> async(nullptr,
             &flow_controller_descr, 0, ThreadSettings{});
@@ -117,11 +122,10 @@ TEST_F(FlowControllerSchedulers, Fifo)
     auto send_functor = [&](
         CacheChange_t* change,
         RTPSMessageGroup&,
-        LocatorSelectorSender& sender,
+        LocatorSelectorSender&,
         const std::chrono::time_point<std::chrono::steady_clock>&)
             {
-                FlowControllerLimitedAsyncPublishModeMock::get_publish_mode().add_sent_bytes_by_group(
-                    change->serializedPayload.length, sender);
+                this->current_bytes_processed += change->serializedPayload.length;
                 {
                     std::unique_lock<std::mutex> lock(this->changes_delivered_mutex);
                     this->changes_delivered.push_back(change);
@@ -204,6 +208,19 @@ TEST_F(FlowControllerSchedulers, Fifo)
 
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -323,95 +340,106 @@ TEST_F(FlowControllerSchedulers, Fifo)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer10_2).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -531,92 +559,130 @@ TEST_F(FlowControllerSchedulers, Fifo)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer9_3).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     // Register writers.
@@ -657,11 +723,10 @@ TEST_F(FlowControllerSchedulers, RoundRobin)
     auto send_functor = [&](
         CacheChange_t* change,
         RTPSMessageGroup&,
-        LocatorSelectorSender& sender,
+        LocatorSelectorSender&,
         const std::chrono::time_point<std::chrono::steady_clock>&)
             {
-                FlowControllerLimitedAsyncPublishModeMock::get_publish_mode().add_sent_bytes_by_group(
-                    change->serializedPayload.length, sender);
+                this->current_bytes_processed += change->serializedPayload.length;
                 {
                     std::unique_lock<std::mutex> lock(this->changes_delivered_mutex);
                     this->changes_delivered.push_back(change);
@@ -744,6 +809,19 @@ TEST_F(FlowControllerSchedulers, RoundRobin)
 
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -863,95 +941,106 @@ TEST_F(FlowControllerSchedulers, RoundRobin)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer9_3).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -1071,92 +1160,130 @@ TEST_F(FlowControllerSchedulers, RoundRobin)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer9_3).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     // Register writers.
@@ -1219,11 +1346,10 @@ TEST_F(FlowControllerSchedulers, HighPriority)
     auto send_functor = [&](
         CacheChange_t* change,
         RTPSMessageGroup&,
-        LocatorSelectorSender& sender,
+        LocatorSelectorSender&,
         const std::chrono::time_point<std::chrono::steady_clock>&)
             {
-                FlowControllerLimitedAsyncPublishModeMock::get_publish_mode().add_sent_bytes_by_group(
-                    change->serializedPayload.length, sender);
+                this->current_bytes_processed += change->serializedPayload.length;
                 {
                     std::unique_lock<std::mutex> lock(this->changes_delivered_mutex);
                     this->changes_delivered.push_back(change);
@@ -1306,6 +1432,19 @@ TEST_F(FlowControllerSchedulers, HighPriority)
 
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -1425,95 +1564,106 @@ TEST_F(FlowControllerSchedulers, HighPriority)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer10_2).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     {
+        this->current_bytes_processed = 10100;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer1_1 = EXPECT_CALL(writer1,
                         deliver_sample_nts(&change_writer1_1, _, Ref(writer1.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -1633,92 +1783,130 @@ TEST_F(FlowControllerSchedulers, HighPriority)
                 deliver_sample_nts(&change_writer10_3, _, Ref(writer10.async_locator_selector_), _)).
                 After(call_change_writer10_2).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     // Register writers.
@@ -1790,11 +1978,10 @@ TEST_F(FlowControllerSchedulers, PriorityWithReservation)
     auto send_functor = [&](
         CacheChange_t* change,
         RTPSMessageGroup&,
-        LocatorSelectorSender& sender,
+        LocatorSelectorSender&,
         const std::chrono::time_point<std::chrono::steady_clock>&)
             {
-                FlowControllerLimitedAsyncPublishModeMock::get_publish_mode().add_sent_bytes_by_group(
-                    change->serializedPayload.length, sender);
+                this->current_bytes_processed += change->serializedPayload.length;
                 {
                     std::unique_lock<std::mutex> lock(this->changes_delivered_mutex);
                     this->changes_delivered.push_back(change);
@@ -1877,6 +2064,19 @@ TEST_F(FlowControllerSchedulers, PriorityWithReservation)
 
 
     {
+        this->current_bytes_processed = 101000;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer8_1 = EXPECT_CALL(writer8,
                         deliver_sample_nts(&change_writer8_1, _, Ref(writer8.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -1996,97 +2196,108 @@ TEST_F(FlowControllerSchedulers, PriorityWithReservation)
                 deliver_sample_nts(&change_writer7_3, _, Ref(writer7.async_locator_selector_), _)).
                 After(call_change_writer7_2).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Makes sure it start a new period.
 
     {
+        this->current_bytes_processed = 101000;
+        this->allow_resetting = false;
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                get_current_bytes_processed()).WillRepeatedly(
+            ReturnPointee(&this->current_bytes_processed));
+        EXPECT_CALL(*FlowControllerLimitedAsyncPublishModeMock::get_group(),
+                reset_current_bytes_processed()).WillRepeatedly([&]()
+                {
+                    if (this->allow_resetting)
+                    {
+                        this->current_bytes_processed = 0;
+                    }
+                });
         auto& call_change_writer8_1 = EXPECT_CALL(writer8,
                         deliver_sample_nts(&change_writer8_1, _, Ref(writer8.async_locator_selector_), _)).
                         WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
@@ -2206,95 +2417,133 @@ TEST_F(FlowControllerSchedulers, PriorityWithReservation)
                 deliver_sample_nts(&change_writer7_3, _, Ref(writer7.async_locator_selector_), _)).
                 After(call_change_writer7_2).
                 WillOnce(DoAll(send_functor, Return(DeliveryRetCode::DELIVERED)));
-
         writer1.getMutex().lock();
-        writer2.getMutex().lock();
-        writer3.getMutex().lock();
-        writer4.getMutex().lock();
-        writer5.getMutex().lock();
-        writer6.getMutex().lock();
-        writer7.getMutex().lock();
-        writer8.getMutex().lock();
-        writer9.getMutex().lock();
-        writer10.getMutex().lock();
-
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_1,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_2,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer10.getMutex().unlock();
+        writer1.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer1, &change_writer1_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer1.getMutex().unlock();
+        writer2.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer2, &change_writer2_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer2.getMutex().unlock();
+        writer3.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer3, &change_writer3_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer3.getMutex().unlock();
+        writer4.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer4, &change_writer4_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer4.getMutex().unlock();
+        writer5.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer5, &change_writer5_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer5.getMutex().unlock();
+        writer6.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer6, &change_writer6_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer6.getMutex().unlock();
+        writer7.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer7, &change_writer7_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer7.getMutex().unlock();
+        writer8.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer8, &change_writer8_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer8.getMutex().unlock();
+        writer9.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer9, &change_writer9_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
+        writer9.getMutex().unlock();
+        writer10.getMutex().lock();
         ASSERT_TRUE(async.add_new_sample(&writer10, &change_writer10_3,
                 std::chrono::steady_clock::now() + std::chrono::hours(24)));
-
-        writer1.getMutex().unlock();
-        writer2.getMutex().unlock();
-        writer3.getMutex().unlock();
-        writer4.getMutex().unlock();
-        writer5.getMutex().unlock();
-        writer6.getMutex().unlock();
-        writer7.getMutex().unlock();
-        writer8.getMutex().unlock();
-        writer9.getMutex().unlock();
         writer10.getMutex().unlock();
-
+        this->allow_resetting = true;
         this->wait_changes_was_delivered(30);
         this->changes_delivered.clear();
+        this->current_bytes_processed = 0;
     }
 
-    //Unregister writers.
+    // Register writers.
     async.unregister_writer(&writer1);
     async.unregister_writer(&writer2);
     async.unregister_writer(&writer3);

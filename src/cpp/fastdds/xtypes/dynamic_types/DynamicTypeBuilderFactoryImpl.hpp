@@ -15,7 +15,6 @@
 #ifndef FASTDDS_XTYPES_DYNAMIC_TYPES_DYNAMICTYPEBUILDERFACTORYIMPL_HPP
 #define FASTDDS_XTYPES_DYNAMIC_TYPES_DYNAMICTYPEBUILDERFACTORYIMPL_HPP
 
-#include <functional>
 #include <string>
 
 #include <fastcdr/xcdr/optional.hpp>
@@ -69,11 +68,6 @@ public:
             const std::string& document_url,
             const std::string& type_name,
             const IncludePathSeq& include_paths) noexcept override;
-
-    ReturnCode_t for_each_type_w_uri(
-            const std::string& document_url,
-            const IncludePathSeq& include_paths,
-            std::function<bool(traits<DynamicTypeBuilder>::ref_type)> callback) noexcept override;
 
     //}}}
 

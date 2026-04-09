@@ -94,7 +94,7 @@ public:
 
         // Call low level transport
         return low_sender_resource->send(buffers, total_bytes, destination_locators_begin,
-                       destination_locators_end, timeout, 0);
+                       destination_locators_end, timeout);
     }
 
     void receive(

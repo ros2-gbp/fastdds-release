@@ -139,7 +139,7 @@ namespace xmlparser {
 using namespace eprosima::fastdds::xml::detail;
 using namespace eprosima::fastdds::rtps;
 
-XMLP_ret XMLParser::parseXMLOctetVector(
+static XMLP_ret parseXMLOctetVector(
         tinyxml2::XMLElement* elem,
         std::vector<octet>& octet_vector,
         bool allow_empty)
@@ -1389,7 +1389,6 @@ XMLP_ret XMLParser::getXMLWriterQosPolicies(
                 <xs:element name="data_sharing" type="dataSharingQosPolicyType" minOccurs="0"/>
                 <xs:element name="disablePositiveAcks" type="disablePositiveAcksQosPolicyType" minOccurs="0"/>
                 <xs:element name="disable_heartbeat_piggyback" type="boolType" minOccurs="0"/>
-                <xs:element name="transport_priority" type="boolType" minOccurs="0"/>
             </xs:all>
         </xs:complexType>
      */
@@ -1534,14 +1533,6 @@ XMLP_ret XMLParser::getXMLWriterQosPolicies(
         {
             // userData
             if (XMLP_ret::XML_OK != getXMLOctetVector(p_aux0, qos.m_groupData.data_vec(), ident))
-            {
-                return XMLP_ret::XML_ERROR;
-            }
-        }
-        else if (strcmp(name, "transport_priority") == 0)
-        {
-            // transport_priority - int32
-            if (XMLP_ret::XML_OK != getXMLInt(p_aux0, &qos.transport_priority.value, ident))
             {
                 return XMLP_ret::XML_ERROR;
             }
@@ -2343,9 +2334,8 @@ XMLP_ret XMLParser::getXMLDataSharingQos(
     if (max_domains != 0 && domain_ids.size() > static_cast<uint32_t>(max_domains))
     {
         EPROSIMA_LOG_ERROR(XMLPARSER, "Node 'data_sharing' defines a maximum of " << max_domains
-                                                                                  << " domain IDs but also define "
-                                                                                  << domain_ids.size()
-                                                                                  << " domain IDs");
+                                                                                  << " domain IDs but also define " << domain_ids.size() <<
+                " domain IDs");
         return XMLP_ret::XML_ERROR;
     }
 
@@ -2845,8 +2835,7 @@ XMLP_ret XMLParser::getXMLDuration(
 
         if (elem->FirstChildElement() != nullptr)
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER,
-                    "If a dds::Duration_t type element is defined as DURATION_INFINITY it cannot have <sec> or"
+            EPROSIMA_LOG_ERROR(XMLPARSER, "If a dds::Duration_t type element is defined as DURATION_INFINITY it cannot have <sec> or"
                     " <nanosec> subelements.");
             return XMLP_ret::XML_ERROR;
         }
@@ -3367,8 +3356,8 @@ static XMLP_ret process_unsigned_attribute(
         }
 
         EPROSIMA_LOG_ERROR(XMLPARSER,
-                "Wrong value '" << attribute->Value() << "' for attribute '" << name << "' on '"
-                                << elem->Name() << "'");
+                "Wrong value '" << attribute->Value() << "' for attribute '" << name << "' on '" <<
+                elem->Name() << "'");
         return XMLP_ret::XML_ERROR;
     }
 
@@ -3501,7 +3490,6 @@ XMLP_ret XMLParser::getXMLLocatorList(
                     <xs:element name="udpv6" type="udpv6LocatorType"/>
                     <xs:element name="tcpv4" type="tcpv4LocatorType"/>
                     <xs:element name="tcpv6" type="tcpv6LocatorType"/>
-                    <xs:element name="ethernet" type="ethernetLocatorType"/>
                 </xs:choice>
             </xs:complexType>
          */
@@ -3534,21 +3522,9 @@ XMLP_ret XMLParser::getXMLLocatorList(
                 return XMLP_ret::XML_ERROR;
             }
         }
-        else if (nullptr != (p_aux1 = p_aux0->FirstChildElement(ETH_LOCATOR)))
-        {
-            if (XMLP_ret::XML_OK != get_xml_locator_ethernet(p_aux1, loc, ident + 1))
-            {
-                return XMLP_ret::XML_ERROR;
-            }
-        }
         else if (nullptr != (p_aux1 = p_aux0->FirstChildElement()))
         {
             EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid element found into 'locatorType'. Name: " << p_aux1->Name());
-            return XMLP_ret::XML_ERROR;
-        }
-        else
-        {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Node '" << LOCATOR << "' without content");
             return XMLP_ret::XML_ERROR;
         }
 
@@ -4551,16 +4527,16 @@ XMLP_ret XMLParser::getXMLThreadSettingsWithPort(
             catch (std::invalid_argument& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Found wrong value " << attrib->Value() << " for port attribute. "
-                                             << except.what());
+                        "Found wrong value " << attrib->Value() << " for port attribute. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }
             catch (const std::out_of_range& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Value of the port attribute " << attrib->Value() << " out of range. "
-                                                       << except.what());
+                        "Value of the port attribute " << attrib->Value() << " out of range. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }
@@ -4751,8 +4727,8 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
             catch (std::invalid_argument& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Found wrong value " << attrib->Value() << " for max_msg_size attribute. "
-                                             << except.what());
+                        "Found wrong value " << attrib->Value() << " for max_msg_size attribute. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }
@@ -4783,8 +4759,8 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
             catch (std::invalid_argument& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Found wrong value " << attrib->Value() << " for sockets_size attribute. "
-                                             << except.what());
+                        "Found wrong value " << attrib->Value() << " for sockets_size attribute. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }
@@ -4808,8 +4784,8 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
             catch (std::invalid_argument& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Found wrong value " << attrib->Value() << " for non_blocking attribute. "
-                                             << except.what());
+                        "Found wrong value " << attrib->Value() << " for non_blocking attribute. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }
@@ -4838,8 +4814,8 @@ XMLP_ret XMLParser::getXMLBuiltinTransports(
             catch (std::exception& except)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Found wrong value " << attrib->Value() << " for tcp_negotiation_timeout attribute. "
-                                             << except.what());
+                        "Found wrong value " << attrib->Value() << " for tcp_negotiation_timeout attribute. " <<
+                        except.what());
                 ret = XMLP_ret::XML_ERROR;
                 break;
             }

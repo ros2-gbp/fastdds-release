@@ -20,7 +20,7 @@
 #endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
-#include "../network/asio.hpp"
+#include <asio.hpp>
 #include <asio/ssl.hpp>
 #include <asio/strand.hpp>
 #include <rtps/transport/TCPChannelResource.h>

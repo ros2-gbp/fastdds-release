@@ -83,8 +83,7 @@ bool PermissionsParser::parse_stream(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "Invalid tag. Expected  " << Permission_str << " tag. Line " << PRINTLINE(
+                    EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid tag. Expected  " << Permission_str << " tag. Line " << PRINTLINE(
                                 permission_node));
                 }
             }
@@ -254,8 +253,8 @@ bool PermissionsParser::parse_grant(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << AllowRule_str << " or " << DenyRule_str << " tag. Line "
-                                                  << PRINTLINE(old_node));
+        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << AllowRule_str << " or " << DenyRule_str << " tag. Line " <<
+                PRINTLINE(old_node));
         return false;
     }
 
@@ -308,7 +307,7 @@ bool PermissionsParser::parse_validity(
 #if _MSC_VER != 1800
         validity
 #endif // if _MSC_VER != 1800
-)
+        )
 {
     assert(root);
 
@@ -354,8 +353,8 @@ bool PermissionsParser::parse_validity(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER, "Fail parsing datetime value in " << NotAfter_str << " tag. Line "
-                                                                                        << PRINTLINE(
+                        EPROSIMA_LOG_ERROR(XMLPARSER, "Fail parsing datetime value in " << NotAfter_str << " tag. Line " <<
+                                PRINTLINE(
                                     node));
                     }
 #if _MSC_VER != 1800
@@ -375,15 +374,15 @@ bool PermissionsParser::parse_validity(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Fail parsing datetime value in " << NotBefore_str << " tag. Line "
-                                                                                << PRINTLINE(node));
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Fail parsing datetime value in " << NotBefore_str << " tag. Line " <<
+                        PRINTLINE(node));
             }
 #endif // if _MSC_VER != 1800
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected datetime value in " << NotBefore_str << " tag. Line "
-                                                                            << PRINTLINE(node));
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected datetime value in " << NotBefore_str << " tag. Line " <<
+                        PRINTLINE(node));
             }
         }
         else
@@ -466,8 +465,8 @@ bool PermissionsParser::parse_rule(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Publish_str << " or " << Subscribe_str
-                                                          << " or " << Relay_str << " tag. Line " << PRINTLINE(node));
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Publish_str << " or " << Subscribe_str <<
+                        " or " << Relay_str << " tag. Line " << PRINTLINE(node));
                 return false;
             }
         }
@@ -501,9 +500,8 @@ bool PermissionsParser::parse_criteria(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Topics_str << " or " << Partitions_str
-                                                          << " or " << DataTags_str << " tag. Line "
-                                                          << PRINTLINE(node));
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Topics_str << " or " << Partitions_str <<
+                        " or " << DataTags_str << " tag. Line " << PRINTLINE(node));
                 returned_value = false;
             }
         }
@@ -590,8 +588,7 @@ bool PermissionsParser::parse_partition(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER,
-                                "Expected topic name in " << Partition_str << " tag. Line " << PRINTLINE(
+                        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected topic name in " << Partition_str << " tag. Line " << PRINTLINE(
                                     node));
                         returned_value = false;
                     }

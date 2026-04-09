@@ -337,7 +337,7 @@ public:
     {
     }
 
-    template<EndpointKind_t kind, octet no_key, octet with_key>
+    template <EndpointKind_t kind, octet no_key, octet with_key>
     static bool preprocess_endpoint_attributes(
             const EntityId_t&,
             std::atomic<uint32_t>&,
@@ -369,7 +369,7 @@ public:
 
     MOCK_METHOD0(has_shm_transport, bool());
 
-    MOCK_METHOD0(typelookup_manager, fastdds::dds::builtin::TypeLookupManager * ());
+    MOCK_METHOD0(typelookup_manager, fastdds::dds::builtin::TypeLookupManager* ());
 
     uint32_t getRTPSParticipantID() const
     {
@@ -434,26 +434,6 @@ public:
     }
 
     MOCK_METHOD(dds::utils::TypePropagation, type_propagation, (), (const));
-
-    // *INDENT-OFF* Uncrustify makes a mess with MOCK_METHOD macros
-    MOCK_METHOD(void, notify_reader_discovery, (
-            ReaderDiscoveryStatus reason,
-            const SubscriptionBuiltinTopicData& info));
-
-    MOCK_METHOD(void, notify_reader_discovery, (
-            ReaderDiscoveryStatus reason,
-            const SubscriptionBuiltinTopicData& info,
-            RTPSParticipantListener* listener));
-
-    MOCK_METHOD(void, notify_writer_discovery, (
-            WriterDiscoveryStatus reason,
-            const PublicationBuiltinTopicData& info));
-
-    MOCK_METHOD(void, notify_writer_discovery, (
-            WriterDiscoveryStatus reason,
-            const PublicationBuiltinTopicData& info,
-            RTPSParticipantListener* listener));
-    // *INDENT-ON*
 
 private:
 

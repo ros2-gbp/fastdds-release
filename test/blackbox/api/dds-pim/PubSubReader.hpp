@@ -35,7 +35,6 @@
 #include <Windows.h>
 #endif // _MSC_VER
 #include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
-#include <fastdds/dds/common/InstanceHandle.hpp>
 #include <fastdds/dds/core/condition/GuardCondition.hpp>
 #include <fastdds/dds/core/condition/StatusCondition.hpp>
 #include <fastdds/dds/core/condition/WaitSet.hpp>
@@ -84,9 +83,6 @@ public:
     typedef std::function<bool (
                         eprosima::fastdds::rtps::WriterDiscoveryStatus reason,
                         const eprosima::fastdds::dds::PublicationBuiltinTopicData& info)> EndpointDiscoveryFunctor;
-    typedef std::function<bool (
-                        const eprosima::fastdds::dds::SubscriptionBuiltinTopicData& reader_info,
-                        const eprosima::fastdds::dds::PublicationBuiltinTopicData& writer_info)> EndpointMatchingFunctor;
 
 protected:
 
@@ -142,19 +138,6 @@ protected:
                 reader_.discovery_result_ |= reader_.onEndpointDiscovery_(reason, info);
                 reader_.cvDiscovery_.notify_one();
             }
-        }
-
-        bool should_endpoints_match(
-                const eprosima::fastdds::dds::DomainParticipant*,
-                const eprosima::fastdds::dds::SubscriptionBuiltinTopicData& reader_info,
-                const eprosima::fastdds::dds::PublicationBuiltinTopicData& writer_info) override
-        {
-            if (reader_.onEndpointMatching_ != nullptr)
-            {
-                return reader_.onEndpointMatching_(reader_info, writer_info);
-            }
-
-            return true;
         }
 
 #if HAVE_SECURITY
@@ -408,11 +391,7 @@ public:
             bool take = true,
             bool statistics = false,
             bool read = true)
-        : PubSubReader(
-                topic_name,
-                take,
-                statistics,
-                read)
+        : PubSubReader(topic_name, take, statistics, read)
     {
         filter_expression_ = filter_expression;
         expression_parameters_ = expression_parameters;
@@ -536,8 +515,8 @@ public:
 
             if (datareader_ != nullptr)
             {
-                std::cout << "Created datareader " << datareader_->guid() << " for topic "
-                          << topic_name_ << std::endl;
+                std::cout << "Created datareader " << datareader_->guid() << " for topic " <<
+                    topic_name_ << std::endl;
                 initialized_ = true;
                 datareader_guid_ = datareader_->guid();
             }
@@ -1815,12 +1794,6 @@ public:
         onEndpointDiscovery_ = f;
     }
 
-    void set_should_endpoints_match_function(
-            EndpointMatchingFunctor f)
-    {
-        onEndpointMatching_ = f;
-    }
-
     bool take_first_data(
             void* data)
     {
@@ -1833,10 +1806,7 @@ public:
 
         if (eprosima::fastdds::dds::RETCODE_OK == datareader_->take(data_seq, info_seq))
         {
-            if (info_seq[0].publication_handle != eprosima::fastdds::dds::HANDLE_NIL)
-            {
-                current_processed_count_++;
-            }
+            current_processed_count_++;
             return true;
         }
         return false;
@@ -1848,10 +1818,7 @@ public:
         eprosima::fastdds::dds::SampleInfo dds_info;
         if (datareader_->take_next_sample(data, &dds_info) == eprosima::fastdds::dds::RETCODE_OK)
         {
-            if (dds_info.publication_handle != eprosima::fastdds::dds::HANDLE_NIL)
-            {
-                current_processed_count_++;
-            }
+            current_processed_count_++;
             return true;
         }
         return false;
@@ -2092,8 +2059,7 @@ protected:
         ReturnCode_t success = take_ ?
                 datareader->take_next_sample((void*)&data, &info) :
                 datareader->read_next_sample((void*)&data, &info);
-        if ((eprosima::fastdds::dds::RETCODE_OK == success) &&
-                (info.publication_handle != eprosima::fastdds::dds::HANDLE_NIL))
+        if (eprosima::fastdds::dds::RETCODE_OK == success)
         {
             returnedValue = true;
 
@@ -2146,12 +2112,6 @@ protected:
         {
             type& data = datas[i];
             eprosima::fastdds::dds::SampleInfo& info = infos[i];
-
-            // Skip unknown samples
-            if (info.publication_handle == eprosima::fastdds::dds::HANDLE_NIL)
-            {
-                continue;
-            }
 
             // Check order of changes.
             LastSeqInfo seq_info{ info.instance_handle, info.sample_identity.writer_guid() };
@@ -2292,7 +2252,6 @@ protected:
     std::function<bool(const eprosima::fastdds::rtps::ParticipantBuiltinTopicData& info,
             eprosima::fastdds::rtps::ParticipantDiscoveryStatus status)> onDiscovery_;
     EndpointDiscoveryFunctor onEndpointDiscovery_;
-    EndpointMatchingFunctor onEndpointMatching_;
 
     //! True to take data from history. On False, read_ is checked.
     bool take_;
@@ -2631,8 +2590,8 @@ public:
                 initialized_ = datareader_->is_enabled();
                 if (initialized_)
                 {
-                    std::cout << "Created datareader " << datareader_->guid() << " for topic "
-                              << topic_name_ << std::endl;
+                    std::cout << "Created datareader " << datareader_->guid() << " for topic " <<
+                        topic_name_ << std::endl;
                 }
 
                 // Set the desired status condition mask and start the waitset thread

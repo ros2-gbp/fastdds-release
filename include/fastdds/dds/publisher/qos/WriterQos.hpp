@@ -63,8 +63,7 @@ public:
                (this->m_publishMode == b.m_publishMode) &&
                (this->m_disablePositiveACKs == b.m_disablePositiveACKs) &&
                (this->representation == b.representation) &&
-               (this->data_sharing == b.data_sharing) &&
-               (this->transport_priority == b.transport_priority);
+               (this->data_sharing == b.data_sharing);
     }
 
     //!Durability Qos, implemented in the library.
@@ -114,9 +113,6 @@ public:
 
     //!Group Data Qos, NOT implemented in the library.
     GroupDataQosPolicy m_groupData;
-
-    //! Transport priority Qos, implemented in the library.
-    TransportPriorityQosPolicy transport_priority;
 
     //!Publication Mode Qos, implemented in the library.
     PublishModeQosPolicy m_publishMode;

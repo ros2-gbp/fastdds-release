@@ -19,7 +19,6 @@
 
 #include <xmlparser/XMLEndpointParser.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <string>
 
@@ -309,8 +308,8 @@ XMLP_ret XMLEndpointParser::loadXMLReaderEndpoint(
             if (rdata->topic_name == EPROSIMA_UNKNOWN_STRING || rdata->type_name == EPROSIMA_UNKNOWN_STRING)
             {
                 EPROSIMA_LOG_ERROR(RTPS_EDP,
-                        "Bad XML file, topic: " << rdata->topic_name << " or typeName: " << rdata->type_name
-                                                << " undefined");
+                        "Bad XML file, topic: " << rdata->topic_name << " or typeName: " << rdata->type_name <<
+                        " undefined");
                 delete(rdata);
                 return XMLP_ret::XML_ERROR;
             }
@@ -598,8 +597,8 @@ XMLP_ret XMLEndpointParser::loadXMLWriterEndpoint(
             if (wdata->topic_name == EPROSIMA_UNKNOWN_STRING || wdata->type_name == EPROSIMA_UNKNOWN_STRING)
             {
                 EPROSIMA_LOG_ERROR(RTPS_EDP,
-                        "Bad XML file, topic: " << wdata->topic_name << " or typeName: " << wdata->type_name
-                                                << " undefined");
+                        "Bad XML file, topic: " << wdata->topic_name << " or typeName: " << wdata->type_name <<
+                        " undefined");
                 delete(wdata);
                 return XMLP_ret::XML_ERROR;
             }
@@ -790,28 +789,21 @@ XMLP_ret XMLEndpointParser::loadXMLWriterEndpoint(
 XMLP_ret XMLEndpointParser::lookforReader(
         const char* partname,
         uint16_t id,
-        ReaderProxyData** rdataptr,
-        uint32_t& position)
+        ReaderProxyData** rdataptr)
 {
     for (std::vector<StaticRTPSParticipantInfo*>::iterator pit = m_RTPSParticipants.begin();
             pit != m_RTPSParticipants.end(); ++pit)
     {
         if ((*pit)->m_RTPSParticipantName == partname || true) //it doenst matter the name fo the RTPSParticipant, only for organizational purposes
         {
-            position = 0;
             for (std::vector<ReaderProxyData*>::iterator rit = (*pit)->m_readers.begin();
                     rit != (*pit)->m_readers.end(); ++rit)
             {
                 if ((*rit)->user_defined_id() == id)
                 {
-                    if (nullptr != rdataptr)
-                    {
-                        *rdataptr = *rit;
-                    }
+                    *rdataptr = *rit;
                     return XMLP_ret::XML_OK;
                 }
-
-                ++position;
             }
         }
     }
@@ -821,130 +813,25 @@ XMLP_ret XMLEndpointParser::lookforReader(
 XMLP_ret XMLEndpointParser::lookforWriter(
         const char* partname,
         uint16_t id,
-        WriterProxyData** wdataptr,
-        uint32_t& position)
+        WriterProxyData** wdataptr)
 {
     for (std::vector<StaticRTPSParticipantInfo*>::iterator pit = m_RTPSParticipants.begin();
             pit != m_RTPSParticipants.end(); ++pit)
     {
         if ((*pit)->m_RTPSParticipantName == partname || true) //it doenst matter the name fo the RTPSParticipant, only for organizational purposes
         {
-            position = 0;
             for (std::vector<WriterProxyData*>::iterator wit = (*pit)->m_writers.begin();
                     wit != (*pit)->m_writers.end(); ++wit)
             {
                 if ((*wit)->user_defined_id() == id)
                 {
-                    if (nullptr != wdataptr)
-                    {
-                        *wdataptr = *wit;
-                    }
+                    *wdataptr = *wit;
                     return XMLP_ret::XML_OK;
                 }
-
-                ++position;
             }
         }
     }
     return XMLP_ret::XML_ERROR;
-}
-
-XMLP_ret XMLEndpointParser::get_reader_from_position(
-        const std::string& participant_name,
-        size_t pos,
-        rtps::ReaderProxyData** rdataptr)
-{
-    XMLP_ret ret_value {XMLP_ret::XML_ERROR};
-
-    auto participant_it = std::find_if(m_RTPSParticipants.begin(), m_RTPSParticipants.end(),
-                    [&participant_name](StaticRTPSParticipantInfo* participant_info)
-                    {
-                        if (participant_info->m_RTPSParticipantName ==
-                        participant_name.substr(0, participant_name.find_first_of('#')))
-                        {
-                            return true;
-                        }
-                        return false;
-                    });
-
-    if (m_RTPSParticipants.end() != participant_it && (*participant_it)->m_readers.size() > pos && nullptr != rdataptr)
-    {
-        *rdataptr = (*participant_it)->m_readers.at(pos);
-        ret_value = XMLP_ret::XML_OK;
-    }
-    return ret_value;
-}
-
-XMLP_ret XMLEndpointParser::get_writer_from_position(
-        const std::string& participant_name,
-        size_t pos,
-        rtps::WriterProxyData** wdataptr)
-{
-    XMLP_ret ret_value {XMLP_ret::XML_ERROR};
-
-    auto participant_it = std::find_if(m_RTPSParticipants.begin(), m_RTPSParticipants.end(),
-                    [&participant_name](StaticRTPSParticipantInfo* participant_info)
-                    {
-                        if (participant_info->m_RTPSParticipantName ==
-                        participant_name.substr(0, participant_name.find_first_of('#')))
-                        {
-                            return true;
-                        }
-                        return false;
-                    });
-
-    if (m_RTPSParticipants.end() != participant_it && (*participant_it)->m_writers.size() > pos && nullptr != wdataptr)
-    {
-        *wdataptr = (*participant_it)->m_writers.at(pos);
-        ret_value = XMLP_ret::XML_OK;
-    }
-    return ret_value;
-}
-
-size_t XMLEndpointParser::get_number_of_readers(
-        const std::string& participant_name)
-{
-    size_t ret_value {0};
-    auto participant_it = std::find_if(m_RTPSParticipants.begin(), m_RTPSParticipants.end(),
-                    [&participant_name](StaticRTPSParticipantInfo* participant_info)
-                    {
-                        if (participant_info->m_RTPSParticipantName ==
-                        participant_name.substr(0, participant_name.find_first_of('#')))
-                        {
-                            return true;
-                        }
-                        return false;
-                    });
-
-    if (m_RTPSParticipants.end() != participant_it)
-    {
-        ret_value = (*participant_it)->m_readers.size();
-    }
-
-    return ret_value;
-}
-
-size_t XMLEndpointParser::get_number_of_writers(
-        const std::string& participant_name)
-{
-    size_t ret_value {0};
-    auto participant_it = std::find_if(m_RTPSParticipants.begin(), m_RTPSParticipants.end(),
-                    [&participant_name](StaticRTPSParticipantInfo* participant_info)
-                    {
-                        if (participant_info->m_RTPSParticipantName ==
-                        participant_name.substr(0, participant_name.find_first_of('#')))
-                        {
-                            return true;
-                        }
-                        return false;
-                    });
-
-    if (m_RTPSParticipants.end() != participant_it)
-    {
-        ret_value = (*participant_it)->m_writers.size();
-    }
-
-    return ret_value;
 }
 
 }  // namespace xmlparser

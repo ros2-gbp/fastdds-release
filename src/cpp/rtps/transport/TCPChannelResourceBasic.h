@@ -16,7 +16,7 @@
 #define _FASTDDS_TCP_CHANNEL_RESOURCE_BASIC_
 
 #include <mutex>
-#include "../network/asio.hpp"
+#include <asio.hpp>
 #include <rtps/transport/TCPChannelResource.h>
 
 namespace eprosima {

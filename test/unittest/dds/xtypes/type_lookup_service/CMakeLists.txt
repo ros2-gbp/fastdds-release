@@ -91,4 +91,7 @@ target_link_libraries(TypeLookupServiceTests
     GTest::gmock
     ${CMAKE_DL_LIBS}
     )
+if (APPLE)
+    target_link_libraries(TypeLookupServiceTests "-framework CoreFoundation" "-framework IOKit")
+endif()
 gtest_discover_tests(TypeLookupServiceTests)

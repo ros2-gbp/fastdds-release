@@ -34,7 +34,6 @@ bool DataSharingPayloadPool::release_payload(
     payload.pos = 0;
     payload.max_size = 0;
     payload.data = nullptr;
-    payload.is_serialized_key = false;
     payload.payload_owner = nullptr;
     return true;
 }

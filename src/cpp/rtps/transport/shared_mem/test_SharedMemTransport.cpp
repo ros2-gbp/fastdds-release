@@ -53,8 +53,7 @@ bool test_SharedMemTransport::send(
         uint32_t total_bytes,
         LocatorsIterator* destination_locators_begin,
         LocatorsIterator* destination_locators_end,
-        const std::chrono::steady_clock::time_point& max_blocking_time_point,
-        const int32_t transport_priority)
+        const std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
     if (total_bytes >= big_buffer_size_)
     {
@@ -62,7 +61,7 @@ bool test_SharedMemTransport::send(
     }
 
     return SharedMemTransport::send(buffers, total_bytes, destination_locators_begin,
-                   destination_locators_end, max_blocking_time_point, transport_priority);
+                   destination_locators_end, max_blocking_time_point);
 }
 
 SharedMemChannelResource* test_SharedMemTransport::CreateInputChannelResource(

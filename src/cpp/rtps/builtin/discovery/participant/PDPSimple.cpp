@@ -21,7 +21,6 @@
 
 #include <mutex>
 
-#include <fastdds/config.hpp>
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/builtin/data/BuiltinEndpoints.hpp>
 #include <fastdds/rtps/history/ReaderHistory.hpp>
@@ -278,11 +277,7 @@ void PDPSimple::announceParticipantState(
         if (mp_RTPSParticipant->is_secure())
         {
             auto secure = dynamic_cast<fastdds::rtps::SimplePDPEndpointsSecure*>(builtin_endpoints_.get());
-            assert(secure && secure->secure_writer.history_);
-            if (!secure || !secure->secure_writer.history_)
-            {
-                FASTDDS_UNREACHABLE();   // “cannot happen” invariant
-            }
+            assert(nullptr != secure);
 
             WriterHistory& history = *(secure->secure_writer.history_);
             PDP::announceParticipantState(history, new_change, dispose, wp);
@@ -290,13 +285,6 @@ void PDPSimple::announceParticipantState(
 #endif // HAVE_SECURITY
 
         auto endpoints = dynamic_cast<fastdds::rtps::SimplePDPEndpoints*>(builtin_endpoints_.get());
-        assert(endpoints && endpoints->writer.history_);
-
-        if (!endpoints || !endpoints->writer.history_)
-        {
-            FASTDDS_UNREACHABLE();       // “cannot happen” invariant
-        }
-
         WriterHistory& history = *(endpoints->writer.history_);
         PDP::announceParticipantState(history, new_change, dispose, wp);
 
@@ -587,27 +575,12 @@ void PDPSimple::unmatch_pdp_remote_endpoints(
 
     {
         auto endpoints = dynamic_cast<fastdds::rtps::SimplePDPEndpoints*>(builtin_endpoints_.get());
-        if (nullptr == endpoints)
-        {
-            EPROSIMA_LOG_ERROR(RTPS_PDP,
-                    "unmatch_pdp_remote_endpoints(): builtin_endpoints_ is null or wrong type");
-            return;
-        }
+        assert(nullptr != endpoints);
 
         guid.entityId = c_EntityId_SPDPWriter;
-        if (!endpoints->reader.reader_)
-        {
-            EPROSIMA_LOG_ERROR(RTPS_PDP, "SPDPReader is null, cannot unmatch remote endpoints for " << guid);
-            return;
-        }
         endpoints->reader.reader_->matched_writer_remove(guid);
 
         guid.entityId = c_EntityId_SPDPReader;
-        if (!endpoints->writer.writer_)
-        {
-            EPROSIMA_LOG_ERROR(RTPS_PDP, "SPDPWriter is null, cannot unmatch remote endpoints for " << guid);
-            return;
-        }
         endpoints->writer.writer_->matched_reader_remove(guid);
     }
 
@@ -712,8 +685,8 @@ void PDPSimple::match_pdp_remote_endpoints(
                         reader->getGuid(), pdata.guid, *temp_writer_data,
                         reader->getAttributes().security_attributes()))
             {
-                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
-                        << temp_writer_data->guid);
+                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
+                        temp_writer_data->guid);
             }
         }
         else
@@ -742,8 +715,8 @@ void PDPSimple::match_pdp_remote_endpoints(
                         writer->getGuid(), pdata.guid, *temp_reader_data,
                         writer->getAttributes().security_attributes()))
             {
-                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for reader "
-                        << temp_reader_data->guid);
+                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for reader " <<
+                        temp_reader_data->guid);
             }
         }
         else

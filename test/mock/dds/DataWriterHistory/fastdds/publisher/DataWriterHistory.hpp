@@ -34,6 +34,8 @@
 
 #include <fastdds/publisher/history/DataWriterInstance.hpp>
 
+#include <rtps/history/HistoryAttributesExtension.hpp>
+
 namespace eprosima {
 namespace fastdds {
 namespace dds {
@@ -57,7 +59,7 @@ public:
 
         if (history_qos.kind != KEEP_ALL_HISTORY_QOS)
         {
-            max_samples = history_qos.depth;
+            max_samples = get_min_max_samples(history_qos.depth, resource_limits_qos.max_samples_per_instance);
             if (topic_kind != NO_KEY)
             {
                 if (0 < resource_limits_qos.max_instances)
@@ -66,11 +68,11 @@ public:
                 }
                 else
                 {
-                    max_samples = std::numeric_limits<int32_t>::max();
+                    max_samples = LENGTH_UNLIMITED;
                 }
             }
 
-            initial_samples = std::min(initial_samples, max_samples);
+            initial_samples = get_min_max_samples(initial_samples, max_samples);
         }
 
         return HistoryAttributes(mempolicy, payloadMaxSize, initial_samples, max_samples, extra_samples);

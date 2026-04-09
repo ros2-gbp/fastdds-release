@@ -656,8 +656,7 @@ bool MessageReceiver::readSubmessageHeader(
     CDRMessage::readUInt16(msg, &length);
     if (msg->pos + length > msg->length)
     {
-        EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "SubMsg of invalid length (" << length
-                                                                                <<
+        EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "SubMsg of invalid length (" << length <<
                 ") with current msg position/length (" << msg->pos << "/" << msg->length << ")");
         return false;
     }
@@ -868,16 +867,33 @@ bool MessageReceiver::proc_Submsg_Data(
         uint32_t next_pos {msg->pos + payload_size};
         if (msg->length >= next_pos && payload_size > 0)
         {
-            ch.serializedPayload.data = &msg->buffer[msg->pos];
-            ch.serializedPayload.length = payload_size;
-            ch.serializedPayload.max_size = payload_size;
-            ch.serializedPayload.is_serialized_key = keyFlag;
+            FASTDDS_TODO_BEFORE(3, 3, "Pass keyFlag in serializedPayload, and always pass input data upwards");
+            if (dataFlag)
+            {
+                ch.serializedPayload.data = &msg->buffer[msg->pos];
+                ch.serializedPayload.length = payload_size;
+                ch.serializedPayload.max_size = payload_size;
+            }
+            else // keyFlag would be true since we are inside an if (dataFlag || keyFlag)
+            {
+                if (payload_size <= PARAMETER_KEY_HASH_LENGTH)
+                {
+                    if (!ch.instanceHandle.isDefined())
+                    {
+                        memcpy(ch.instanceHandle.value, &msg->buffer[msg->pos], payload_size);
+                    }
+                }
+                else
+                {
+                    EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Ignoring Serialized Payload for too large key-only data (" <<
+                            payload_size << ")");
+                }
+            }
             msg->pos = next_pos;
         }
         else
         {
-            EPROSIMA_LOG_WARNING(RTPS_MSG_IN,
-                    IDSTRING "Serialized Payload value invalid or larger than maximum allowed size"
+            EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Serialized Payload value invalid or larger than maximum allowed size"
                     "(" << payload_size << "/" << (msg->length - msg->pos) << ")");
             ch.serializedPayload.data = nullptr;
             ch.inline_qos.data = nullptr;
@@ -891,8 +907,8 @@ bool MessageReceiver::proc_Submsg_Data(
         ch.sourceTimestamp = timestamp_;
     }
 
-    EPROSIMA_LOG_INFO(RTPS_MSG_IN, IDSTRING "from Writer " << ch.writerGUID << "; possible Reader entities: "
-                                                           << associated_readers_.size());
+    EPROSIMA_LOG_INFO(RTPS_MSG_IN, IDSTRING "from Writer " << ch.writerGUID << "; possible Reader entities: " <<
+            associated_readers_.size());
 
     //Look for the correct reader to add the change
     process_data_message_function_(readerID, ch, was_decoded);
@@ -961,7 +977,6 @@ bool MessageReceiver::proc_Submsg_DataFrag(
     //FOUND THE READER.
     //We ask the reader for a cachechange to store the information.
     CacheChange_t ch;
-    ch.kind = ALIVE;
     ch.writerGUID.guidPrefix = source_guid_prefix_;
     valid &= CDRMessage::readEntityId(msg, &ch.writerGUID.entityId);
 
@@ -1031,25 +1046,49 @@ bool MessageReceiver::proc_Submsg_DataFrag(
 
     // Validations??? XXX TODO
 
-    uint32_t next_pos {msg->pos + payload_size};
-    if (msg->length >= next_pos && payload_size > 0)
+    if (!keyFlag)
     {
-        ch.serializedPayload.data = &msg->buffer[msg->pos];
-        ch.serializedPayload.length = payload_size;
-        ch.serializedPayload.max_size = payload_size;
-        ch.serializedPayload.is_serialized_key = keyFlag;
-        ch.setFragmentSize(fragmentSize);
+        uint32_t next_pos {msg->pos + payload_size};
+        if (msg->length >= next_pos && payload_size > 0)
+        {
+            ch.kind = ALIVE;
+            ch.serializedPayload.data = &msg->buffer[msg->pos];
+            ch.serializedPayload.length = payload_size;
+            ch.serializedPayload.max_size = payload_size;
+            ch.setFragmentSize(fragmentSize);
 
-        msg->pos = next_pos;
+            msg->pos = next_pos;
+        }
+        else
+        {
+            EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Serialized Payload value invalid or larger than maximum allowed size "
+                    "(" << payload_size << "/" << (msg->length - msg->pos) << ")");
+            ch.serializedPayload.data = nullptr;
+            ch.inline_qos.data = nullptr;
+            return false;
+        }
     }
-    else
+    else if (keyFlag)
     {
-        EPROSIMA_LOG_WARNING(RTPS_MSG_IN,
-                IDSTRING "Serialized Payload value invalid or larger than maximum allowed size "
-                "(" << payload_size << "/" << (msg->length - msg->pos) << ")");
-        ch.serializedPayload.data = nullptr;
-        ch.inline_qos.data = nullptr;
-        return false;
+        /* XXX TODO
+           Endianness_t previous_endian = msg->msg_endian;
+           if (ch->serializedPayload.encapsulation == PL_CDR_BE)
+           msg->msg_endian = BIGEND;
+           else if (ch->serializedPayload.encapsulation == PL_CDR_LE)
+           msg->msg_endian = LITTLEEND;
+           else
+           {
+           EPROSIMA_LOG_ERROR(RTPS_MSG_IN, IDSTRING"Bad encapsulation for KeyHash and status parameter list");
+           return false;
+           }
+           //uint32_t param_size;
+           if (ParameterList::readParameterListfromCDRMsg(msg, &m_ParamList, ch, false) <= 0)
+           {
+           EPROSIMA_LOG_INFO(RTPS_MSG_IN, IDSTRING"SubMessage Data ERROR, keyFlag ParameterList");
+           return false;
+           }
+           msg->msg_endian = previous_endian;
+         */
     }
 
     // Set sourcetimestamp
@@ -1058,8 +1097,8 @@ bool MessageReceiver::proc_Submsg_DataFrag(
         ch.sourceTimestamp = timestamp_;
     }
 
-    EPROSIMA_LOG_INFO(RTPS_MSG_IN, IDSTRING "from Writer " << ch.writerGUID << "; possible Reader entities: "
-                                                           << associated_readers_.size());
+    EPROSIMA_LOG_INFO(RTPS_MSG_IN, IDSTRING "from Writer " << ch.writerGUID << "; possible Reader entities: " <<
+            associated_readers_.size());
     process_data_fragment_message_function_(readerID, ch, sampleSize, fragmentStartingNum, fragmentsInSubmessage,
             was_decoded);
     ch.serializedPayload.data = nullptr;
@@ -1109,8 +1148,8 @@ bool MessageReceiver::proc_Submsg_Heartbeat(
     }
     if (lastSN < firstSN && lastSN != firstSN - 1)
     {
-        EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Invalid Heartbeat received (" << firstSN << ") - ("
-                                                                                  << lastSN << "), ignoring");
+        EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Invalid Heartbeat received (" << firstSN << ") - (" <<
+                lastSN << "), ignoring");
         return false;
     }
     uint32_t HBCount {0};

@@ -38,7 +38,7 @@ public:
      *
      * @param participant Pointer to the participant owner of this object.
      */
-    virtual void init(
+    void init(
             fastdds::rtps::RTPSParticipantImpl* participant);
 
     /*!
@@ -60,7 +60,7 @@ public:
             const std::string& flow_controller_name,
             const fastdds::rtps::WriterAttributes& writer_attributes);
 
-protected:
+private:
 
     fastdds::rtps::RTPSParticipantImpl* participant_ = nullptr;
 

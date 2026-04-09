@@ -38,6 +38,9 @@ set(LISTENERTESTS_SOURCE ListenerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/DataWriterQos.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/PublisherQos.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/WriterQos.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ReplierImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/RequesterImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ServiceImpl.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/rpc/ServiceTypeSupport.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/DataReader.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/subscriber/DataReaderImpl.cpp
@@ -92,7 +95,6 @@ set(LISTENERTESTS_SOURCE ListenerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLElementParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
     )
 
@@ -194,11 +196,17 @@ target_link_libraries(ListenerTests
     foonathan_memory
     ${TINYXML2_LIBRARY}
     GTest::gmock
-    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
-    $<$<BOOL:${WIN32}>:ws2_32>
-    $<$<BOOL:${QNX}>:socket>
     ${CMAKE_DL_LIBS}
     ${THIRDPARTY_BOOST_LINK_LIBS}
     )
+if(QNX)
+    target_link_libraries(ListenerTests socket)
+endif()
+if(MSVC OR MSVC_IDE)
+    target_link_libraries(ListenerTests iphlpapi Shlwapi ws2_32)
+endif()
+if (APPLE)
+    target_link_libraries(ListenerTests "-framework CoreFoundation" "-framework IOKit")
+endif()
 
 gtest_discover_tests(ListenerTests)

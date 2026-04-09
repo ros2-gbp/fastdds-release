@@ -245,9 +245,12 @@ UDPChannelResource* UDPTransportInterface::CreateInputChannelResource(
     return p_channel_resource;
 }
 
-void UDPTransportInterface::set_output_pre_bind_options(
-        eProsimaUDPSocket& socket) const
+eProsimaUDPSocket UDPTransportInterface::OpenAndBindUnicastOutputSocket(
+        const ip::udp::endpoint& endpoint,
+        uint16_t& port)
 {
+    eProsimaUDPSocket socket = createUDPSocket(io_context_);
+    getSocketPtr(socket)->open(generate_protocol());
     if (mSendBufferSize != 0)
     {
         uint32_t configured_value = 0;
@@ -264,23 +267,8 @@ void UDPTransportInterface::set_output_pre_bind_options(
         }
     }
     getSocketPtr(socket)->set_option(ip::multicast::hops(configuration()->TTL));
-}
-
-void UDPTransportInterface::set_output_post_bind_options(
-        eProsimaUDPSocket& socket) const
-{
-    getSocketPtr(socket)->non_blocking(configuration()->non_blocking_send);
-}
-
-eProsimaUDPSocket UDPTransportInterface::OpenAndBindUnicastOutputSocket(
-        const ip::udp::endpoint& endpoint,
-        uint16_t& port)
-{
-    eProsimaUDPSocket socket = createUDPSocket(io_context_);
-    getSocketPtr(socket)->open(generate_protocol());
-    set_output_pre_bind_options(socket);
     getSocketPtr(socket)->bind(endpoint);
-    set_output_post_bind_options(socket);
+    getSocketPtr(socket)->non_blocking(configuration()->non_blocking_send);
 
     if (port == 0)
     {
@@ -518,8 +506,7 @@ bool UDPTransportInterface::send(
         fastdds::rtps::LocatorsIterator* destination_locators_end,
         bool only_multicast_purpose,
         bool whitelisted,
-        const std::chrono::steady_clock::time_point& max_blocking_time_point,
-        const int32_t /* transport_priority */)
+        const std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
     fastdds::rtps::LocatorsIterator& it = *destination_locators_begin;
 
@@ -619,8 +606,8 @@ bool UDPTransportInterface::send(
 
         (void)bytesSent;
         EPROSIMA_LOG_INFO(TRANSPORT_UDP,
-                "UDPTransport: " << bytesSent << " bytes TO endpoint: " << destinationEndpoint
-                                 << " FROM " << getSocketPtr(socket)->local_endpoint());
+                "UDPTransport: " << bytesSent << " bytes TO endpoint: " << destinationEndpoint <<
+                " FROM " << getSocketPtr(socket)->local_endpoint());
         success = true;
     }
 

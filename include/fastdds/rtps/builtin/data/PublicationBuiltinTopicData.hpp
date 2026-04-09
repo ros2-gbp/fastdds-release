@@ -125,11 +125,6 @@ struct PublicationBuiltinTopicData
     /// Data representation
     dds::DataRepresentationQosPolicy representation;
 
-    // RPC over DDS V1.0
-
-    // Related DataReader Key
-    GUID_t related_datareader_key;
-
     // eProsima extensions
 
     /// Disable positive acks, implemented in the library.

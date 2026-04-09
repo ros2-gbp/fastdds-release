@@ -17,7 +17,6 @@
 #include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/dds/builtin/topic/PublicationBuiltinTopicData.hpp>
 #include <fastdds/dds/builtin/topic/SubscriptionBuiltinTopicData.hpp>
-#include <fastdds/dds/common/InstanceHandle.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/core/Time_t.hpp>
 #include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
@@ -203,8 +202,8 @@ public:
 
         writer_stat_guids_.push_back(statistics::to_statistics_type(writers_.back()->guid()));
 
-        std::cout << "Created datawriter " << writers_.back()->guid() << " for topic "
-                  << topics_.back()->get_name() << std::endl;
+        std::cout << "Created datawriter " << writers_.back()->guid() << " for topic " <<
+            topics_.back()->get_name() << std::endl;
     }
 
     void create_and_add_reader(
@@ -226,8 +225,8 @@ public:
 
         reader_stat_guids_.push_back(statistics::to_statistics_type(readers_.back()->guid()));
 
-        std::cout << "Created datareader " << readers_.back()->guid() << " for topic "
-                  << topics_.back()->get_name() << std::endl;
+        std::cout << "Created datareader " << readers_.back()->guid() << " for topic " <<
+            topics_.back()->get_name() << std::endl;
     }
 
     bool delete_writer()
@@ -352,8 +351,8 @@ protected:
                 ++cb_counters_[OFFERED_DEADLINE_MISSED_IDX];
             }
 
-            std::cout << "on_offered_deadline_missed() " << writer->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_offered_deadline_missed() " << writer->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_offered_incompatible_qos (
@@ -365,8 +364,8 @@ protected:
                 ++cb_counters_[OFFERED_INCOMPATIBLE_QOS_IDX];
             }
 
-            std::cout << "on_offered_incompatible_qos " << writer->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_offered_incompatible_qos " << writer->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_liveliness_lost (
@@ -390,8 +389,8 @@ protected:
                 ++cb_counters_[PUBLICATION_MATCHED_IDX];
             }
 
-            std::cout << "on_publication_matched " << writer->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_publication_matched " << writer->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_requested_deadline_missed (
@@ -403,8 +402,8 @@ protected:
                 ++cb_counters_[REQUESTED_DEADLINE_MISSED_IDX];
             }
 
-            std::cout << "on_requested_deadline_missed" << reader->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_requested_deadline_missed" << reader->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_requested_incompatible_qos (
@@ -416,8 +415,8 @@ protected:
                 ++cb_counters_[REQUESTED_INCOMPATIBLE_QOS_IDX];
             }
 
-            std::cout << "on_requested_incompatible_qos" << reader->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_requested_incompatible_qos" << reader->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_liveliness_changed (
@@ -429,8 +428,8 @@ protected:
                 ++cb_counters_[LIVELINESS_CHANGED_IDX];
             }
 
-            std::cout << "on_liveliness_changed " << reader->guid() << " not_alive_count " << status.not_alive_count
-                      << std::endl;
+            std::cout << "on_liveliness_changed " << reader->guid() << " not_alive_count " << status.not_alive_count <<
+                std::endl;
         }
 
         void on_subscription_matched (
@@ -442,8 +441,8 @@ protected:
                 ++cb_counters_[SUBSCRIPTION_MATCHED_IDX];
             }
 
-            std::cout << "on_subscription_matched " << reader->guid() << " total_count " << status.total_count
-                      << std::endl;
+            std::cout << "on_subscription_matched " << reader->guid() << " total_count " << status.total_count <<
+                std::endl;
         }
 
         void on_sample_lost (
@@ -708,22 +707,19 @@ protected:
         {
             returnedValue = true;
 
-            if (info.publication_handle != HANDLE_NIL)
+            std::unique_lock<std::mutex> lock(mutex_);
+
+            // Check order of changes
+            LastSeqInfo seq_info{ info.instance_handle, info.sample_identity.writer_guid() };
+            ASSERT_LT(last_seq[seq_info], info.sample_identity.sequence_number());
+            last_seq[seq_info] = info.sample_identity.sequence_number();
+
             {
-                std::unique_lock<std::mutex> lock(mutex_);
-
-                // Check order of changes
-                LastSeqInfo seq_info{ info.instance_handle, info.sample_identity.writer_guid() };
-                ASSERT_LT(last_seq[seq_info], info.sample_identity.sequence_number());
-                last_seq[seq_info] = info.sample_identity.sequence_number();
-
+                std::lock_guard<std::mutex> guard(validator_mtx_);
+                if (nullptr != sample_validator_)
                 {
-                    std::lock_guard<std::mutex> guard(validator_mtx_);
-                    if (nullptr != sample_validator_)
-                    {
-                        validator_selector(statistics_part_, sample_validator_,
-                                data.status_kind(), info, data, total_msgs_, current_processed_count_, cv_);
-                    }
+                    validator_selector(statistics_part_, sample_validator_,
+                            data.status_kind(), info, data, total_msgs_, current_processed_count_, cv_);
                 }
             }
         }
@@ -756,7 +752,7 @@ struct ProxySampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       data.local_entity() == elem.local_entity();
+                                data.local_entity() == elem.local_entity();
                             });
 
             bool msgs_was_expected = false;
@@ -764,8 +760,8 @@ struct ProxySampleValidator : public SampleValidator
             // If this proxy is not expected, avoid further processing and return
             if (!msgs_was_expected)
             {
-                std::cout << "Unexpected proxy " << statistics::to_fastdds_type(data.local_entity())
-                          << data.status_kind() << std::endl;
+                std::cout << "Unexpected proxy " << statistics::to_fastdds_type(data.local_entity()) <<
+                    data.status_kind() << std::endl;
                 return;
             }
 
@@ -851,7 +847,7 @@ struct ProxySampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       data.local_entity() == elem.local_entity();
+                                data.local_entity() == elem.local_entity();
                             });
 
             std::cout << "Received unregistration of instance "
@@ -882,8 +878,8 @@ struct ConnectionListSampleValidator : public SampleValidator
 
             for (auto& connection : data.value().connection_list())
             {
-                std::cout << "Received Connection: \n\tMode: " << static_cast<uint32_t>(connection.mode())
-                          << "\n\tGuid " << statistics::to_fastdds_type(connection.guid()) << "\n\t"
+                std::cout << "Received Connection: \n\tMode: " << static_cast<uint32_t>(connection.mode()) <<
+                    "\n\tGuid " << statistics::to_fastdds_type(connection.guid()) << "\n\t"
                           << "Announced Locators: ";
                 for (auto& locator : connection.used_locators())
                 {
@@ -934,10 +930,9 @@ struct ConnectionListSampleValidator : public SampleValidator
                                                         EPROSIMA_LOG_ERROR(BBTestsMonitorService,
                                                         "Locator not found in sample msg "
                                                             << statistics::to_fastdds_type(total_msgs_elem_connection.
-                                                                announced_locators()[i])
-                                                            << " for local entity "
-                                                            << statistics::to_fastdds_type(
-                                                            total_msgs_elem.local_entity()));
+                                                                announced_locators()[i]) <<
+                                                            " for local entity " <<
+                                                            statistics::to_fastdds_type(total_msgs_elem.local_entity()));
                                                         same_locators = false;
                                                         break;
                                                     }
@@ -989,9 +984,9 @@ struct IncompatibleQoSSampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (data.value().incompatible_qos_status().last_policy_id()
-                                       == elem.value().incompatible_qos_status().last_policy_id());
+                                (data.local_entity() == elem.local_entity()) &&
+                                (data.value().incompatible_qos_status().last_policy_id()
+                                == elem.value().incompatible_qos_status().last_policy_id());
                             });
 
             bool msg_was_expected = false;
@@ -1023,9 +1018,9 @@ struct LivelinessLostSampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (data.value().liveliness_lost_status().total_count()
-                                       == elem.value().liveliness_lost_status().total_count());
+                                (data.local_entity() == elem.local_entity()) &&
+                                (data.value().liveliness_lost_status().total_count()
+                                == elem.value().liveliness_lost_status().total_count());
                             });
 
             if (assert_on_non_expected_msgs_)
@@ -1062,9 +1057,9 @@ struct LivelinessChangedSampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (data.value().liveliness_changed_status().not_alive_count()
-                                       >= elem.value().liveliness_changed_status().not_alive_count());
+                                (data.local_entity() == elem.local_entity()) &&
+                                (data.value().liveliness_changed_status().not_alive_count()
+                                >= elem.value().liveliness_changed_status().not_alive_count());
                             });
 
             std::cout << "Received Liveliness Changed on local_entity "
@@ -1101,9 +1096,9 @@ struct DeadlineMissedSampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (data.value().deadline_missed_status().total_count()
-                                       >= elem.value().deadline_missed_status().total_count());
+                                (data.local_entity() == elem.local_entity()) &&
+                                (data.value().deadline_missed_status().total_count()
+                                >= elem.value().deadline_missed_status().total_count());
                             });
 
             std::cout << "Received Deadline Missed on local_entity "
@@ -1135,8 +1130,8 @@ struct SampleLostSampleValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (data.value().sample_lost_status().total_count() >= 1);
+                                (data.local_entity() == elem.local_entity()) &&
+                                (data.value().sample_lost_status().total_count() >= 1);
                             });
 
             std::cout << "Received Sample Lost on local_entity "
@@ -1169,10 +1164,10 @@ struct ExtendedIncompatibleQoSValidator : public SampleValidator
                             [&](const MonitorServiceType::type& elem)
                             {
                                 return (data.status_kind() == elem.status_kind()) &&
-                                       (data.local_entity() == elem.local_entity()) &&
-                                       (std::is_permutation(data.value().extended_incompatible_qos_status().begin(),
-                                       data.value().extended_incompatible_qos_status().end(),
-                                       elem.value().extended_incompatible_qos_status().begin()));
+                                (data.local_entity() == elem.local_entity()) &&
+                                (std::is_permutation(data.value().extended_incompatible_qos_status().begin(),
+                                data.value().extended_incompatible_qos_status().end(),
+                                elem.value().extended_incompatible_qos_status().begin()));
                             });
 
             std::cout << "Received Extended Incompatible QoS on local_entity "
@@ -2689,10 +2684,10 @@ TEST(DDSMonitorServiceTest, monitor_service_advanced_extended_incompatible_qos)
     add_extended_incompatible_policy(
         expected_msgs,
         w_guid,
-        {
-            {MSPs[1].get_reader_guids().back(), {DURABILITY_QOS_POLICY_ID}},
-            {MSPs[2].get_reader_guids().back(), {LIVELINESS_QOS_POLICY_ID}},
-            {MSPs[3].get_reader_guids().back(), {OWNERSHIP_QOS_POLICY_ID}}});
+    {
+        {MSPs[1].get_reader_guids().back(), {DURABILITY_QOS_POLICY_ID}},
+        {MSPs[2].get_reader_guids().back(), {LIVELINESS_QOS_POLICY_ID}},
+        {MSPs[3].get_reader_guids().back(), {OWNERSHIP_QOS_POLICY_ID}}});
 
     MSC.start_reception(expected_msgs);
 

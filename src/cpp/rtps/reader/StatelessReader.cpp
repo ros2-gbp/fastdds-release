@@ -29,7 +29,7 @@
 #include <fastdds/rtps/reader/ReaderListener.hpp>
 
 #include "reader_utils.hpp"
-#include "rtps/domain/RTPSDomainImpl.hpp"
+#include "rtps/RTPSDomainImpl.hpp"
 #include <rtps/builtin/BuiltinProtocols.h>
 #include <rtps/builtin/liveliness/WLP.hpp>
 #include <rtps/DataSharing/DataSharingListener.hpp>
@@ -382,12 +382,7 @@ bool StatelessReader::change_received(
             }
             ++total_unread_;
 
-
-            // Statistics callback is called with the original writer GUID if it is set
-            auto statistics_source_guid = change->write_params.original_writer_info() != OriginalWriterInfo::unknown() ?
-                    change->write_params.original_writer_info().original_writer_guid() : guid;
-
-            on_data_notify(statistics_source_guid, change->sourceTimestamp);
+            on_data_notify(guid, change->sourceTimestamp);
 
             auto listener = get_listener();
             if (listener != nullptr)

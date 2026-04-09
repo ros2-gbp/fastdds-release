@@ -51,8 +51,7 @@ public:
         {
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
-                    library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -70,8 +69,7 @@ public:
         {
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
-                    library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -120,7 +118,7 @@ void run_parametrized_test(
     auto pub_udp_descriptor = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     std::atomic<uint32_t> messages_on_odd_port{ 0 };  // Messages corresponding to user data
     pub_udp_descriptor->locator_filter_ = [&messages_on_odd_port](
-        const eprosima::fastdds::rtps::Locator& destination, int32_t)
+        const eprosima::fastdds::rtps::Locator& destination)
             {
                 if (0 != (destination.port % 2))
                 {
@@ -211,7 +209,7 @@ static void shm_metatraffic_test(
 
     auto discovery_checker =
             [unicast, multicast](const eprosima::fastdds::rtps::ParticipantBuiltinTopicData& info,
-            eprosima::fastdds::rtps::ParticipantDiscoveryStatus /*status*/)
+                    eprosima::fastdds::rtps::ParticipantDiscoveryStatus /*status*/)
             {
                 check_shm_locators(info, unicast, multicast);
                 return true;
@@ -248,8 +246,7 @@ TEST(SHMUDP, SHM_metatraffic_wrong_config)
     /* Set up log */
     BlackboxMockConsumer* helper_consumer = new BlackboxMockConsumer();
     eprosima::fastdds::dds::Log::ClearConsumers();  // Remove default consumers
-    eprosima::fastdds::dds::Log::RegisterConsumer(std::unique_ptr<eprosima::fastdds::dds::LogConsumer>(
-                helper_consumer));                                                                                        // Registering a consumer transfer ownership
+    eprosima::fastdds::dds::Log::RegisterConsumer(std::unique_ptr<eprosima::fastdds::dds::LogConsumer>(helper_consumer)); // Registering a consumer transfer ownership
     // Filter specific message
     eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
     eprosima::fastdds::dds::Log::SetCategoryFilter(std::regex("RTPS_NETWORK"));

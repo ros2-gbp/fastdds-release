@@ -51,18 +51,6 @@ public:
 
     using NetworkBuffer = eprosima::fastdds::rtps::NetworkBuffer;
 
-    FASTDDS_DEPRECATED_UNTIL(4, send, "Use send with transport_priority instead")
-    bool send(
-            const std::vector<NetworkBuffer>& buffers,
-            const uint32_t& total_bytes,
-            LocatorsIterator* destination_locators_begin,
-            LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point)
-    {
-        return send(buffers, total_bytes, destination_locators_begin, destination_locators_end,
-                       max_blocking_time_point, 0);
-    }
-
     /**
      * Sends to a destination locator, through the channel managed by this resource.
      * @param buffers Vector of buffers to send.
@@ -71,7 +59,6 @@ public:
      * @param destination_locators_begin destination endpoint Locators iterator begin.
      * @param destination_locators_end destination endpoint Locators iterator end.
      * @param max_blocking_time_point If transport supports it then it will use it as maximum blocking time.
-     * @param transport_priority Transport priority to be used for the send operation.
      * @return Success of the send operation.
      */
     bool send(
@@ -79,14 +66,8 @@ public:
             const uint32_t& total_bytes,
             LocatorsIterator* destination_locators_begin,
             LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point,
-            int32_t transport_priority)
+            const std::chrono::steady_clock::time_point& max_blocking_time_point)
     {
-        if (send_lambda_)
-        {
-            return send_lambda_(buffers, total_bytes, destination_locators_begin, destination_locators_end,
-                           max_blocking_time_point, transport_priority);
-        }
         return send_buffers_lambda_(buffers, total_bytes, destination_locators_begin, destination_locators_end,
                        max_blocking_time_point);
     }
@@ -96,7 +77,11 @@ public:
      * construction outside of the factory are forbidden.
      */
     SenderResource(
-            SenderResource&& rValueResource) = default;
+            SenderResource&& rValueResource)
+    {
+        clean_up.swap(rValueResource.clean_up);
+        send_buffers_lambda_.swap(rValueResource.send_buffers_lambda_);
+    }
 
     virtual ~SenderResource() = default;
 
@@ -134,14 +119,6 @@ protected:
                 LocatorsIterator* destination_locators_begin,
                 LocatorsIterator* destination_locators_end,
                 const std::chrono::steady_clock::time_point&)> send_buffers_lambda_;
-
-    std::function<bool(
-                const std::vector<NetworkBuffer>&,
-                uint32_t,
-                LocatorsIterator* destination_locators_begin,
-                LocatorsIterator* destination_locators_end,
-                const std::chrono::steady_clock::time_point&,
-                int32_t transport_priority)> send_lambda_;
 
 private:
 

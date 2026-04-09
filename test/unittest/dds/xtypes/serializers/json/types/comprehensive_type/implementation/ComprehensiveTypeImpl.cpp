@@ -39,87 +39,31 @@
 #include "../gen/ComprehensiveTypePubSubTypes.hpp"
 #include "../gen/ComprehensiveTypeTypeObjectSupport.hpp"
 
-#include <gtest/gtest.h>
-
 using namespace eprosima::fastdds::dds;
-
-traits<DynamicData>::ref_type create_primitives_struct()
-{
-    eprosima::fastdds::dds::TypeSupport type(new PrimitivesStructPubSubType());
-    const auto type_name = type->get_name();
-
-    xtypes::TypeObjectPair type_object_pair;
-    if (RETCODE_OK !=
-            DomainParticipantFactory::get_instance()->type_object_registry().get_type_objects(
-                type_name, type_object_pair))
-    {
-        std::cout << "Failed to get type objects for " << type_name << " type." << std::endl;
-    }
-
-    // Create DynamicType
-    auto type_builder = DynamicTypeBuilderFactory::get_instance()->create_type_w_type_object(
-        type_object_pair.complete_type_object);
-    const auto dynamic_type = type_builder->build();
-
-    return DynamicDataFactory::get_instance()->create_data(dynamic_type);
-}
 
 void fill_primitives_struct(
         traits<DynamicData>::ref_type dyn_data,
         const unsigned int& index)
 {
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data->set_boolean_value(dyn_data->get_member_id_by_name("my_bool"), true), RETCODE_OK);
-    }
-    else
-    {
-        EXPECT_EQ(dyn_data->set_boolean_value(dyn_data->get_member_id_by_name("my_bool"), false), RETCODE_OK);
-    }
-    EXPECT_EQ(dyn_data->set_byte_value(dyn_data->get_member_id_by_name("my_octet"),
-            static_cast<eprosima::fastdds::rtps::octet>(index)), RETCODE_OK);
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data->set_char8_value(dyn_data->get_member_id_by_name(
-                    "my_char"), static_cast<char>('e')), RETCODE_OK);
-    }
-    else
-    {
-        EXPECT_EQ(dyn_data->set_char8_value(dyn_data->get_member_id_by_name(
-                    "my_char"), static_cast<char>('o')), RETCODE_OK);
-    }
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data->set_char16_value(dyn_data->get_member_id_by_name(
-                    "my_wchar"), static_cast<wchar_t>(L'e')), RETCODE_OK);
-    }
-    else
-    {
-        EXPECT_EQ(dyn_data->set_char16_value(dyn_data->get_member_id_by_name(
-                    "my_wchar"), static_cast<wchar_t>(L'o')), RETCODE_OK);
-    }
-    EXPECT_EQ(dyn_data->set_int32_value(dyn_data->get_member_id_by_name(
-                "my_long"), static_cast<int32_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_uint32_value(dyn_data->get_member_id_by_name(
-                "my_ulong"), static_cast<uint32_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_int8_value(dyn_data->get_member_id_by_name(
-                "my_int8"), static_cast<int8_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_uint8_value(dyn_data->get_member_id_by_name(
-                "my_uint8"), static_cast<uint8_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_int16_value(dyn_data->get_member_id_by_name(
-                "my_short"), static_cast<int16_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_uint16_value(dyn_data->get_member_id_by_name(
-                "my_ushort"), static_cast<uint16_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_int64_value(dyn_data->get_member_id_by_name(
-                "my_longlong"), static_cast<int64_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_uint64_value(dyn_data->get_member_id_by_name(
-                "my_ulonglong"), static_cast<uint64_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_float32_value(dyn_data->get_member_id_by_name(
-                "my_float"), static_cast<float>(0.5 * index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_float64_value(dyn_data->get_member_id_by_name(
-                "my_double"), static_cast<double>(0.5 * index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_float128_value(dyn_data->get_member_id_by_name("my_longdouble"),
-            static_cast<long double>(0.5 * index)), RETCODE_OK);
+    index % 2 ? dyn_data->set_boolean_value(dyn_data->get_member_id_by_name("my_bool"), true) :
+    dyn_data->set_boolean_value(dyn_data->get_member_id_by_name("my_bool"), false);
+    dyn_data->set_uint8_value(dyn_data->get_member_id_by_name("my_octet"), static_cast<uint8_t>(index));
+    index % 2 ? dyn_data->set_char8_value(dyn_data->get_member_id_by_name("my_char"), static_cast<char>('e')):
+    dyn_data->set_char8_value(dyn_data->get_member_id_by_name("my_char"), static_cast<char>('o'));
+    index % 2 ? dyn_data->set_char16_value(dyn_data->get_member_id_by_name("my_wchar"), static_cast<wchar_t>(L'e')):
+    dyn_data->set_char16_value(dyn_data->get_member_id_by_name("my_wchar"), static_cast<wchar_t>(L'o'));
+    dyn_data->set_int32_value(dyn_data->get_member_id_by_name("my_long"), static_cast<int32_t>(index));
+    dyn_data->set_uint32_value(dyn_data->get_member_id_by_name("my_ulong"), static_cast<uint32_t>(index));
+    dyn_data->set_int8_value(dyn_data->get_member_id_by_name("my_int8"), static_cast<int8_t>(index));
+    dyn_data->set_uint8_value(dyn_data->get_member_id_by_name("my_uint8"), static_cast<uint8_t>(index));
+    dyn_data->set_int16_value(dyn_data->get_member_id_by_name("my_short"), static_cast<int16_t>(index));
+    dyn_data->set_uint16_value(dyn_data->get_member_id_by_name("my_ushort"), static_cast<uint16_t>(index));
+    dyn_data->set_int64_value(dyn_data->get_member_id_by_name("my_longlong"), static_cast<int64_t>(index));
+    dyn_data->set_uint64_value(dyn_data->get_member_id_by_name("my_ulonglong"), static_cast<uint64_t>(index));
+    dyn_data->set_float32_value(dyn_data->get_member_id_by_name("my_float"), static_cast<float>(0.5 * index));
+    dyn_data->set_float64_value(dyn_data->get_member_id_by_name("my_double"), static_cast<double>(0.5 * index));
+    dyn_data->set_float128_value(dyn_data->get_member_id_by_name("my_longdouble"),
+            static_cast<long double>(0.5 * index));
 }
 
 void fill_my_enum(
@@ -130,13 +74,13 @@ void fill_my_enum(
     switch (index % 3)
     {
         case 0:
-            EXPECT_EQ(dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 0), RETCODE_OK);
+            dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 0);
             break;
         case 1:
-            EXPECT_EQ(dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 1), RETCODE_OK);
+            dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 1);
             break;
         case 2:
-            EXPECT_EQ(dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 2), RETCODE_OK);
+            dyn_data->set_int32_value(dyn_data->get_member_id_by_name(member_name), 2);
             break;
     }
 }
@@ -149,12 +93,10 @@ void fill_all_struct(
     fill_primitives_struct(dyn_data, index);
 
     // strings
-    EXPECT_EQ(dyn_data->set_string_value(dyn_data->get_member_id_by_name("my_string"), "my_string"), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_wstring_value(dyn_data->get_member_id_by_name("my_wstring"), L"my_string"), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_string_value(dyn_data->get_member_id_by_name(
-                "my_bounded_string"), "my_bounded_string"), RETCODE_OK);
-    EXPECT_EQ(dyn_data->set_wstring_value(dyn_data->get_member_id_by_name(
-                "my_bounded_wstring"), L"my_bounded_wstring"), RETCODE_OK);
+    dyn_data->set_string_value(dyn_data->get_member_id_by_name("my_string"), "my_string");
+    dyn_data->set_wstring_value(dyn_data->get_member_id_by_name("my_wstring"), L"my_string");
+    dyn_data->set_string_value(dyn_data->get_member_id_by_name("my_bounded_string"), "my_bounded_string");
+    dyn_data->set_wstring_value(dyn_data->get_member_id_by_name("my_bounded_wstring"), L"my_bounded_wstring");
 
     // enum
     fill_my_enum(dyn_data, "my_enum", index);
@@ -162,41 +104,30 @@ void fill_all_struct(
     // bitmask
     traits<DynamicData>::ref_type dyn_data_my_bitmask =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("my_bitmask"));
-    ASSERT_NE(dyn_data_my_bitmask, nullptr);
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data_my_bitmask->set_boolean_value(dyn_data_my_bitmask->get_member_id_by_name(
-                    "flag0"), true), RETCODE_OK);
-    }
-    else
-    {
-        EXPECT_EQ(dyn_data_my_bitmask->set_boolean_value(dyn_data_my_bitmask->get_member_id_by_name(
-                    "flag0"), false), RETCODE_OK);
-    }
+    index % 2 ? dyn_data_my_bitmask->set_boolean_value(dyn_data_my_bitmask->get_member_id_by_name("flag0"), true) :
+    dyn_data_my_bitmask->set_boolean_value(dyn_data_my_bitmask->get_member_id_by_name("flag0"), false);
     traits<DynamicData>::ref_type dyn_data_bitmask_sequence =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("bitmask_sequence"));
-    ASSERT_NE(dyn_data_bitmask_sequence, nullptr);
-    EXPECT_EQ(dyn_data_bitmask_sequence->set_complex_value(0, dyn_data_my_bitmask), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_my_bitmask), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_bitmask_sequence), RETCODE_OK);
+    dyn_data_bitmask_sequence->set_complex_value(0, dyn_data_my_bitmask);
+    dyn_data->return_loaned_value(dyn_data_my_bitmask);
+    dyn_data->return_loaned_value(dyn_data_bitmask_sequence);
 
     // alias
     traits<DynamicData>::ref_type dyn_data_my_aliased_struct =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("my_aliased_struct"));
-    ASSERT_NE(dyn_data_my_aliased_struct, nullptr);
     fill_primitives_struct(dyn_data_my_aliased_struct, index);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_my_aliased_struct), RETCODE_OK);
+    dyn_data->return_loaned_value(dyn_data_my_aliased_struct);
 
     fill_my_enum(dyn_data, "my_aliased_enum", index);
 
-    EXPECT_EQ(dyn_data->set_string_value(dyn_data->get_member_id_by_name("my_aliased_bounded_string"),
-            "my_aliased_bounded_string"), RETCODE_OK);
+    dyn_data->set_string_value(dyn_data->get_member_id_by_name("my_aliased_bounded_string"),
+            "my_aliased_bounded_string");
 
     fill_my_enum(dyn_data, "my_recursive_alias", index);
 
     // sequences
     Int16Seq short_seq = {0, static_cast<int16_t>(index)};
-    EXPECT_EQ(dyn_data->set_int16_values(dyn_data->get_member_id_by_name("short_sequence"), short_seq), RETCODE_OK);
+    dyn_data->set_int16_values(dyn_data->get_member_id_by_name("short_sequence"), short_seq);
 
     Int32Seq enum_seq;
     switch (index % 3)
@@ -211,133 +142,93 @@ void fill_all_struct(
             enum_seq = {static_cast<int32_t>(2)};
             break;
     }
-    EXPECT_EQ(dyn_data->set_int32_values(dyn_data->get_member_id_by_name("enum_sequence"), enum_seq), RETCODE_OK);
+    dyn_data->set_int32_values(dyn_data->get_member_id_by_name("enum_sequence"), enum_seq);
 
     // array
     Int32Seq long_array_seq = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
-    EXPECT_EQ(dyn_data->set_int32_values(dyn_data->get_member_id_by_name("long_array"), long_array_seq), RETCODE_OK);
+    dyn_data->set_int32_values(dyn_data->get_member_id_by_name("long_array"), long_array_seq);
 
     // maps
     traits<DynamicData>::ref_type dyn_data_string_unbounded_map =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("string_unbounded_map"));
-    ASSERT_NE(dyn_data_string_unbounded_map, nullptr);
-    EXPECT_EQ(dyn_data_string_unbounded_map->set_string_value(
-                dyn_data_string_unbounded_map->get_member_id_by_name("0"), "string_unbounded_map"), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_string_unbounded_map), RETCODE_OK);
+    dyn_data_string_unbounded_map->set_string_value(dyn_data_string_unbounded_map->get_member_id_by_name(
+                "0"), "string_unbounded_map");
+    dyn_data->return_loaned_value(dyn_data_string_unbounded_map);
 
-    traits<DynamicData>::ref_type dyn_data_string_alias_unbounded_map =
-            dyn_data->loan_value(dyn_data->get_member_id_by_name(
+    traits<DynamicData>::ref_type dyn_data_string_alias_unbounded_map = dyn_data->loan_value(dyn_data->get_member_id_by_name(
                         "string_alias_unbounded_map"));
-    ASSERT_NE(dyn_data_string_alias_unbounded_map, nullptr);
-    EXPECT_EQ(dyn_data_string_alias_unbounded_map->set_string_value(
-                dyn_data_string_alias_unbounded_map->get_member_id_by_name(
-                    "0"), "string_alias_unbounded_map"), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_string_alias_unbounded_map), RETCODE_OK);
+    dyn_data_string_alias_unbounded_map->set_string_value(dyn_data_string_alias_unbounded_map->get_member_id_by_name(
+                "0"), "string_alias_unbounded_map");
+    dyn_data->return_loaned_value(dyn_data_string_alias_unbounded_map);
 
     traits<DynamicData>::ref_type dyn_data_short_long_map =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("short_long_map"));
-    ASSERT_NE(dyn_data_short_long_map, nullptr);
     int32_t key {1};
-    EXPECT_EQ(dyn_data_short_long_map->set_int32_value(
-                dyn_data_short_long_map->get_member_id_by_name(std::to_string(
-                    key)), static_cast<int32_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_short_long_map), RETCODE_OK);
+    dyn_data_short_long_map->set_int32_value(dyn_data_short_long_map->get_member_id_by_name(std::to_string(
+                key)), static_cast<int32_t>(index));
+    dyn_data->return_loaned_value(dyn_data_short_long_map);
 
-    // unions
+    // union
     traits<DynamicData>::ref_type dyn_data_inner_union =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("inner_union"));
-    ASSERT_NE(dyn_data_inner_union, nullptr);
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data_inner_union->set_int64_value(
-                    dyn_data_inner_union->get_member_id_by_name("second"), static_cast<int64_t>(index)), RETCODE_OK);
-    }
-    else
-    {
-        auto primitive_struct = create_primitives_struct();
-        ASSERT_NE(primitive_struct, nullptr);
-        fill_primitives_struct(primitive_struct, index);
-        EXPECT_EQ(dyn_data_inner_union->set_complex_value(
-                    dyn_data_inner_union->get_member_id_by_name("first"), primitive_struct), RETCODE_OK);
-
-        // At the time of this writing, the DynamicData API does not support setting a complex non-alias value
-        // with a DynamicData whose type is an alias of the type being set.
-        // Substitute the block above with the following lines if it is supported in the future.
-        /* dyn_data_my_aliased_struct = dyn_data->loan_value(dyn_data->get_member_id_by_name("my_aliased_struct"));
-           ASSERT_NE(dyn_data_my_aliased_struct, nullptr);
-           EXPECT_EQ(dyn_data_inner_union->set_complex_value(
-                    dyn_data_inner_union->get_member_id_by_name("first"), dyn_data_my_aliased_struct), RETCODE_OK);
-           EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_my_aliased_struct), RETCODE_OK); */
-    }
-
+    dyn_data_inner_union->set_int64_value(dyn_data_inner_union->get_member_id_by_name("second"),
+            static_cast<int64_t>(index));
     traits<DynamicData>::ref_type dyn_data_complex_union =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("complex_union"));
-    ASSERT_NE(dyn_data_complex_union, nullptr);
-    if (index % 2)
-    {
-        EXPECT_EQ(dyn_data_complex_union->set_complex_value(
-                    dyn_data_complex_union->get_member_id_by_name("fourth"), dyn_data_inner_union), RETCODE_OK);
-    }
-    else
-    {
-        EXPECT_EQ(dyn_data_complex_union->set_int32_value(
-                    dyn_data_complex_union->get_member_id_by_name("third"), static_cast<int32_t>(index)), RETCODE_OK);
-    }
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_complex_union), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_inner_union), RETCODE_OK);
+    dyn_data_complex_union->set_complex_value(dyn_data_complex_union->get_member_id_by_name(
+                "fourth"), dyn_data_inner_union);
+    dyn_data->return_loaned_value(dyn_data_complex_union);
+    dyn_data->return_loaned_value(dyn_data_inner_union);
 
     // bitset
     traits<DynamicData>::ref_type dyn_data_my_bitset =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("my_bitset"));
-    ASSERT_NE(dyn_data_my_bitset, nullptr);
-    EXPECT_EQ(dyn_data_my_bitset->set_int16_value(
-                dyn_data_my_bitset->get_member_id_by_name("d"), static_cast<int16_t>(index)), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_my_bitset), RETCODE_OK);
+    dyn_data_my_bitset->set_int16_value(dyn_data_my_bitset->get_member_id_by_name("d"), static_cast<int16_t>(index));
+    dyn_data->return_loaned_value(dyn_data_my_bitset);
 }
 
-void fill_dyn_data(
+traits<DynamicData>::ref_type fill_dyn_data(
         traits<DynamicData>::ref_type dyn_data,
         const unsigned int& index)
 {
     // index
-    EXPECT_EQ(dyn_data->set_uint32_value(dyn_data->get_member_id_by_name("index"), index), RETCODE_OK);
+    dyn_data->set_uint32_value(dyn_data->get_member_id_by_name("index"), index);
 
     // inner struct
     traits<DynamicData>::ref_type dyn_data_all_struct =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("inner_struct"));
-    ASSERT_NE(dyn_data_all_struct, nullptr);
     fill_all_struct(dyn_data_all_struct, index);
 
     // complex sequence
     traits<DynamicData>::ref_type dyn_data_complex_sequence =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("complex_sequence"));
-    ASSERT_NE(dyn_data_complex_sequence, nullptr);
-    EXPECT_EQ(dyn_data_complex_sequence->set_complex_value(0, dyn_data_all_struct), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_complex_sequence), RETCODE_OK);
+    dyn_data_complex_sequence->set_complex_value(0, dyn_data_all_struct);
+    dyn_data->return_loaned_value(dyn_data_complex_sequence);
 
     // complex array
     traits<DynamicData>::ref_type dyn_data_complex_array =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("complex_array"));
-    ASSERT_NE(dyn_data_complex_array, nullptr);
     for (unsigned int i = 0; i < 2; i++)
     {
-        EXPECT_EQ(dyn_data_complex_array->set_complex_value(i, dyn_data_all_struct), RETCODE_OK);
+        dyn_data_complex_array->set_complex_value(i, dyn_data_all_struct);
     }
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_complex_array), RETCODE_OK);
+    dyn_data->return_loaned_value(dyn_data_complex_array);
 
     // complex map
     traits<DynamicData>::ref_type dyn_data_complex_map =
             dyn_data->loan_value(dyn_data->get_member_id_by_name("complex_map"));
-    ASSERT_NE(dyn_data_complex_map, nullptr);
-    EXPECT_EQ(dyn_data_complex_map->set_complex_value(
-                dyn_data_complex_map->get_member_id_by_name(std::to_string(0)), dyn_data_all_struct), RETCODE_OK);
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_complex_map), RETCODE_OK);
+    dyn_data_complex_map->set_complex_value(dyn_data_complex_map->get_member_id_by_name(std::to_string(
+                0)), dyn_data_all_struct);
+    dyn_data->return_loaned_value(dyn_data_complex_map);
 
     // Return AllStruct loaned DynamicData
-    EXPECT_EQ(dyn_data->return_loaned_value(dyn_data_all_struct), RETCODE_OK);
+    dyn_data->return_loaned_value(dyn_data_all_struct);
+
+    return dyn_data;
+
 }
 
-template<>
+template <>
 traits<DynamicType>::ref_type create_dynamic_type<DataTypeKind::COMPREHENSIVE_TYPE>()
 {
     eprosima::fastdds::dds::TypeSupport type(new ComprehensiveTypePubSubType());
@@ -349,6 +240,7 @@ traits<DynamicType>::ref_type create_dynamic_type<DataTypeKind::COMPREHENSIVE_TY
     if (RETCODE_OK !=
             DomainParticipantFactory::get_instance()->type_object_registry().get_type_objects(
                 type_name, type_object_pair))
+
     {
         std::cout << "Failed to get type objects for " << type_name << " type." << std::endl;
         return nullptr;
@@ -362,7 +254,7 @@ traits<DynamicType>::ref_type create_dynamic_type<DataTypeKind::COMPREHENSIVE_TY
     return dynamic_type;
 }
 
-template<>
+template <>
 traits<DynamicData>::ref_type create_dynamic_data<DataTypeKind::COMPREHENSIVE_TYPE>(
         const traits<DynamicType>::ref_type& dynamic_type,
         bool filled,
@@ -377,15 +269,15 @@ traits<DynamicData>::ref_type create_dynamic_data<DataTypeKind::COMPREHENSIVE_TY
     // Create DynamicData
     auto dynamic_data = DynamicDataFactory::get_instance()->create_data(dynamic_type);
 
-    if (filled)
+    if (!filled)
     {
-        fill_dyn_data(dynamic_data, index);
+        return dynamic_data;
     }
 
-    return dynamic_data;
+    return fill_dyn_data(dynamic_data, index);
 }
 
-template<>
+template <>
 std::string get_expected_json<DataTypeKind::COMPREHENSIVE_TYPE>(
         const DynamicDataJsonFormat& format,
         bool filled,

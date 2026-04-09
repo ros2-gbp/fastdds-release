@@ -35,9 +35,7 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class ChangeForReader_t;
 class ReaderProxy;
-class StatefulWriterListener;
 class TimedEvent;
 
 /**
@@ -55,8 +53,7 @@ public:
             const WriterAttributes& att,
             fastdds::rtps::FlowController* flow_controller,
             WriterHistory* hist,
-            WriterListener* listen,
-            StatefulWriterListener* stateful_listener);
+            WriterListener* listen = nullptr);
 
     virtual ~StatefulWriter();
 
@@ -370,7 +367,8 @@ private:
 
     void send_heartbeat_piggyback_nts_(
             RTPSMessageGroup& message_group,
-            LocatorSelectorSender& locator_selector);
+            LocatorSelectorSender& locator_selector,
+            uint32_t& last_bytes_processed);
 
     void send_heartbeat_nts_(
             size_t number_of_readers,
@@ -471,10 +469,12 @@ private:
     /// Biggest sequence number removed from history
     SequenceNumber_t biggest_removed_sequence_number_;
 
-    uint32_t last_num_exceeded_send_buffer_size_ {0};
+    const uint32_t sendBufferSize_;
 
-    bool there_are_remote_readers_ {false};
-    bool there_are_local_readers_ {false};
+    int32_t currentUsageSendBufferSize_;
+
+    bool there_are_remote_readers_ = false;
+    bool there_are_local_readers_ = false;
 
     /// The filter for the reader
     fastdds::rtps::IReaderDataFilter* reader_data_filter_ = nullptr;
@@ -487,8 +487,6 @@ private:
     LocatorSelectorSender locator_selector_general_;
 
     LocatorSelectorSender locator_selector_async_;
-
-    StatefulWriterListener* const stateful_writer_listener_ = nullptr;
 };
 
 } // namespace rtps

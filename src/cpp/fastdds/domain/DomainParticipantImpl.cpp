@@ -23,7 +23,7 @@
 #include <chrono>
 #include <string>
 
-#include "../../rtps/network/asio.hpp"
+#include <asio.hpp>
 
 #include <fastdds/core/policy/QosPolicyUtils.hpp>
 #include <fastdds/dds/builtin/topic/ParticipantBuiltinTopicData.hpp>
@@ -51,18 +51,18 @@
 #include <fastdds/rtps/writer/WriterDiscoveryStatus.hpp>
 
 #include <fastdds/builtin/type_lookup_service/TypeLookupManager.hpp>
+#include <fastdds/core/policy/QosPolicyUtils.hpp>
 #include <fastdds/publisher/DataWriterImpl.hpp>
 #include <fastdds/publisher/PublisherImpl.hpp>
 #include <fastdds/subscriber/SubscriberImpl.hpp>
 #include <fastdds/topic/ContentFilteredTopicImpl.hpp>
-#include <fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp>
 #include <fastdds/topic/TopicImpl.hpp>
 #include <fastdds/topic/TopicProxy.hpp>
 #include <fastdds/topic/TopicProxyFactory.hpp>
 #include <fastdds/utils/QosConverters.hpp>
 #include <fastdds/utils/TypePropagation.hpp>
 #include <rtps/builtin/liveliness/WLP.hpp>
-#include <rtps/domain/RTPSDomainImpl.hpp>
+#include <rtps/RTPSDomainImpl.hpp>
 #include <utils/SystemInfo.hpp>
 #include <xmlparser/attributes/PublisherAttributes.hpp>
 #include <xmlparser/attributes/ReplierAttributes.hpp>
@@ -70,6 +70,10 @@
 #include <xmlparser/attributes/SubscriberAttributes.hpp>
 #include <xmlparser/attributes/TopicAttributes.hpp>
 #include <xmlparser/XMLProfileManager.h>
+
+#include "../rpc/ReplierImpl.hpp"
+#include "../rpc/RequesterImpl.hpp"
+#include "../rpc/ServiceImpl.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -90,54 +94,6 @@ using rtps::ReaderDiscoveryStatus;
 using rtps::ResourceEvent;
 using rtps::WriterDiscoveryStatus;
 
-static size_t get_filter_max_subexpressions(
-        const DomainParticipantQos& qos)
-{
-    constexpr const char parameter_name[] = "dds.sql.expression.max_subexpressions";
-    const std::string* property = fastdds::rtps::PropertyPolicyHelper::find_property(
-        qos.properties(), parameter_name);
-    if (nullptr != property)
-    {
-        try
-        {
-            return std::stoul(*property);
-        }
-        catch (...)
-        {
-            EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT,
-                    "Invalid value for dds.sql.expression.max_subexpressions property: "
-                    << *property << ". Will use default value of "
-                    << DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS);
-        }
-    }
-
-    return DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS;
-}
-
-static size_t get_filter_max_expression_length(
-        const DomainParticipantQos& qos)
-{
-    constexpr const char parameter_name[] = "dds.sql.expression.max_expression_length";
-    const std::string* property = fastdds::rtps::PropertyPolicyHelper::find_property(
-        qos.properties(), parameter_name);
-    if (nullptr != property)
-    {
-        try
-        {
-            return std::stoul(*property);
-        }
-        catch (...)
-        {
-            EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT,
-                    "Invalid value for dds.sql.expression.max_expression_length property: "
-                    << *property << ". Will use default value of "
-                    << DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH);
-        }
-    }
-
-    return DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH;
-}
-
 DomainParticipantImpl::DomainParticipantImpl(
         DomainParticipant* dp,
         DomainId_t did,
@@ -151,7 +107,6 @@ DomainParticipantImpl::DomainParticipantImpl(
     , listener_(listen)
     , default_pub_qos_(PUBLISHER_QOS_DEFAULT)
     , default_sub_qos_(SUBSCRIBER_QOS_DEFAULT)
-    , dds_sql_filter_factory_(get_filter_max_subexpressions(qos), get_filter_max_expression_length(qos))
     , default_topic_qos_(TOPIC_QOS_DEFAULT)
     , id_counter_(0)
 #pragma warning (disable : 4355 )
@@ -173,7 +128,7 @@ DomainParticipantImpl::DomainParticipantImpl(
 
     // Pre calculate participant id and generated guid
     participant_id_ = qos_.wire_protocol().participant_id;
-    if (!eprosima::fastdds::rtps::RTPSDomainImpl::get_instance()->create_participant_guid(participant_id_, guid_))
+    if (!eprosima::fastdds::rtps::RTPSDomainImpl::create_participant_guid(participant_id_, guid_))
     {
         EPROSIMA_LOG_ERROR(DOMAIN_PARTICIPANT, "Error generating GUID for participant");
     }
@@ -248,6 +203,18 @@ void DomainParticipantImpl::disable()
 
 DomainParticipantImpl::~DomainParticipantImpl()
 {
+    {
+        std::lock_guard<std::mutex> lock(mtx_services_);
+        for (auto service_it = services_.begin(); service_it != services_.end(); ++service_it)
+        {
+            delete service_it->second;
+        }
+        services_.clear();
+    }
+
+    services_publisher_ = {};
+    services_subscriber_ = {};
+
     {
         std::lock_guard<std::mutex> lock(mtx_pubs_);
         for (auto pub_it = publishers_.begin(); pub_it != publishers_.end(); ++pub_it)
@@ -607,20 +574,6 @@ ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
         Topic* related_topic,
         const std::string& filter_expression,
         const std::vector<std::string>& expression_parameters,
-        const char* filter_class_name,
-        ReturnCode_t& ret_code)
-{
-    ContentFilteredTopic* topic = create_contentfilteredtopic(name, related_topic, filter_expression,
-                    expression_parameters, filter_class_name);
-    ret_code = (topic != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-    return topic;
-}
-
-ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
-        const std::string& name,
-        Topic* related_topic,
-        const std::string& filter_expression,
-        const std::vector<std::string>& expression_parameters,
         const char* filter_class_name)
 {
     if ((nullptr == related_topic) || (nullptr == filter_class_name))
@@ -640,8 +593,7 @@ ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
 
     if (related_topic->get_participant() != get_participant())
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Creating ContentFilteredTopic with name " << name
-                                                                                   <<
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Creating ContentFilteredTopic with name " << name <<
                 ": related_topic not from this participant");
         return nullptr;
     }
@@ -687,8 +639,8 @@ ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
             filter_factory->create_content_filter(filter_class_name, related_topic->get_type_name().c_str(),
             type.get(), filter_expression.c_str(), filter_parameters, filter_instance))
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Could not create filter of class " << filter_class_name << " for expression \""
-                                                                            << filter_expression);
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Could not create filter of class " << filter_class_name << " for expression \"" <<
+                filter_expression);
         return nullptr;
     }
 
@@ -823,7 +775,7 @@ IContentFilterFactory* DomainParticipantImpl::find_content_filter_factory(
     return &dds_sql_filter_factory_;
 }
 
-InstanceHandle_t DomainParticipantImpl::get_instance_handle() const
+const InstanceHandle_t& DomainParticipantImpl::get_instance_handle() const
 {
     return handle_;
 }
@@ -831,17 +783,6 @@ InstanceHandle_t DomainParticipantImpl::get_instance_handle() const
 const fastdds::rtps::GUID_t& DomainParticipantImpl::guid() const
 {
     return guid_;
-}
-
-Publisher* DomainParticipantImpl::create_publisher(
-        const PublisherQos& qos,
-        ReturnCode_t& ret_code,
-        PublisherListener* listener,
-        const StatusMask& mask)
-{
-    Publisher* pub = create_publisher(qos, listener, mask);
-    ret_code = (pub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-    return pub;
 }
 
 Publisher* DomainParticipantImpl::create_publisher(
@@ -896,17 +837,6 @@ Publisher* DomainParticipantImpl::create_publisher(
         *impl = pubimpl;
     }
 
-    return pub;
-}
-
-Publisher* DomainParticipantImpl::create_publisher_with_profile(
-        const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        PublisherListener* listener,
-        const StatusMask& mask)
-{
-    Publisher* pub = create_publisher_with_profile(profile_name, listener, mask);
-    ret_code = (pub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
     return pub;
 }
 
@@ -1046,6 +976,9 @@ ReturnCode_t DomainParticipantImpl::delete_contained_entities()
         delete it_pubs->second;
         it_pubs = publishers_.erase(it_pubs);
     }
+
+    services_publisher_ = {};
+    services_subscriber_ = {};
 
     std::lock_guard<std::mutex> lock_topics(mtx_topics_);
 
@@ -1660,17 +1593,6 @@ std::vector<std::string> DomainParticipantImpl::get_participant_names() const
 
 Subscriber* DomainParticipantImpl::create_subscriber(
         const SubscriberQos& qos,
-        ReturnCode_t& ret_code,
-        SubscriberListener* listener,
-        const StatusMask& mask)
-{
-    Subscriber* subscriber = create_subscriber(qos, listener, mask);
-    ret_code = (subscriber != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-    return subscriber;
-}
-
-Subscriber* DomainParticipantImpl::create_subscriber(
-        const SubscriberQos& qos,
         SubscriberListener* listener,
         const StatusMask& mask)
 {
@@ -1714,17 +1636,6 @@ Subscriber* DomainParticipantImpl::create_subscriber(
 
 Subscriber* DomainParticipantImpl::create_subscriber_with_profile(
         const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        SubscriberListener* listener,
-        const StatusMask& mask)
-{
-    Subscriber* subscriber = create_subscriber_with_profile(profile_name, listener, mask);
-    ret_code = (subscriber != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-    return subscriber;
-}
-
-Subscriber* DomainParticipantImpl::create_subscriber_with_profile(
-        const std::string& profile_name,
         SubscriberListener* listener,
         const StatusMask& mask)
 {
@@ -1745,19 +1656,6 @@ SubscriberImpl* DomainParticipantImpl::create_subscriber_impl(
         SubscriberListener* listener)
 {
     return new SubscriberImpl(this, qos, listener);
-}
-
-Topic* DomainParticipantImpl::create_topic(
-        const std::string& topic_name,
-        const std::string& type_name,
-        const TopicQos& qos,
-        ReturnCode_t& ret_code,
-        TopicListener* listener,
-        const StatusMask& mask)
-{
-    Topic * topic = create_topic(topic_name, type_name, qos, listener, mask);
-    ret_code = (topic != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-    return topic;
 }
 
 Topic* DomainParticipantImpl::create_topic(
@@ -1815,19 +1713,6 @@ Topic* DomainParticipantImpl::create_topic(
 
     cond_topics_.notify_all();
 
-    return topic;
-}
-
-Topic* DomainParticipantImpl::create_topic_with_profile(
-        const std::string& topic_name,
-        const std::string& type_name,
-        const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        TopicListener* listener,
-        const StatusMask& mask)
-{
-    Topic* topic = create_topic_with_profile(topic_name, type_name, profile_name, listener, mask);
-    ret_code = (topic != nullptr) ? RETCODE_OK : RETCODE_ERROR;
     return topic;
 }
 
@@ -1976,121 +1861,396 @@ ReturnCode_t DomainParticipantImpl::unregister_type(
 }
 
 const rpc::ServiceTypeSupport DomainParticipantImpl::find_service_type(
-        const std::string& /*service_type_name*/) const
+        const std::string& service_type_name) const
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return rpc::ServiceTypeSupport();
+    std::lock_guard<std::mutex> lock(mtx_service_types_);
+
+    auto service_type_it = service_types_.find(service_type_name);
+
+    if (service_type_it != service_types_.end())
+    {
+        return service_type_it->second;
+    }
+
+    return rpc::ServiceTypeSupport(TypeSupport(nullptr), TypeSupport(nullptr));
 }
 
 ReturnCode_t DomainParticipantImpl::register_service_type(
-        rpc::ServiceTypeSupport /*service_type*/,
-        const std::string& /*service_type_name*/)
+        rpc::ServiceTypeSupport service_type,
+        const std::string& service_type_name)
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return RETCODE_UNSUPPORTED;
+    if (service_type_name.size() <= 0)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Registered Service Type must have a name");
+        return RETCODE_BAD_PARAMETER;
+    }
+
+    if (service_type.empty_types())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Trying to register a Service Type with empty request/reply types");
+        return RETCODE_BAD_PARAMETER;
+    }
+
+    // Check if the service type is already registered
+    rpc::ServiceTypeSupport t = find_service_type(service_type_name);
+
+    if (!t.empty_types())
+    {
+        if (t == service_type)
+        {
+            return RETCODE_OK;
+        }
+
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Another service type with the same name '" << service_type_name <<
+                "' is already registered.");
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    // Register request/reply types
+    ReturnCode_t ret_code;
+    ret_code = register_type(service_type.request_type(), service_type_name + "_Request");
+
+    if (RETCODE_OK != ret_code)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error registering Request Type for Service Type " << service_type_name);
+        return ret_code;
+    }
+
+    ret_code = register_type(service_type.reply_type(), service_type_name + "_Reply");
+
+    if (RETCODE_OK != ret_code)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error registering Request Type for Service Type " << service_type_name);
+        return ret_code;
+    }
+
+    EPROSIMA_LOG_INFO(PARTICIPANT, "Service Type " << service_type_name << " registered.");
+    std::lock_guard<std::mutex> lock(mtx_service_types_);
+    service_types_.insert(std::make_pair(service_type_name, service_type));
+
+    return RETCODE_OK;
 }
 
 ReturnCode_t DomainParticipantImpl::unregister_service_type(
-        const std::string& /*service_type_name*/)
+        const std::string& service_type_name)
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return RETCODE_UNSUPPORTED;
-}
+    if (service_type_name.size() <= 0)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Registered Service Type must have a name");
+        return RETCODE_BAD_PARAMETER;
+    }
 
-rpc::Service* DomainParticipantImpl::create_service(
-        const std::string& /*service_name*/,
-        const std::string& /*service_type_name*/,
-        ReturnCode_t& ret_code)
-{
-    ret_code = RETCODE_UNSUPPORTED;
-    return nullptr;
+    rpc::ServiceTypeSupport t = find_service_type(service_type_name);
+    if (t.empty_types())
+    {
+        return RETCODE_OK; // Not registered, so unregistering complete.
+    }
+
+    // Iterate over all active services and check if any of them is using the service type
+    {
+        std::lock_guard<std::mutex> lock(mtx_services_);
+        for (auto service_it : services_)
+        {
+            if (service_it.second->service_type_in_use(service_type_name))
+            {
+                EPROSIMA_LOG_ERROR(PARTICIPANT, "Service Type " << service_type_name << " is in use by service " <<
+                        service_it.first);
+                return RETCODE_PRECONDITION_NOT_MET;
+            }
+        }
+    }
+
+    // Unregister request/reply types
+    ReturnCode_t ret_code;
+    ret_code = unregister_type(service_type_name + "_Request");
+
+    if (RETCODE_OK != ret_code)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error unregistering Request Type for Service Type " << service_type_name);
+        return ret_code;
+    }
+
+    ret_code = unregister_type(service_type_name + "_Reply");
+
+    if (RETCODE_OK != ret_code)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error unregistering Reply Type for Service Type " << service_type_name);
+
+        // Request topic type was unregistered, so register it again to avoid leaving the participant in an inconsistent state
+        register_type(t.request_type(), service_type_name + "_Request");
+
+        return ret_code;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_service_types_);
+        service_types_.erase(service_type_name);
+    }
+
+    return RETCODE_OK;
 }
 
 rpc::Service* DomainParticipantImpl::create_service(
         const std::string& service_name,
         const std::string& service_type_name)
 {
-    ReturnCode_t ret_code;
-    rpc::Service* service = create_service(service_name, service_type_name, ret_code);
-    if (RETCODE_UNSUPPORTED == ret_code)
+    if (service_name.empty())
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service name cannot be empty.");
+        return nullptr;
     }
+
+    if (service_type_name.empty())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service type name cannot be empty.");
+        return nullptr;
+    }
+
+    // Check if the service has already been created
+    {
+        std::lock_guard<std::mutex> lock(mtx_services_);
+        auto it = services_.find(service_name);
+
+        if (it != services_.end())
+        {
+            EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service_name << "' already exists.");
+            return nullptr;
+        }
+    }
+
+    // Check if the request/reply content filter factory is registered. If not, register it.
+    IContentFilterFactory* factory = find_content_filter_factory(rpc::RequestReplyContentFilterFactory::FILTER_NAME);
+
+    if (!factory)
+    {
+        factory = &req_rep_filter_factory_;
+        ReturnCode_t ret_code =
+                register_content_filter_factory(rpc::RequestReplyContentFilterFactory::FILTER_NAME, factory);
+
+        if (RETCODE_OK != ret_code)
+        {
+            EPROSIMA_LOG_ERROR(PARTICIPANT, "Error registering Request/Reply Content Filter Factory.");
+            return nullptr;
+        }
+    }
+
+    // Before creating the service, create the publisher and subscriber
+    // that it will use for DDS endpoints creation, if it is necessary
+    if (!services_publisher_.second)
+    {
+        Publisher* pub = create_publisher(PUBLISHER_QOS_DEFAULT);
+        if (!pub)
+        {
+            EPROSIMA_LOG_ERROR(PARTICIPANT, "Error creating Services publisher.");
+            return nullptr;
+        }
+        services_publisher_ = std::make_pair(pub, publishers_[pub]);
+    }
+
+    if (!services_subscriber_.second)
+    {
+        Subscriber* sub = create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+        if (!sub)
+        {
+            EPROSIMA_LOG_ERROR(PARTICIPANT, "Error creating Services subscriber.");
+            return nullptr;
+        }
+        services_subscriber_ = std::make_pair(sub, subscribers_[sub]);
+    }
+    // Create and store the service (Internally, this will create the required DDS Request/Reply Topics))
+    rpc::ServiceImpl* service(nullptr);
+
+    try
+    {
+        service = new rpc::ServiceImpl(
+            service_name, service_type_name, this, services_publisher_.second, services_subscriber_.second);
+    }
+    catch (const std::exception& e)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error creating service: " << e.what());
+        return nullptr;
+    }
+
+    // Try to enable the created service
+    if (RETCODE_OK != service->enable())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Error enabling service.");
+        delete service;
+        return nullptr;
+    }
+
+    {
+        // Register the service in the participant
+        std::lock_guard<std::mutex> lock(mtx_services_);
+        services_[service_name] = service;
+    }
+
     return service;
 }
 
 rpc::Service* DomainParticipantImpl::find_service(
-        const std::string& /*service_name*/) const
+        const std::string& service_name) const
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service_name);
+
+    if (it != services_.end())
+    {
+        return it->second;
+    }
     return nullptr;
 }
 
 ReturnCode_t DomainParticipantImpl::delete_service(
-        const rpc::Service* /*service*/)
+        const rpc::Service* service)
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return RETCODE_UNSUPPORTED;
-}
+    if (!service)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service is nullptr.");
+        return RETCODE_BAD_PARAMETER;
+    }
 
-rpc::Requester* DomainParticipantImpl::create_service_requester(
-        rpc::Service* /*service*/,
-        const RequesterQos& /*requester_qos*/,
-        ReturnCode_t& ret_code)
-{
-    ret_code = RETCODE_UNSUPPORTED;
-    return nullptr;
+    const rpc::ServiceImpl* service_impl = dynamic_cast<const rpc::ServiceImpl*>(service);
+    assert(service_impl != nullptr);
+
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service->get_service_name());
+
+    if (it != services_.end())
+    {
+        if (service_impl != it->second)
+        {
+            EPROSIMA_LOG_ERROR(PARTICIPANT, "Service mismatch.");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
+
+        // Check that the service is disabled
+        if (it->second->is_enabled())
+        {
+            EPROSIMA_LOG_INFO(PARTICIPANT, "Trying to delete an enabled service.");
+            ReturnCode_t retcode = it->second->close();
+            if (RETCODE_OK != retcode)
+            {
+                EPROSIMA_LOG_ERROR(PARTICIPANT, "Error closing service: " << retcode);
+                return retcode;
+            }
+        }
+
+        delete it->second;
+        services_.erase(it);
+        return RETCODE_OK;
+    }
+
+    // The service was not found in this participant
+    EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service->get_service_name() << "' not found.");
+    return RETCODE_PRECONDITION_NOT_MET;
 }
 
 rpc::Requester* DomainParticipantImpl::create_service_requester(
         rpc::Service* service,
         const RequesterQos& qos)
 {
-    ReturnCode_t ret_code;
-    rpc::Requester* requester = create_service_requester(service, qos, ret_code);
-    if (RETCODE_UNSUPPORTED == ret_code)
+    // Check if the service is valid and registered in participant
+    if (!service)
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service is nullptr.");
+        return nullptr;
     }
-    return requester;
+
+    const rpc::ServiceImpl* service_impl = dynamic_cast<const rpc::ServiceImpl*>(service);
+    assert(service_impl != nullptr);
+
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service->get_service_name());
+    if (it == services_.end())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service->get_service_name() << "' not found.");
+        return nullptr;
+    }
+
+    // Make sure that both services are the same
+    if (it->second != service_impl)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service mismatch.");
+        return nullptr;
+    }
+
+    // Create the requester and register it in the service
+    return it->second->create_requester(qos);
 }
 
 ReturnCode_t DomainParticipantImpl::delete_service_requester(
-        const std::string& /*service_name*/,
-        rpc::Requester* /*requester*/)
+        const std::string& service_name,
+        rpc::Requester* requester)
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return RETCODE_UNSUPPORTED;
-}
 
-rpc::Replier* DomainParticipantImpl::create_service_replier(
-        rpc::Service* /*service*/,
-        const ReplierQos& /*replier_qos*/,
-        ReturnCode_t& ret_code)
-{
-    ret_code = RETCODE_UNSUPPORTED;
-    return nullptr;
+    rpc::RequesterImpl* requester_impl = dynamic_cast<rpc::RequesterImpl*>(requester);
+    assert(requester_impl != nullptr);
+
+    // Get registered service implementation
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service_name);
+
+    if (it == services_.end())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service_name << "' not registered.");
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return it->second->remove_requester(requester_impl);
 }
 
 rpc::Replier* DomainParticipantImpl::create_service_replier(
         rpc::Service* service,
         const ReplierQos& qos)
 {
-    ReturnCode_t ret_code;
-    rpc::Replier* replier = create_service_replier(service, qos, ret_code);
-    if (RETCODE_UNSUPPORTED == ret_code)
+    // Check if the service is valid and registered in participant
+    if (!service)
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service is nullptr.");
+        return nullptr;
     }
-    return replier;
+
+    const rpc::ServiceImpl* service_impl = dynamic_cast<const rpc::ServiceImpl*>(service);
+    assert(service_impl != nullptr);
+
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service->get_service_name());
+    if (it == services_.end())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service->get_service_name() << "' not found.");
+        return nullptr;
+    }
+
+    // Make sure that both services are the same
+    if (it->second != service_impl)
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service mismatch.");
+        return nullptr;
+    }
+
+    // Create the replier and register it in the service
+    return it->second->create_replier(qos);
 }
 
 ReturnCode_t DomainParticipantImpl::delete_service_replier(
-        const std::string& /*service_name*/,
-        rpc::Replier* /*replier*/)
+        const std::string& service_name,
+        rpc::Replier* replier)
 {
-    EPROSIMA_LOG_ERROR(PARTICIPANT, "Services are not supported in this Fast DDS version");
-    return RETCODE_UNSUPPORTED;
+    rpc::ReplierImpl* replier_impl = dynamic_cast<rpc::ReplierImpl*>(replier);
+    assert(replier_impl != nullptr);
+
+    // Get registered service implementation
+    std::lock_guard<std::mutex> lock(mtx_services_);
+    auto it = services_.find(service_name);
+
+    if (it == services_.end())
+    {
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Service with name '" << service_name << "' not registered.");
+        return RETCODE_PRECONDITION_NOT_MET;
+    }
+
+    return it->second->remove_replier(replier_impl);
 }
 
 void DomainParticipantImpl::MyRTPSParticipantListener::on_participant_discovery(
@@ -2158,24 +2318,6 @@ void DomainParticipantImpl::MyRTPSParticipantListener::on_writer_discovery(
             listener->on_data_writer_discovery(participant_->participant_, reason, info, should_be_ignored);
         }
     }
-}
-
-bool DomainParticipantImpl::MyRTPSParticipantListener::should_endpoints_match(
-        const RTPSParticipant*,
-        const SubscriptionBuiltinTopicData& reader_info,
-        const PublicationBuiltinTopicData& writer_info)
-{
-    Sentry sentinel(this);
-    if (sentinel)
-    {
-        DomainParticipantListener* listener = participant_->listener_;
-        if (nullptr != listener)
-        {
-            return listener->should_endpoints_match(participant_->participant_, reader_info, writer_info);
-        }
-    }
-
-    return true;
 }
 
 bool DomainParticipantImpl::new_remote_endpoint_discovered(
@@ -2411,8 +2553,7 @@ bool DomainParticipantImpl::can_qos_be_updated(
                 from.wire_protocol().builtin.discovery_config.ignoreParticipantFlags))))
         {
             updatable = false;
-            EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
-                    "WireProtocolConfigQos cannot be changed after the participant is enabled, "
+            EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK, "WireProtocolConfigQos cannot be changed after the participant is enabled, "
                     << "with the exception of builtin.discovery_config.m_DiscoveryServers");
         }
     }

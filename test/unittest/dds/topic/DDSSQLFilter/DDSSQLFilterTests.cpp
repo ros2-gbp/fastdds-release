@@ -143,7 +143,7 @@ static ReturnCode_t create_content_filter(
 
 class DDSSQLFilterTests : public testing::Test
 {
-    DDSFilterFactory uut{DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH};
+    DDSFilterFactory uut;
     ContentFilterTestTypePubSubType type_support;
 
 protected:
@@ -168,15 +168,8 @@ protected:
     void run(
             const TestCase& test)
     {
-        run(test, uut);
-    }
-
-    void run(
-            const TestCase& test,
-            DDSFilterFactory& factory)
-    {
         IContentFilter* filter_instance = nullptr;
-        auto ret = create_content_filter(factory, test.expression, test.parameters, &type_support, filter_instance);
+        auto ret = create_content_filter(uut, test.expression, test.parameters, &type_support, filter_instance);
         EXPECT_EQ(ret, test.result)
             << " failed for expression \"" << test.expression << "\" [" << test.parameters.size() << "]";
         if (ret == ok_code)
@@ -188,17 +181,10 @@ protected:
     void run(
             const std::vector<TestCase>& test_cases)
     {
-        run(test_cases, uut);
-    }
-
-    void run(
-            const std::vector<TestCase>& test_cases,
-            DDSFilterFactory& factory)
-    {
         std::cout << "Test Cases: " << test_cases.size() << std::endl;
         for (const TestCase& tc : test_cases)
         {
-            run(tc, factory);
+            run(tc);
         }
     }
 
@@ -586,45 +572,14 @@ TEST_F(DDSSQLFilterTests, different_type_name)
     type.register_type_object_representation();
 
     IContentFilter* filter_instance = nullptr;
-    DDSFilterFactory fac{DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH};
+    DDSFilterFactory factory;
     StackAllocatedSequence<const char*, 10> params;
 
-    EXPECT_EQ(fac.create_content_filter("DDSSQL", "MyCustomType", &type,
+    EXPECT_EQ(factory.create_content_filter("DDSSQL", "MyCustomType", &type,
             "uint16_field = 3", params, filter_instance), RETCODE_OK);
 
-    EXPECT_EQ(RETCODE_OK, fac.delete_content_filter("DDSSQL", filter_instance));
-}
-
-TEST_F(DDSSQLFilterTests, parenthesis)
-{
-    constexpr size_t maxp = DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS;
-
-    std::vector<TestCase> test_cases
-    {
-        {"(int32_field = 10)", {}, ok_code},
-        {"((int32_field = 10))", {}, ok_code},
-        {"(int32_field = 10", {}, bad_code},
-        {"int32_field = 10)", {}, bad_code},
-        {"((int32_field = 10)", {}, bad_code},
-        {"(int32_field = 10))", {}, bad_code},
-        {"(int32_field = 10) AND (uint8_field = 5)", {}, ok_code},
-        {"((int32_field = 10) AND (uint8_field = 5))", {}, ok_code},
-        {"(int32_field = 10 AND (uint8_field = 5))", {}, ok_code},
-        {"((int32_field = 10) AND uint8_field = 5)", {}, ok_code},
-        {"(int32_field = 10) AND uint8_field = 5)", {}, bad_code},
-        {"int32_field = 10) AND (uint8_field = 5)", {}, bad_code},
-        {"(int32_field = 10 AND uint8_field = 5", {}, bad_code},
-        {"int32_field = 10 AND (uint8_field = 5)", {}, ok_code},
-        {std::string(maxp, '(') + "int32_field = 10" + std::string(maxp, ')'), {}, ok_code},
-        {std::string(maxp + 1, '(') + "int32_field = 10" + std::string(maxp + 1, ')'), {}, bad_code},
-        {std::string(20000, '(') + "int32_field = 10" + std::string(20000, ')'), {}, bad_code}
-    };
-    run(test_cases);
-
-    // Test with a factory with increased limit
-    DDSFilterFactory increased_limit_factory{ maxp + 2, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH };
-    (test_cases.rbegin() + 1)->result = ok_code;  // maxp + 1 parenthesis pairs
-    run(test_cases, increased_limit_factory);
+    EXPECT_EQ(RETCODE_OK,
+            factory.delete_content_filter("DDSSQL", filter_instance));
 }
 
 /**
@@ -693,7 +648,7 @@ public:
 
     static const std::array<std::pair<std::string, std::string>, 6>& ops()
     {
-        static const std::array<std::pair<std::string, std::string>, 6> the_ops =
+        static const std::array < std::pair<std::string, std::string>, 6 > the_ops =
         {
             std::pair<std::string, std::string>{"=",  "eq"},
             std::pair<std::string, std::string>{"<>", "ne"},
@@ -1099,7 +1054,7 @@ protected:
         eprosima::fastdds::dds::Log::ClearConsumers();
     }
 
-    DDSFilterFactory uut{DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH};
+    DDSFilterFactory uut;
     ContentFilterTestTypePubSubType type_support;
 
     template<typename T>
@@ -1311,36 +1266,6 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
     results[0] = results[4] = true;
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
     EXPECT_EQ(RETCODE_OK, ret);
-    perform_basic_check(filter, results, values);
-
-    ret = uut.delete_content_filter("DDSSQL", filter);
-    EXPECT_EQ(RETCODE_OK, ret);
-}
-
-// Check that key-only payloads always pass the filter
-TEST_F(DDSSQLFilterValueTests, key_only_payload)
-{
-    static const std::string expression = "string_field MATCH %0 OR string_field LIKE %1";
-
-    IContentFilter* filter = nullptr;
-    auto ret = create_content_filter(uut, expression, { "'BBB'", "'X'" }, &type_support, filter);
-    EXPECT_EQ(RETCODE_OK, ret);
-    ASSERT_NE(nullptr, filter);
-
-    // Create a copy of the default values, but with the key-only payload
-    const auto& initial_values = DDSSQLFilterValueGlobalData::values();
-    std::vector<std::unique_ptr<IContentFilter::SerializedPayload>> values;
-    values.reserve(initial_values.size());
-    for (const auto& value : initial_values)
-    {
-        auto payload = new IContentFilter::SerializedPayload(value->max_size);
-        payload->copy(value.get());
-        payload->is_serialized_key = true;
-        values.emplace_back(std::move(payload));
-    }
-    std::array<bool, 5> results{ true, true, true, true, true };
-
-    ASSERT_EQ(results.size(), values.size());
     perform_basic_check(filter, results, values);
 
     ret = uut.delete_content_filter("DDSSQL", filter);

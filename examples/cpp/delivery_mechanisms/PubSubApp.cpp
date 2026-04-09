@@ -62,7 +62,6 @@ PubSubApp::PubSubApp(
     , writer_(nullptr)
     , type_(new DeliveryMechanismsPubSubType())
     , matched_(0)
-    , expected_matches_(config.matched)
     , index_of_last_sample_sent_(0)
     , received_samples_(0)
     , samples_(config.samples)
@@ -292,13 +291,13 @@ void PubSubApp::on_publication_matched(
 {
     if (info.current_count_change == 1)
     {
-        matched_ = static_cast<int16_t>(info.current_count);
+        matched_ = info.current_count;
         std::cout << "Pub matched." << std::endl;
         cv_.notify_one();
     }
     else if (info.current_count_change == -1)
     {
-        matched_ = static_cast<int16_t>(info.current_count);
+        matched_ = info.current_count;
         std::cout << "Pub unmatched." << std::endl;
     }
     else
@@ -344,12 +343,8 @@ void PubSubApp::on_data_available(
                 const DeliveryMechanisms& delivery_mechanisms_ = delivery_mechanisms_sequence[i];
 
                 received_samples_++;
-                std::cout << "Sample: '" << delivery_mechanisms_.message().data() << "' with index: '"
-                          << delivery_mechanisms_.index() << "' RECEIVED" << std::endl;
-                if ((samples_ > 0) && (received_samples_ >= samples_))
-                {
-                    break;
-                }
+                std::cout << "Sample: '" << delivery_mechanisms_.message().data() << "' with index: '" <<
+                    delivery_mechanisms_.index() << "' RECEIVED" << std::endl;
             }
         }
         reader->return_loan(delivery_mechanisms_sequence, info_sequence);
@@ -367,32 +362,6 @@ void PubSubApp::run()
             {
                 std::cout << "Error sending sample with index: '" << index_of_last_sample_sent_ << "'" << std::endl;
             }
-
-            // Wait for acking the first sample
-            if (index_of_last_sample_sent_ == 1u)
-            {
-                ReturnCode_t acked = RETCODE_ERROR;
-                do
-                {
-                    dds::Duration_t acked_wait{1, 0};
-                    acked = writer_->wait_for_acknowledgments(acked_wait);
-                }
-                while (acked != RETCODE_OK);
-            }
-
-#ifdef _WIN32
-            // Wait for acking the last sample
-            if (samples_ > 0 && index_of_last_sample_sent_ == samples_ - 1)
-            {
-                ReturnCode_t acked = RETCODE_ERROR;
-                do
-                {
-                    dds::Duration_t acked_wait{1, 0};
-                    acked = writer_->wait_for_acknowledgments(acked_wait);
-                }
-                while (acked != RETCODE_OK);
-            }
-#endif // _WIN32
         }
 
         // Wait for period or stop event
@@ -417,7 +386,7 @@ bool PubSubApp::publish()
     cv_.wait(matched_lock, [&]()
             {
                 // at least one has been discovered
-                return ((matched_ >= expected_matches_) || is_stopped());
+                return ((matched_ > 0) || is_stopped());
             });
     void* sample_ = nullptr;
     if (!is_stopped() && (RETCODE_OK == writer_->loan_sample(sample_)))

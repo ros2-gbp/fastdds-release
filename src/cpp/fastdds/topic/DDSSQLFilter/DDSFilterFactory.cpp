@@ -461,25 +461,32 @@ static std::shared_ptr<xtypes::TypeObject> get_complete_type_object(
         const TopicDataType* data_type)
 {
     ReturnCode_t ret;
-    auto& registry = DomainParticipantFactory::get_instance()->type_object_registry();
 
     // Try to get the complete TypeObject from the type name
     std::shared_ptr<xtypes::TypeObjectPair> type_objects = std::make_shared<xtypes::TypeObjectPair>();
-    ret = registry.get_type_objects(type_name, *type_objects);
+    ret = DomainParticipantFactory::get_instance()->type_object_registry().get_type_objects(
+        type_name, *type_objects);
     if (RETCODE_OK == ret)
     {
         return std::make_shared<xtypes::TypeObject>(type_objects->complete_type_object);
     }
 
     // If not found, try to get the complete TypeObject from the type identifier
-    xtypes::CompleteTypeObject complete_type_object;
-    ret = registry.get_complete_type_object(data_type->type_identifiers(), complete_type_object);
+    xtypes::TypeObject complete_type_object;
+    if (xtypes::EK_COMPLETE == data_type->type_identifiers().type_identifier1()._d())
+    {
+        ret = DomainParticipantFactory::get_instance()->type_object_registry().get_type_object(
+            data_type->type_identifiers().type_identifier1(), complete_type_object);
+    }
+    else if (xtypes::EK_COMPLETE == data_type->type_identifiers().type_identifier2()._d())
+    {
+        ret = DomainParticipantFactory::get_instance()->type_object_registry().get_type_object(
+            data_type->type_identifiers().type_identifier2(), complete_type_object);
+    }
 
     if (RETCODE_OK == ret)
     {
-        auto value = std::make_shared<xtypes::TypeObject>();
-        value->complete(complete_type_object);
-        return value;
+        return std::make_shared<xtypes::TypeObject>(complete_type_object);
     }
 
     return nullptr;
@@ -541,58 +548,48 @@ ReturnCode_t DDSFilterFactory::create_content_filter(
             }
         }
     }
+    else if (std::strlen(filter_expression) == 0)
+    {
+        delete_content_filter(filter_class_name, filter_instance);
+        filter_instance = &empty_expression_;
+        ret = RETCODE_OK;
+    }
     else
     {
-        size_t expression_len = std::strlen(filter_expression);
+        std::shared_ptr<xtypes::TypeObject> type_object = get_complete_type_object(type_name, data_type);
 
-        if (0 == expression_len)
+        if (!type_object)
         {
-            delete_content_filter(filter_class_name, filter_instance);
-            filter_instance = &empty_expression_;
-            ret = RETCODE_OK;
+            EPROSIMA_LOG_ERROR(DDSSQLFILTER, "No TypeObject found for type " << type_name);
         }
-        else if (validate_filter_expression(filter_expression, expression_len))
+        else
         {
-            std::shared_ptr<xtypes::TypeObject> type_object = get_complete_type_object(type_name, data_type);
-
-            if (!type_object)
+            auto node = parser::parse_filter_expression(filter_expression, type_object);
+            if (node)
             {
-                EPROSIMA_LOG_ERROR(DDSSQLFILTER, "No TypeObject found for type " << type_name);
-                ret = RETCODE_PRECONDITION_NOT_MET;
-            }
-            else
-            {
-                auto node = parser::parse_filter_expression(filter_expression, type_object);
-                if (node)
+                DynamicType::_ref_type dyn_type = DynamicTypeBuilderFactory::get_instance()->create_type_w_type_object(
+                    *type_object)->build();
+                if (dyn_type)
                 {
-                    DynamicTypeBuilderFactory::_ref_type factory = DynamicTypeBuilderFactory::get_instance();
-                    DynamicType::_ref_type dyn_type = factory->create_type_w_type_object(*type_object)->build();
-                    if (dyn_type)
+                    DDSFilterExpression* expr = get_expression();
+                    expr->set_type(dyn_type);
+                    size_t n_params = filter_parameters.length();
+                    expr->parameters.reserve(n_params);
+                    while (expr->parameters.size() < n_params)
                     {
-                        DDSFilterExpression* expr = get_expression();
-                        expr->set_type(dyn_type);
-                        size_t n_params = filter_parameters.length();
-                        expr->parameters.reserve(n_params);
-                        while (expr->parameters.size() < n_params)
-                        {
-                            expr->parameters.emplace_back();
-                        }
-                        ExpressionParsingState state{ std::make_shared<xtypes::TypeObject>(*type_object),
-                                                      filter_parameters, expr };
-                        ret = convert_tree<DDSFilterCondition>(state, expr->root, *(node->children[0]));
-                        if (RETCODE_OK == ret)
-                        {
-                            delete_content_filter(filter_class_name, filter_instance);
-                            filter_instance = expr;
-                        }
-                        else
-                        {
-                            delete_content_filter(filter_class_name, expr);
-                        }
+                        expr->parameters.emplace_back();
+                    }
+                    ExpressionParsingState state{ std::make_shared<xtypes::TypeObject>(*type_object),
+                                                  filter_parameters, expr };
+                    ret = convert_tree<DDSFilterCondition>(state, expr->root, *(node->children[0]));
+                    if (RETCODE_OK == ret)
+                    {
+                        delete_content_filter(filter_class_name, filter_instance);
+                        filter_instance = expr;
                     }
                     else
                     {
-                        ret = RETCODE_BAD_PARAMETER;
+                        delete_content_filter(filter_class_name, expr);
                     }
                 }
                 else
@@ -600,10 +597,10 @@ ReturnCode_t DDSFilterFactory::create_content_filter(
                     ret = RETCODE_BAD_PARAMETER;
                 }
             }
-        }
-        else
-        {
-            ret = RETCODE_BAD_PARAMETER;
+            else
+            {
+                ret = RETCODE_BAD_PARAMETER;
+            }
         }
     }
 
@@ -628,50 +625,6 @@ ReturnCode_t DDSFilterFactory::delete_content_filter(
         expression_pool_.put(expr);
     }
     return RETCODE_OK;
-}
-
-bool DDSFilterFactory::validate_filter_expression(
-        const char* expression,
-        const size_t expression_len) const
-{
-    if (expression_len > max_expression_length_)
-    {
-        // Expression too long
-        return false;
-    }
-
-    // Check parentheses balance and count
-    size_t num_parentheses = 0;
-    size_t pending_size = expression_len;
-    for (const char* ptr = expression; (pending_size > 0) && (*ptr != '\0'); ++ptr, --pending_size)
-    {
-        if (*ptr == '(')
-        {
-            ++num_parentheses;
-
-            if (num_parentheses > max_subexpressions_)
-            {
-                // Too many nested parentheses
-                return false;
-            }
-        }
-        else if (*ptr == ')')
-        {
-            if (num_parentheses == 0)
-            {
-                // Unmatched closing parenthesis
-                return false;
-            }
-            --num_parentheses;
-        }
-    }
-    if (num_parentheses != 0)
-    {
-        // Unmatched opening parenthesis
-        return false;
-    }
-
-    return true;
 }
 
 }  // namespace DDSSQLFilter

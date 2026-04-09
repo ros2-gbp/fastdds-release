@@ -14,7 +14,7 @@
 
 #include <rtps/transport/UDPChannelResource.h>
 
-#include "../network/asio.hpp"
+#include <asio.hpp>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
 

@@ -15,7 +15,7 @@
 ###############################################################################
 # CMake build rules for Fast DDS
 ###############################################################################
-cmake_minimum_required(VERSION 3.22) # TODO 3.28
+cmake_minimum_required(VERSION 3.20)
 
 # Set CMAKE_BUILD_TYPE to Release by default.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -29,14 +29,12 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastdds VERSION "3.6.0.0" LANGUAGES C CXX)
+project(fastdds VERSION "3.2.4" LANGUAGES C CXX)
 
 set(PROJECT_NAME_LARGE "Fast DDS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
 
 message(STATUS "Version: ${PROJECT_VERSION}")
-
-set(FASTDDS_BASIC_DIR ${PROJECT_SOURCE_DIR})
 
 ###############################################################################
 # eProsima build options
@@ -91,6 +89,19 @@ else()
     if(EPROSIMA_BUILD)
         string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
     endif()
+endif()
+
+###############################################################################
+# CCache on Windows on CI
+###############################################################################
+if (MSVC AND CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "ccache")
+    foreach(config DEBUG RELWITHDEBINFO)
+        foreach(lang C CXX)
+            set(flags_var "CMAKE_${lang}_FLAGS_${config}")
+            string(REPLACE "/Zi" "/Z7" ${flags_var} "${${flags_var}}")
+            set(${flags_var} "${${flags_var}}")
+        endforeach()
+    endforeach()
 endif()
 
 ###############################################################################
@@ -178,7 +189,12 @@ endif()
 string(FIND ${CMAKE_CXX_FLAGS} "-fsanitize=thread" SANITIZER_THREAD)
 if (${SANITIZER_THREAD} EQUAL -1)
     message(STATUS "Setting warnings as errors...")
-    set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+    if(MSVC OR MSVC_IDE)
+        add_compile_options(/WX)
+    else()
+        set(CMAKE_CXX_FLAGS
+            "${CMAKE_CXX_FLAGS} -Werror")
+    endif()
 endif()
 
 ###############################################################################

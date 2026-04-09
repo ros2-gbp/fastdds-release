@@ -43,8 +43,7 @@ public:
     enum class ExchangeFormat : uint32_t
     {
         v1, //! Standard exchange format for Static Discovery.
-        v1_Reduced, //! Exchange format that reduces the used network bandwidth.
-        v2 //! Exchange format that reduces the used network bandwidth with more restrictions.
+        v1_Reduced //! Exchange format that reduces the used network bandwidth.
     };
 
     /**
@@ -148,18 +147,6 @@ public:
      **/
     bool checkEntityId(
             WriterProxyData* wdata);
-
-    bool enable_reader_on_v2_property(
-            const std::string& local_participant_name,
-            fastdds::dds::ParameterPropertyList_t& pdp_properties,
-            uint16_t id,
-            bool disable);
-
-    bool enable_writer_on_v2_property(
-            const std::string& local_participant_name,
-            fastdds::dds::ParameterPropertyList_t& pdp_properties,
-            uint16_t id,
-            bool disable);
 
 private:
 

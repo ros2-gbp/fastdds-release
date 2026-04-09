@@ -164,17 +164,6 @@ public:
 
     Publisher* create_publisher(
             const PublisherQos& qos,
-            ReturnCode_t& ret_code,
-            PublisherListener* listener,
-            const StatusMask& mask)
-    {
-        Publisher* pub = create_publisher(qos, listener, mask);
-        ret_code = (pub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-        return pub;
-    }
-
-    Publisher* create_publisher(
-            const PublisherQos& qos,
             PublisherListener* listener,
             const StatusMask& mask)
     {
@@ -200,17 +189,6 @@ public:
             *impl = pubimpl;
         }
 
-        return pub;
-    }
-
-    Publisher* create_publisher_with_profile(
-            const std::string& profile_name,
-            ReturnCode_t& ret_code,
-            PublisherListener* listener,
-            const StatusMask& mask)
-    {
-        Publisher* pub = create_publisher_with_profile(profile_name, listener, mask);
-        ret_code = (pub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
         return pub;
     }
 
@@ -246,17 +224,6 @@ public:
 
     Subscriber* create_subscriber(
             const SubscriberQos& qos,
-            ReturnCode_t& ret_code,
-            SubscriberListener* listener = nullptr,
-            const StatusMask& mask = StatusMask::all())
-    {
-        Subscriber* sub = create_subscriber(qos, listener, mask);
-        ret_code = (sub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-        return sub;
-    }
-
-    Subscriber* create_subscriber(
-            const SubscriberQos& qos,
             SubscriberListener* listener = nullptr,
             const StatusMask& mask = StatusMask::all())
     {
@@ -267,17 +234,6 @@ public:
         std::lock_guard<std::mutex> lock(mtx_subs_);
         subscribers_[sub] = subimpl;
         sub->enable();
-        return sub;
-    }
-
-    Subscriber* create_subscriber_with_profile(
-            const std::string& profile_name,
-            ReturnCode_t& ret_code,
-            SubscriberListener* listener = nullptr,
-            const StatusMask& mask = StatusMask::all())
-    {
-        Subscriber* sub = create_subscriber_with_profile(profile_name, listener, mask);
-        ret_code = (sub != nullptr) ? RETCODE_OK : RETCODE_ERROR;
         return sub;
     }
 
@@ -314,19 +270,6 @@ public:
     Topic* create_topic(
             const std::string& topic_name,
             const std::string& type_name,
-            const TopicQos& qos,
-            ReturnCode_t& ret_code,
-            TopicListener* listener = nullptr,
-            const StatusMask& mask = StatusMask::all())
-    {
-        Topic* topic = create_topic(topic_name, type_name, qos, listener, mask);
-        ret_code = (topic != nullptr) ? RETCODE_OK : RETCODE_ERROR;
-        return topic;
-    }
-
-    Topic* create_topic(
-            const std::string& topic_name,
-            const std::string& type_name,
             const TopicQos& qos = TOPIC_QOS_DEFAULT,
             TopicListener* listener = nullptr,
             const StatusMask& mask = StatusMask::all())
@@ -351,19 +294,6 @@ public:
         topics_[topic_name] = proxy;
         topics_impl_[topic_name] = topic_impl;
         topic->enable();
-        return topic;
-    }
-
-    Topic* create_topic_with_profile(
-            const std::string& topic_name,
-            const std::string& type_name,
-            const std::string& profile_name,
-            ReturnCode_t& ret_code,
-            TopicListener* listener,
-            const StatusMask& mask)
-    {
-        Topic* topic = create_topic_with_profile(topic_name, type_name, profile_name, listener, mask);
-        ret_code = (topic != nullptr) ? RETCODE_OK : RETCODE_ERROR;
         return topic;
     }
 
@@ -430,14 +360,6 @@ public:
         return RETCODE_ERROR;
     }
 
-    MOCK_METHOD6(create_contentfilteredtopic, ContentFilteredTopic * (
-                const std::string& name,
-                Topic * related_topic,
-                const std::string& filter_expression,
-                const std::vector<std::string>& expression_parameters,
-                const char* filter_class_name,
-                ReturnCode_t & ret_code));
-
     MOCK_METHOD5(create_contentfilteredtopic, ContentFilteredTopic * (
                 const std::string& name,
                 Topic * related_topic,
@@ -464,10 +386,6 @@ public:
     MOCK_METHOD1(ignore_participant, bool (
                 const fastdds::rtps::InstanceHandle_t& handle));
 
-    MOCK_METHOD2(find_service_type, rpc::ServiceTypeSupport(
-                const std::string& service_name,
-                ReturnCode_t & ret_code));
-
     MOCK_METHOD1(find_service_type, rpc::ServiceTypeSupport(
                 const std::string& service_name));
 
@@ -478,50 +396,31 @@ public:
     MOCK_METHOD1(unregister_service_type, ReturnCode_t(
                 const std::string& service_name));
 
-    MOCK_METHOD3(create_service, rpc::Service * (
-                const std::string& service_name,
-                const std::string& service_type_name,
-                ReturnCode_t & ret_code));
-
-    MOCK_METHOD2(create_service, rpc::Service * (
+    MOCK_METHOD2(create_service, rpc::Service* (
                 const std::string& service_name,
                 const std::string& service_type_name));
 
-    MOCK_METHOD2(find_service, rpc::Service * (
-                const std::string& service_name,
-                ReturnCode_t & ret_code));
-
-    MOCK_METHOD1(find_service, rpc::Service * (
+    MOCK_METHOD1(find_service, rpc::Service* (
                 const std::string& service_name));
 
     MOCK_METHOD1(delete_service, ReturnCode_t(
-                const rpc::Service * service));
+                const rpc::Service* service));
 
-    MOCK_METHOD3(create_service_requester, rpc::Requester * (
-                rpc::Service * service,
-                const RequesterQos& requester_qos,
-                ReturnCode_t & ret_code));
-
-    MOCK_METHOD2(create_service_requester, rpc::Requester * (
-                rpc::Service * service,
+    MOCK_METHOD2(create_service_requester, rpc::Requester* (
+                rpc::Service* service,
                 const RequesterQos& requester_qos));
 
     MOCK_METHOD2(delete_service_requester, ReturnCode_t(
                 const std::string& service_name,
-                rpc::Requester * requester));
+                rpc::Requester* requester));
 
-    MOCK_METHOD3(create_service_replier, rpc::Replier * (
-                rpc::Service * service,
-                const ReplierQos& replier_qos,
-                ReturnCode_t & ret_code));
-
-    MOCK_METHOD2(create_service_replier, rpc::Replier * (
-                rpc::Service * service,
+    MOCK_METHOD2(create_service_replier, rpc::Replier* (
+                rpc::Service* service,
                 const ReplierQos& replier_qos));
 
     MOCK_METHOD2(delete_service_replier, ReturnCode_t(
                 const std::string& service_name,
-                rpc::Replier * replier));
+                rpc::Replier* replier));
 
 
     TopicDescription* lookup_topicdescription(

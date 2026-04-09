@@ -157,19 +157,8 @@ void EDPSimple::processPersistentData(
     std::lock_guard<RecursiveTimedMutex> guardW(writer.first->getMutex());
     std::lock_guard<std::recursive_mutex> guardP(*mp_PDP->getMutex());
 
-    if (nullptr == mp_PDP)
-    {
-        EPROSIMA_LOG_ERROR(RTPS_EDP, "Cannot processPersistentData: mp_PDP is null");
-        return;
-    }
-    ParticipantProxyData* local_ppd = mp_PDP->getLocalParticipantProxyData();
-    if (nullptr == local_ppd)
-    {
-        EPROSIMA_LOG_ERROR(RTPS_EDP, "Cannot processPersistentData: LocalParticipantProxyData is null");
-        return;
-    }
     // own server instance
-    InstanceHandle_t server_key = local_ppd->m_key;
+    InstanceHandle_t server_key = mp_PDP->getLocalParticipantProxyData()->m_key;
 
     // reference own references from writer history
     std::forward_list<CacheChange_t*> removal;
@@ -825,8 +814,8 @@ void EDPSimple::assignRemoteEndpoints(
                     publications_secure_reader_.first->getGuid(), pdata.guid, *temp_writer_proxy_data,
                     publications_secure_reader_.first->getAttributes().security_attributes()))
         {
-            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
-                    << publications_secure_reader_.first->getGuid());
+            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
+                    publications_secure_reader_.first->getGuid());
         }
     }
 
@@ -839,8 +828,8 @@ void EDPSimple::assignRemoteEndpoints(
                     publications_secure_writer_.first->getGuid(), pdata.guid, *temp_reader_proxy_data,
                     publications_secure_writer_.first->getAttributes().security_attributes()))
         {
-            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
-                    << publications_secure_writer_.first->getGuid());
+            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
+                    publications_secure_writer_.first->getGuid());
         }
     }
 
@@ -855,8 +844,8 @@ void EDPSimple::assignRemoteEndpoints(
                     subscriptions_secure_reader_.first->getGuid(), pdata.guid, *temp_writer_proxy_data,
                     subscriptions_secure_reader_.first->getAttributes().security_attributes()))
         {
-            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
-                    << subscriptions_secure_reader_.first->getGuid());
+            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
+                    subscriptions_secure_reader_.first->getGuid());
         }
     }
 
@@ -870,8 +859,8 @@ void EDPSimple::assignRemoteEndpoints(
                     subscriptions_secure_writer_.first->getGuid(), pdata.guid, *temp_reader_proxy_data,
                     subscriptions_secure_writer_.first->getAttributes().security_attributes()))
         {
-            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
-                    << subscriptions_secure_writer_.first->getGuid());
+            EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer " <<
+                    subscriptions_secure_writer_.first->getGuid());
         }
     }
 #else

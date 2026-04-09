@@ -246,8 +246,7 @@ static bool verify_certificate(
             }
             else
             {
-                EPROSIMA_LOG_WARNING(SECURITY_AUTHENTICATION,
-                        "Invalidation error of certificate  (" << X509_verify_cert_error_string(
+                EPROSIMA_LOG_WARNING(SECURITY_AUTHENTICATION, "Invalidation error of certificate  (" << X509_verify_cert_error_string(
                             errorCode) << ")");
             }
         }
@@ -2536,11 +2535,7 @@ std::shared_ptr<SecretHandle> PKIDH::get_shared_secret(
     {
         auto secret = get_shared_secret(SharedSecretHandle::nil_handle, exception);
         auto sharedsecret = std::dynamic_pointer_cast<SharedSecretHandle>(secret);
-
-        if (sharedsecret)
-        {
-            (*sharedsecret)->data_ = (*handshake->sharedsecret_)->data_;
-        }
+        (*sharedsecret)->data_ = (*handshake->sharedsecret_)->data_;
         return secret;
     }
 

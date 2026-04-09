@@ -35,8 +35,7 @@ public:
             uint32_t total_bytes,
             LocatorsIterator* destination_locators_begin,
             LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point,
-            const int32_t transport_priority) override;
+            const std::chrono::steady_clock::time_point& max_blocking_time_point) override;
 
     SharedMemChannelResource* CreateInputChannelResource(
             const Locator& locator,
