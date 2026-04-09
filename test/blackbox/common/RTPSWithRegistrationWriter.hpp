@@ -51,7 +51,7 @@ public:
     typedef TypeSupport type_support;
     typedef typename type_support::type type;
 
-    using OnReaderDiscoveryFunctor = std::function <void (
+    using OnReaderDiscoveryFunctor = std::function<void (
                         eprosima::fastdds::rtps::ReaderDiscoveryStatus,
                         const eprosima::fastdds::rtps::GUID_t&,
                         const eprosima::fastdds::rtps::SubscriptionBuiltinTopicData*
@@ -110,7 +110,9 @@ public:
 
     RTPSWithRegistrationWriter(
             const std::string& topic_name)
-        : RTPSWithRegistrationWriter(topic_name, nullptr)
+        : RTPSWithRegistrationWriter(
+                topic_name,
+                nullptr)
     {
     }
 
@@ -673,7 +675,7 @@ private:
     bool initialized_;
     std::mutex mutex_;
     std::condition_variable cv_;
-    uint32_t matched_;
+    std::atomic<uint32_t> matched_;
     eprosima::fastdds::rtps::EntityId_t custom_entity_id_ = eprosima::fastdds::rtps::c_EntityId_Unknown;
     type_support type_;
     std::shared_ptr<eprosima::fastdds::rtps::IPayloadPool> payload_pool_;
