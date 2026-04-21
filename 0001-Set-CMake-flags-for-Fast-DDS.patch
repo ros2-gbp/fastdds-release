@@ -1,4 +1,4 @@
-From fa0a5fd05cdbc1a81b7ead387110afd4ce5a4e8b Mon Sep 17 00:00:00 2001
+From 2e3a28c2fa3260f655d3d3f24b3b1f24b51d3a72 Mon Sep 17 00:00:00 2001
 From: Scott K Logan <logans@cottsay.net>
 Date: Wed, 20 Jan 2021 12:08:26 -0800
 Subject: [PATCH] Set CMake flags for Fast-DDS
@@ -23,5 +23,5 @@ index 3464a0bc..cac5c33d 100644
  
  %make_build
 -- 
-2.43.0
+2.34.1
 
