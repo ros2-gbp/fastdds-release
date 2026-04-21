@@ -222,8 +222,14 @@ bool DataReaderHistory::received_change_keep_all(
 {
     if (!compute_key_for_change_fn_(a_change))
     {
-        // Store the sample temporally only in ReaderHistory. When completed it will be stored in DataReaderHistory too.
-        return add_to_reader_history_if_not_full(a_change, rejection_reason);
+        if (!a_change->is_fully_assembled())
+        {
+            // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
+            return add_to_reader_history_if_not_full(a_change, rejection_reason);
+        }
+
+        rejection_reason = REJECTED_BY_UNKNOWN_INSTANCE;
+        return false;
     }
 
     bool ret_value = false;
@@ -258,8 +264,14 @@ bool DataReaderHistory::received_change_keep_last(
 {
     if (!compute_key_for_change_fn_(a_change))
     {
-        // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
-        return add_to_reader_history_if_not_full(a_change, rejection_reason);
+        if (!a_change->is_fully_assembled())
+        {
+            // Store the sample temporally only in ReaderHistory. When completed it will be stored in SubscriberHistory too.
+            return add_to_reader_history_if_not_full(a_change, rejection_reason);
+        }
+
+        rejection_reason = REJECTED_BY_UNKNOWN_INSTANCE;
+        return false;
     }
 
     bool ret_value = false;
@@ -267,8 +279,7 @@ bool DataReaderHistory::received_change_keep_last(
     if (find_key(a_change->instanceHandle, vit))
     {
         DataReaderInstance::ChangeCollection& instance_changes = vit->second->cache_changes;
-        auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
-        if (instance_changes.size() < static_cast<size_t>(effective_depth))
+        if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
         {
             ret_value = true;
         }
@@ -374,6 +385,13 @@ bool DataReaderHistory::get_first_untaken_info(
             }
 
             ReadTakeCommand::generate_info(info, *(it.second), instance_change);
+            return true;
+        }
+
+        if (it.second->has_state_notification_sample)
+        {
+            // Generate SampleInfo for state notification sample
+            ReadTakeCommand::generate_instance_info(info, it.first, *(it.second));
             return true;
         }
     }
@@ -669,7 +687,7 @@ void DataReaderHistory::check_and_remove_instance(
 {
     DataReaderInstance* instance = instance_info->second.get();
 
-    if (instance->cache_changes.empty())
+    if (instance->cache_changes.empty() && (false == instance->has_state_notification_sample))
     {
         if (InstanceStateKind::ALIVE_INSTANCE_STATE != instance->instance_state &&
                 instance->alive_writers.empty() &&
@@ -803,8 +821,7 @@ bool DataReaderHistory::completed_change_keep_last(
 {
     bool ret_value = false;
     DataReaderInstance::ChangeCollection& instance_changes = instance.cache_changes;
-    auto effective_depth = std::min(history_qos_.depth, resource_limited_qos_.max_samples_per_instance);
-    if (instance_changes.size() < static_cast<size_t>(effective_depth))
+    if (instance_changes.size() < static_cast<size_t>(history_qos_.depth))
     {
         ret_value = true;
     }
@@ -896,15 +913,26 @@ bool DataReaderHistory::update_instance_nts(
     return ret;
 }
 
-void DataReaderHistory::writer_not_alive(
+bool DataReaderHistory::writer_not_alive(
         const GUID_t& writer_guid)
 {
     std::lock_guard<RecursiveTimedMutex> guard(*getMutex());
 
+    bool ret_val = false;
+
     for (auto& it : instances_)
     {
+        bool had_notification_sample = it.second->has_state_notification_sample;
         it.second->writer_removed(counters_, writer_guid);
+        if (it.second->has_state_notification_sample && !had_notification_sample)
+        {
+            // Mark instance as data available
+            data_available_instances_[it.first] = it.second;
+            ret_val = true;
+        }
     }
+
+    return ret_val;
 }
 
 StateFilter DataReaderHistory::get_mask_status() const noexcept

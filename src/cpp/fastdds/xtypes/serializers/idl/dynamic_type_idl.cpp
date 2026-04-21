@@ -111,8 +111,8 @@ ReturnCode_t dyn_type_to_tree(
             if (RETCODE_OK != ret)
             {
                 EPROSIMA_LOG_ERROR(DYNAMIC_TYPE_IDL,
-                        "Error getting member descriptor of member " << member->get_name() <<
-                        " of " << node << ".");
+                        "Error getting member descriptor of member " << member->get_name()
+                                                                     << " of " << node << ".");
                 return ret;
             }
 
@@ -122,8 +122,8 @@ ReturnCode_t dyn_type_to_tree(
             if (RETCODE_OK != ret)
             {
                 EPROSIMA_LOG_ERROR(DYNAMIC_TYPE_IDL,
-                        "Error building tree of member " << member->get_name() <<
-                        " of " << node << ".");
+                        "Error building tree of member " << member->get_name()
+                                                         << " of " << node << ".");
                 return ret;
             }
 
@@ -214,8 +214,8 @@ ReturnCode_t dyn_type_to_tree(
                 if (RETCODE_OK != ret)
                 {
                     EPROSIMA_LOG_ERROR(DYNAMIC_TYPE_IDL,
-                            "Error getting member descriptor of member " << member->get_name() <<
-                            " of " << node << ".");
+                            "Error getting member descriptor of member " << member->get_name()
+                                                                         << " of " << node << ".");
                     return ret;
                 }
 
@@ -225,8 +225,8 @@ ReturnCode_t dyn_type_to_tree(
                 if (RETCODE_OK != ret)
                 {
                     EPROSIMA_LOG_ERROR(DYNAMIC_TYPE_IDL,
-                            "Error building tree of member " << member->get_name() <<
-                            " of " << node << ".");
+                            "Error building tree of member " << member->get_name()
+                                                             << " of " << node << ".");
                     return ret;
                 }
 
@@ -749,11 +749,19 @@ ReturnCode_t bitmask_to_idl(
         idl << TAB_SEPARATOR << tabulate_n(n_modules);
 
         // Annotation with the position
-        const auto id = member->get_id();
-
-        if (id != pos)
+        MemberDescriptor::_ref_type member_descriptor {traits<MemberDescriptor>::make_shared()};
+        ret = member->get_descriptor(member_descriptor);
+        if (RETCODE_OK != ret)
         {
-            idl << "@position(" << std::to_string(id) << ") ";
+            EPROSIMA_LOG_ERROR(DYNAMIC_TYPE_IDL, "Error getting member descriptor of " << member->get_name() << ".");
+            return ret;
+        }
+
+        const auto member_pos = member_descriptor->position();
+
+        if (member_pos != pos)
+        {
+            idl << "@position(" << std::to_string(member_pos) << ") ";
         }
 
         idl << member->get_name().to_string();
@@ -767,7 +775,7 @@ ReturnCode_t bitmask_to_idl(
         idl << "\n";
 
         // The position is always sequential
-        pos = id + 1;
+        pos = member_pos + 1;
     }
 
     // Close type definition

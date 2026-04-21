@@ -122,11 +122,11 @@ private:
     bool create_known_type(
             const std::string& type);
 
-    template <typename Type, typename TypePubSubType>
+    template<typename Type, typename TypePubSubType>
     bool create_known_type_impl(
             const std::string& type);
 
-    template <typename Type>
+    template<typename Type>
     bool process_type_impl(
             DataReader* reader);
 
@@ -453,8 +453,6 @@ private:
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(FinalUnionStruct);
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(FinalWCharStruct);
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(InheritanceEmptyStruct);
-        SUBSCRIBER_TYPE_CREATOR_FUNCTION(InnerEmptyStructureHelper);
-        SUBSCRIBER_TYPE_CREATOR_FUNCTION(InnerStructureHelper);
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(BitsetsChildInheritanceStruct);
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(InnerEmptyStructureHelperChild);
         SUBSCRIBER_TYPE_CREATOR_FUNCTION(InnerStructureHelperChild);

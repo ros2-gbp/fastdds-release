@@ -485,6 +485,24 @@ ReturnCode_t DataReader::get_subscription_builtin_topic_data(
     return impl_->get_subscription_builtin_topic_data(subscription_data);
 }
 
+ReturnCode_t DataReader::set_related_datawriter(
+        const DataWriter* related_writer)
+{
+    return impl_->set_related_datawriter(related_writer);
+}
+
+ReturnCode_t DataReader::set_type_support_context(
+        const std::shared_ptr<TopicDataType::Context>& context)
+{
+    if (enable_)
+    {
+        return RETCODE_ILLEGAL_OPERATION;
+    }
+
+    impl_->set_type_support_context(context);
+    return RETCODE_OK;
+}
+
 } /* namespace dds */
 } /* namespace fastdds */
 } /* namespace eprosima */

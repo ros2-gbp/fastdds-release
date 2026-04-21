@@ -39,7 +39,7 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-class RTPSDomainImpl;
+class IDomainImpl;
 
 namespace detail {
 class TopicPayloadPoolRegistry;
@@ -51,10 +51,6 @@ namespace dds {
 class DomainParticipantListener;
 class DomainParticipant;
 class DomainParticipantImpl;
-
-namespace detail {
-struct LogResources;
-}  // namespace detail
 
 /**
  * Class DomainParticipantFactory
@@ -482,9 +478,7 @@ protected:
 
     std::shared_ptr<fastdds::rtps::detail::TopicPayloadPoolRegistry> topic_pool_;
 
-    std::shared_ptr<fastdds::rtps::RTPSDomainImpl> rtps_domain_;
-
-    std::shared_ptr<detail::LogResources> log_resources_;
+    std::shared_ptr<fastdds::rtps::IDomainImpl> rtps_domain_;
 
     /**
      * This mutex guards the access to load the profiles.

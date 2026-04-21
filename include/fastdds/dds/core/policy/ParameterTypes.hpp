@@ -30,6 +30,7 @@
 #include <fastdds/dds/core/Types.hpp>
 #include <fastdds/rtps/common/InstanceHandle.hpp>
 #include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/OriginalWriterInfo.hpp>
 #include <fastdds/rtps/common/ProductVersion_t.hpp>
 #include <fastdds/rtps/common/SampleIdentity.hpp>
 #include <fastdds/rtps/common/SerializedPayload.hpp>
@@ -185,6 +186,8 @@ enum ParameterId_t : uint16_t
     PID_READER_RESOURCE_LIMITS              = 0x8202,
     /* Participant specific */
     PID_WIREPROTOCOL_CONFIG                 = 0x8300,
+    /* RPC specific */
+    PID_RPC_MORE_REPLIES                    = 0x8400,
 
     /* eProsima Safe DDS extensions */
     PID_SAFE_DDS_SIGNATURE                  = 0x9000,
@@ -1744,6 +1747,62 @@ public:
 };
 
 #define PARAMETER_SAMPLEIDENTITY_LENGTH 24
+
+/**
+ * @ingroup PARAMETER_MODULE
+ */
+class ParameterOriginalWriterInfo_t : public Parameter_t
+{
+public:
+
+    //! Original Writer Info <br> By default, unknown.
+    fastdds::rtps::OriginalWriterInfo original_writer_info;
+
+    /**
+     * @brief Constructor without parameters
+     */
+    ParameterOriginalWriterInfo_t()
+        : original_writer_info(fastdds::rtps::OriginalWriterInfo::unknown())
+    {
+    }
+
+    /**
+     * Constructor using a parameter PID and the parameter length
+     *
+     * @param pid Pid of the parameter
+     * @param in_length Its associated length
+     */
+    ParameterOriginalWriterInfo_t(
+            ParameterId_t pid,
+            uint16_t in_length)
+        : Parameter_t(pid, in_length)
+        , original_writer_info(fastdds::rtps::OriginalWriterInfo::unknown())
+    {
+    }
+
+    /**
+     * Add the parameter to a CDRMessage_t message.
+     *
+     * @param [in,out] msg Pointer to the message where the parameter should be added.
+     * @return True if the parameter was correctly added.
+     */
+    bool addToCDRMessage(
+            fastdds::rtps::CDRMessage_t* msg) const;
+
+    /**
+     * Read the parameter from a CDRMessage_t message.
+     *
+     * @param [in,out] msg Pointer to the message from where the parameter should be taken.
+     * @param size Size of the parameter field to read
+     * @return True if the parameter was correctly taken.
+     */
+    bool readFromCDRMessage(
+            fastdds::rtps::CDRMessage_t* msg,
+            uint16_t size);
+
+};
+
+#define PARAMETER_ORIGINALWRITERINFO_LENGTH 24
 
 
 #if HAVE_SECURITY

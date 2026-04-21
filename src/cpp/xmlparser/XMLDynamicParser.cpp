@@ -289,7 +289,7 @@ XMLP_ret XMLParser::parseXMLBitvalueDynamicType(
     }
 
     MemberDescriptor::_ref_type md {traits<MemberDescriptor>::make_shared()};
-    md->id(field_position);
+    md->position(field_position);
     md->name(memberName);
     md->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     builder->add_member(md);
@@ -930,7 +930,7 @@ XMLP_ret XMLParser::parseXMLEnumDynamicType(
             const char* value = literal->Attribute(VALUE);
             if (value != nullptr)
             {
-                md->default_value(value);
+                md->literal_value(value);
             }
 
             type_builder->add_member(md);
@@ -1217,7 +1217,7 @@ static bool dimensionsToLabels(
     return def;
 }
 
-DynamicType::_ref_type XMLParser:: parseXMLMemberDynamicType(
+DynamicType::_ref_type XMLParser::parseXMLMemberDynamicType(
         tinyxml2::XMLElement* p_root)
 {
     /*
@@ -1317,8 +1317,8 @@ DynamicType::_ref_type XMLParser:: parseXMLMemberDynamicType(
             else
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Error parsing sequence element type: Cannot recognize inner content of member: " <<
-                        memberType);
+                        "Error parsing sequence element type: Cannot recognize inner content of member: "
+                        << memberType);
                 return {};
             }
         }
@@ -1337,16 +1337,16 @@ DynamicType::_ref_type XMLParser:: parseXMLMemberDynamicType(
                 else
                 {
                     EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "Error parsing sequence element type: Cannot recognize inner content of member: " <<
-                            memberType);
+                            "Error parsing sequence element type: Cannot recognize inner content of member: "
+                            << memberType);
                     return {};
                 }
             }
             else
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Error parsing sequence element type: Cannot recognize inner content of member: " <<
-                        memberType);
+                        "Error parsing sequence element type: Cannot recognize inner content of member: "
+                        << memberType);
                 return {};
             }
         }
@@ -1441,8 +1441,11 @@ DynamicType::_ref_type XMLParser:: parseXMLMemberDynamicType(
             if (!inner_builder)
             {
                 EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Error parsing map member type: `create_map_type` failed for key=`" << key_type <<
-                        "`, value=`" << value_type << "`, length=`" << length << "`.");
+                        "Error parsing map member type: `create_map_type` failed for key=`" << key_type
+                                                                                            << "`, value=`"
+                                                                                            << value_type
+                                                                                            << "`, length=`"
+                                                                                            << length << "`.");
                 return {};
             }
             std::vector<uint32_t> bounds;

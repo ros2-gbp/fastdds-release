@@ -173,8 +173,8 @@ bool SharedMemTransport::is_locator_reachable(
             (void)e;
 
             EPROSIMA_LOG_INFO(RTPS_MSG_OUT,
-                    "Local SHM locator '" << locator <<
-                    "' is not reachable; discarding. Reason: " << e.what());
+                    "Local SHM locator '" << locator
+                                          << "' is not reachable; discarding. Reason: " << e.what());
             is_reachable = false;
         }
     }
@@ -493,7 +493,8 @@ bool SharedMemTransport::send(
         uint32_t total_bytes,
         fastdds::rtps::LocatorsIterator* destination_locators_begin,
         fastdds::rtps::LocatorsIterator* destination_locators_end,
-        const std::chrono::steady_clock::time_point& max_blocking_time_point)
+        const std::chrono::steady_clock::time_point& max_blocking_time_point,
+        const int32_t /* transport_priority */)
 {
     using namespace eprosima::fastdds::statistics::rtps;
 
@@ -640,8 +641,9 @@ bool SharedMemTransport::send(
     }
 
     EPROSIMA_LOG_INFO(RTPS_MSG_OUT,
-            "(ID:" << std::this_thread::get_id() << ") " << "SharedMemTransport: " << buffer->size() << " bytes to port " <<
-            remote_locator.port);
+            "(ID:" << std::this_thread::get_id() << ") " << "SharedMemTransport: " << buffer->size()
+                   << " bytes to port "
+                   << remote_locator.port);
 
     return true;
 }

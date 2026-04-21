@@ -30,7 +30,7 @@ namespace eprosima {
 namespace fastdds {
 namespace dds {
 
-template <typename Parameter>
+template<typename Parameter>
 class ParameterSerializer
 {
 public:
@@ -99,6 +99,7 @@ public:
     static constexpr uint32_t PARAMETER_KEY_SIZE = 20u;
     static constexpr uint32_t PARAMETER_SENTINEL_SIZE = 4u;
     static constexpr uint32_t PARAMETER_SAMPLE_IDENTITY_SIZE = 28u;
+    static constexpr uint32_t PARAMETER_ORIGINAL_WRITER_INFO_SIZE = 28u;
 
     static bool add_parameter_status(
             rtps::CDRMessage_t* cdr_message,
@@ -121,6 +122,7 @@ public:
             rtps::CDRMessage_t* cdr_message,
             const rtps::InstanceHandle_t& iHandle)
     {
+        // Size of parameter key is 20 bytes: 4 for PID (2) and length (2), 16 for the key hash
         if (cdr_message->pos + 20 >= cdr_message->max_size)
         {
             return false;
@@ -155,7 +157,9 @@ public:
             rtps::CDRMessage_t* cdr_message,
             const rtps::SampleIdentity& sample_id)
     {
-        if (cdr_message->pos + 28 > cdr_message->max_size)
+        uint32_t required_size = 24 + 4; // 24 for the sample identity and 4 for the PID and length
+
+        if (cdr_message->pos + required_size > cdr_message->max_size)
         {
             return false;
         }
@@ -168,6 +172,7 @@ public:
                 sample_id.writer_guid().entityId.value, rtps::EntityId_t::size);
         rtps::CDRMessage::addInt32(cdr_message, sample_id.sequence_number().high);
         rtps::CDRMessage::addUInt32(cdr_message, sample_id.sequence_number().low);
+
         return true;
     }
 
@@ -195,6 +200,58 @@ public:
                 sample_id.writer_guid().entityId.value, rtps::EntityId_t::size);
         rtps::CDRMessage::addInt32(cdr_message, sample_id.sequence_number().high);
         rtps::CDRMessage::addUInt32(cdr_message, sample_id.sequence_number().low);
+        return true;
+    }
+
+    /**
+     * This method fills the more replies parameter to the cdr_message.
+     * The PID used is the standard PID_RPC_MORE_REPLIES.
+     * @param cdr_message Message to be filled up.
+     * @return true if operation is successful, false if the operation would overflow the maximum size of the message.
+     */
+    static inline bool add_parameter_more_replies(
+            rtps::CDRMessage_t* cdr_message)
+    {
+        if (cdr_message->pos + 4 > cdr_message->max_size)
+        {
+            return false;
+        }
+
+        rtps::CDRMessage::addUInt16(cdr_message, dds::PID_RPC_MORE_REPLIES);
+        rtps::CDRMessage::addUInt16(cdr_message, 0);
+        return true;
+    }
+
+    /**
+     * This method fills the original writer info parameter to the cdr_message.
+     * The PID used is the standard PID_ORIGINAL_WRITER_INFO.
+     * @param cdr_message Message to be filled up.
+     * @param original_guid Original writer GUID.
+     * @return true if operation is successful, false if the operation would overflow the maximum size of the message.
+     */
+    static inline bool add_parameter_original_writer(
+            rtps::CDRMessage_t* cdr_message,
+            const rtps::OriginalWriterInfo& original_writer_info)
+    {
+        // A GUID takes 16 bytes: 12 of prefix plus 4 of entity
+        // A Sequence number takes 8 bytes: 4 for high and 4 for low
+        // The PID and the length take 4 bytes: 2 for PID and 2 for length
+
+        uint32_t required_size = PARAMETER_ORIGINAL_WRITER_INFO_SIZE;
+        if (cdr_message->pos + required_size > cdr_message->max_size)
+        {
+            return false;
+        }
+
+        rtps::CDRMessage::addUInt16(cdr_message, dds::PID_ORIGINAL_WRITER_INFO);
+        rtps::CDRMessage::addUInt16(cdr_message, PARAMETER_ORIGINAL_WRITER_INFO_SIZE - 4);
+        rtps::CDRMessage::addData(cdr_message,
+                original_writer_info.original_writer_guid().guidPrefix.value, rtps::GuidPrefix_t::size);
+        rtps::CDRMessage::addData(cdr_message,
+                original_writer_info.original_writer_guid().entityId.value, rtps::EntityId_t::size);
+        rtps::CDRMessage::addInt32(cdr_message, original_writer_info.sequence_number().high);
+        rtps::CDRMessage::addUInt32(cdr_message, original_writer_info.sequence_number().low);
+
         return true;
     }
 
@@ -845,6 +902,27 @@ inline bool ParameterSerializer<ParameterSampleIdentity_t>::read_content_from_cd
                     parameter.sample_id.writer_guid().entityId.value, rtps::EntityId_t::size);
     valid = valid && rtps::CDRMessage::readInt32(cdr_message, &parameter.sample_id.sequence_number().high);
     valid = valid && rtps::CDRMessage::readUInt32(cdr_message, &parameter.sample_id.sequence_number().low);
+
+    return valid;
+}
+
+template<>
+inline bool ParameterSerializer<ParameterOriginalWriterInfo_t>::read_content_from_cdr_message(
+        ParameterOriginalWriterInfo_t& parameter,
+        rtps::CDRMessage_t* cdr_message,
+        const uint16_t parameter_length)
+{
+    if (parameter_length < PARAMETER_ORIGINALWRITERINFO_LENGTH)
+    {
+        return false;
+    }
+    parameter.length = parameter_length;
+    bool valid = rtps::CDRMessage::readData(cdr_message,
+                    parameter.original_writer_info.original_writer_guid().guidPrefix.value, rtps::GuidPrefix_t::size);
+    valid = valid && rtps::CDRMessage::readData(cdr_message,
+                    parameter.original_writer_info.original_writer_guid().entityId.value, rtps::EntityId_t::size);
+    valid = valid && rtps::CDRMessage::readInt32(cdr_message, &parameter.original_writer_info.sequence_number().high);
+    valid = valid && rtps::CDRMessage::readUInt32(cdr_message, &parameter.original_writer_info.sequence_number().low);
 
     return valid;
 }

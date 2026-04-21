@@ -93,6 +93,7 @@ set(XMLPROFILEPARSER_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/PortBasedTransportDescriptor.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -102,6 +103,7 @@ set(XMLPROFILEPARSER_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLElementParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
     )
 
@@ -155,16 +157,14 @@ target_include_directories(XMLProfileParserTests PRIVATE
     )
 
 target_link_libraries(XMLProfileParserTests
-    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
-    $<$<BOOL:${WIN32}>:ws2_32>
-    ${TINYXML2_LIBRARY}
     fastcdr
     fastdds::xtypes::dynamic-types::impl
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${WIN32}>:ws2_32>
+    $<$<BOOL:${QNX}>:socket>
+    ${TINYXML2_LIBRARY}
     )
-if(QNX)
-    target_link_libraries(XMLProfileParserTests socket)
-endif()
 gtest_discover_tests(XMLProfileParserTests)
 ###################################  XMLProfileParserTests  ####################################################
 
@@ -189,6 +189,7 @@ set(XMLPARSER_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/PortBasedTransportDescriptor.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -198,6 +199,7 @@ set(XMLPARSER_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLElementParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
     )
 
@@ -245,17 +247,15 @@ target_include_directories(XMLParserTests PRIVATE
     )
 
 target_link_libraries(XMLParserTests
-    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
-    $<$<BOOL:${WIN32}>:ws2_32>
-    ${TINYXML2_LIBRARY}
     fastcdr
     fastdds::log
     fastdds::xtypes::dynamic-types::impl
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${WIN32}>:ws2_32>
+    $<$<BOOL:${QNX}>:socket>
+    ${TINYXML2_LIBRARY}
     )
-if(QNX)
-    target_link_libraries(XMLParserTests socket)
-endif()
 if(EPROSIMA_TEST_DNS_NOT_SET_UP)
     message(STATUS "Ignoring 'getXMLLocatorDNS*'")
     set(IGNORE_COMMAND "-getXMLLocatorDNS*")
@@ -316,15 +316,17 @@ set(XMLENDPOINTPARSERTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/PortBasedTransportDescriptor.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/UnitsParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLElementParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
 
     # locators
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/UnitsParser.cpp
     )
@@ -372,17 +374,15 @@ target_include_directories(XMLEndpointParserTests PRIVATE
     )
 
 target_link_libraries(XMLEndpointParserTests
-    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
-    $<$<BOOL:${WIN32}>:ws2_32>
-    ${TINYXML2_LIBRARY}
     fastcdr
     fastdds::log
     fastdds::xtypes::dynamic-types::impl
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${WIN32}>:ws2_32>
+    $<$<BOOL:${QNX}>:socket>
+    ${TINYXML2_LIBRARY}
     )
-if(QNX)
-    target_link_libraries(XMLEndpointParserTests socket)
-endif()
 gtest_discover_tests(XMLEndpointParserTests)
 
 ######################################  XMLLoadFileTests  ######################################################
@@ -403,17 +403,19 @@ set(XMLLOADFILE_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/PortBasedTransportDescriptor.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/UnitsParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLDynamicParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLElementParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
 
     # locators
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/UnitsParser.cpp
     )
@@ -463,15 +465,14 @@ target_include_directories(XMLLoadFileTests PRIVATE
     )
 
 target_link_libraries(XMLLoadFileTests
-    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
-    $<$<BOOL:${WIN32}>:ws2_32>
-    ${TINYXML2_LIBRARY}
+    $<$<BOOL:${QNX}>:socket>
     fastcdr
     fastdds::log
     fastdds::xtypes::dynamic-types::impl
     GTest::gmock
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${WIN32}>:ws2_32>
+    $<$<BOOL:${QNX}>:socket>
+    ${TINYXML2_LIBRARY}
     )
-if(QNX)
-    target_link_libraries(XMLLoadFileTests socket)
-endif()
 gtest_discover_tests(XMLLoadFileTests)

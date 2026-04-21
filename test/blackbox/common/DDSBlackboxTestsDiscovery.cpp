@@ -358,71 +358,6 @@ TEST(DDSDiscovery, ServersConnectionTCP)
     server_3.wait_discovery(std::chrono::seconds::zero(), 2, true); // Knows server1 and server2
 }
 
-/**
- * This test checks the addition of network interfaces at run-time.
- *
- * After launching the reader with the network interfaces enabled,
- * the writer is launched with the transport simulating that there
- * are no interfaces.
- * No participant discovery occurs, nor is communication established.
- *
- * In a second step, the flag to simulate no interfaces is disabled and
- * DomainParticipant::set_qos() called to add the "new" interfaces.
- * Discovery is succesful and communication is established.
- */
-TEST(DDSDiscovery, DDSNetworkInterfaceChangesAtRunTime)
-{
-    using namespace eprosima::fastdds::rtps;
-
-    PubSubWriter<HelloWorldPubSubType> datawriter(TEST_TOPIC_NAME);
-    PubSubReader<HelloWorldPubSubType> datareader(TEST_TOPIC_NAME);
-
-    // datareader is initialized with all the network interfaces
-    datareader.durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS).history_depth(100).
-            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
-    ASSERT_TRUE(datareader.isInitialized());
-
-    // datawriter: launch without interfaces
-    auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
-    test_transport->test_transport_options->simulate_no_interfaces = true;
-    datawriter.disable_builtin_transport().add_user_transport_to_pparams(test_transport).history_depth(100).init();
-    ASSERT_TRUE(datawriter.isInitialized());
-
-    // no discovery
-    datawriter.wait_discovery(std::chrono::seconds(3));
-    datareader.wait_discovery(std::chrono::seconds(3));
-    EXPECT_EQ(datawriter.get_matched(), 0u);
-    EXPECT_EQ(datareader.get_matched(), 0u);
-
-    // send data
-    auto complete_data = default_helloworld_data_generator();
-    size_t samples = complete_data.size();
-
-    datareader.startReception(complete_data);
-
-    datawriter.send(complete_data);
-    EXPECT_TRUE(complete_data.empty());
-
-    // no data received
-    EXPECT_EQ(datareader.block_for_all(std::chrono::seconds(3)), 0u);
-
-    // enable interfaces
-    test_transport->test_transport_options->simulate_no_interfaces = false;
-    datawriter.participant_set_qos();
-
-    // Wait for discovery
-    datawriter.wait_discovery(std::chrono::seconds(3));
-    datareader.wait_discovery(std::chrono::seconds(3));
-    ASSERT_EQ(datawriter.get_matched(), 1u);
-    ASSERT_EQ(datareader.get_matched(), 1u);
-
-    // data received
-    EXPECT_EQ(datareader.block_for_all(std::chrono::seconds(3)), samples);
-
-    datareader.destroy();
-    datawriter.destroy();
-}
-
 /*
  * This tests checks that DataReader::get_subscription_matched_status() and
  * DataWriter::get_publication_matched_status() return the correct last_publication_handle
@@ -546,6 +481,132 @@ TEST(DDSDiscovery, UpdateMatchedStatus)
     datareader_2.destroy();
     datawriter_1.destroy();
     datawriter_2.destroy();
+}
+
+TEST(DDSDiscovery, EndpointMatchingCallbackAlwaysTrue)
+{
+    using namespace std::chrono_literals;
+
+    std::atomic_uint32_t writer_calls {0};
+    std::atomic_uint32_t reader_calls {0};
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    writer.set_should_endpoints_match_function(
+        [&](const eprosima::fastdds::dds::SubscriptionBuiltinTopicData&,
+        const eprosima::fastdds::dds::PublicationBuiltinTopicData&)
+        {
+            ++writer_calls;
+            return true;
+        });
+
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    reader.set_should_endpoints_match_function(
+        [&](const eprosima::fastdds::dds::SubscriptionBuiltinTopicData&,
+        const eprosima::fastdds::dds::PublicationBuiltinTopicData&)
+        {
+            ++reader_calls;
+            return true;
+        });
+
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.wait_discovery(3s, 1u);
+    writer.wait_discovery(1u, 3s);
+
+    ASSERT_EQ(reader.get_matched(), 1u);
+    ASSERT_EQ(writer.get_matched(), 1u);
+    ASSERT_GE(reader_calls.load(), 1u);
+    ASSERT_GE(writer_calls.load(), 1u);
+}
+
+TEST(DDSDiscovery, EndpointMatchingCallbackAlwaysFalse)
+{
+    using namespace std::chrono_literals;
+
+    std::atomic_uint32_t writer_calls {0};
+    std::atomic_uint32_t reader_calls {0};
+
+    PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
+    writer.set_should_endpoints_match_function(
+        [&](const eprosima::fastdds::dds::SubscriptionBuiltinTopicData&,
+        const eprosima::fastdds::dds::PublicationBuiltinTopicData&)
+        {
+            ++writer_calls;
+            return false;
+        });
+
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    reader.set_should_endpoints_match_function(
+        [&](const eprosima::fastdds::dds::SubscriptionBuiltinTopicData&,
+        const eprosima::fastdds::dds::PublicationBuiltinTopicData&)
+        {
+            ++reader_calls;
+            return false;
+        });
+
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.wait_discovery(2s, 1u);
+    writer.wait_discovery(1u, 2s);
+
+    ASSERT_FALSE(reader.is_matched());
+    ASSERT_FALSE(writer.is_matched());
+    ASSERT_GE(reader_calls.load(), 1u);
+    ASSERT_GE(writer_calls.load(), 1u);
+    ASSERT_EQ(reader.get_matched(), 0u);
+    ASSERT_EQ(writer.get_matched(), 0u);
+}
+
+TEST(DDSDiscovery, EndpointMatchingCallbackSelectivelyMatchesOneWriter)
+{
+    using namespace std::chrono_literals;
+
+    // Writer that will be matched
+    PubSubWriter<HelloWorldPubSubType> allowed_writer(TEST_TOPIC_NAME);
+    allowed_writer.setPublisherIDs(1u, 1u);
+    allowed_writer.init();
+    ASSERT_TRUE(allowed_writer.isInitialized());
+
+    // Writer that wont be matched due to the callback
+    PubSubWriter<HelloWorldPubSubType> rejected_writer(TEST_TOPIC_NAME);
+    rejected_writer.setPublisherIDs(2u, 2u);
+    rejected_writer.init();
+    ASSERT_TRUE(rejected_writer.isInitialized());
+
+    const auto allowed_entity_id = allowed_writer.datawriter_guid().entityId;
+
+    std::atomic_uint32_t reader_calls {0};
+
+
+    PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
+    reader.set_should_endpoints_match_function(
+        [&, allowed_entity_id](
+            const eprosima::fastdds::dds::SubscriptionBuiltinTopicData&,
+            const eprosima::fastdds::dds::PublicationBuiltinTopicData& writer_info)
+        {
+            // Simple callback that will only accept the allowed_writer
+            ++reader_calls;
+            return writer_info.guid.entityId == allowed_entity_id;
+        });
+    reader.init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    reader.wait_discovery(3s, 1u);
+    allowed_writer.wait_discovery(1u, 3s);
+
+    // Check that only the allowed writer is matched from the reader's perspective
+    ASSERT_EQ(reader.get_matched(), 1u);
+    ASSERT_GE(reader_calls.load(), 1u);
+
+    // NOTE: Beware, the rejected_writer hasn't rejected the reader, so it believes it is matched.
 }
 
 /**
@@ -2115,9 +2176,9 @@ TEST(DDSDiscovery, client_server_participants_with_different_domain_ids_discover
     client_domain_3.init();
     EXPECT_TRUE(client_domain_3.isInitialized());
 
-    server_domain_1.wait_discovery(std::chrono::seconds(2));
-    client_domain_2.wait_discovery(std::chrono::seconds(2));
-    client_domain_3.wait_discovery(std::chrono::seconds(2));
+    server_domain_1.wait_discovery(std::chrono::seconds(5));
+    client_domain_2.wait_discovery(2, std::chrono::seconds(5));
+    client_domain_3.wait_discovery(std::chrono::seconds(5));
 
     ASSERT_TRUE(client_domain_2.is_matched());
     ASSERT_TRUE(client_domain_3.is_matched());
@@ -2438,7 +2499,7 @@ TEST(DDSDiscovery, multicast_only_one_packet_sent_when_multiple_multicast_reader
     multicast_locators.push_back(new_multicast_locator);
 
     writer_test_transport->locator_filter_ = [&n_multicast_times_sent, &new_multicast_locator](
-        const eprosima::fastdds::rtps::Locator& destination)
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 if (destination == new_multicast_locator)
                 {

@@ -67,6 +67,14 @@ using eprosima::fastdds::rtps::BuiltinTransportsOptions;
 template<class TypeSupport>
 class PubSubWriter
 {
+public:
+
+    typedef std::function<bool (
+                        const eprosima::fastdds::dds::SubscriptionBuiltinTopicData& reader_info,
+                        const eprosima::fastdds::dds::PublicationBuiltinTopicData& writer_info)> EndpointMatchingFunctor;
+
+private:
+
     class ParticipantListener : public eprosima::fastdds::dds::DomainParticipantListener
     {
     public:
@@ -162,6 +170,19 @@ class PubSubWriter
             {
                 writer_.remove_writer_info(info);
             }
+        }
+
+        bool should_endpoints_match(
+                const eprosima::fastdds::dds::DomainParticipant*,
+                const eprosima::fastdds::dds::SubscriptionBuiltinTopicData& reader_info,
+                const eprosima::fastdds::dds::PublicationBuiltinTopicData& writer_info) override
+        {
+            if (writer_.onEndpointMatching_ != nullptr)
+            {
+                return writer_.onEndpointMatching_(reader_info, writer_info);
+            }
+
+            return true;
         }
 
     private:
@@ -367,6 +388,7 @@ public:
 
     eprosima::fastdds::dds::DataWriter& get_native_writer() const
     {
+        EXPECT_NE(datawriter_, nullptr);
         return *datawriter_;
     }
 
@@ -458,8 +480,8 @@ public:
             if (datawriter_ != nullptr)
             {
                 datawriter_guid_ = datawriter_->guid();
-                std::cout << "Created datawriter " << datawriter_guid_ << " for topic " <<
-                    topic_name_ << std::endl;
+                std::cout << "Created datawriter " << datawriter_guid_ << " for topic "
+                          << topic_name_ << std::endl;
 
                 initialized_ = datawriter_->is_enabled();
             }
@@ -522,13 +544,25 @@ public:
 
     void send(
             std::list<type>& msgs,
-            uint32_t milliseconds = 0)
+            uint32_t milliseconds = 0,
+            eprosima::fastdds::rtps::WriteParams* write_params = nullptr)
     {
         auto it = msgs.begin();
 
         while (it != msgs.end())
         {
-            if (eprosima::fastdds::dds::RETCODE_OK == datawriter_->write((void*)&(*it)))
+            auto ret = eprosima::fastdds::dds::RETCODE_OK;
+
+            if (nullptr != write_params)
+            {
+                ret = datawriter_->write((void*)&(*it), *write_params);
+            }
+            else
+            {
+                ret = datawriter_->write((void*)&(*it));
+            }
+
+            if (eprosima::fastdds::dds::RETCODE_OK == ret)
             {
                 default_send_print<type>(*it);
                 it = msgs.erase(it);
@@ -565,10 +599,20 @@ public:
     }
 
     bool send_sample(
-            type& msg)
+            type& msg,
+            eprosima::fastdds::rtps::WriteParams* write_params = nullptr)
     {
         default_send_print(msg);
-        return (eprosima::fastdds::dds::RETCODE_OK == datawriter_->write((void*)&msg));
+        auto ret = eprosima::fastdds::dds::RETCODE_OK;
+        if (write_params != nullptr)
+        {
+            ret = datawriter_->write((void*)&msg, *write_params);
+        }
+        else
+        {
+            ret = datawriter_->write((void*)&msg);
+        }
+        return (eprosima::fastdds::dds::RETCODE_OK == ret);
     }
 
     eprosima::fastdds::dds::ReturnCode_t send_sample(
@@ -904,6 +948,12 @@ public:
             eprosima::fastdds::rtps::ParticipantDiscoveryStatus)> f)
     {
         onDiscovery_ = f;
+    }
+
+    void set_should_endpoints_match_function(
+            EndpointMatchingFunctor f)
+    {
+        onEndpointMatching_ = f;
     }
 
     /*** Function to change QoS ***/
@@ -1675,6 +1725,13 @@ public:
         return *this;
     }
 
+    PubSubWriter& transport_priority(
+            int32_t prio)
+    {
+        datawriter_qos_.transport_priority().value = prio;
+        return *this;
+    }
+
     const std::string& topic_name() const
     {
         return topic_name_;
@@ -1881,6 +1938,12 @@ public:
     eprosima::fastdds::dds::TypeSupport get_type_support()
     {
         return type_;
+    }
+
+    eprosima::fastdds::dds::ReturnCode_t set_sample_prefilter(
+            std::shared_ptr<eprosima::fastdds::dds::IContentFilter> prefilter)
+    {
+        return datawriter_->set_sample_prefilter(prefilter);
     }
 
 protected:
@@ -2164,6 +2227,7 @@ protected:
 
     std::function<bool(const eprosima::fastdds::rtps::ParticipantBuiltinTopicData& info,
             eprosima::fastdds::rtps::ParticipantDiscoveryStatus status)> onDiscovery_;
+    EndpointMatchingFunctor onEndpointMatching_;
 
     //! A mutex for liveliness
     std::mutex liveliness_mutex_;
@@ -2411,8 +2475,8 @@ public:
                 initialized_ = datawriter_->is_enabled();
                 if (initialized_)
                 {
-                    std::cout << "Created datawriter " << datawriter_->guid() << " for topic " <<
-                        topic_name_ << std::endl;
+                    std::cout << "Created datawriter " << datawriter_->guid() << " for topic "
+                              << topic_name_ << std::endl;
 
                     // Set the desired status condition mask and start the waitset thread
                     datawriter_->get_statuscondition().set_enabled_statuses(status_mask_);

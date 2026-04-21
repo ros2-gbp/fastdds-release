@@ -32,6 +32,7 @@
 #include <fastdds/fastdds_dll.hpp>
 #include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/dds/topic/TopicDataType.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -44,6 +45,7 @@ struct GUID_t;
 
 namespace dds {
 
+class DataReader;
 class PublisherListener;
 class PublisherImpl;
 class Publisher;
@@ -54,6 +56,8 @@ class DataWriterImpl;
 class DataWriterListener;
 class DataWriterQos;
 class Topic;
+
+struct IContentFilter;
 
 /**
  * Class DataWriter, contains the actual implementation of the behaviour of the DataWriter.
@@ -481,9 +485,7 @@ public:
      *
      * @param [out] subscription_data subscription data struct
      * @param subscription_handle InstanceHandle_t of the subscription
-     * @return RETCODE_OK
-     *
-     * @warning Not supported yet. Currently returns RETCODE_UNSUPPORTED
+     * @return RETCODE_OK if successfull, RETCODE_BAD_PARAMETER otherwise
      */
     FASTDDS_EXPORTED_API ReturnCode_t get_matched_subscription_data(
             SubscriptionBuiltinTopicData& subscription_data,
@@ -493,9 +495,7 @@ public:
      * @brief Fills the given vector with the InstanceHandle_t of matched DataReaders
      *
      * @param [out] subscription_handles Vector where the InstanceHandle_t are returned
-     * @return RETCODE_OK
-     *
-     * @warning Not supported yet. Currently returns RETCODE_UNSUPPORTED
+     * @return RETCODE_OK if successfull, RETCODE_ERROR otherwise
      */
     FASTDDS_EXPORTED_API ReturnCode_t get_matched_subscriptions(
             std::vector<InstanceHandle_t>& subscription_handles) const;
@@ -595,6 +595,51 @@ public:
      */
     FASTDDS_EXPORTED_API ReturnCode_t get_publication_builtin_topic_data(
             PublicationBuiltinTopicData& publication_data) const;
+
+    /**
+     *  @brief Set a sample prefilter to be used. This filter is always
+     *  evaluated before sending the sample to any DataReader and prior to
+     *  any content filtering.
+     *  Passing a nullptr disables prefiltering.
+     *
+     * @param prefilter The prefilter to be set.
+     *
+     * @return RETCODE_OK if the prefilter is set correctly.
+     *
+     * @note Prefiltering is currently incompatible with DataSharing.
+     */
+    FASTDDS_EXPORTED_API ReturnCode_t set_sample_prefilter(
+            std::shared_ptr<IContentFilter> prefilter);
+
+    /**
+     * This operation sets the key of the DataReader that is related to this DataWriter.
+     * This is used to establish a relationship between a DataReader and a DataWriter
+     * in the context of RPC over DDS.
+     *
+     * @warning This operation is only valid if the entity is not enabled.
+     *
+     * @param [in] related_reader Pointer to the DataReader to set as related.
+     *
+     * @return RETCODE_OK if the key is set successfully.
+     * @return RETCODE_ILLEGAL_OPERATION if this entity is enabled.
+     * @return RETCODE_PRECONDITION_NOT_MET if the entity does not belong to the same participant.
+     * @return RETCODE_BAD_PARAMETER if the provided GUID is unknown
+     * or the pointer is not valid.
+     */
+    FASTDDS_EXPORTED_API ReturnCode_t set_related_datareader(
+            const DataReader* related_reader);
+
+    /**
+     * @brief Set the type support context to be used when serializing data for this DataWriter.
+     *        Cannot be called on an enabled DataWriter.
+     *
+     * @param [in] context Shared pointer to the context to be used when serializing data.
+     *
+     * @return RETCODE_OK if the context is set successfully.
+     *         RETCODE_ILLEGAL_OPERATION if this entity is enabled.
+     */
+    FASTDDS_EXPORTED_API ReturnCode_t set_type_support_context(
+            const std::shared_ptr<TopicDataType::Context>& context);
 
 protected:
 

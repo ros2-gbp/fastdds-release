@@ -25,15 +25,6 @@ endif()
 set(FILE_EXTENSION "")
 set(DOCKER_IMAGE_NAME "")
 set(SHELL_EXECUTABLE "")
-set(TINYXML2_LIB_DIR_COMPOSE_VOLUME "")
-set(TINYXML2_LIB_DIR_COMPOSE_LD_LIBRARY_PATH "")
-
-# Configure TinyXML2 library path if installed in user library path
-if(NOT (TINYXML2_FROM_SOURCE OR TINYXML2_FROM_THIRDPARTY))
-    get_filename_component(TINYXML2_LIB_DIR ${TINYXML2_LIBRARY} DIRECTORY)
-    set(TINYXML2_LIB_DIR_COMPOSE_VOLUME "- ${TINYXML2_LIB_DIR}:${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}/fastdds:ro")
-    set(TINYXML2_LIB_DIR_COMPOSE_LD_LIBRARY_PATH ":${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}/fastdds")
-endif()
 
 # Linux configurations
 if(UNIX AND NOT(APPLE) AND NOT(QNXNTO) AND NOT(ANDROID))
@@ -44,16 +35,16 @@ if(UNIX AND NOT(APPLE) AND NOT(QNXNTO) AND NOT(ANDROID))
     endif()
 
     set(SHELL_EXECUTABLE ${BASH_EXECUTABLE})
-    set(DOCKER_IMAGE_NAME "ubuntu:22.04")
+    set(DOCKER_IMAGE_NAME "ubuntu-examples-test")
+    set(DOCKER_BUILD_COMPOSE "build:
+      context: ${CMAKE_CURRENT_SOURCE_DIR}/ubuntu
+      dockerfile: Dockerfile")
 
     set(PROJECT_BINARY_DIR_COMPOSE_VOLUME "${PROJECT_BINARY_DIR}:${PROJECT_BINARY_DIR}")
     set(fastcdr_LIB_DIR_COMPOSE_VOLUME "${fastcdr_LIB_DIR}:${fastcdr_LIB_DIR}")
     set(CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME "${CMAKE_INSTALL_PREFIX}:${CMAKE_INSTALL_PREFIX}")
 
     set(PATH_ENVIRONMENT_VARIABLE_COMPOSE "LD_LIBRARY_PATH: ${PROJECT_BINARY_DIR}/src/cpp:${fastcdr_LIB_DIR}")
-    if (TINYXML2_LIB_DIR_COMPOSE_LD_LIBRARY_PATH)
-        set(PATH_ENVIRONMENT_VARIABLE_COMPOSE "${PATH_ENVIRONMENT_VARIABLE_COMPOSE}${TINYXML2_LIB_DIR_COMPOSE_LD_LIBRARY_PATH}")
-    endif()
     set(EXAMPLE_PREFIX_DIR_COMPOSE "${PROJECT_BINARY_DIR}/examples/cpp")
     set(EXAMPLE_SUFFIX_DIR_COMPOSE "")
     set(FASTDDS_DEFAULT_PROFILES_FILE_PREFIX_COMPOSE "${PROJECT_BINARY_DIR}/examples/cpp")
@@ -63,8 +54,14 @@ if(UNIX AND NOT(APPLE) AND NOT(QNXNTO) AND NOT(ANDROID))
 
     set(SUB_ADDITIONAL_ARGS_COMPOSE "$\${SUB_ADDITIONAL_ARGS_COMPOSE}")
     set(PUB_ADDITIONAL_ARGS_COMPOSE "$\${PUB_ADDITIONAL_ARGS_COMPOSE}")
+    set(SERVER1_ADDITIONAL_ARGS_COMPOSE "$\${SERVER1_ADDITIONAL_ARGS_COMPOSE}")
+    set(SERVER2_ADDITIONAL_ARGS_COMPOSE "$\${SERVER2_ADDITIONAL_ARGS_COMPOSE}")
+    set(ISOLATED_SUB_ADDITIONAL_ARGS_COMPOSE "$\${ISOLATED_SUB_ADDITIONAL_ARGS_COMPOSE}")
+    set(PUBSUB_ADDITIONAL_ARGS_COMPOSE "$\${PUBSUB_ADDITIONAL_ARGS_COMPOSE}")
     set(CLIENT_ADDITIONAL_ARGS_COMPOSE "$\${CLIENT_ADDITIONAL_ARGS_COMPOSE}")
+    set(XML_ARG_COMPOSE "$\${XML_FILE}")
     set(SPLIT_ARGS_COMPOSE "")
+    set(NETWORK_MODE_COMPOSE "network_mode: host")
 
 # Windows configurations
 elseif(WIN32)
@@ -79,6 +76,7 @@ elseif(WIN32)
 
     set(FILE_EXTENSION ".exe")
     set(DOCKER_IMAGE_NAME "windows-testing")
+    set(DOCKER_BUILD_COMPOSE "")
 
     cmake_path(GET fastcdr_LIB_DIR PARENT_PATH fastcdr_INSTALL_DIR)
 
@@ -105,8 +103,15 @@ elseif(WIN32)
 
     set(SUB_ADDITIONAL_ARGS_COMPOSE "$\$Env:SUB_ADDITIONAL_ARGS_COMPOSE")
     set(PUB_ADDITIONAL_ARGS_COMPOSE "$\$Env:PUB_ADDITIONAL_ARGS_COMPOSE")
+    set(SERVER1_ADDITIONAL_ARGS_COMPOSE "$\$Env:SERVER1_ADDITIONAL_ARGS_COMPOSE")
+    set(SERVER2_ADDITIONAL_ARGS_COMPOSE "$\$Env:SERVER2_ADDITIONAL_ARGS_COMPOSE")
+    set(ISOLATED_SUB_ADDITIONAL_ARGS_COMPOSE "$\$Env:ISOLATED_SUB_ADDITIONAL_ARGS_COMPOSE")
+    set(PUBSUB_ADDITIONAL_ARGS_COMPOSE "$\$Env:PUBSUB_ADDITIONAL_ARGS_COMPOSE")
     set(CLIENT_ADDITIONAL_ARGS_COMPOSE "$\$Env:CLIENT_ADDITIONAL_ARGS_COMPOSE")
+    set(XML_ARG_COMPOSE "$\$Env:XML_FILE")
     set(SPLIT_ARGS_COMPOSE ".split(' ')")
+    # network_mode: host is not supported in windows docker containers yet.
+    set(NETWORK_MODE_COMPOSE "")
 
     set(WIN_DOCKERFILE ${CMAKE_CURRENT_LIST_DIR}/windows/Dockerfile)
     # Generate image for testing
@@ -125,18 +130,8 @@ else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
 
-if(WIN32)
-    # Temporarily, test hello world
-    file(GLOB examples_python_tests RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_custom_payload_pool.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_hello_world.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_rtps.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_flow_control.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_content_filter.py)
-else()
-    # Find all pytest files for testing
-    file(GLOB examples_python_tests RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*.py)
-endif()
+# Find all pytest files for testing
+file(GLOB examples_python_tests RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*.py)
 
 # Add security test only if security is enabled
 if (NOT SECURITY)
@@ -150,8 +145,18 @@ foreach(example_test ${examples_python_tests})
     message(STATUS "  Configuring example test: ${example_name}")
     configure_file(${example_test}
                    ${CMAKE_CURRENT_BINARY_DIR}/${example_name}/${example_test} @ONLY)
-    configure_file(${example_name}.compose.yml
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${example_name}.compose.yml")
+
+        configure_file(${example_name}.compose.yml
                    ${CMAKE_CURRENT_BINARY_DIR}/${example_name}/${example_name}.compose.yml @ONLY)
+    else()
+        # Get base example name without suffix (e.g., -I)
+        string(REGEX REPLACE "-.*$" "" base_example_name "${example_name}")
+        if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${base_example_name}.compose.yml")
+            configure_file(${base_example_name}.compose.yml
+                    ${CMAKE_CURRENT_BINARY_DIR}/${example_name}/${base_example_name}.compose.yml @ONLY)
+        endif()
+    endif()
     add_test(NAME example_tests.${example_name}
              COMMAND ${Python3_EXECUTABLE} -m pytest -vrP
              WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${example_name})

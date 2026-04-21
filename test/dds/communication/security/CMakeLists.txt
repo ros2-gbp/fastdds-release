@@ -25,10 +25,10 @@ include_directories(${Asio_INCLUDE_DIR})
 # Binaries
 ###############################################################################
 set(COMMON_SOURCE
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldPubSubTypes.cxx
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/HelloWorldTypeObjectSupport.cxx
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSizedPubSubTypes.cxx
-    ${PROJECT_SOURCE_DIR}/test/blackbox/types/FixedSizedTypeObjectSupport.cxx
+    ${FASTDDS_BASIC_DIR}/test/blackbox/types/HelloWorldPubSubTypes.cxx
+    ${FASTDDS_BASIC_DIR}/test/blackbox/types/HelloWorldTypeObjectSupport.cxx
+    ${FASTDDS_BASIC_DIR}/test/blackbox/types/FixedSizedPubSubTypes.cxx
+    ${FASTDDS_BASIC_DIR}/test/blackbox/types/FixedSizedTypeObjectSupport.cxx
     )
 
 set(DDS_PUBLISHER_SOURCE ${COMMON_SOURCE}
@@ -40,7 +40,7 @@ target_compile_definitions(CommunicationPublisher PRIVATE
     $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     )
-target_include_directories(CommunicationPublisher PRIVATE ${PROJECT_SOURCE_DIR}/test/blackbox)
+target_include_directories(CommunicationPublisher PRIVATE ${FASTDDS_BASIC_DIR}/test/blackbox)
 target_link_libraries(CommunicationPublisher fastdds fastcdr foonathan_memory ${CMAKE_DL_LIBS})
 
 set(DDS_SUBSCRIBER_SOURCE ${COMMON_SOURCE}
@@ -52,7 +52,7 @@ target_compile_definitions(CommunicationSubscriber PRIVATE
     $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
     $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     )
-target_include_directories(CommunicationSubscriber PRIVATE ${PROJECT_SOURCE_DIR}/test/blackbox)
+target_include_directories(CommunicationSubscriber PRIVATE ${FASTDDS_BASIC_DIR}/test/blackbox)
 target_link_libraries(CommunicationSubscriber fastdds fastcdr foonathan_memory ${CMAKE_DL_LIBS})
 
 ###############################################################################
@@ -68,35 +68,15 @@ list(APPEND XML_CONFIGURATION_FILES
         secure_msg_submsg_crypto_besteffort_sub_profile.xml
         secure_submsg_crypto_besteffort_pub_profile.xml
         secure_submsg_crypto_besteffort_sub_profile.xml
-        secure_ds_simple_secure_msg_crypto_pub_profile.xml
-        secure_ds_simple_secure_msg_crypto_sub_profile.xml
-        secure_ds_simple_secure_msg_crypto_ds_1_sub_profile.xml
-        secure_ds_simple_secure_no_discovery_no_rtps_protection_pub_profile.xml
-        secure_ds_simple_secure_no_discovery_no_rtps_protection_sub_profile.xml
-        secure_ds_simple_secure_no_discovery_no_rtps_protection_ds_1_sub_profile.xml
-        secure_ds_simple_secure_no_discovery_protection_pub_profile.xml
-        secure_ds_simple_secure_no_discovery_protection_sub_profile.xml
-        secure_ds_simple_secure_no_discovery_protection_ds_1_sub_profile.xml
-        secure_ds_simple_secure_no_rtps_protection_pub_profile.xml
-        secure_ds_simple_secure_no_rtps_protection_sub_profile.xml
-        secure_ds_simple_secure_no_rtps_protection_ds_1_sub_profile.xml
-        secure_simple_ds_server_profile.xml
-        secure_simple_ds_server_idx_1_profile.xml
-        secure_simple_ds_server_no_discovery_no_rtps_protection_profile.xml
-        secure_simple_ds_server_no_discovery_no_rtps_protection_idx_1_profile.xml
-        secure_simple_ds_server_no_discovery_protection_profile.xml
-        secure_simple_ds_server_no_discovery_protection_idx_1_profile.xml
-        secure_simple_ds_server_no_rtps_protection_profile.xml
-        secure_simple_ds_server_no_rtps_protection_idx_1_profile.xml
         simple_secure_allow_unauthenticated_pub_profile.xml
         simple_allow_unauthenticated_sub_profile.xml
+        secure_simple_ds_server_profile.xml
     )
 
 list(APPEND PYTHON_FILES
     simple_communication
     multiple_subs_secure_crypto_communication
-    secure_ds_pubsub_secure_crypto_communication
-    multiple_secure_ds_pubsub_secure_crypto_communication
+    test_secure_ds_disabled
     )
 
 # XML files
@@ -112,33 +92,33 @@ foreach(PY_FILE IN LISTS PYTHON_FILES)
 endforeach()
 
 # Cmake file
-configure_file(${PROJECT_SOURCE_DIR}/cmake/common/test_wrapper.cmake.in
+configure_file(${FASTDDS_BASIC_DIR}/cmake/common/test_wrapper.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/test_wrapper.cmake @ONLY)
 
 if(SECURITY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/maincacert.pem
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/maincacert.pem
         ${CMAKE_CURRENT_BINARY_DIR}/maincacert.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainpubcert.pem
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/mainpubcert.pem
         ${CMAKE_CURRENT_BINARY_DIR}/mainpubcert.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainpubkey.pem
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/mainpubkey.pem
         ${CMAKE_CURRENT_BINARY_DIR}/mainpubkey.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainsubcert.pem
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/mainsubcert.pem
         ${CMAKE_CURRENT_BINARY_DIR}/mainsubcert.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/mainsubkey.pem
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/mainsubkey.pem
         ${CMAKE_CURRENT_BINARY_DIR}/mainsubkey.pem COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_helloworld_all_enable.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/governance_helloworld_all_enable.smime
         ${CMAKE_CURRENT_BINARY_DIR}/governance_helloworld_all_enable.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_disable_discovery_disable_rtps_helloworld_all_enable.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/governance_disable_discovery_disable_rtps_helloworld_all_enable.smime
         ${CMAKE_CURRENT_BINARY_DIR}/governance_disable_discovery_disable_rtps_helloworld_all_enable.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_disable_discovery_helloworld_all_enable.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/governance_disable_discovery_helloworld_all_enable.smime
         ${CMAKE_CURRENT_BINARY_DIR}/governance_disable_discovery_helloworld_all_enable.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_disable_rtps_helloworld_all_enable.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/governance_disable_rtps_helloworld_all_enable.smime
         ${CMAKE_CURRENT_BINARY_DIR}/governance_disable_rtps_helloworld_all_enable.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/permissions_helloworld.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/permissions_helloworld.smime
         ${CMAKE_CURRENT_BINARY_DIR}/permissions_helloworld.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/governance_allow_unauth_all_disabled_access_none.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/governance_allow_unauth_all_disabled_access_none.smime
         ${CMAKE_CURRENT_BINARY_DIR}/governance_allow_unauth_all_disabled_access_none.smime COPYONLY)
-    configure_file(${PROJECT_SOURCE_DIR}/test/certs/permissions_helloworld_securehelloworld.smime
+    configure_file(${FASTDDS_BASIC_DIR}/test/certs/permissions_helloworld_securehelloworld.smime
         ${CMAKE_CURRENT_BINARY_DIR}/permissions_helloworld_securehelloworld.smime COPYONLY)
 
     if(PYTHONINTERP_FOUND)
@@ -216,162 +196,6 @@ if(SECURITY)
                 "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
         endif()
 
-        add_test(NAME SecureDiscoverServerSimplePubSubSecureMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_msg_crypto_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_msg_crypto_sub_profile.xml
-            --samples 10
-            --ds $<TARGET_FILE:fast-discovery-server>
-            --xml-ds secure_simple_ds_server_profile.xml
-            --server-id 0)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST SecureDiscoverServerSimplePubSubSecureMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST SecureDiscoverServerSimplePubSubSecureMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME SecureDiscoverServerSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_discovery_no_rtps_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_discovery_no_rtps_protection_sub_profile.xml
-            --samples 10
-            --ds $<TARGET_FILE:fast-discovery-server>
-            --xml-ds secure_simple_ds_server_no_discovery_no_rtps_protection_profile.xml
-            --server-id 0)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST SecureDiscoverServerSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST SecureDiscoverServerSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME SecureDiscoverServerSimplePubSubSecureNoDiscoveryProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_discovery_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_discovery_protection_sub_profile.xml
-            --samples 10
-            --ds $<TARGET_FILE:fast-discovery-server>
-            --xml-ds secure_simple_ds_server_no_discovery_protection_profile.xml
-            --server-id 0)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST SecureDiscoverServerSimplePubSubSecureNoDiscoveryProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST SecureDiscoverServerSimplePubSubSecureNoDiscoveryProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME SecureDiscoverServerSimplePubSubSecureNoRTPSProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_rtps_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_rtps_protection_sub_profile.xml
-            --samples 10
-            --ds $<TARGET_FILE:fast-discovery-server>
-            --xml-ds secure_simple_ds_server_no_rtps_protection_profile.xml
-            --server-id 0)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST SecureDiscoverServerSimplePubSubSecureNoRTPSProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST SecureDiscoverServerSimplePubSubSecureNoRTPSProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME TwoSecureDiscoverServersSimplePubSubSecureMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_msg_crypto_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_msg_crypto_ds_1_sub_profile.xml
-            --samples 10
-            --servers $<TARGET_FILE:fast-discovery-server> $<TARGET_FILE:fast-discovery-server>
-            --xml-servers secure_simple_ds_server_profile.xml secure_simple_ds_server_idx_1_profile.xml)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_discovery_no_rtps_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_discovery_no_rtps_protection_ds_1_sub_profile.xml
-            --samples 10
-            --servers $<TARGET_FILE:fast-discovery-server> $<TARGET_FILE:fast-discovery-server>
-            --xml-servers secure_simple_ds_server_no_discovery_no_rtps_protection_profile.xml secure_simple_ds_server_no_discovery_no_rtps_protection_idx_1_profile.xml)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryNoRTPSProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_discovery_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_discovery_protection_ds_1_sub_profile.xml
-            --samples 10
-            --servers $<TARGET_FILE:fast-discovery-server> $<TARGET_FILE:fast-discovery-server>
-            --xml-servers secure_simple_ds_server_no_discovery_protection_profile.xml secure_simple_ds_server_no_discovery_protection_idx_1_profile.xml)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoDiscoveryProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
-        add_test(NAME TwoSecureDiscoverServersSimplePubSubSecureNoRTPSProtectionMsgCrypto
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_no_rtps_protection_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_no_rtps_protection_ds_1_sub_profile.xml
-            --samples 10
-            --servers $<TARGET_FILE:fast-discovery-server> $<TARGET_FILE:fast-discovery-server>
-            --xml-servers secure_simple_ds_server_no_rtps_protection_profile.xml secure_simple_ds_server_no_rtps_protection_idx_1_profile.xml)
-
-        # Set test with label NoMemoryCheck
-        set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoRTPSProtectionMsgCrypto PROPERTY LABELS "NoMemoryCheck")
-
-        if(WIN32)
-            string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST TwoSecureDiscoverServersSimplePubSubSecureNoRTPSProtectionMsgCrypto APPEND PROPERTY ENVIRONMENT
-                "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
-        endif()
-
         add_test(NAME AllowUnauthenticatedSimplePubSecureNoRTPSProtectionSubNonSecure
             COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_subs_secure_crypto_communication.py
             --n-subs 1
@@ -390,25 +214,19 @@ if(SECURITY)
                 "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
         endif()
 
-        add_test(NAME SecureDiscoverServerMultipleClientsHandShakeAssertion
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/multiple_secure_ds_pubsub_secure_crypto_communication.py
-            --pub $<TARGET_FILE:CommunicationPublisher>
-            --xml-pub secure_ds_simple_secure_msg_crypto_pub_profile.xml
-            --sub $<TARGET_FILE:CommunicationSubscriber>
-            --xml-sub secure_ds_simple_secure_msg_crypto_sub_profile.xml
-            --samples 100 #not important to receive all samples
-            --servers $<TARGET_FILE:fast-discovery-server>
-            --xml-servers secure_simple_ds_server_profile.xml
-            --n-clients 30
-            --relaunch-clients
-            --validation-method server)
+        add_test(NAME SecureDiscoverServerDisabled
+            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/test_secure_ds_disabled.py
+            --ds-server $<TARGET_FILE:fast-discovery-server>
+            --xml-ds secure_simple_ds_server_profile.xml
+            --server-id 0
+            --timeout 5)
 
         # Set test with label NoMemoryCheck
-        set_property(TEST SecureDiscoverServerMultipleClientsHandShakeAssertion PROPERTY LABELS "NoMemoryCheck")
+        set_property(TEST SecureDiscoverServerDisabled PROPERTY LABELS "NoMemoryCheck")
 
         if(WIN32)
             string(REPLACE ";" "\\;" WIN_PATH "$ENV{PATH}")
-            set_property(TEST SecureDiscoverServerMultipleClientsHandShakeAssertion APPEND PROPERTY ENVIRONMENT
+            set_property(TEST SecureDiscoverServerDisabled APPEND PROPERTY ENVIRONMENT
                 "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>\\;$<TARGET_FILE_DIR:fastcdr>\\;${WIN_PATH}")
         endif()
 

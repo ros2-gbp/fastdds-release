@@ -22,7 +22,7 @@
 #include <rtps/transport/shared_mem/SharedMemLog.hpp>
 
 #include <map>
-#include <asio.hpp>
+#include "../../network/asio.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -165,13 +165,15 @@ public:
      * @param remote_locator Locator describing the remote destination we're sending to.
      * @param only_multicast_purpose
      * @param timeout Maximum time this function will block
+     * @param transport_priority Transport priority to use for this send.
      */
     virtual bool send(
             const std::vector<NetworkBuffer>& buffers,
             uint32_t total_bytes,
             LocatorsIterator* destination_locators_begin,
             LocatorsIterator* destination_locators_end,
-            const std::chrono::steady_clock::time_point& max_blocking_time_point);
+            const std::chrono::steady_clock::time_point& max_blocking_time_point,
+            const int32_t transport_priority);
 
     /**
      * Performs the locator selection algorithm for this transport.

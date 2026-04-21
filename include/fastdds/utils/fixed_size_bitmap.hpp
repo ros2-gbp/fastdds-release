@@ -48,7 +48,7 @@ namespace fastdds {
 
 using std::uint32_t;
 
-template <class T>
+template<class T>
 struct DiffFunction
 {
     constexpr auto operator () (
@@ -101,7 +101,9 @@ public:
      */
     explicit BitmapRange(
             T base) noexcept
-        : BitmapRange(base, NBITS - 1)
+        : BitmapRange(
+                base,
+                NBITS - 1)
     {
     }
 
@@ -409,6 +411,31 @@ public:
         num_bits = num_bits_;
         num_longs_used = (num_bits_ + 31u) / 32u;
         bitmap = bitmap_;
+    }
+
+    /**
+     * Counts the number of elements set in the bitmap.
+     *
+     * @return Number of elements set in the bitmap.
+     */
+    uint32_t count() const noexcept
+    {
+        uint32_t total = 0;
+        // Traverse through the significant items on the bitmap
+        uint32_t n_longs = (num_bits_ + 31u) / 32u;
+        for (uint32_t i = 0; i < n_longs; i++)
+        {
+            // Count bits set on the item
+            uint32_t bits = bitmap_[i];
+            // Use algorithm from https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+            // to count number of bits set in a 32-bit integer
+            bits = bits - ((bits >> 1) & 0x55555555);
+            bits = (bits & 0x33333333) + ((bits >> 2) & 0x33333333);
+            bits = (bits + (bits >> 4)) & 0x0F0F0F0F;
+            total += (bits * 0x1010101) >> 24;
+        }
+
+        return total;
     }
 
     /**

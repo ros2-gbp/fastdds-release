@@ -28,6 +28,7 @@
 #include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/log/Log.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
 #include <fastdds/dds/publisher/PublisherListener.hpp>
@@ -50,7 +51,7 @@
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/resources/ResourceEvent.h>
 #include <rtps/resources/TimedEvent.h>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <rtps/writer/BaseWriter.hpp>
 #include <rtps/writer/StatefulWriter.hpp>
 #include <utils/TimeConversion.hpp>
@@ -233,7 +234,7 @@ void DataWriterImpl::create_history(
                 qos_.history(),
                 qos_.resource_limits(),
                 (type_->is_compute_key_provided ? WITH_KEY : NO_KEY),
-                type_->max_serialized_type_size,
+                type_->get_max_serialized_size_ctx(type_support_context_),
                 qos_.endpoint().history_memory_policy,
                 [this](
                     const InstanceHandle_t& handle) -> void
@@ -251,14 +252,17 @@ ReturnCode_t DataWriterImpl::enable()
 
     auto history_att = DataWriterHistory::to_history_attributes(
         qos_.history(),
-        qos_.resource_limits(), (type_->is_compute_key_provided ? WITH_KEY : NO_KEY), type_->max_serialized_type_size,
+        qos_.resource_limits(),
+        (type_->is_compute_key_provided ? WITH_KEY : NO_KEY),
+        type_->get_max_serialized_size_ctx(type_support_context_),
         qos_.endpoint().history_memory_policy);
     pool_config_ = PoolConfig::from_history_attributes(history_att);
 
     // When the user requested PREALLOCATED_WITH_REALLOC, but we know the type cannot
     // grow, we translate the policy into bare PREALLOCATED
     if (PREALLOCATED_WITH_REALLOC_MEMORY_MODE == pool_config_.memory_policy &&
-            (type_->is_bounded() || type_->is_plain(data_representation_)))
+            (type_->is_bounded_ctx(type_support_context_) ||
+            type_->is_plain_ctx(type_support_context_, data_representation_)))
     {
         pool_config_.memory_policy = PREALLOCATED_MEMORY_MODE;
     }
@@ -285,6 +289,7 @@ ReturnCode_t DataWriterImpl::enable()
     w_att.liveliness_announcement_period = qos_.liveliness().announcement_period;
     w_att.matched_readers_allocation = qos_.writer_resource_limits().matched_subscriber_allocation;
     w_att.disable_heartbeat_piggyback = qos_.reliable_writer_qos().disable_heartbeat_piggyback;
+    w_att.transport_priority = qos_.transport_priority().value;
 
     // TODO(Ricardo) Remove in future
     // Insert topic_name and partitions
@@ -361,8 +366,10 @@ ReturnCode_t DataWriterImpl::enable()
     bool filtering_enabled =
             qos_.liveliness().lease_duration.is_infinite() &&
             (0 < qos_.writer_resource_limits().reader_filters_allocation.maximum);
+
     if (filtering_enabled)
     {
+        std::lock_guard<std::mutex> lock(filters_mtx_);
         reader_filters_.reset(new ReaderFilterCollection(qos_.writer_resource_limits().reader_filters_allocation));
     }
 
@@ -387,7 +394,7 @@ ReturnCode_t DataWriterImpl::enable()
 
     create_history(pool, change_pool);
 
-    RTPSWriter* writer =  RTPSDomainImpl::create_rtps_writer(
+    RTPSWriter* writer =  RTPSDomain::createRTPSWriter(
         publisher_->rtps_participant(),
         guid_.entityId,
         w_att,
@@ -425,7 +432,7 @@ ReturnCode_t DataWriterImpl::enable()
         }
 
         create_history(pool, change_pool);
-        writer = RTPSDomainImpl::create_rtps_writer(
+        writer = RTPSDomain::createRTPSWriter(
             publisher_->rtps_participant(),
             guid_.entityId,
             w_att,
@@ -441,10 +448,10 @@ ReturnCode_t DataWriterImpl::enable()
     }
 
     writer_ = BaseWriter::downcast(writer);
-    if (filtering_enabled)
-    {
-        writer_->reader_data_filter(this);
-    }
+
+    // Set DataWriterImpl as the implementer of the
+    // IReaderDataFilter interface
+    writer_->reader_data_filter(this);
 
     // In case it has been loaded from the persistence DB, rebuild instances on history
     history_->rebuild_instances();
@@ -532,8 +539,8 @@ ReturnCode_t DataWriterImpl::loan_sample(
             microseconds(rtps::TimeConv::Time_t2MicroSecondsInt64(qos_.reliability().max_blocking_time));
 
     // Type should be plain and have space for the representation header
-    if (!type_->is_plain(data_representation_) ||
-            SerializedPayload_t::representation_header_size > type_->max_serialized_type_size)
+    if (!type_->is_plain_ctx(type_support_context_, data_representation_) ||
+            SerializedPayload_t::representation_header_size > type_->get_max_serialized_size_ctx(type_support_context_))
     {
         return RETCODE_ILLEGAL_OPERATION;
     }
@@ -557,7 +564,7 @@ ReturnCode_t DataWriterImpl::loan_sample(
 
     // Get one payload from the pool
     SerializedPayload_t payload;
-    uint32_t size = type_->max_serialized_type_size;
+    uint32_t size = type_->get_max_serialized_size_ctx(type_support_context_);
     if (!get_free_payload_from_pool(size, payload))
     {
         return RETCODE_OUT_OF_RESOURCES;
@@ -599,7 +606,7 @@ ReturnCode_t DataWriterImpl::loan_sample(
             break;
 
         case LoanInitializationKind::CONSTRUCTED_LOAN_INITIALIZATION:
-            if (!type_->construct_sample(sample))
+            if (!type_->construct_sample_ctx(type_support_context_, sample))
             {
                 check_and_remove_loan(sample, payload);
                 payload_pool_->release_payload(payload);
@@ -620,8 +627,8 @@ ReturnCode_t DataWriterImpl::discard_loan(
         void*& sample)
 {
     // Type should be plain and have space for the representation header
-    if (!type_->is_plain(data_representation_) ||
-            SerializedPayload_t::representation_header_size > type_->max_serialized_type_size)
+    if (!type_->is_plain_ctx(type_support_context_, data_representation_) ||
+            SerializedPayload_t::representation_header_size > type_->get_max_serialized_size_ctx(type_support_context_))
     {
         return RETCODE_ILLEGAL_OPERATION;
     }
@@ -683,19 +690,23 @@ ReturnCode_t DataWriterImpl::check_write_preconditions(
         return RETCODE_NOT_ENABLED;
     }
 
-    if (type_.get()->is_compute_key_provided)
+    if (type_->is_compute_key_provided)
     {
         bool is_key_protected = false;
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_.get()->compute_key(data, instance_handle, is_key_protected);
+        if (!type_->compute_key_ctx(type_support_context_, data, instance_handle, is_key_protected) ||
+                !instance_handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
-    // Check if the Handle is different from the special value HANDLE_NIL and
-    // does not correspond with the instance referred by the data
-    if (handle.isDefined() && handle != instance_handle)
+    if (handle.isDefined() && instance_handle != handle)
     {
+        EPROSIMA_LOG_ERROR(DATA_WRITER, "Handle differs from data's key.");
         return RETCODE_PRECONDITION_NOT_MET;
     }
 
@@ -770,7 +781,7 @@ ReturnCode_t DataWriterImpl::check_instance_preconditions(
 
     instance_handle = handle;
 
-#if defined(NDEBUG)
+#if defined(NDEBUG) // In Release build, compute key only if necessary
     if (!instance_handle.isDefined())
 #endif // if !defined(NDEBUG)
     {
@@ -778,13 +789,18 @@ ReturnCode_t DataWriterImpl::check_instance_preconditions(
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_->compute_key(data, instance_handle, is_key_protected);
+        if (!type_->compute_key_ctx(type_support_context_, data, instance_handle, is_key_protected) ||
+                !instance_handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) // In Debug build, always check that provided handle matches data's key
     if (handle.isDefined() && instance_handle != handle)
     {
-        EPROSIMA_LOG_ERROR(DATA_WRITER, "handle differs from data's key.");
+        EPROSIMA_LOG_ERROR(DATA_WRITER, "Handle differs from data's key.");
         return RETCODE_PRECONDITION_NOT_MET;
     }
 #endif // if !defined(NDEBUG)
@@ -850,10 +866,11 @@ InstanceHandle_t DataWriterImpl::do_register_instance(
             assert(nullptr != payload);
             if (0 == payload->length || nullptr == payload->data)
             {
-                uint32_t size = fixed_payload_size_ ? fixed_payload_size_ : type_->calculate_serialized_size(key,
-                                data_representation_);
+                uint32_t size = fixed_payload_size_
+                    ? fixed_payload_size_
+                    : type_->calculate_serialized_size_ctx(type_support_context_, key, data_representation_);
                 payload->reserve(size);
-                if (!type_->serialize(key, *payload, data_representation_))
+                if (!type_->serialize_ctx(type_support_context_, key, *payload, data_representation_))
                 {
                     EPROSIMA_LOG_WARNING(DATA_WRITER, "Key data serialization failed");
 
@@ -969,7 +986,7 @@ ReturnCode_t DataWriterImpl::get_key_value(
         return RETCODE_BAD_PARAMETER;
     }
 
-    type_->deserialize(*payload, key_holder);
+    type_->deserialize_ctx(type_support_context_, *payload, key_holder);
     return RETCODE_OK;
 }
 
@@ -1030,8 +1047,9 @@ ReturnCode_t DataWriterImpl::perform_create_new_change(
     bool was_loaned = check_and_remove_loan(data, payload);
     if (!was_loaned)
     {
-        uint32_t payload_size = fixed_payload_size_ ? fixed_payload_size_ : type_->calculate_serialized_size(
-            data, data_representation_);
+        uint32_t payload_size = fixed_payload_size_
+            ? fixed_payload_size_
+            : type_->calculate_serialized_size_ctx(type_support_context_, data, data_representation_);
         // Initialize payload to null state
         payload.length = 0;
         payload.max_size = 0;
@@ -1047,7 +1065,7 @@ ReturnCode_t DataWriterImpl::perform_create_new_change(
                 return RETCODE_OUT_OF_RESOURCES;
             }
 
-            if (!type_->serialize(data, payload, data_representation_))
+            if (!type_->serialize_ctx(type_support_context_, data, payload, data_representation_))
             {
                 EPROSIMA_LOG_WARNING(DATA_WRITER, "Data serialization returned false");
                 payload_pool_->release_payload(payload);
@@ -1141,6 +1159,8 @@ ReturnCode_t DataWriterImpl::create_new_change_with_params(
         return ret_code;
     }
 
+    // As this entry point does not receive an InstanceHandle_t, it has to be computed if the topic
+    // requires it
     InstanceHandle_t handle;
     if (type_->is_compute_key_provided)
     {
@@ -1148,7 +1168,11 @@ ReturnCode_t DataWriterImpl::create_new_change_with_params(
 #if HAVE_SECURITY
         is_key_protected = writer_->getAttributes().security_attributes().is_key_protected;
 #endif // if HAVE_SECURITY
-        type_->compute_key(data, handle, is_key_protected);
+        if (!type_->compute_key_ctx(type_support_context_, data, handle, is_key_protected) || !handle.isDefined())
+        {
+            EPROSIMA_LOG_ERROR(DATA_WRITER, "Could not compute key for data");
+            return RETCODE_PRECONDITION_NOT_MET;
+        }
     }
 
     return perform_create_new_change(changeKind, data, wparams, handle);
@@ -1248,14 +1272,18 @@ ReturnCode_t DataWriterImpl::set_qos(
 
     if (enabled)
     {
-        if (qos_.reliability().kind == ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS &&
-                qos_.reliable_writer_qos() == qos_to_set.reliable_writer_qos())
+        int32_t transport_priority = writer_->get_transport_priority();
+
+        if ((qos_.reliability().kind == ReliabilityQosPolicyKind::RELIABLE_RELIABILITY_QOS &&
+                qos_.reliable_writer_qos() == qos_to_set.reliable_writer_qos()) ||
+                (transport_priority != qos_to_set.transport_priority().value))
         {
             // Update times and positive_acks attributes on RTPS Layer
             WriterAttributes w_att;
             w_att.times = qos_.reliable_writer_qos().times;
             w_att.disable_positive_acks = qos_.reliable_writer_qos().disable_positive_acks.enabled;
             w_att.keep_duration = qos_.reliable_writer_qos().disable_positive_acks.duration;
+            w_att.transport_priority = qos_to_set.transport_priority().value;
             writer_->update_attributes(w_att);
         }
 
@@ -1525,6 +1553,34 @@ ReturnCode_t DataWriterImpl::get_publication_matched_status(
 
     user_datawriter_->get_statuscondition().get_impl()->set_status(StatusMask::publication_matched(), false);
     return RETCODE_OK;
+}
+
+ReturnCode_t DataWriterImpl::set_sample_prefilter(
+        std::shared_ptr<IContentFilter> prefilter)
+{
+    if (is_data_sharing_compatible_)
+    {
+        EPROSIMA_LOG_WARNING(DATA_WRITER,
+                "Data-sharing is enabled on this DataWriter, which is not compatible with sample prefiltering. \
+                 Ensure that transport is used for communicating with DataReaders.");
+    }
+
+    std::lock_guard<std::mutex> lock(filters_mtx_);
+    sample_prefilter_ = prefilter;
+    return RETCODE_OK;
+}
+
+ReturnCode_t DataWriterImpl::set_related_datareader(
+        const DataReader* /*related_reader*/)
+{
+    ReturnCode_t ret = RETCODE_UNSUPPORTED;
+    return ret;
+}
+
+void DataWriterImpl::set_type_support_context(
+        const std::shared_ptr<TopicDataType::Context>& context)
+{
+    type_support_context_ = context;
 }
 
 bool DataWriterImpl::deadline_timer_reschedule()
@@ -1826,7 +1882,7 @@ ReturnCode_t DataWriterImpl::get_publication_builtin_topic_data(
 
     qos_.endpoint().unicast_locator_list.copy_to(publication_data.remote_locators.unicast);
     qos_.endpoint().multicast_locator_list.copy_to(publication_data.remote_locators.multicast);
-    publication_data.max_serialized_size = type_->max_serialized_type_size;
+    publication_data.max_serialized_size = type_->get_max_serialized_size_ctx(type_support_context_);
     publication_data.loopback_transformation =
             writer_->get_participant_impl()->network_factory().network_configuration();
 
@@ -2071,12 +2127,10 @@ ReturnCode_t DataWriterImpl::check_qos(
             qos.resource_limits().max_samples_per_instance > 0 &&
             qos.history().depth > qos.resource_limits().max_samples_per_instance)
     {
-        EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
-                "HISTORY DEPTH '" << qos.history().depth
-                                  << "' is inconsistent with max_samples_per_instance: '"
-                                  << qos.resource_limits().max_samples_per_instance
-                                  << "'. Consistency rule: depth <= max_samples_per_instance."
-                                  << " Effectively using max_samples_per_instance as depth.");
+        EPROSIMA_LOG_ERROR(RTPS_QOS_CHECK,
+                "HISTORY DEPTH '" << qos.history().depth << "' is higher than max_samples_per_instance "
+                                  << "'" << qos.resource_limits().max_samples_per_instance << "'.");
+        return RETCODE_INCONSISTENT_POLICY;
     }
     return RETCODE_OK;
 }
@@ -2229,7 +2283,7 @@ std::shared_ptr<IPayloadPool> DataWriterImpl::get_payload_pool()
         }
 
         // Prepare loans collection for plain types only
-        if (type_->is_plain(data_representation_))
+        if (type_->is_plain_ctx(type_support_context_, data_representation_))
         {
             loans_.reset(new LoanCollection(pool_config_));
         }
@@ -2306,7 +2360,7 @@ ReturnCode_t DataWriterImpl::check_datasharing_compatible(
     bool has_bound_payload_size =
             (qos_.endpoint().history_memory_policy == eprosima::fastdds::rtps::PREALLOCATED_MEMORY_MODE ||
             qos_.endpoint().history_memory_policy == eprosima::fastdds::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE) &&
-            type_.is_bounded();
+            type_->is_bounded_ctx(type_support_context_);
 
     bool has_key = type_->is_compute_key_provided;
 
@@ -2333,7 +2387,8 @@ ReturnCode_t DataWriterImpl::check_datasharing_compatible(
             if (!has_bound_payload_size)
             {
                 EPROSIMA_LOG_ERROR(DATA_WRITER, "Data sharing cannot be used with "
-                        << (type_.is_bounded() ? "memory policies other than PREALLOCATED" : "unbounded data types"));
+                        << (type_->is_bounded_ctx(type_support_context_) ? "memory policies other than PREALLOCATED" :
+                        "unbounded data types"));
                 return RETCODE_BAD_PARAMETER;
             }
 
@@ -2363,7 +2418,8 @@ ReturnCode_t DataWriterImpl::check_datasharing_compatible(
             if (!has_bound_payload_size)
             {
                 EPROSIMA_LOG_INFO(DATA_WRITER, "Data sharing disabled because "
-                        << (type_.is_bounded() ? "memory policy is not PREALLOCATED" : "data type is not bounded"));
+                        << (type_->is_bounded_ctx(type_support_context_) ? "memory policy is not PREALLOCATED" :
+                        "data type is not bounded"));
                 return RETCODE_OK;
             }
 
@@ -2463,9 +2519,24 @@ bool DataWriterImpl::is_relevant(
         const fastdds::rtps::CacheChange_t& change,
         const fastdds::rtps::GUID_t& reader_guid) const
 {
-    assert(reader_filters_);
-    const DataWriterFilteredChange& writer_change = static_cast<const DataWriterFilteredChange&>(change);
-    return writer_change.is_relevant_for(reader_guid);
+    bool is_relevant_for_reader = true;
+    std::lock_guard<std::mutex> lock(filters_mtx_);
+
+    if (sample_prefilter_)
+    {
+        IContentFilter::FilterSampleInfo filter_sample_info(change.write_params);
+        is_relevant_for_reader = sample_prefilter_->evaluate(change.serializedPayload,
+                        filter_sample_info,
+                        reader_guid);
+    }
+
+    if (is_relevant_for_reader && reader_filters_)
+    {
+        const DataWriterFilteredChange& writer_change = static_cast<const DataWriterFilteredChange&>(change);
+        is_relevant_for_reader = writer_change.is_relevant_for(reader_guid);
+    }
+
+    return is_relevant_for_reader;
 }
 
 } // namespace dds

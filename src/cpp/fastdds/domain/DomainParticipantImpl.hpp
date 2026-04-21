@@ -33,7 +33,6 @@
 #include <fastdds/dds/domain/qos/ReplierQos.hpp>
 #include <fastdds/dds/domain/qos/RequesterQos.hpp>
 #include <fastdds/dds/publisher/qos/PublisherQos.hpp>
-#include "fastdds/rpc/RequestReplyContentFilterFactory.hpp"
 #include <fastdds/dds/rpc/ServiceTypeSupport.hpp>
 #include <fastdds/dds/subscriber/qos/SubscriberQos.hpp>
 #include <fastdds/dds/topic/ContentFilteredTopic.hpp>
@@ -144,6 +143,21 @@ public:
 
     /**
      * Create a Publisher in this Participant.
+     *
+     * @param qos QoS of the Publisher.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the publisher is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Publisher.
+     */
+    Publisher* create_publisher(
+            const PublisherQos& qos,
+            ReturnCode_t& ret_code,
+            PublisherListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Publisher in this Participant.
      * @param qos QoS of the Publisher.
      * @param listenerer Pointer to the listener.
      * @param mask StatusMask
@@ -170,6 +184,21 @@ public:
 
     /**
      * Create a Publisher in this Participant.
+     *
+     * @param profile_name Publisher profile name.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the publisher is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Publisher.
+     */
+    Publisher* create_publisher_with_profile(
+            const std::string& profile_name,
+            ReturnCode_t& ret_code,
+            PublisherListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Publisher in this Participant.
      * @param profile_name Publisher profile name.
      * @param listener Pointer to the listener.
      * @param mask StatusMask
@@ -185,6 +214,21 @@ public:
 
     /**
      * Create a Subscriber in this Participant.
+     *
+     * @param qos QoS of the Subscriber.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the subscriber is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Subscriber.
+     */
+    Subscriber* create_subscriber(
+            const SubscriberQos& qos,
+            ReturnCode_t& ret_code,
+            SubscriberListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Subscriber in this Participant.
      * @param qos QoS of the Subscriber.
      * @param listener Pointer to the listener.
      * @param mask StatusMask that holds statuses the listener responds to
@@ -192,6 +236,21 @@ public:
      */
     Subscriber* create_subscriber(
             const SubscriberQos& qos,
+            SubscriberListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Subscriber in this Participant.
+     *
+     * @param profile_name Subscriber profile name.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the subscriber is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Subscriber.
+     */
+    Subscriber* create_subscriber_with_profile(
+            const std::string& profile_name,
+            ReturnCode_t& ret_code,
             SubscriberListener* listener = nullptr,
             const StatusMask& mask = StatusMask::all());
 
@@ -212,6 +271,25 @@ public:
 
     /**
      * Create a Topic in this Participant.
+     *
+     * @param topic_name Name of the Topic.
+     * @param type_name Data type of the Topic.
+     * @param qos QoS of the Topic.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the topic is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Topic.
+     */
+    Topic* create_topic(
+            const std::string& topic_name,
+            const std::string& type_name,
+            const TopicQos& qos,
+            ReturnCode_t& ret_code,
+            TopicListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Topic in this Participant.
      * @param topic_name Name of the Topic.
      * @param type_name Data type of the Topic.
      * @param qos QoS of the Topic.
@@ -223,6 +301,25 @@ public:
             const std::string& topic_name,
             const std::string& type_name,
             const TopicQos& qos = TOPIC_QOS_DEFAULT,
+            TopicListener* listener = nullptr,
+            const StatusMask& mask = StatusMask::all());
+
+    /**
+     * Create a Topic in this Participant.
+     *
+     * @param topic_name Name of the Topic.
+     * @param type_name Data type of the Topic.
+     * @param profile_name Topic profile name.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the topic is created, RETCODE_ERROR otherwise.
+     * @param listener Pointer to the listener (default: nullptr)
+     * @param mask StatusMask that holds statuses the listener responds to (default: all)
+     * @return Pointer to the created Topic.
+     */
+    Topic* create_topic_with_profile(
+            const std::string& topic_name,
+            const std::string& type_name,
+            const std::string& profile_name,
+            ReturnCode_t& ret_code,
             TopicListener* listener = nullptr,
             const StatusMask& mask = StatusMask::all());
 
@@ -276,6 +373,37 @@ public:
     ReturnCode_t delete_topic(
             const Topic* topic);
 
+    /**
+     * Create a ContentFilteredTopic in this Participant.
+     *
+     * @param name Name of the ContentFilteredTopic.
+     * @param related_topic Pointer to the related Topic.
+     * @param filter_expression Filter expression to be associated with the ContentFilteredTopic.
+     * @param expression_parameters Expression parameters to be associated with the ContentFilteredTopic.
+     * @param filter_class_name Name of the content filter class to be associated with the Content
+     * FilteredTopic. This class must have been registered in the participant with register_content_filter_factory.
+     * @param [out] ret_code Return code of the operation, RETCODE_OK if the content filtered topic is created, RETCODE_ERROR otherwise.
+     * @return Pointer to the created ContentFilteredTopic
+     */
+    ContentFilteredTopic* create_contentfilteredtopic(
+            const std::string& name,
+            Topic* related_topic,
+            const std::string& filter_expression,
+            const std::vector<std::string>& expression_parameters,
+            const char* filter_class_name,
+            ReturnCode_t& ret_code);
+
+    /**
+     * Create a ContentFilteredTopic in this Participant.
+     *
+     * @param name Name of the ContentFilteredTopic.
+     * @param related_topic Pointer to the related Topic.
+     * @param filter_expression Filter expression to be associated with the ContentFilteredTopic.
+     * @param expression_parameters Expression parameters to be associated with the ContentFilteredTopic.
+     * @param filter_class_name Name of the content filter class to be associated with the Content
+     * FilteredTopic. This class must have been registered in the participant with register_content_filter_factory.
+     * @return Pointer to the created ContentFilteredTopic
+     */
     ContentFilteredTopic* create_contentfilteredtopic(
             const std::string& name,
             Topic* related_topic,
@@ -348,6 +476,19 @@ public:
      *
      * @param service_name Name of the service.
      * @param service_type_name Type name of the service (Request & reply types)
+     * @param [out] ret_code Return code indicating the result of the operation.
+     * @return Pointer to the created service. nullptr in error case.
+     */
+    rpc::Service* create_service(
+            const std::string& service_name,
+            const std::string& service_type_name,
+            ReturnCode_t& ret_code);
+
+    /**
+     * Create an enabled RPC service.
+     *
+     * @param service_name Name of the service.
+     * @param service_type_name Type name of the service (Request & reply types)
      * @return Pointer to the created service. nullptr in error case.
      */
     rpc::Service* create_service(
@@ -374,6 +515,18 @@ public:
 
     /**
      * Create a RPC Requester in a given Service.
+     * @param service Pointer to a service object where the requester will be created.
+     * @param requester_qos QoS of the requester.
+     * @param [out] ret_code Return code indicating the result of the operation.
+     * @return Pointer to the created requester. nullptr in error case.
+     */
+    rpc::Requester* create_service_requester(
+            rpc::Service* service,
+            const RequesterQos& requester_qos,
+            ReturnCode_t& ret_code);
+
+    /**
+     * Create a RPC Requester in a given Service.
      *
      * @param service Pointer to a service object where the requester will be created.
      * @param requester_qos QoS of the requester.
@@ -394,6 +547,20 @@ public:
     ReturnCode_t delete_service_requester(
             const std::string& service_name,
             rpc::Requester* requester);
+
+    /**
+     * Create a RPC Replier in a given Service.
+     *
+     * @param service Pointer to a service object where the Replier will be created.
+     * @param requester_qos QoS of the requester.
+     * @param [out] ret_code Return code indicating the result of the operation.
+     *
+     * @return Pointer to the created replier. nullptr in error case.
+     */
+    rpc::Replier* create_service_replier(
+            rpc::Service* service,
+            const ReplierQos& replier_qos,
+            ReturnCode_t& ret_code);
 
     /**
      * Create a RPC Replier in a given Service.
@@ -653,7 +820,7 @@ public:
     const rpc::ServiceTypeSupport find_service_type(
             const std::string& service_name) const;
 
-    const InstanceHandle_t& get_instance_handle() const;
+    InstanceHandle_t get_instance_handle() const;
 
     // From here legacy RTPS methods.
 
@@ -765,19 +932,6 @@ protected:
     std::map<std::string, TypeSupport> types_;
     mutable std::mutex mtx_types_;
 
-    //! RPC Service maps
-    std::map<std::string, rpc::ServiceTypeSupport> service_types_;
-    std::map<std::string, rpc::ServiceImpl*> services_;
-    mutable std::mutex mtx_service_types_;
-    mutable std::mutex mtx_services_;
-
-    //! RPC Services publisher and subscriber
-    std::pair<Subscriber*, SubscriberImpl*> services_subscriber_;
-    std::pair<Publisher*, PublisherImpl*> services_publisher_;
-
-    //! RPC Services Reply topic Content Filter Factory
-    rpc::RequestReplyContentFilterFactory req_rep_filter_factory_;
-
     //!Topic map
     std::map<std::string, TopicProxyFactory*> topics_;
     std::map<InstanceHandle_t, Topic*> topics_by_handle_;
@@ -821,7 +975,8 @@ protected:
                     {
                         std::lock_guard<std::mutex> lock(listener_->participant_->mtx_gs_);
                         assert(
-                            listener_ != nullptr && listener_->participant_ != nullptr && listener_->participant_->listener_ != nullptr &&
+                            listener_ != nullptr && listener_->participant_ != nullptr &&
+                            listener_->participant_->listener_ != nullptr &&
                             listener_->participant_->participant_ != nullptr);
                         --listener_->callback_counter_;
                         notify = !listener_->callback_counter_;
@@ -878,6 +1033,11 @@ protected:
                 fastdds::rtps::WriterDiscoveryStatus reason,
                 const fastdds::rtps::PublicationBuiltinTopicData& info,
                 bool& should_be_ignored) override;
+
+        bool should_endpoints_match(
+                const fastdds::rtps::RTPSParticipant* participant,
+                const fastdds::rtps::SubscriptionBuiltinTopicData& reader_info,
+                const fastdds::rtps::PublicationBuiltinTopicData& writer_info) override;
 
         DomainParticipantImpl* participant_;
         int callback_counter_ = 0;

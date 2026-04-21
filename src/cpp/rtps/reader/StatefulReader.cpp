@@ -31,7 +31,7 @@
 #include <fastdds/rtps/writer/WriterDiscoveryStatus.hpp>
 
 #include "reader_utils.hpp"
-#include "rtps/RTPSDomainImpl.hpp"
+#include "rtps/domain/RTPSDomainImpl.hpp"
 #include <rtps/builtin/BuiltinProtocols.h>
 #include <rtps/builtin/liveliness/WLP.hpp>
 #include <rtps/DataSharing/DataSharingListener.hpp>
@@ -834,6 +834,19 @@ bool StatefulReader::process_data_frag_msg(
                             pWP->irrelevant_change_set(work_change->sequenceNumber);
                             has_to_notify = true;
                         }
+
+                        /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+                         * Because the instance will still be unknown
+                         */
+                        if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+                        {
+                            EPROSIMA_LOG_ERROR(RTPS_READER,
+                                    "Change received from " << work_change->writerGUID << " with sequence number: "
+                                                            << work_change->sequenceNumber
+                                                            << " ignored. Could not compute key in keyed topic.");
+                            pWP->irrelevant_change_set(work_change->sequenceNumber);
+                            has_to_notify = true;
+                        }
                     }
 
                     History::const_iterator chit = history_->find_change_nts(work_change);
@@ -1128,7 +1141,7 @@ bool StatefulReader::change_received(
                         "Change received from " << a_change->writerGUID << " with sequence number: "
                                                 << a_change->sequenceNumber
                                                 <<
-                                    " skipped. Higher sequence numbers have been received.");
+                        " skipped. Higher sequence numbers have been received.");
                 return false;
             }
         }
@@ -1201,6 +1214,20 @@ bool StatefulReader::change_received(
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 NotifyChanges(prox);
             }
+
+            /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+             * Because the instance will still be unknown
+             */
+            if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+            {
+                EPROSIMA_LOG_ERROR(RTPS_READER,
+                        "Change received from " << a_change->writerGUID << " with sequence number: "
+                                                << a_change->sequenceNumber
+                                                <<
+                        " ignored. Could not compute key in keyed topic.");
+                prox->irrelevant_change_set(a_change->sequenceNumber);
+                NotifyChanges(prox);
+            }
         }
     }
 
@@ -1229,7 +1256,12 @@ void StatefulReader::NotifyChanges(
         assert(false == aux_ch->isRead);
         new_data_available = true;
         ++total_unread_;
-        on_data_notify(proxGUID, aux_ch->sourceTimestamp);
+
+        // Statistics callback is called with the original writer GUID if it is set
+        auto statistics_source_guid = aux_ch->write_params.original_writer_info() != OriginalWriterInfo::unknown() ?
+                aux_ch->write_params.original_writer_info().original_writer_guid() : proxGUID;
+
+        on_data_notify(statistics_source_guid, aux_ch->sourceTimestamp);
 
         ++it;
         do
@@ -1655,7 +1687,7 @@ bool StatefulReader::send_sync_nts(
         std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
     return mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid, locators_begin, locators_end,
-                   max_blocking_time_point);
+                   max_blocking_time_point, 0);
 }
 
 } // namespace rtps

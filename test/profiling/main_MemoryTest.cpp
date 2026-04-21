@@ -35,12 +35,6 @@
 using namespace eprosima::fastdds;
 using namespace eprosima::fastdds::rtps;
 
-#if FASTDDS_IS_BIG_ENDIAN_TARGET
-const Endianness_t DEFAULT_ENDIAN = BIGEND;
-#else
-const Endianness_t DEFAULT_ENDIAN = LITTLEEND;
-#endif // if FASTDDS_IS_BIG_ENDIAN_TARGET
-
 #if defined(_WIN32)
 #define COPYSTR strcpy_s
 #else
@@ -438,8 +432,8 @@ int main(
 
     if (pub_sub)
     {
-        std::cout << "Performing test with " << sub_number << " subscribers and " << n_samples << " samples" <<
-            std::endl;
+        std::cout << "Performing test with " << sub_number << " subscribers and " << n_samples << " samples"
+                  << std::endl;
         MemoryTestPublisher memoryPub;
         memoryPub.init(sub_number, n_samples, reliable, seed, hostname, export_csv, export_prefix,
                 pub_part_property_policy, pub_property_policy, sXMLConfigFile, data_size, dynamic_types);

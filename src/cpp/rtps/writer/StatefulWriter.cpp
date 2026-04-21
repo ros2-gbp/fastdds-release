@@ -50,9 +50,10 @@
 #include <rtps/reader/LocalReaderPointer.hpp>
 #include <rtps/resources/ResourceEvent.h>
 #include <rtps/resources/TimedEvent.h>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <rtps/writer/BaseWriter.hpp>
 #include <rtps/writer/ReaderProxy.hpp>
+#include <rtps/writer/StatefulWriterListener.hpp>
 #include <utils/TimeConversion.hpp>
 
 #ifdef FASTDDS_STATISTICS
@@ -177,7 +178,8 @@ StatefulWriter::StatefulWriter(
         const WriterAttributes& att,
         FlowController* flow_controller,
         WriterHistory* history,
-        WriterListener* listener)
+        WriterListener* listener,
+        StatefulWriterListener* stateful_listener)
     : BaseWriter(pimpl, guid, att, flow_controller, history, listener)
     , periodic_hb_event_(nullptr)
     , nack_response_event_(nullptr)
@@ -195,12 +197,11 @@ StatefulWriter::StatefulWriter(
     , keep_duration_(att.keep_duration)
     , last_sequence_number_()
     , biggest_removed_sequence_number_()
-    , sendBufferSize_(pimpl->get_min_network_send_buffer_size())
-    , currentUsageSendBufferSize_(static_cast<int32_t>(pimpl->get_min_network_send_buffer_size()))
     , matched_local_readers_(att.matched_readers_allocation)
     , matched_datasharing_readers_(att.matched_readers_allocation)
     , locator_selector_general_(*this, att.matched_readers_allocation)
     , locator_selector_async_(*this, att.matched_readers_allocation)
+    , stateful_writer_listener_(stateful_listener)
 {
     init(pimpl, att);
 }
@@ -244,7 +245,9 @@ void StatefulWriter::init(
 
     for (size_t n = 0; n < att.matched_readers_allocation.initial; ++n)
     {
-        matched_readers_pool_.push_back(new ReaderProxy(times_, part_att.allocation.locators, this));
+        ReaderProxy* new_proxy = new ReaderProxy(
+            times_, part_att.allocation.locators, this, stateful_writer_listener_);
+        matched_readers_pool_.push_back(new_proxy);
     }
 }
 
@@ -733,7 +736,6 @@ DeliveryRetCode StatefulWriter::deliver_sample_to_network(
         {
             if (should_be_sent)
             {
-                uint32_t last_processed = 0;
                 if (!separate_sending_enabled_)
                 {
                     size_t num_locators = locator_selector.locator_selector.selected_size();
@@ -812,7 +814,7 @@ DeliveryRetCode StatefulWriter::deliver_sample_to_network(
                             }
                         }
 
-                        send_heartbeat_piggyback_nts_(group, locator_selector, last_processed);
+                        send_heartbeat_piggyback_nts_(group, locator_selector);
                     }
                 }
                 else
@@ -1037,7 +1039,7 @@ bool StatefulWriter::matched_reader_add_edp(
         if (get_matched_readers_size() + matched_readers_pool_.size() < max_readers)
         {
             const RTPSParticipantAttributes& part_att = mp_RTPSParticipant->get_attributes();
-            rp = new ReaderProxy(times_, part_att.allocation.locators, this);
+            rp = new ReaderProxy(times_, part_att.allocation.locators, this, stateful_writer_listener_);
         }
         else
         {
@@ -1467,6 +1469,11 @@ void StatefulWriter::check_acked_status()
             }
             );
 
+    if (all_acked)
+    {
+        min_low_mark = history_->next_sequence_number() - 1;
+    }
+
     bool something_changed = all_acked;
     SequenceNumber_t min_seq = get_seq_num_min();
     if (min_seq != SequenceNumber_t::unknown())
@@ -1616,6 +1623,8 @@ bool StatefulWriter::wait_for_acknowledgement(
 void StatefulWriter::update_attributes(
         const WriterAttributes& att)
 {
+    BaseWriter::update_attributes(att);
+
     this->update_times(att.times);
     if (this->get_disable_positive_acks())
     {
@@ -1869,8 +1878,6 @@ void StatefulWriter::send_heartbeat_nts_(
 
     increment_hb_count();
     message_group.add_heartbeat(firstSeq, lastSeq, heartbeat_count_, final, liveliness);
-    // Update calculate of heartbeat piggyback.
-    currentUsageSendBufferSize_ = static_cast<int32_t>(sendBufferSize_);
 
     EPROSIMA_LOG_INFO(RTPS_WRITER,
             getGuid().entityId << " Sending Heartbeat (" << firstSeq << " - " << lastSeq << ")" );
@@ -1878,8 +1885,7 @@ void StatefulWriter::send_heartbeat_nts_(
 
 void StatefulWriter::send_heartbeat_piggyback_nts_(
         RTPSMessageGroup& message_group,
-        LocatorSelectorSender& locator_selector,
-        uint32_t& last_bytes_processed)
+        LocatorSelectorSender& locator_selector)
 {
     if (!disable_heartbeat_piggyback_)
     {
@@ -1891,11 +1897,9 @@ void StatefulWriter::send_heartbeat_piggyback_nts_(
         }
         else
         {
-            uint32_t current_bytes = message_group.get_current_bytes_processed();
-            currentUsageSendBufferSize_ -= current_bytes - last_bytes_processed;
-            last_bytes_processed = current_bytes;
-            if (currentUsageSendBufferSize_ < 0)
+            if (last_num_exceeded_send_buffer_size_ != message_group.num_exceeded_send_buffer_size())
             {
+                last_num_exceeded_send_buffer_size_ = message_group.num_exceeded_send_buffer_size();
                 select_all_readers_nts(message_group, locator_selector);
                 size_t number_of_readers = locator_selector.all_remote_readers.size();
                 send_heartbeat_nts_(number_of_readers, message_group, disable_positive_acks_);
@@ -2107,10 +2111,8 @@ bool StatefulWriter::ack_timer_expired()
         {
             last_sequence_number_++;
         }
-        while (!history_->get_change(
-                    last_sequence_number_,
-                    getGuid(),
-                    &change) && last_sequence_number_ < next_sequence_number());
+        while (!history_->get_change(last_sequence_number_, getGuid(), &change) &&
+                last_sequence_number_ < next_sequence_number());
 
         if (!history_->get_change(
                     last_sequence_number_,

@@ -65,7 +65,8 @@ public:
         {
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -83,7 +84,8 @@ public:
         {
             case INTRAPROCESS:
                 library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -200,7 +202,7 @@ void static_discovery_test(
     writer.history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
             .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
             .property_policy(writer_property_policy);
-    writer.static_discovery("file://PubSubWriter_static_disc.xml").reliability(
+    writer.static_discovery("file://RTPSParticipant_static_disc.xml").reliability(
         eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             unicastLocatorList(WriterUnicastLocators).multicast_locator_list(WriterMulticastLocators).
             setPublisherIDs(1,
@@ -236,7 +238,7 @@ void static_discovery_test(
             .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
             .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
             .property_policy(reader_property_policy);
-    reader.static_discovery("file://PubSubReader_static_disc.xml").
+    reader.static_discovery("file://RTPSParticipant_static_disc.xml").
             unicastLocatorList(ReaderUnicastLocators).multicast_locator_list(ReaderMulticastLocators).
             setSubscriberIDs(3,
             4).setManualTopicName(std::string("BlackBox_StaticDiscovery_") + TOPIC_RANDOM_NUMBER).init();
@@ -278,6 +280,21 @@ TEST(Discovery, StaticDiscovery_v1_Reduced)
 TEST(Discovery, StaticDiscovery_v1_Mixed)
 {
     static_discovery_test("v1", "v1_Reduced");
+}
+
+TEST(Discovery, StaticDiscovery_v2)
+{
+    static_discovery_test("v2", "v2");
+}
+
+TEST(Discovery, StaticDiscovery_v1_v2)
+{
+    static_discovery_test("v1", "v2");
+}
+
+TEST(Discovery, StaticDiscovery_v1_Reduced_v2)
+{
+    static_discovery_test("v1_Reduced", "v2");
 }
 
 TEST(Discovery, StaticDiscovery_wrong_exchange_format)
@@ -805,7 +822,7 @@ TEST(Discovery, LocalInitialPeersDiferrentLocators)
 
     // Install hook on the test transport to check for destination locators on the writer participant
     Checker checker;
-    auto locator_printer = [&checker](const eprosima::fastdds::rtps::Locator& destination)
+    auto locator_printer = [&checker](const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 checker.check(destination);
                 return false;
@@ -1006,7 +1023,7 @@ TEST_P(Discovery, PubSubAsReliableHelloworldEndpointUserData)
 }
 
 //! Auxiliar method for discovering participants tests
-template <typename ParticipantConfigurator>
+template<typename ParticipantConfigurator>
 static void discoverParticipantsTest(
         bool avoid_multicast,
         size_t n_participants,
@@ -1336,7 +1353,7 @@ TEST_P(Discovery, AsymmeticIgnoreParticipantFlags)
     std::atomic<uint32_t> messages_on_port{ 0 };
     test_transport->interfaceWhiteList.push_back("127.0.0.1");
     test_transport->locator_filter_ = [&multicast_port, &messages_on_port](
-        const eprosima::fastdds::rtps::Locator& destination)
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 if (IPLocator::isMulticast(destination))
                 {
@@ -1391,7 +1408,7 @@ TEST_P(Discovery, single_unicast_pdp_response)
     auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
     test_transport->interfaceWhiteList.push_back("127.0.0.1");
     test_transport->locator_filter_ = [&num_unicast_sends, &multicast_port](
-        const eprosima::fastdds::rtps::Locator& destination)
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 if (IPLocator::isMulticast(destination))
                 {
@@ -1501,7 +1518,7 @@ TEST_P(Discovery, single_unicast_pdp_response_flowcontroller)
     auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
     test_transport->interfaceWhiteList.push_back("127.0.0.1");
     test_transport->locator_filter_ = [&num_unicast_sends, &multicast_port](
-        const eprosima::fastdds::rtps::Locator& destination)
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 if (IPLocator::isMulticast(destination))
                 {
@@ -1633,7 +1650,7 @@ TEST_P(Discovery, single_unicast_pdp_response_flowcontroller_limited)
     auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
     test_transport->interfaceWhiteList.push_back("127.0.0.1");
     test_transport->locator_filter_ = [&num_unicast_sends, &multicast_port](
-        const eprosima::fastdds::rtps::Locator& destination)
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
             {
                 if (IPLocator::isMulticast(destination))
                 {
@@ -2158,7 +2175,7 @@ TEST_P(Discovery, discovery_server_pdp_messages_sent)
     server->wait_discovery(std::chrono::seconds(5), 1, true);
     // Let some time for the server to run the internal routine and check if it sent Data(p)
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 1u);
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 2u);
 
     // Init client 2
     ASSERT_TRUE(client_2.wire_protocol(client_qos)
@@ -2170,7 +2187,7 @@ TEST_P(Discovery, discovery_server_pdp_messages_sent)
     server->wait_discovery(std::chrono::seconds(5), 2, true);
     // Let some time for the server to run the internal routine and check if it sent Data(p)
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 2u);
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 5u);
 
     // Init client 3
     ASSERT_TRUE(client_3.wire_protocol(client_qos)
@@ -2182,7 +2199,140 @@ TEST_P(Discovery, discovery_server_pdp_messages_sent)
     server->wait_discovery(std::chrono::seconds(5), 3, true);
     // Let some time for the server to run the internal routine and check if it sent Data(p)
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 3u);
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 9u);
+}
+
+// This test checks that a client connected to a Discovery Server does not receive
+// discovery information about clients connected to a different server from a server
+// different than their own.
+TEST(Discovery, discovery_server_no_external_to_external_relay)
+{
+    using namespace eprosima::fastdds::dds;
+
+    // Define a specific port for client_1's metatraffic
+    uint32_t client_1_metatraffic_port = global_port + 10;
+
+    // Declare a test transport that will count messages sent from server_2 to client_1
+    std::atomic<size_t> num_messages_to_client_1{ 0 };
+
+    auto test_transport_server_2 = std::make_shared<test_UDPv4TransportDescriptor>();
+    test_transport_server_2->locator_filter_ = [&](
+        const eprosima::fastdds::rtps::Locator& destination, int32_t)
+            {
+                // Check if destination port matches client_1's metatraffic port
+                if (destination.port == client_1_metatraffic_port)
+                {
+                    std::cout << "Message from server_2 to client_1 detected on port "
+                              << destination.port << std::endl;
+                    num_messages_to_client_1.fetch_add(1u, std::memory_order_seq_cst);
+                }
+                return false; // Don't drop the message
+            };
+
+    // Create server 1
+    auto server_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server_1;  // UDPv4 locator by default
+    eprosima::fastdds::rtps::IPLocator::setIPv4(locator_server_1, 127, 0, 0, 1);
+    eprosima::fastdds::rtps::IPLocator::setPhysicalPort(locator_server_1, global_port);
+
+    WireProtocolConfigQos server_wp_qos_1;
+    server_wp_qos_1.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
+    server_wp_qos_1.builtin.metatrafficUnicastLocatorList.push_back(locator_server_1);
+    server_wp_qos_1.builtin.discovery_config.initial_announcements.count = 1;
+
+    server_1->wire_protocol(server_wp_qos_1)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4);
+
+    // Start server 1
+    ASSERT_TRUE(server_1->init_participant());
+
+    // Create server 2 (federated with server 1) with test transport
+    auto server_2 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server_2;  // UDPv4 locator by default
+    eprosima::fastdds::rtps::IPLocator::setIPv4(locator_server_2, 127, 0, 0, 1);
+    eprosima::fastdds::rtps::IPLocator::setPhysicalPort(locator_server_2, global_port + 1);
+
+    WireProtocolConfigQos server_wp_qos_2;
+    server_wp_qos_2.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
+    server_wp_qos_2.builtin.metatrafficUnicastLocatorList.push_back(locator_server_2);
+    server_wp_qos_2.builtin.discovery_config.initial_announcements.count = 1;
+    // Federate server 2 with server 1
+    server_wp_qos_2.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
+
+    server_2->disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport_server_2)
+            .wire_protocol(server_wp_qos_2);
+
+    // Start server 2
+    ASSERT_TRUE(server_2->init_participant());
+
+    // Wait for servers to discover each other
+    server_1->wait_discovery(std::chrono::seconds(5), 1, true);
+    server_2->wait_discovery(std::chrono::seconds(5), 1, true);
+
+    // Record baseline message count after server federation
+    size_t baseline_count = num_messages_to_client_1.load(std::memory_order_seq_cst);
+    ASSERT_EQ(baseline_count, 0u); // No messages should ever be sent from server2 to client1
+
+    // Create client 1 connected ONLY to server 1 with a specific metatraffic port
+    PubSubWriter<HelloWorldPubSubType> client_1(TEST_TOPIC_NAME);
+
+    // Set up client_1's metatraffic unicast locator with a specific port
+    Locator_t client_1_metatraffic_locator;
+    eprosima::fastdds::rtps::IPLocator::setIPv4(client_1_metatraffic_locator, 127, 0, 0, 1);
+    client_1_metatraffic_locator.port = client_1_metatraffic_port;
+
+    WireProtocolConfigQos client_1_qos;
+    client_1_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+    client_1_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_1);
+    client_1_qos.builtin.discovery_config.initial_announcements.count = 1;
+    client_1_qos.builtin.metatrafficUnicastLocatorList.push_back(client_1_metatraffic_locator);
+
+    client_1.set_wire_protocol_qos(client_1_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .init();
+
+    ASSERT_TRUE(client_1.isInitialized());
+
+    // Wait for server_1 to discover client_1
+    server_1->wait_discovery(std::chrono::seconds(5), 2, true);  // server_2 + client_1
+
+    // Record message count after client_1 connects
+    size_t messages_after_client_1 = num_messages_to_client_1.load(std::memory_order_seq_cst);
+    ASSERT_EQ(messages_after_client_1, 0u); // No messages should ever be sent from server2 to client1
+
+    // Create client 2 connected ONLY to server 2
+    PubSubReader<HelloWorldPubSubType> client_2(TEST_TOPIC_NAME);
+
+    WireProtocolConfigQos client_2_qos;
+    client_2_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+    client_2_qos.builtin.discovery_config.m_DiscoveryServers.push_back(locator_server_2);
+    client_2_qos.builtin.discovery_config.initial_announcements.count = 1;
+
+    client_2.set_wire_protocol_qos(client_2_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .init();
+
+    ASSERT_TRUE(client_2.isInitialized());
+
+    // Wait for server_2 to discover client_2
+    server_2->wait_discovery(std::chrono::seconds(5), 2, true);  // server_1 + client_2
+
+    // Give enough time for any potential (incorrect) relay of discovery information
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    // Record final message count
+    size_t messages_final = num_messages_to_client_1.load(std::memory_order_seq_cst);
+
+    // Verify that server_2 did NOT send messages directly to client_1 after client_2 connected
+    EXPECT_EQ(messages_final, baseline_count)
+        << "Server_2 sent " << (messages_final - baseline_count) << " messages directly to client_1. "
+        << "This suggests external-to-external relay is happening. "
+        << "Baseline: " << baseline_count
+        << ", After client_1: " << messages_after_client_1
+        << ", Final: " << messages_final;
 }
 
 // This test checks that a Discover Server does not send duplicated EDP messages when its routine

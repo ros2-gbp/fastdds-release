@@ -91,6 +91,7 @@ if (FASTDDS_STATISTICS)
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/network.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
@@ -261,7 +262,8 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/ResourceEvent.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/RTPSDomain.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomain.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomainExtras.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/ChannelResource.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
@@ -319,6 +321,7 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
         )
 
@@ -448,7 +451,8 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/ResourceEvent.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/RTPSDomain.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomain.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/domain/RTPSDomainExtras.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/ChannelResource.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
@@ -506,6 +510,7 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLEndpointParser.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParser.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserCommon.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLParserExtras.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/xmlparser/XMLProfileManager.cpp
         )
 
@@ -591,7 +596,7 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp
         ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
         ${THIRDPARTY_BOOST_INCLUDE_DIR})
-    target_link_libraries(StatisticsDomainParticipantMockTests ${PRIVACY}
+    target_link_libraries(StatisticsDomainParticipantMockTests PRIVATE
         fastcdr
         fastdds::log
         fastdds::xtypes::dynamic-types::impl
@@ -605,14 +610,6 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${THIRDPARTY_BOOST_LINK_LIBS}
         eProsima_atomic
         )
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(StatisticsDomainParticipantMockTests ${PRIVACY}
-            iphlpapi Shlwapi
-            )
-    endif()
-    if (APPLE)
-        target_link_libraries(StatisticsDomainParticipantMockTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-    endif()
 
     gtest_discover_tests(StatisticsDomainParticipantMockTests)
 
@@ -644,7 +641,7 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${PROJECT_SOURCE_DIR}/src/cpp
         ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
         ${THIRDPARTY_BOOST_INCLUDE_DIR})
-    target_link_libraries(StatisticsDomainParticipantStatusQueryableTests ${PRIVACY}
+    target_link_libraries(StatisticsDomainParticipantStatusQueryableTests PRIVATE
         fastcdr
         fastdds::log
         fastdds::xtypes::dynamic-types::impl
@@ -658,14 +655,6 @@ if (SQLITE3_SUPPORT AND FASTDDS_STATISTICS AND NOT QNX)
         ${THIRDPARTY_BOOST_LINK_LIBS}
         eProsima_atomic
         )
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(StatisticsDomainParticipantStatusQueryableTests ${PRIVACY}
-            iphlpapi Shlwapi
-            )
-    endif()
-    if (APPLE)
-        target_link_libraries(StatisticsDomainParticipantStatusQueryableTests ${PRIVACY} "-framework CoreFoundation" "-framework IOKit")
-    endif()
 
     gtest_discover_tests(StatisticsDomainParticipantStatusQueryableTests)
 

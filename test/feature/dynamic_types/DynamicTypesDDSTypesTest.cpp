@@ -70,7 +70,8 @@ DynamicType::_ref_type DynamicTypesDDSTypesTest::create_inner_enum_helper()
     TypeDescriptor::_ref_type enum_descriptor {traits<TypeDescriptor>::make_shared()};
     enum_descriptor->kind(TK_ENUM);
     enum_descriptor->name(enum_name);
-    DynamicTypeBuilder::_ref_type enum_builder {DynamicTypeBuilderFactory::get_instance()->create_type(enum_descriptor)};
+    DynamicTypeBuilder::_ref_type enum_builder {DynamicTypeBuilderFactory::get_instance()->create_type(
+                                                    enum_descriptor)};
 
     MemberDescriptor::_ref_type enum_literal_descriptor {traits<MemberDescriptor>::make_shared()};
     enum_literal_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_INT32));
@@ -101,22 +102,22 @@ DynamicType::_ref_type DynamicTypesDDSTypesTest::create_inner_bitmask_helper()
     MemberDescriptor::_ref_type bitfield_descriptor {traits<MemberDescriptor>::make_shared()};
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bitmask_flag_0_name);
-    bitfield_descriptor->id(0);
+    bitfield_descriptor->position(0);
     bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bitmask_flag_1_name);
-    bitfield_descriptor->id(1);
+    bitfield_descriptor->position(1);
     bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bitmask_flag_4_name);
-    bitfield_descriptor->id(4);
+    bitfield_descriptor->position(4);
     bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bitmask_flag_6_name);
-    bitfield_descriptor->id(6);
+    bitfield_descriptor->position(6);
     bitmask_builder->add_member(bitfield_descriptor);
 
     return bitmask_builder->build();
@@ -135,22 +136,22 @@ DynamicType::_ref_type DynamicTypesDDSTypesTest::create_inner_bounded_bitmask_he
     MemberDescriptor::_ref_type bitfield_descriptor {traits<MemberDescriptor>::make_shared()};
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bounded_bitmask_bflag_0_name);
-    bitfield_descriptor->id(0);
+    bitfield_descriptor->position(0);
     bounded_bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bounded_bitmask_bflag_1_name);
-    bitfield_descriptor->id(1);
+    bitfield_descriptor->position(1);
     bounded_bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bounded_bitmask_bflag_4_name);
-    bitfield_descriptor->id(4);
+    bitfield_descriptor->position(4);
     bounded_bitmask_builder->add_member(bitfield_descriptor);
     bitfield_descriptor = traits<MemberDescriptor>::make_shared();
     bitfield_descriptor->type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_BOOLEAN));
     bitfield_descriptor->name(bounded_bitmask_bflag_6_name);
-    bitfield_descriptor->id(6);
+    bitfield_descriptor->position(6);
     bounded_bitmask_builder->add_member(bitfield_descriptor);
 
     return bounded_bitmask_builder->build();
@@ -173,7 +174,8 @@ DynamicType::_ref_type DynamicTypesDDSTypesTest::create_inner_union_helper()
     union_descriptor->name(union_name);
     union_descriptor->discriminator_type(DynamicTypeBuilderFactory::get_instance()->get_primitive_type(TK_INT32));
     union_descriptor->is_nested(true);
-    DynamicTypeBuilder::_ref_type union_builder {DynamicTypeBuilderFactory::get_instance()->create_type(union_descriptor)};
+    DynamicTypeBuilder::_ref_type union_builder {DynamicTypeBuilderFactory::get_instance()->create_type(
+                                                     union_descriptor)};
 
     MemberDescriptor::_ref_type union_member {traits<MemberDescriptor>::make_shared()};
     union_member->name(union_long_member_name);

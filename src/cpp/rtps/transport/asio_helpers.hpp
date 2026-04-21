@@ -17,7 +17,7 @@
 
 #include <cstdint>
 
-#include <asio.hpp>
+#include "../network/asio.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -41,7 +41,7 @@ struct asio_helpers
      *
      * @return true if the buffer size was successfully set, false otherwise.
      */
-    template <typename BufferOptionType, typename SocketType>
+    template<typename BufferOptionType, typename SocketType>
     static inline bool try_setting_buffer_size(
             SocketType& socket,
             const uint32_t initial_buffer_value,
@@ -87,10 +87,9 @@ struct asio_helpers
         if (!ec)
         {
             // Last attempt was successful. Get the actual value set.
-            int32_t max_value = static_cast<int32_t>(initial_buffer_value);
             BufferOptionType option;
             socket.get_option(option, ec);
-            if (!ec && (option.value() >= value_to_set) && (option.value() <= max_value))
+            if (!ec && (option.value() >= value_to_set))
             {
                 final_buffer_value = option.value();
                 return true;
@@ -113,7 +112,7 @@ struct asio_helpers
      *
      * @return true if the buffer size was successfully set, false otherwise.
      */
-    template <typename BufferOptionType, typename SocketType>
+    template<typename BufferOptionType, typename SocketType>
     static inline bool configure_buffer_size(
             SocketType& socket,
             const uint32_t initial_buffer_value,

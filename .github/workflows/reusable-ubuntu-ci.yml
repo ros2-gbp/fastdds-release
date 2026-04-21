@@ -31,7 +31,7 @@ on:
         description: 'Branch or tag of Fast CDR repository (https://github.com/eProsima/Fast-CDR)'
         required: false
         type: string
-        default: '2.3.x'
+        default: 'master'
       security:
         description: 'Enable security features'
         required: false
@@ -60,12 +60,12 @@ on:
 
 env:
   security-cmake-flag: ${{ inputs.security == true && '-DSECURITY=ON' || '-DSECURITY=OFF' }}
-  colcon-build-default-cmake-args: '-DCMAKE_CXX_FLAGS_INIT="-Werror -Wall -Wextra -Wpedantic -Wunused-value -Woverloaded-virtual"'
-  fastdds-python-branch: '2.2.x'
-  fastdds-docs-branch: '3.2.x'
-  shapes-demo-branch: '3.2.x'
-  discovery-server-branch: '2.0.x'
-  
+  colcon-build-default-cmake-args: '-DCMAKE_CXX_FLAGS_INIT="-Werror -Wunused-value -Woverloaded-virtual -Wsign-compare -Wcast-align -Wlogical-op -Wduplicated-cond -Wrestrict -Wpointer-arith -Wwrite-strings -Wunreachable-code"'
+  fastdds-python-branch: 'master'
+  fastdds-docs-branch: 'master'
+  shapes-demo-branch: 'master'
+  discovery-server-branch: 'master'
+
 defaults:
   run:
     shell: bash
@@ -106,13 +106,13 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
         with:
           packages: libasio-dev libtinyxml2-dev libssl-dev
-          update: false
+          update: true
           upgrade: false
 
       - name: Install colcon
@@ -198,7 +198,7 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt packages
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
@@ -301,12 +301,19 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt packages
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
         with:
-          packages: libasio-dev libtinyxml2-dev libssl-dev swig
+          packages: libasio-dev libtinyxml2-dev libssl-dev swig4.1
+
+      - name: Install and configure SWIG test
+        run: |
+          sudo apt-get install -y swig4.1
+          sudo update-alternatives --install /usr/bin/swig swig /usr/bin/swig4.1 100
+          sudo update-alternatives --set swig /usr/bin/swig4.1
+          swig -version
 
       - name: Install colcon
         uses: eProsima/eProsima-CI/ubuntu/install_colcon@v0
@@ -342,7 +349,7 @@ jobs:
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
           colcon_build_args: ${{ inputs.colcon-args }} --packages-select fastdds_python
-          cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
+          cmake_args: '-DSWIG_EXECUTABLE=/usr/bin/swig4.1 ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ''
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace_dependencies: ${{ github.workspace }}/install
@@ -381,12 +388,18 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt packages
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
         with:
-          packages: libasio-dev libtinyxml2-dev libssl-dev swig
+          packages: libasio-dev libtinyxml2-dev libssl-dev swig4.1
+
+      - name: Install and configure SWIG test
+        run: |
+          sudo update-alternatives --install /usr/bin/swig swig /usr/bin/swig4.1 100
+          sudo update-alternatives --set swig /usr/bin/swig4.1
+          swig -version
 
       - name: Install colcon
         uses: eProsima/eProsima-CI/ubuntu/install_colcon@v0
@@ -415,7 +428,7 @@ jobs:
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/python_test.meta
           colcon_build_args: ${{ inputs.colcon-args }}
-          cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
+          cmake_args: '-DSWIG_EXECUTABLE=/usr/bin/swig4.1 ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ''
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace: ${{ github.workspace }}
@@ -470,12 +483,18 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt packages
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
         with:
-          packages: libasio-dev libtinyxml2-dev libssl-dev swig doxygen imagemagick plantuml libenchant-2-2
+          packages: libasio-dev libtinyxml2-dev libssl-dev swig4.1 doxygen imagemagick plantuml libenchant-2-2
+
+      - name: Install and configure SWIG test
+        run: |
+          sudo update-alternatives --install /usr/bin/swig swig /usr/bin/swig4.1 100
+          sudo update-alternatives --set swig /usr/bin/swig4.1
+          swig -version
 
       - name: Install colcon
         uses: eProsima/eProsima-CI/ubuntu/install_colcon@v0
@@ -525,7 +544,7 @@ jobs:
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/documentation.meta
           colcon_build_args: ${{ inputs.colcon-args }}
-          cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
+          cmake_args: '-DSWIG_EXECUTABLE=/usr/bin/swig4.1 ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
           cmake_args_default: ''
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace: ${{ github.workspace }}
@@ -580,7 +599,7 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt packages
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
@@ -622,8 +641,9 @@ jobs:
       - name: Install Qt
         uses: eProsima/eProsima-CI/external/install_qt@v0
         with:
-          version: '5.15.2'
-          dir: '${{ github.workspace }}/qt_installation/'
+          version: '6.8.3'
+          dir: '/opt/qt_installation/'
+          arch: 'linux_gcc_64'
           modules: 'qtcharts'
           setup-python: 'false'
 
@@ -637,109 +657,6 @@ jobs:
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
           cmake_build_type: ${{ matrix.cmake-build-type }}
           workspace: ${{ github.workspace }}
-
-  fastdds_discovery_server_test:
-    needs: fastdds_build
-    runs-on: ${{ inputs.os-image }}
-    strategy:
-      fail-fast: false
-      matrix:
-        cmake-build-type:
-          - 'RelWithDebInfo'
-    steps:
-      - name: Free disk space
-        uses: eProsima/eProsima-CI/ubuntu/free_disk_space@v0
-
-      - name: Download build artifacts
-        uses: eProsima/eProsima-CI/external/download-artifact@v0
-        with:
-          name: fastdds_build_${{ inputs.label }}
-          path: ${{ github.workspace }}
-
-      - name: Install Fix Python version
-        uses: eProsima/eProsima-CI/external/setup-python@v0
-        with:
-          python-version: '3.11'
-
-      - name: Get minimum supported version of CMake
-        uses: eProsima/eProsima-CI/external/get-cmake@v0
-        with:
-          cmakeVersion: '3.22.6'
-
-      - name: Install apt packages
-        uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
-        with:
-          packages: libasio-dev libtinyxml2-dev libssl-dev
-
-      - name: Install colcon
-        uses: eProsima/eProsima-CI/ubuntu/install_colcon@v0
-
-      - name: Install Python dependencies
-        uses: eProsima/eProsima-CI/ubuntu/install_python_packages@v0
-        with:
-          packages: vcstool xmlschema xmltodict==0.13.0 jsondiff==2.0.0 pandas==1.5.2 psutil
-
-      - name: Setup CCache
-        uses: eProsima/eProsima-CI/external/setup-ccache-action@v0
-        if: ${{ inputs.use-ccache == true }}
-        with:
-          api_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get Discovery Server branch
-        id: get_discovery_server_branch
-        uses: eProsima/eProsima-CI/ubuntu/get_related_branch_from_repo@v0
-        with:
-          remote_repository: eProsima/Discovery-Server
-          fallback_branch: ${{ env.discovery-server-branch }}
-
-      - name: Download Discovery Server repo
-        uses: eProsima/eProsima-CI/external/checkout@v0
-        with:
-          repository: eProsima/Discovery-Server
-          path: src/discovery_server
-          ref: ${{ steps.get_discovery_server_branch.outputs.deduced_branch }}
-
-      - name: Fetch Fast DDS CI dependencies
-        uses: eProsima/eProsima-CI/ubuntu/vcs_import@v0
-        with:
-          vcs_repos_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_test.repos
-          destination_workspace: src
-          skip_existing: 'true'
-
-      - name: Colcon build
-        continue-on-error: false
-        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
-        with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta ${{ github.workspace }}/src/fastdds/.github/workflows/config/discovery_server.meta
-          colcon_build_args: ${{ inputs.colcon-args }}
-          cmake_args: '${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
-          cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
-          cmake_build_type: ${{ matrix.cmake-build-type }}
-          workspace: ${{ github.workspace }}
-
-      - name: Colcon test
-        id: discovery_server_test
-        if: ${{ inputs.run-tests == true }}
-        uses: eProsima/eProsima-CI/ubuntu/colcon_test@v0
-        with:
-          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/discovery_server.meta
-          colcon_test_args: ${{ inputs.colcon-args }}
-          colcon_test_args_default: --event-handlers=console_direct+
-          ctest_args: ${{ inputs.ctest-args }}
-          packages_names: discovery-server
-          workspace: ${{ github.workspace }}
-          workspace_dependencies: ''
-          test_report_artifact: ${{ format('test_report_{0}_{1}_{2}', inputs.label, github.job, join(matrix.*, '_')) }}
-
-      - name: Discovery server test summary
-        uses: eProsima/eProsima-CI/ubuntu/junit_summary@v0
-        if: ${{ !cancelled() && inputs.run-tests == true }}
-        with:
-          junit_reports_dir: "${{ steps.discovery_server_test.outputs.ctest_results_path }}"
-          print_summary: 'True'
-          show_failed: 'True'
-          show_disabled: 'False'
-          show_skipped: 'False'
 
   fastdds_alternative_builds:
     needs: fastdds_build
@@ -767,13 +684,13 @@ jobs:
       - name: Get minimum supported version of CMake
         uses: eProsima/eProsima-CI/external/get-cmake@v0
         with:
-          cmakeVersion: '3.22.6'
+          cmakeVersion: '3.28.6'
 
       - name: Install apt dependencies
         uses: eProsima/eProsima-CI/ubuntu/install_apt_packages@v0
         with:
           packages: libasio-dev libtinyxml2-dev libssl-dev
-          update: false
+          update: true
           upgrade: false
 
       - name: Install colcon
@@ -796,7 +713,7 @@ jobs:
         with:
           repository: osrf/osrf_testing_tools_cpp
           path: src/osrf_testing_tools_cpp
-          ref: 1.4.0
+          ref: 2.3.0
 
       - name: OSRF testing tools build
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
@@ -812,7 +729,7 @@ jobs:
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
           colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
-          colcon_build_args: ${{ inputs.colcon-args }} --packages-up-to fastdds
+          colcon_build_args: ${{ inputs.colcon-args }} --cmake-clean-cache --packages-up-to fastdds
           cmake_args: '-DPROFILING_TESTS=ON ${{ inputs.cmake-args }}'
           cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
           cmake_build_type: ${{ matrix.cmake-build-type }}
@@ -886,6 +803,22 @@ jobs:
           cd ${{ github.workspace }}
           rm -rf build install log
 
+      - name: Null dereference colcon build
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
+        with:
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
+          colcon_build_args: '${{ inputs.colcon-args }} --packages-up-to fastdds'
+          cmake_args: '-DEPROSIMA_BUILD_TESTS=OFF -DCMAKE_CXX_FLAGS_INIT="-Wnull-dereference" -DSECURITY=ON -DFASTDDS_STATISTICS=ON ${{ inputs.cmake-args }}'
+          cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
+          # Force to build with maximum compiler optimization to catch all 'null-dereference' errors
+          cmake_build_type: Release
+          workspace: ${{ github.workspace }}
+
+      - name: Clean workspace - No shared libs
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf build install log
+
       - name: Vanilla colcon build
         uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
         with:
@@ -893,6 +826,21 @@ jobs:
           workspace: ${{ github.workspace }}
 
       - name: Clean workspace - Vanilla build
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf build install log
+
+      - name: No TLS colcon build
+        uses: eProsima/eProsima-CI/ubuntu/colcon_build@v0
+        with:
+          colcon_meta_file: ${{ github.workspace }}/src/fastdds/.github/workflows/config/fastdds_build.meta
+          colcon_build_args: ${{ inputs.colcon-args }}
+          cmake_args: '-DNO_TLS=ON ${{ env.security-cmake-flag }} ${{ inputs.cmake-args }}'
+          cmake_args_default: ${{ env.colcon-build-default-cmake-args }}
+          cmake_build_type: ${{ matrix.cmake-build-type }}
+          workspace: ${{ github.workspace }}
+
+      - name: Clean workspace - No TLS
         run: |
           cd ${{ github.workspace }}
           rm -rf build install log

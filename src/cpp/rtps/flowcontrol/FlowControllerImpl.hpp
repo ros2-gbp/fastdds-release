@@ -13,6 +13,7 @@
 #include <fastdds/utils/TimedConditionVariable.hpp>
 #include <fastdds/utils/TimedMutex.hpp>
 
+#include <rtps/messages/IRTPSMessageGroupLimitation.hpp>
 #include <rtps/messages/RTPSMessageGroup.hpp>
 #include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/writer/BaseWriter.hpp>
@@ -125,6 +126,10 @@ private:
             tail.writer_info.previous = &head;
         }
 
+        // TODO: remove optimization with GCC > 15
+        #if defined(__linux__) && defined(__GNUC__) && !defined(__clang__)
+        [[gnu::optimize("no-delete-null-pointer-checks")]]
+        #endif // if defined(__GNUC__)
         bool is_empty() const noexcept
         {
             assert((&tail == head.writer_info.next && &head == tail.writer_info.previous) ||
@@ -273,19 +278,20 @@ struct FlowControllerSyncPublishMode : public FlowControllerPureSyncPublishMode,
 };
 
 //! Sends all samples asynchronously but with bandwidth limitation.
-struct FlowControllerLimitedAsyncPublishMode : public FlowControllerAsyncPublishMode
+struct FlowControllerLimitedAsyncPublishMode : public FlowControllerAsyncPublishMode, public IRTPSMessageGroupLimitation
 {
     FlowControllerLimitedAsyncPublishMode(
             RTPSParticipantImpl* participant,
             const FlowControllerDescriptor* descriptor)
         : FlowControllerAsyncPublishMode(participant, descriptor)
+        , sent_bytes_limitation_(static_cast<uint32_t>(descriptor->max_bytes_per_period))
     {
         assert(nullptr != descriptor);
         assert(0 < descriptor->max_bytes_per_period);
 
         max_bytes_per_period = descriptor->max_bytes_per_period;
         period_ms = std::chrono::milliseconds(descriptor->period_ms);
-        group.set_sent_bytes_limitation(static_cast<uint32_t>(max_bytes_per_period));
+        group.set_limitation(this);
     }
 
     bool fast_check_is_there_slot_for_change(
@@ -307,7 +313,7 @@ struct FlowControllerLimitedAsyncPublishMode : public FlowControllerAsyncPublish
 
         }
 
-        bool ret = (max_bytes_per_period - group.get_current_bytes_processed()) > size_to_check;
+        bool ret = (max_bytes_per_period - current_sent_bytes_) > size_to_check;
 
         if (!ret)
         {
@@ -341,7 +347,7 @@ struct FlowControllerLimitedAsyncPublishMode : public FlowControllerAsyncPublish
         {
             last_period_ = std::chrono::steady_clock::now();
             force_wait_ = false;
-            group.reset_current_bytes_processed();
+            current_sent_bytes_ = 0;
         }
 
         return reset_limit;
@@ -361,15 +367,39 @@ struct FlowControllerLimitedAsyncPublishMode : public FlowControllerAsyncPublish
         }
     }
 
+    void add_sent_bytes_by_group(
+            uint32_t bytes,
+            RTPSMessageSenderInterface&) override
+    {
+        current_sent_bytes_ += bytes;
+    }
+
+    bool data_exceeds_limitation(
+            CacheChange_t&,
+            uint32_t size_to_add,
+            uint32_t pending_to_send,
+            RTPSMessageSenderInterface&) override
+    {
+        return
+            //   either limitation has already been reached
+            (sent_bytes_limitation_ <= (current_sent_bytes_ + pending_to_send)) ||
+            //   or adding size_to_add will exceed limitation
+            (size_to_add > (sent_bytes_limitation_ - (current_sent_bytes_ + pending_to_send)));
+    }
+
     int32_t max_bytes_per_period = 0;
 
     std::chrono::milliseconds period_ms;
 
 private:
 
-    bool force_wait_ = false;
+    bool force_wait_ {false};
 
-    std::chrono::steady_clock::time_point last_period_ = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point last_period_ {std::chrono::steady_clock::now()};
+
+    uint32_t sent_bytes_limitation_ {0};
+
+    uint32_t current_sent_bytes_ {0};
 };
 
 
@@ -641,9 +671,15 @@ struct FlowControllerHighPrioritySchedule
     void unregister_writer(
             BaseWriter* writer)
     {
-        auto it = priorities_.find(writer);
-        assert(it != priorities_.end());
-        priorities_.erase(it);
+        if (writer)
+        {
+            auto it = priorities_.find(writer);
+            assert(it != priorities_.end());
+            if (it != priorities_.end())
+            {
+                priorities_.erase(it);
+            }
+        }
     }
 
     void work_done() const
@@ -790,7 +826,12 @@ struct FlowControllerPriorityWithReservationSchedule
             BaseWriter* writer)
     {
         auto it = writers_queue_.find(writer);
-        assert(it != writers_queue_.end());
+        if (it == writers_queue_.end())
+        {
+            EPROSIMA_LOG_ERROR(RTPS_WRITER,
+                    "FlowControllerPriorityWithReservationSchedule::unregister_writer: writer not found");
+            return;
+        }
         int32_t priority = std::get<1>(it->second);
         writers_queue_.erase(it);
         auto priority_it = priorities_.find(priority);
@@ -806,7 +847,15 @@ struct FlowControllerPriorityWithReservationSchedule
         {
             assert(0 != size_being_processed_);
             auto writer = writers_queue_.find(writer_being_processed_);
-            std::get<3>(writer->second) += size_being_processed_;
+            if (writer == writers_queue_.end())
+            {
+                EPROSIMA_LOG_ERROR(RTPS_WRITER,
+                        "work_done(): writer_being_processed_ not found in writers_queue_");
+            }
+            else
+            {
+                std::get<3>(writer->second) += size_being_processed_;
+            }
             writer_being_processed_ = nullptr;
             size_being_processed_ = 0;
         }
@@ -1051,7 +1100,7 @@ public:
         return get_max_payload_impl();
     }
 
-private:
+protected:
 
     /*!
      * Initialize asynchronous thread.

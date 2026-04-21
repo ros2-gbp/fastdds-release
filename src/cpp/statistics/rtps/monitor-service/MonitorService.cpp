@@ -27,7 +27,7 @@
 #include <rtps/history/CacheChangePool.h>
 #include <rtps/history/PoolConfig.h>
 #include <rtps/history/TopicPayloadPoolRegistry.hpp>
-#include <rtps/RTPSDomainImpl.hpp>
+#include <rtps/domain/RTPSDomainImpl.hpp>
 #include <statistics/rtps/StatisticsBase.hpp>
 #include <utils/TimeConversion.hpp>
 
@@ -361,8 +361,8 @@ bool MonitorService::write_status(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not retrieve the status data for " << i << " of " <<
-                            local_entity_guid);
+                    EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not retrieve the status data for " << i << " of "
+                                                                                                  << local_entity_guid);
                 }
             }
         }
@@ -433,8 +433,8 @@ bool MonitorService::add_change(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not request a valid CacheChange for " <<
-                status_data.status_kind() << " of " << to_fastdds_type(status_data.local_entity()));
+        EPROSIMA_LOG_ERROR(MONITOR_SERVICE, "Could not request a valid CacheChange for "
+                << status_data.status_kind() << " of " << to_fastdds_type(status_data.local_entity()));
         return false;
     }
 

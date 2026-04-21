@@ -14,12 +14,13 @@
 
 services:
   xtypes-subscriber:
+    @DOCKER_BUILD_COMPOSE@
     image: @DOCKER_IMAGE_NAME@
     volumes:
       - @PROJECT_BINARY_DIR_COMPOSE_VOLUME@
       - @fastcdr_LIB_DIR_COMPOSE_VOLUME@
       - @CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME@
-      @TINYXML2_LIB_DIR_COMPOSE_VOLUME@
+
     environment:
       @PATH_ENVIRONMENT_VARIABLE_COMPOSE@
       EXAMPLE_DIR: @EXAMPLE_PREFIX_DIR_COMPOSE@/xtypes/@EXAMPLE_SUFFIX_DIR_COMPOSE@
@@ -27,28 +28,30 @@ services:
     command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ subscriber --samples 30"
 
   xtypes-subscriber-publisher:
+    @DOCKER_BUILD_COMPOSE@
     image: @DOCKER_IMAGE_NAME@
     volumes:
       - @PROJECT_BINARY_DIR_COMPOSE_VOLUME@
       - @fastcdr_LIB_DIR_COMPOSE_VOLUME@
       - @CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME@
-      @TINYXML2_LIB_DIR_COMPOSE_VOLUME@
+
     environment:
       @PATH_ENVIRONMENT_VARIABLE_COMPOSE@
       EXAMPLE_DIR: @EXAMPLE_PREFIX_DIR_COMPOSE@/xtypes/@EXAMPLE_SUFFIX_DIR_COMPOSE@
       FASTDDS_DEFAULT_PROFILES_FILE: @FASTDDS_DEFAULT_PROFILES_FILE_PREFIX_COMPOSE@/xtypes/xtypes_complete_profile.xml
-    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ subscriber --samples 30 @COMMAND_CONCATENATE_COMPOSE@ @COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ publisher --samples 10@COMMAND_BACKGROUND_JOB_COMPOSE@"
+    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ subscriber --samples 30 @COMMAND_CONCATENATE_COMPOSE@ @COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ publisher --samples 10 --matched 3@COMMAND_BACKGROUND_JOB_COMPOSE@"
     depends_on:
       - xtypes-subscriber
       - helloworld-subscriber
 
   helloworld-subscriber:
+    @DOCKER_BUILD_COMPOSE@
     image: @DOCKER_IMAGE_NAME@
     volumes:
       - @PROJECT_BINARY_DIR_COMPOSE_VOLUME@
       - @fastcdr_LIB_DIR_COMPOSE_VOLUME@
       - @CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME@
-      @TINYXML2_LIB_DIR_COMPOSE_VOLUME@
+
     environment:
       @PATH_ENVIRONMENT_VARIABLE_COMPOSE@
       EXAMPLE_DIR: @EXAMPLE_PREFIX_DIR_COMPOSE@/hello_world/@EXAMPLE_SUFFIX_DIR_COMPOSE@
@@ -56,33 +59,35 @@ services:
     command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/hello_world@FILE_EXTENSION@ subscriber --samples 30"
 
   helloworld-publisher:
+    @DOCKER_BUILD_COMPOSE@
     image: @DOCKER_IMAGE_NAME@
     volumes:
       - @PROJECT_BINARY_DIR_COMPOSE_VOLUME@
       - @fastcdr_LIB_DIR_COMPOSE_VOLUME@
       - @CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME@
-      @TINYXML2_LIB_DIR_COMPOSE_VOLUME@
+
     environment:
       @PATH_ENVIRONMENT_VARIABLE_COMPOSE@
       EXAMPLE_DIR: @EXAMPLE_PREFIX_DIR_COMPOSE@/hello_world/@EXAMPLE_SUFFIX_DIR_COMPOSE@
       FASTDDS_DEFAULT_PROFILES_FILE: @FASTDDS_DEFAULT_PROFILES_FILE_PREFIX_COMPOSE@/hello_world/hello_world_profile.xml
-    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/hello_world@FILE_EXTENSION@ publisher --samples 10"
+    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/hello_world@FILE_EXTENSION@ publisher --samples 10 --matched 3"
     depends_on:
       - xtypes-subscriber
       - helloworld-subscriber
 
   xtypes-publisher:
+    @DOCKER_BUILD_COMPOSE@
     image: @DOCKER_IMAGE_NAME@
     volumes:
       - @PROJECT_BINARY_DIR_COMPOSE_VOLUME@
       - @fastcdr_LIB_DIR_COMPOSE_VOLUME@
       - @CMAKE_INSTALL_PREFIX_COMPOSE_VOLUME@
-      @TINYXML2_LIB_DIR_COMPOSE_VOLUME@
+
     environment:
       @PATH_ENVIRONMENT_VARIABLE_COMPOSE@
       EXAMPLE_DIR: @EXAMPLE_PREFIX_DIR_COMPOSE@/xtypes/@EXAMPLE_SUFFIX_DIR_COMPOSE@
       FASTDDS_DEFAULT_PROFILES_FILE: @FASTDDS_DEFAULT_PROFILES_FILE_PREFIX_COMPOSE@/xtypes/xtypes_complete_profile.xml
-    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ publisher --samples 10 --xml-type"
+    command: @SHELL_EXECUTABLE@ -c "@COMMAND_EXAMPLE_DIR_PREFIX_COMPOSE@/xtypes@FILE_EXTENSION@ publisher --samples 10 --matched 3 --xml-type"
     depends_on:
       - xtypes-subscriber
       - helloworld-subscriber

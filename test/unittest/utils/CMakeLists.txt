@@ -26,8 +26,10 @@ set(STRINGMATCHINGTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/StringMatching.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp)
 
@@ -47,8 +49,10 @@ set(LOCATORTESTS_SOURCE
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/Host.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/md5.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp)
 
 set(FIXEDSIZEQUEUETESTS_SOURCE
@@ -93,12 +97,9 @@ target_link_libraries(StringMatchingTests
     fastcdr
     fastdds::log
     GTest::gtest
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     ${MOCKS}
     )
-if(MSVC OR MSVC_IDE)
-    target_link_libraries(StringMatchingTests ${PRIVACY} iphlpapi Shlwapi
-        )
-endif()
 gtest_discover_tests(StringMatchingTests)
 
 
@@ -137,11 +138,9 @@ target_link_libraries(LocatorTests
     fastcdr
     fastdds::log
     GTest::gtest
+    $<$<BOOL:${QNX}>:socket>
     ${MOCKS}
     )
-if(QNX)
-    target_link_libraries(LocatorTests socket)
-endif()
 if(EPROSIMA_TEST_DNS_NOT_SET_UP)
     message(STATUS "Ignoring 'LocatorDNSTests*'")
     set(IGNORE_COMMAND "-LocatorDNSTests*")
@@ -170,25 +169,22 @@ target_link_libraries(SystemInfoTests
     fastdds::log
     GTest::gtest
     )
-if(APPLE)
-    target_link_libraries(SystemInfoTests "-framework CoreFoundation" "-framework IOKit")
-endif()
 gtest_discover_tests(SystemInfoTests)
 
 add_executable(SharedMutexTests shared_mutex_tests.cpp)
 target_compile_definitions(SharedMutexTests PUBLIC USE_THIRDPARTY_SHARED_MUTEX=1)
 target_include_directories(SharedMutexTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(SharedMutexTests PUBLIC GTest::gtest)
+target_link_libraries(SharedMutexTests GTest::gtest)
 gtest_discover_tests(SharedMutexTests)
 
 add_executable(TreeNodeTests ${TREETESTS_SOURCE})
 target_include_directories(TreeNodeTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(TreeNodeTests PUBLIC GTest::gtest)
+target_link_libraries(TreeNodeTests GTest::gtest)
 gtest_discover_tests(TreeNodeTests)
 
 add_executable(RefCountedPointerTests ${REF_COUNTED_POINTER_TESTS_SOURCE})
 target_include_directories(RefCountedPointerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(RefCountedPointerTests PUBLIC GTest::gtest)
+target_link_libraries(RefCountedPointerTests GTest::gtest)
 gtest_discover_tests(RefCountedPointerTests)
 
 ###############################################################################
