@@ -1,0 +1,27 @@
+From 22a5cc3bbf52543472cd4698d0fceb2754b83555 Mon Sep 17 00:00:00 2001
+From: Scott K Logan <logans@cottsay.net>
+Date: Wed, 20 Jan 2021 12:08:26 -0800
+Subject: [PATCH] Set CMake flags for Fast-DDS
+
+Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
+---
+ rpm/ros-rolling-fastdds.spec | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/rpm/ros-rolling-fastdds.spec b/rpm/ros-rolling-fastdds.spec
+index 6767faec9854..3bc1ac9a8dee 100644
+--- a/rpm/ros-rolling-fastdds.spec
++++ b/rpm/ros-rolling-fastdds.spec
+@@ -81,6 +81,9 @@ giving the user full access to the protocol internals.
+ %if !0%{?with_tests}
+     -DBUILD_TESTING=OFF \
+ %endif
++    -DINSTALL_EXAMPLES=OFF \
++    -DSECURITY=ON \
++    -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON \
+ 
+ %cmake3_build
+ 
+-- 
+2.53.0
+
