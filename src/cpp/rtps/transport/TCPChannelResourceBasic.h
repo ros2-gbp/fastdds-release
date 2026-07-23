@@ -25,10 +25,9 @@ namespace rtps {
 
 class TCPChannelResourceBasic : public TCPChannelResource
 {
-    asio::io_context& context_;
+    asio::io_service& service_;
 
     std::mutex send_mutex_;
-    std::mutex read_mutex_;
     std::shared_ptr<asio::ip::tcp::socket> socket_;
 
 public:
@@ -36,14 +35,14 @@ public:
     // Constructor called when trying to connect to a remote server
     TCPChannelResourceBasic(
             TCPTransportInterface* parent,
-            asio::io_context& context,
+            asio::io_service& service,
             const Locator& locator,
             uint32_t maxMsgSize);
 
     // Constructor called when local server accepted connection
     TCPChannelResourceBasic(
             TCPTransportInterface* parent,
-            asio::io_context& context,
+            asio::io_service& service,
             std::shared_ptr<asio::ip::tcp::socket> socket,
             uint32_t maxMsgSize);
 
@@ -55,15 +54,15 @@ public:
     void disconnect() override;
 
     uint32_t read(
-            octet* buffer,
+            fastrtps::rtps::octet* buffer,
             std::size_t size,
             asio::error_code& ec) override;
 
     size_t send(
-            const octet* header,
+            const fastrtps::rtps::octet* header,
             size_t header_size,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* data,
+            size_t size,
             asio::error_code& ec) override;
 
     // Throwing asio calls

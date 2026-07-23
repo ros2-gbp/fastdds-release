@@ -16,15 +16,15 @@
  * @file LocatorListComparisons.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__LOCATORLISTCOMPARISONS_HPP
-#define FASTDDS_RTPS_COMMON__LOCATORLISTCOMPARISONS_HPP
+#ifndef _FASTDDS_RTPS_COMMON_LOCATORLISTCOMPARISONS_HPP_
+#define _FASTDDS_RTPS_COMMON_LOCATORLISTCOMPARISONS_HPP_
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 #include <algorithm>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -55,8 +55,8 @@ static inline bool operator == (
     return false;
 }
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastrtps */
+} /* namespace eprosima */
 
-#endif // FASTDDS_RTPS_COMMON__LOCATORLISTCOMPARISONS_HPP
+#endif /* _FASTDDS_RTPS_COMMON_LOCATORLISTCOMPARISONS_HPP_ */

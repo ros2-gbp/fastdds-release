@@ -2,7 +2,7 @@
 // detail/scheduler.hpp
 // ~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -23,8 +23,8 @@
 #include "asio/detail/conditionally_enabled_event.hpp"
 #include "asio/detail/conditionally_enabled_mutex.hpp"
 #include "asio/detail/op_queue.hpp"
+#include "asio/detail/reactor_fwd.hpp"
 #include "asio/detail/scheduler_operation.hpp"
-#include "asio/detail/scheduler_task.hpp"
 #include "asio/detail/thread.hpp"
 #include "asio/detail/thread_context.hpp"
 
@@ -42,14 +42,10 @@ class scheduler
 public:
   typedef scheduler_operation operation;
 
-  // The type of a function used to obtain a task instance.
-  typedef scheduler_task* (*get_task_func_type)(
-      asio::execution_context&);
-
-  // Constructor.
+  // Constructor. Specifies the number of concurrent threads that are likely to
+  // run the scheduler. If set to 1 certain optimisation are performed.
   ASIO_DECL scheduler(asio::execution_context& ctx,
-      bool own_thread = true,
-      get_task_func_type get_task = &scheduler::get_default_task);
+      int concurrency_hint = 0, bool own_thread = true);
 
   // Destructor.
   ASIO_DECL ~scheduler();
@@ -103,7 +99,10 @@ public:
   }
 
   // Return whether a handler can be dispatched immediately.
-  ASIO_DECL bool can_dispatch();
+  bool can_dispatch()
+  {
+    return thread_call_stack::contains(this) != 0;
+  }
 
   /// Capture the current exception so it can be rethrown from a run function.
   ASIO_DECL void capture_current_exception();
@@ -134,6 +133,12 @@ public:
   // work_started() was previously called for the operations.
   ASIO_DECL void abandon_operations(op_queue<operation>& ops);
 
+  // Get the concurrency hint that was used to initialise the scheduler.
+  int concurrency_hint() const
+  {
+    return concurrency_hint_;
+  }
+
 private:
   // The mutex type used by this scheduler.
   typedef conditionally_enabled_mutex mutex;
@@ -163,10 +168,6 @@ private:
   ASIO_DECL void wake_one_thread_and_unlock(
       mutex::scoped_lock& lock);
 
-  // Get the default task.
-  ASIO_DECL static scheduler_task* get_default_task(
-      asio::execution_context& ctx);
-
   // Helper class to run the scheduler in its own thread.
   class thread_function;
   friend class thread_function;
@@ -189,10 +190,7 @@ private:
   event wakeup_event_;
 
   // The task to be run by this service.
-  scheduler_task* task_;
-
-  // The function used to get the task.
-  get_task_func_type get_task_;
+  reactor* task_;
 
   // Operation object to represent the position of the task in the queue.
   struct task_operation : operation
@@ -217,12 +215,6 @@ private:
 
   // The concurrency hint used to initialise the scheduler.
   const int concurrency_hint_;
-
-  // The time limit on running the scheduler task, in microseconds.
-  const long task_usec_;
-
-  // The time limit on waiting when the queue is empty, in microseconds.
-  const long wait_usec_;
 
   // The thread that is running the scheduler.
   asio::detail::thread* thread_;

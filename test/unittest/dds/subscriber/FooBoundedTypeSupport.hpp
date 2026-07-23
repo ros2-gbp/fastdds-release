@@ -34,35 +34,27 @@ public:
     FooBoundedTypeSupport()
         : TopicDataType()
     {
-        set_name("type");
-        max_serialized_type_size = 4u + 4u + 4u + 256u; // encapsulation + index + message len + message data
-        is_compute_key_provided = false;
+        setName("type");
+        m_typeSize = 4u + 4u + 4u + 256u; // encapsulation + index + message len + message data
+        m_isGetKeyDefined = false;
     }
 
     bool serialize(
-            const void* const data,
-            fastdds::rtps::SerializedPayload_t& payload,
-            DataRepresentationId_t data_representation) override
+            void* data,
+            fastrtps::rtps::SerializedPayload_t* payload) override
     {
-        const type* p_type = static_cast<const type*>(data);
+        type* p_type = static_cast<type*>(data);
 
         // Object that manages the raw buffer.
-        eprosima::fastcdr::FastBuffer fb(reinterpret_cast<char*>(payload.data), payload.max_size);
+        eprosima::fastcdr::FastBuffer fb(reinterpret_cast<char*>(payload->data), payload->max_size);
         // Object that serializes the data.
-        eprosima::fastcdr::Cdr ser(fb, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-                data_representation == DataRepresentationId_t::XCDR_DATA_REPRESENTATION ?
-                eprosima::fastcdr::CdrVersion::XCDRv1 : eprosima::fastcdr::CdrVersion::XCDRv2);
-        payload.encapsulation = ser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
-        ser.set_encoding_flag(
-            data_representation == DataRepresentationId_t::XCDR_DATA_REPRESENTATION ?
-            eprosima::fastcdr::EncodingAlgorithmFlag::PLAIN_CDR  :
-            eprosima::fastcdr::EncodingAlgorithmFlag::PLAIN_CDR2);
+        eprosima::fastcdr::Cdr ser(fb, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN, eprosima::fastcdr::Cdr::DDS_CDR);
+        payload->encapsulation = ser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
+        // Serialize encapsulation
+        ser.serialize_encapsulation();
 
         try
         {
-            // Serialize encapsulation
-            ser.serialize_encapsulation();
-
             // Serialize the object.
             p_type->serialize(ser);
         }
@@ -72,27 +64,26 @@ public:
         }
 
         // Get the serialized length
-        payload.length = static_cast<uint32_t>(ser.get_serialized_data_length());
+        payload->length = static_cast<uint32_t>(ser.getSerializedDataLength());
         return true;
     }
 
     bool deserialize(
-            fastdds::rtps::SerializedPayload_t& payload,
+            fastrtps::rtps::SerializedPayload_t* payload,
             void* data) override
     {
         //Convert DATA to pointer of your type
         type* p_type = static_cast<type*>(data);
 
         // Object that manages the raw buffer.
-        eprosima::fastcdr::FastBuffer fb(reinterpret_cast<char*>(payload.data), payload.length);
+        eprosima::fastcdr::FastBuffer fb(reinterpret_cast<char*>(payload->data), payload->length);
 
         // Object that deserializes the data.
-        eprosima::fastcdr::Cdr deser(fb
-                );
+        eprosima::fastcdr::Cdr deser(fb, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN, eprosima::fastcdr::Cdr::DDS_CDR);
 
         // Deserialize encapsulation.
         deser.read_encapsulation();
-        payload.encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
+        payload->encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
         try
         {
@@ -107,37 +98,31 @@ public:
         return true;
     }
 
-    uint32_t calculate_serialized_size(
-            const void* const data,
-            DataRepresentationId_t /*data_representation*/) override
+    std::function<uint32_t()> getSerializedSizeProvider(
+            void* data) override
     {
-        return static_cast<uint32_t>(type::getCdrSerializedSize(*static_cast<const type*>(data))) +
-               4u /*encapsulation*/;
+        return [data]() -> uint32_t
+               {
+                   return static_cast<uint32_t>(type::getCdrSerializedSize(*static_cast<type*>(data))) +
+                          4u /*encapsulation*/;
+               };
     }
 
-    void* create_data() override
+    void* createData() override
     {
         return static_cast<void*>(new type());
     }
 
-    void delete_data(
+    void deleteData(
             void* data) override
     {
         type* p_type = static_cast<type*>(data);
         delete p_type;
     }
 
-    bool compute_key(
-            fastdds::rtps::SerializedPayload_t& /*payload*/,
-            fastdds::rtps::InstanceHandle_t& /*handle*/,
-            bool /*force_md5*/) override
-    {
-        return false;
-    }
-
-    bool compute_key(
-            const void* const /*data*/,
-            fastdds::rtps::InstanceHandle_t& /*handle*/,
+    bool getKey(
+            void* /*data*/,
+            fastrtps::rtps::InstanceHandle_t* /*handle*/,
             bool /*force_md5*/) override
     {
         return false;
@@ -148,8 +133,7 @@ public:
         return true;
     }
 
-    inline bool is_plain(
-            eprosima::fastdds::dds::DataRepresentationId_t) const override
+    inline bool is_plain() const override
     {
         return false;
     }
@@ -160,9 +144,6 @@ public:
         return false;
     }
 
-private:
-
-    using TopicDataType::is_plain;
 };
 
 } // namespace dds

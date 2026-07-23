@@ -17,14 +17,13 @@
  *
  */
 
-#include "StatelessPersistentWriter.hpp"
-
-#include <fastdds/rtps/history/WriterHistory.hpp>
-
+#include <fastdds/rtps/writer/StatelessPersistentWriter.h>
+#include <fastdds/rtps/history/WriterHistory.h>
 #include <rtps/persistence/PersistenceService.h>
+#include <fastrtps_deprecated/participant/ParticipantImpl.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 StatelessPersistentWriter::StatelessPersistentWriter(
@@ -36,12 +35,42 @@ StatelessPersistentWriter::StatelessPersistentWriter(
         WriterListener* listen,
         IPersistenceService* persistence)
     : StatelessWriter(pimpl, guid, att, flow_controller, hist, listen)
-    , PersistentWriter(guid, att, hist, persistence)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
+{
+}
+
+StatelessPersistentWriter::StatelessPersistentWriter(
+        RTPSParticipantImpl* pimpl,
+        const GUID_t& guid,
+        const WriterAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        fastdds::rtps::FlowController* flow_controller,
+        WriterHistory* hist,
+        WriterListener* listen,
+        IPersistenceService* persistence)
+    : StatelessWriter(pimpl, guid, att, payload_pool, flow_controller, hist, listen)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
+{
+}
+
+StatelessPersistentWriter::StatelessPersistentWriter(
+        RTPSParticipantImpl* pimpl,
+        const GUID_t& guid,
+        const WriterAttributes& att,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
+        const std::shared_ptr<IChangePool>& change_pool,
+        fastdds::rtps::FlowController* flow_controller,
+        WriterHistory* hist,
+        WriterListener* listen,
+        IPersistenceService* persistence)
+    : StatelessWriter(pimpl, guid, att, payload_pool, change_pool, flow_controller, hist, listen)
+    , PersistentWriter(guid, att, payload_pool_, change_pool_, hist, persistence)
 {
 }
 
 StatelessPersistentWriter::~StatelessPersistentWriter()
 {
+    deinit();
 }
 
 /*
@@ -57,13 +86,12 @@ void StatelessPersistentWriter::unsent_change_added_to_history(
 }
 
 bool StatelessPersistentWriter::change_removed_by_history(
-        CacheChange_t* change,
-        const std::chrono::time_point<std::chrono::steady_clock>& max_blocking_time)
+        CacheChange_t* change)
 {
     remove_persistent_change(change);
-    return StatelessWriter::change_removed_by_history(change, max_blocking_time);
+    return StatelessWriter::change_removed_by_history(change);
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

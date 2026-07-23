@@ -16,9 +16,9 @@
 #define _FASTDDS_TCP_CHANNEL_RESOURCE_BASE_
 
 #include <asio.hpp>
-#include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/TransportReceiverInterface.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/transport/TCPTransportDescriptor.h>
+#include <fastdds/rtps/transport/TransportReceiverInterface.h>
+#include <fastdds/rtps/common/Locator.h>
 #include <rtps/transport/ChannelResource.h>
 #include <rtps/transport/tcp/RTCPMessageManager.h>
 
@@ -53,8 +53,7 @@ protected:
 
     enum eConnectionStatus
     {
-        eDisconnecting = -1,        // Transition state to disconnected, used to protect from concurrent (dis)connects.
-        eDisconnected = 0,          // Initial state.
+        eDisconnected = 0,
         eConnecting,                // Output -> Trying connection.
         eConnected,                 // Output -> Send bind message.
         eWaitingForBind,            // Input -> Waiting for the bind message.
@@ -72,6 +71,7 @@ protected:
     std::vector<uint16_t> pending_logical_output_ports_; // Must be accessed after lock pending_logical_mutex_
     std::vector<uint16_t> logical_output_ports_;
     std::condition_variable_any logical_output_ports_updated_cv;
+    std::mutex read_mutex_;
     std::recursive_mutex pending_logical_mutex_;
     std::atomic<eConnectionStatus> connection_status_;
 
@@ -113,17 +113,6 @@ public:
         return connection_status_ == eConnectionStatus::eEstablished;
     }
 
-    bool connected()
-    {
-        return connection_status_ >= eConnectionStatus::eConnected;
-    }
-
-    bool disconnected()
-    {
-        // NOTE: covers both eDisconnected and eDisconnecting states
-        return connection_status_ <= eConnectionStatus::eDisconnected;
-    }
-
     eConnectionStatus connection_status()
     {
         return connection_status_;
@@ -144,50 +133,15 @@ public:
     virtual void disconnect() = 0;
 
     virtual uint32_t read(
-            octet* buffer,
+            fastrtps::rtps::octet* buffer,
             std::size_t size,
             asio::error_code& ec) = 0;
 
-    /**
-     * Sends the provided TCP header and data over the TCP channel.
-     * Used solely during TCP connection negotiations.
-     *
-     * @param header Pointer to the octet array containing the TCP header.
-     * @param header_size Size of the TCP header array.
-     * @param data Pointer to the octet array containing the data.
-     * @param data_size Size of the data array.
-     * @param ec Reference to the asio::error_code object to store any error that occurs during the send operation.
-     * @return The number of bytes actually sent.
-     */
-    size_t send(
-            const fastdds::rtps::octet* header,
-            size_t header_size,
-            const fastdds::rtps::octet* data,
-            uint32_t data_size,
-            asio::error_code& ec)
-    {
-        NetworkBuffer buffers(data, data_size);
-        std::vector<NetworkBuffer> buffer_list;
-        buffer_list.push_back(buffers);
-        return send(header, header_size, buffer_list, data_size, ec);
-    }
-
-    /**
-     * Sends the provided TCP header and data over the TCP channel.
-     * Used for TCP metatraffic and data transmission.
-     *
-     * @param header Pointer to the TCP header data.
-     * @param header_size Size of the TCP header data.
-     * @param buffers Vector of network buffers containing the data to be sent.
-     * @param total_bytes Total number of bytes to be sent.
-     * @param ec Reference to an asio::error_code object to store any error that occurs during the send operation.
-     * @return The number of bytes actually sent.
-     */
     virtual size_t send(
-            const octet* header,
+            const fastrtps::rtps::octet* header,
             size_t header_size,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
+            const fastrtps::rtps::octet* buffer,
+            size_t size,
             asio::error_code& ec) = 0;
 
     /**
@@ -286,7 +240,7 @@ protected:
      * @param socket Socket on which to set the options.
      * @param options Descriptor with the options to set.
      */
-    void set_socket_options(
+    static void set_socket_options(
             asio::basic_socket<asio::ip::tcp>& socket,
             const TCPTransportDescriptor* options);
 

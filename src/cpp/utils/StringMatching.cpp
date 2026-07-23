@@ -17,7 +17,7 @@
  *
  */
 
-#include <utils/StringMatching.hpp>
+#include <fastrtps/utils/StringMatching.h>
 #include <limits.h>
 #include <errno.h>
 
@@ -25,14 +25,13 @@
 #include <algorithm>
 #include <regex>
 #elif defined(_WIN32)
-#include <cstring>
 #include "Shlwapi.h"
 #else
 #include <fnmatch.h>
 #endif // if defined(__cplusplus_winrt)
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 StringMatching::StringMatching()
@@ -47,7 +46,7 @@ StringMatching::~StringMatching()
 }
 
 #if defined(__cplusplus_winrt)
-static void replace_all(
+void replace_all(
         std::string& subject,
         const std::string& search,
         const std::string& replace)
@@ -60,7 +59,7 @@ static void replace_all(
     }
 }
 
-static bool do_match_pattern(
+bool StringMatching::matchPattern(
         const char* pattern,
         const char* str)
 {
@@ -72,52 +71,87 @@ static bool do_match_pattern(
 
     std::regex path_regex(path);
     std::smatch spec_match;
-    return std::regex_match(spec, spec_match, path_regex);
-}
-
-#elif defined(_WIN32)
-static bool do_match_pattern(
-        const char* pattern,
-        const char* str)
-{
-    // An empty pattern only matches an empty string
-    if (strlen(pattern) == 0)
+    if (std::regex_match(spec, spec_match, path_regex))
     {
-        return strlen(str) == 0;
+        return true;
     }
-    // An empty string also matches a pattern of "*"
-    if (strlen(str) == 0)
-    {
-        return strcmp(pattern, "*") == 0;
-    }
-    // Leave rest of cases to PathMatchSpecA
-    return PathMatchSpecA(str, pattern);
-}
 
-#else
-static bool do_match_pattern(
-        const char* pattern,
-        const char* str)
-{
-    return fnmatch(pattern, str, FNM_NOESCAPE) == 0;
-}
-
-#endif // if defined(__cplusplus_winrt)
-
-bool StringMatching::matchPattern(
-        const char* pattern,
-        const char* str)
-{
-    return do_match_pattern(pattern, str);
+    return false;
 }
 
 bool StringMatching::matchString(
         const char* str1,
         const char* str2)
 {
-    return do_match_pattern(str1, str2) || do_match_pattern(str2, str1);
+    if (StringMatching::matchPattern(str1, str2))
+    {
+        return true;
+    }
+
+    if (StringMatching::matchPattern(str2, str1))
+    {
+        return true;
+    }
+
+    return false;
 }
 
+#elif defined(_WIN32)
+bool StringMatching::matchPattern(
+        const char* pattern,
+        const char* str)
+{
+    if (PathMatchSpecA(str, pattern))
+    {
+        return true;
+    }
+    return false;
+}
+
+bool StringMatching::matchString(
+        const char* str1,
+        const char* str2)
+{
+    if (PathMatchSpecA(str1, str2))
+    {
+        return true;
+    }
+    if (PathMatchSpecA(str2, str1))
+    {
+        return true;
+    }
+    return false;
+}
+
+#else
+bool StringMatching::matchPattern(
+        const char* pattern,
+        const char* str)
+{
+    if (fnmatch(pattern, str, FNM_NOESCAPE) == 0)
+    {
+        return true;
+    }
+    return false;
+}
+
+bool StringMatching::matchString(
+        const char* str1,
+        const char* str2)
+{
+    if (fnmatch(str1, str2, FNM_NOESCAPE) == 0)
+    {
+        return true;
+    }
+    if (fnmatch(str2, str1, FNM_NOESCAPE) == 0)
+    {
+        return true;
+    }
+    return false;
+}
+
+#endif // if defined(__cplusplus_winrt)
+
+} // namespace rtps
 } /* namespace rtps */
-} /* namespace fastdds */
 } /* namespace eprosima */

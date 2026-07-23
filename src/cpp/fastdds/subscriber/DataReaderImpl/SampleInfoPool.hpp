@@ -27,8 +27,9 @@
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 
-#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,6 +38,8 @@ namespace detail {
 
 struct SampleInfoPool
 {
+    using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
+
     explicit SampleInfoPool(
             const DataReaderQos& qos)
         : free_items_(qos.reader_resource_limits().sample_infos_allocation)
@@ -94,7 +97,7 @@ struct SampleInfoPool
 
 private:
 
-    using collection_type = eprosima::fastdds::ResourceLimitedVector<SampleInfo*>;
+    using collection_type = eprosima::fastrtps::ResourceLimitedVector<SampleInfo*>;
 
     collection_type free_items_;
     collection_type used_items_;

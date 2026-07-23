@@ -34,7 +34,7 @@ public:
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif //MOCK_ENTITY_H

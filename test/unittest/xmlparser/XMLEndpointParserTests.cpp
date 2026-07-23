@@ -12,34 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fstream>
-#include <sstream>
-#include <string>
-
-#include <gtest/gtest.h>
-#include <tinyxml2.h>
-
-#include <fastdds/dds/log/FileConsumer.hpp>
+#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
+#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
+#include <fastrtps/xmlparser/XMLEndpointParser.h>
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/OStreamConsumer.hpp>
+#include <fastdds/dds/log/FileConsumer.hpp>
 #include <fastdds/dds/log/StdoutConsumer.hpp>
 #include <fastdds/dds/log/StdoutErrConsumer.hpp>
-
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <xmlparser/XMLEndpointParser.h>
-
 #include "../logging/mock/MockConsumer.h"
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+#include <tinyxml2.h>
+#include <gtest/gtest.h>
+
+#include <string>
+#include <fstream>
+#include <sstream>
+
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 using namespace ::testing;
 
-using eprosima::fastdds::xmlparser::XMLP_ret;
-using eprosima::fastdds::xmlparser::XMLEndpointParser;
-using eprosima::fastdds::xmlparser::StaticRTPSParticipantInfo;
-using eprosima::fastdds::rtps::ReaderProxyData;
-using eprosima::fastdds::rtps::WriterProxyData;
+using eprosima::fastrtps::xmlparser::XMLP_ret;
+using eprosima::fastrtps::xmlparser::XMLEndpointParser;
+using eprosima::fastrtps::xmlparser::StaticRTPSParticipantInfo;
+using eprosima::fastrtps::rtps::ReaderProxyData;
+using eprosima::fastrtps::rtps::WriterProxyData;
 
 using eprosima::fastdds::dds::Log;
 using eprosima::fastdds::dds::LogConsumer;
@@ -124,7 +122,7 @@ TEST_F(XMLEndpointParserTests, loadXMLNode)
                         <reader>\
                             <userId>3</userId>\
                             <entityID>4</entityID>\
-                            <expects_inline_qos>true</expects_inline_qos>\
+                            <expectsInlineQos>true</expectsInlineQos>\
                             <topicName>HelloWorldTopic</topicName>\
                             <topicDataType>HelloWorld</topicDataType>\
                             <topicKind>WITH_KEY</topicKind>\
@@ -207,7 +205,7 @@ TEST_F(XMLEndpointParserTests, loadXMLParticipantEndpoint)
                     <reader>\
                         <userId>3</userId>\
                         <entityID>4</entityID>\
-                        <expects_inline_qos>true</expects_inline_qos>\
+                        <expectsInlineQos>true</expectsInlineQos>\
                         <topicName>HelloWorldTopic</topicName>\
                         <topicDataType>HelloWorld</topicDataType>\
                         <topicKind>WITH_KEY</topicKind>\
@@ -299,7 +297,7 @@ TEST_F(XMLEndpointParserTests, loadXMLReaderEndpoint)
                 <reader>\
                     <userId>3</userId>\
                     <entityID>4</entityID>\
-                    <expects_inline_qos>true</expects_inline_qos>\
+                    <expectsInlineQos>true</expectsInlineQos>\
                     <topicName>HelloWorldTopic</topicName>\
                     <topicDataType>HelloWorld</topicDataType>\
                     <topicKind>WITH_KEY</topicKind>\
@@ -324,28 +322,28 @@ TEST_F(XMLEndpointParserTests, loadXMLReaderEndpoint)
         EXPECT_EQ(XMLP_ret::XML_OK, mp_edpXML->loadXMLReaderEndpoint(titleElement, pdata));
 
         // Topic attributes
-        EXPECT_EQ(pdata->m_readers[0]->topic_name, "HelloWorldTopic");
-        EXPECT_EQ(pdata->m_readers[0]->topic_kind, TopicKind_t::WITH_KEY);
-        EXPECT_EQ(pdata->m_readers[0]->type_name, "HelloWorld");
+        EXPECT_EQ(pdata->m_readers[0]->topicName(), "HelloWorldTopic");
+        EXPECT_EQ(pdata->m_readers[0]->topicKind(), TopicKind_t::WITH_KEY);
+        EXPECT_EQ(pdata->m_readers[0]->typeName(), "HelloWorld");
         EXPECT_EQ(pdata->m_readers[0]->has_locators(), true);
 
         // Locators
         Locator_t uni_loc;
         IPLocator::setIPv4(uni_loc, "192.168.0.128");
         uni_loc.port = static_cast<uint16_t>(5000);
-        EXPECT_EQ(pdata->m_readers[0]->remote_locators.unicast[0],  uni_loc);
+        EXPECT_EQ(pdata->m_readers[0]->remote_locators().unicast[0],  uni_loc);
 
         Locator_t multi_loc;
         IPLocator::setIPv4(multi_loc, "239.255.1.1");
         multi_loc.port = static_cast<uint16_t>(7000);
-        EXPECT_EQ(pdata->m_readers[0]->remote_locators.multicast[0],  multi_loc);
+        EXPECT_EQ(pdata->m_readers[0]->remote_locators().multicast[0],  multi_loc);
 
         // qos
-        EXPECT_EQ(pdata->m_readers[0]->reliability.kind,  dds::BEST_EFFORT_RELIABILITY_QOS);
-        EXPECT_EQ(pdata->m_readers[0]->durability.kind,  dds::VOLATILE_DURABILITY_QOS);
-        EXPECT_EQ(pdata->m_readers[0]->ownership.kind,  dds::SHARED_OWNERSHIP_QOS);
-        EXPECT_EQ(pdata->m_readers[0]->liveliness.kind,  dds::AUTOMATIC_LIVELINESS_QOS);
-        EXPECT_TRUE(pdata->m_readers[0]->disable_positive_acks.enabled);
+        EXPECT_EQ(pdata->m_readers[0]->m_qos.m_reliability.kind,  BEST_EFFORT_RELIABILITY_QOS);
+        EXPECT_EQ(pdata->m_readers[0]->m_qos.m_durability.kind,  VOLATILE_DURABILITY_QOS);
+        EXPECT_EQ(pdata->m_readers[0]->m_qos.m_ownership.kind,  SHARED_OWNERSHIP_QOS);
+        EXPECT_EQ(pdata->m_readers[0]->m_qos.m_liveliness.kind,  AUTOMATIC_LIVELINESS_QOS);
+        EXPECT_TRUE(pdata->m_readers[0]->m_qos.m_disablePositiveACKs.enabled);
 
         // Delete the ReaderProxyData created inside loadXMLParticipantEndpoint
         delete pdata->m_readers[0];
@@ -467,7 +465,7 @@ TEST_F(XMLEndpointParserTests, loadXMLReaderEndpoint)
         {
             "userId",
             "entityID",
-            "expects_inline_qos",
+            "expectsInlineQos",
             "topicName",
             "topicDataType",
             "topicKind",
@@ -545,7 +543,7 @@ TEST_F(XMLEndpointParserTests, loadXMLWriterEndpoint)
                 <writer>\
                     <userId>3</userId>\
                     <entityID>4</entityID>\
-                    <expects_inline_qos>true</expects_inline_qos>\
+                    <expectsInlineQos>true</expectsInlineQos>\
                     <topicName>HelloWorldTopic</topicName>\
                     <topicDataType>HelloWorld</topicDataType>\
                     <topicKind>NO_KEY</topicKind>\
@@ -572,30 +570,30 @@ TEST_F(XMLEndpointParserTests, loadXMLWriterEndpoint)
         EXPECT_EQ(XMLP_ret::XML_OK, mp_edpXML->loadXMLWriterEndpoint(titleElement, pdata));
 
         // Topic attributes
-        EXPECT_EQ(pdata->m_writers[0]->topic_name, "HelloWorldTopic");
-        EXPECT_EQ(pdata->m_writers[0]->topic_kind, TopicKind_t::NO_KEY);
-        EXPECT_EQ(pdata->m_writers[0]->type_name, "HelloWorld");
+        EXPECT_EQ(pdata->m_writers[0]->topicName(), "HelloWorldTopic");
+        EXPECT_EQ(pdata->m_writers[0]->topicKind(), TopicKind_t::NO_KEY);
+        EXPECT_EQ(pdata->m_writers[0]->typeName(), "HelloWorld");
         EXPECT_EQ(pdata->m_writers[0]->has_locators(), true);
 
         // Locators
         Locator_t uni_loc;
         IPLocator::setIPv4(uni_loc, "192.168.0.128");
         uni_loc.port = static_cast<uint16_t>(5000);
-        EXPECT_EQ(pdata->m_writers[0]->remote_locators.unicast[0],  uni_loc);
+        EXPECT_EQ(pdata->m_writers[0]->remote_locators().unicast[0],  uni_loc);
 
         Locator_t multi_loc;
         IPLocator::setIPv4(multi_loc, "239.255.1.1");
         multi_loc.port = static_cast<uint16_t>(7000);
-        EXPECT_EQ(pdata->m_writers[0]->remote_locators.multicast[0],  multi_loc);
+        EXPECT_EQ(pdata->m_writers[0]->remote_locators().multicast[0],  multi_loc);
 
         // qos
-        EXPECT_EQ(pdata->m_writers[0]->reliability.kind,  dds::BEST_EFFORT_RELIABILITY_QOS);
-        EXPECT_EQ(pdata->m_writers[0]->durability.kind,  dds::VOLATILE_DURABILITY_QOS);
-        EXPECT_EQ(pdata->m_writers[0]->ownership.kind,  dds::SHARED_OWNERSHIP_QOS);
-        EXPECT_EQ(pdata->m_writers[0]->liveliness.kind,  dds::AUTOMATIC_LIVELINESS_QOS);
-        EXPECT_TRUE(pdata->m_writers[0]->disable_positive_acks.enabled);
-        EXPECT_EQ(pdata->m_writers[0]->disable_positive_acks.duration.seconds, 300);
-        EXPECT_EQ(pdata->m_writers[0]->disable_positive_acks.duration.nanosec, 0u);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_reliability.kind,  BEST_EFFORT_RELIABILITY_QOS);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_durability.kind,  VOLATILE_DURABILITY_QOS);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_ownership.kind,  SHARED_OWNERSHIP_QOS);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_liveliness.kind,  AUTOMATIC_LIVELINESS_QOS);
+        EXPECT_TRUE(pdata->m_writers[0]->m_qos.m_disablePositiveACKs.enabled);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_disablePositiveACKs.duration.seconds, 300);
+        EXPECT_EQ(pdata->m_writers[0]->m_qos.m_disablePositiveACKs.duration.nanosec, 0u);
 
         // Delete the WriterProxyData created inside loadXMLWriterEndpoint
         delete pdata->m_writers[0];
@@ -717,7 +715,7 @@ TEST_F(XMLEndpointParserTests, loadXMLWriterEndpoint)
         {
             "userId",
             "entityID",
-            "expects_inline_qos",
+            "expectsInlineQos",
             "topicName",
             "topicDataType",
             "topicKind",
@@ -806,21 +804,21 @@ TEST_F(XMLEndpointParserTests, lookforReader)
 
     ASSERT_EQ(XMLP_ret::XML_OK, mp_edpXML->lookforReader("HelloWorldPublisher", 3, &rdataptr));
     ASSERT_NE(rdataptr, nullptr);
-    EXPECT_EQ(rdataptr->topic_name, "HelloWorldTopic");
-    EXPECT_EQ(rdataptr->topic_kind, TopicKind_t::WITH_KEY);
-    EXPECT_EQ(rdataptr->type_name, "HelloWorld");
+    EXPECT_EQ(rdataptr->topicName(), "HelloWorldTopic");
+    EXPECT_EQ(rdataptr->topicKind(), TopicKind_t::WITH_KEY);
+    EXPECT_EQ(rdataptr->typeName(), "HelloWorld");
     EXPECT_EQ(rdataptr->has_locators(), true);
 
     // Locators
     Locator_t uni_loc;
     IPLocator::setIPv4(uni_loc, "192.168.0.128");
     uni_loc.port = static_cast<uint16_t>(5000);
-    EXPECT_EQ(rdataptr->remote_locators.unicast[0],  uni_loc);
+    EXPECT_EQ(rdataptr->remote_locators().unicast[0],  uni_loc);
 
     Locator_t multi_loc;
     IPLocator::setIPv4(multi_loc, "239.255.1.1");
     multi_loc.port = static_cast<uint16_t>(7000);
-    EXPECT_EQ(rdataptr->remote_locators.multicast[0],  multi_loc);
+    EXPECT_EQ(rdataptr->remote_locators().multicast[0],  multi_loc);
 
     ASSERT_EQ(XMLP_ret::XML_ERROR, mp_edpXML->lookforReader("WrongName", 15, &rdataptr));
 }
@@ -857,21 +855,21 @@ TEST_F(XMLEndpointParserTests, lookforWriter)
     EXPECT_EQ(XMLP_ret::XML_OK, mp_edpXML->loadXMLNode(xml_doc));
 
     ASSERT_EQ(XMLP_ret::XML_OK, mp_edpXML->lookforWriter("HelloWorldPublisher", 3, &wdataptr));
-    EXPECT_EQ(wdataptr->topic_name, "HelloWorldTopic");
-    EXPECT_EQ(wdataptr->topic_kind, TopicKind_t::WITH_KEY);
-    EXPECT_EQ(wdataptr->type_name, "HelloWorld");
+    EXPECT_EQ(wdataptr->topicName(), "HelloWorldTopic");
+    EXPECT_EQ(wdataptr->topicKind(), TopicKind_t::WITH_KEY);
+    EXPECT_EQ(wdataptr->typeName(), "HelloWorld");
     EXPECT_EQ(wdataptr->has_locators(), true);
 
     // Locators
     Locator_t uni_loc;
     IPLocator::setIPv4(uni_loc, "192.168.0.128");
     uni_loc.port = static_cast<uint16_t>(5000);
-    EXPECT_EQ(wdataptr->remote_locators.unicast[0],  uni_loc);
+    EXPECT_EQ(wdataptr->remote_locators().unicast[0],  uni_loc);
 
     Locator_t multi_loc;
     IPLocator::setIPv4(multi_loc, "239.255.1.1");
     multi_loc.port = static_cast<uint16_t>(7000);
-    EXPECT_EQ(wdataptr->remote_locators.multicast[0],  multi_loc);
+    EXPECT_EQ(wdataptr->remote_locators().multicast[0],  multi_loc);
 
     ASSERT_EQ(XMLP_ret::XML_ERROR, mp_edpXML->lookforWriter("WrongName", 15, &wdataptr));
 }

@@ -14,8 +14,6 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -23,11 +21,14 @@
 #include <fastdds/statistics/dds/domain/DomainParticipant.hpp>
 #include <fastdds/statistics/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/statistics/topic_names.hpp>
+#include <fastrtps/types/TypesBase.h>
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 #include <statistics/fastdds/publisher/PublisherImpl.hpp>
-#include <statistics/types/typesPubSubTypes.hpp>
+#include <statistics/types/typesPubSubTypes.h>
 
 #include "../../logging/mock/MockConsumer.h"
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -48,64 +49,35 @@ public:
 
 };
 
-namespace {
-
-// Accessor to DomainParticipantImpl* from DomainParticipant
-using DomainParticipantImplPtr =
-        eprosima::fastdds::dds::DomainParticipantImpl * eprosima::fastdds::dds::DomainParticipant::*;
-
-DomainParticipantImplPtr get_domain_participant_impl_ptr();
-
-template<DomainParticipantImplPtr P>
-struct DomainParticipantImplAccessor
+class DomainParticipantImplTest : public DomainParticipantImpl
 {
-    friend DomainParticipantImplPtr get_domain_participant_impl_ptr()
+public:
+
+    eprosima::fastdds::dds::Publisher* get_builtin_publisher() const
     {
-        return P;
+        return builtin_publisher_;
+    }
+
+    PublisherImpl* get_builtin_publisher_impl() const
+    {
+        return builtin_publisher_impl_;
     }
 
 };
 
-template struct DomainParticipantImplAccessor<&eprosima::fastdds::dds::DomainParticipant::impl_>;
-
-// Accessor to builtin_publisher_ from statistics DomainParticipantImpl
-using BuiltinPublisherPtr = eprosima::fastdds::dds::Publisher * DomainParticipantImpl::*;
-
-BuiltinPublisherPtr get_builtin_publisher_ptr();
-
-template<BuiltinPublisherPtr P>
-struct BuiltinPublisherAccessor
+class DomainParticipantTest : public eprosima::fastdds::dds::DomainParticipant
 {
-    friend BuiltinPublisherPtr get_builtin_publisher_ptr()
+public:
+
+    eprosima::fastdds::dds::DomainParticipantImpl* get_impl() const
     {
-        return P;
+        return impl_;
     }
 
 };
-
-template struct BuiltinPublisherAccessor<&DomainParticipantImpl::builtin_publisher_>;
-
-// Accessor to builtin_publisher_impl_ from statistics DomainParticipantImpl
-using BuiltinPublisherImplPtr = PublisherImpl * DomainParticipantImpl::*;
-
-BuiltinPublisherImplPtr get_builtin_publisher_impl_ptr();
-
-template<BuiltinPublisherImplPtr P>
-struct BuiltinPublisherImplAccessor
-{
-    friend BuiltinPublisherImplPtr get_builtin_publisher_impl_ptr()
-    {
-        return P;
-    }
-
-};
-
-template struct BuiltinPublisherImplAccessor<&DomainParticipantImpl::builtin_publisher_impl_>;
-
-} // namespace
 
 /**
- * This test checks that enable_statistics_datawriter fails returning eprosima::fastdds::dds::RETCODE_ERROR when create_datawriter fails
+ * This test checks that enable_statistics_datawriter fails returning RETCODE_ERROR when create_datawriter fails
  * returning a nullptr.
  * 1. Create participant
  * 2. Mock create_datawriter so it returns nullptr
@@ -135,15 +107,16 @@ TEST_F(StatisticsDomainParticipantMockTests, EnableStatisticsDataWriterFailureCr
     ASSERT_NE(statistics_participant, nullptr);
 
     // 2. Mock create_datawriter
-    DomainParticipantImpl* statistics_participant_impl_test = static_cast<DomainParticipantImpl*>(
-        participant->*get_domain_participant_impl_ptr());
+    DomainParticipantTest* participant_test = static_cast<DomainParticipantTest*>(participant);
+    ASSERT_NE(nullptr, participant_test);
+    DomainParticipantImplTest* statistics_participant_impl_test = static_cast<DomainParticipantImplTest*>(
+        participant_test->get_impl());
     ASSERT_NE(nullptr, statistics_participant_impl_test);
-    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->*get_builtin_publisher_impl_ptr();
+    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->get_builtin_publisher_impl();
     EXPECT_CALL(*builtin_pub_impl, create_datawriter_mock()).WillOnce(testing::Return(true));
 
     // 3. enable_statistics_datawriter
-    EXPECT_EQ(fastdds::dds::RETCODE_ERROR,
-            statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
+    EXPECT_EQ(ReturnCode_t::RETCODE_ERROR, statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
             STATISTICS_DATAWRITER_QOS));
     EXPECT_EQ(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
     EXPECT_EQ(null_type, statistics_participant->find_type(count_type.get_type_name()));
@@ -154,12 +127,12 @@ TEST_F(StatisticsDomainParticipantMockTests, EnableStatisticsDataWriterFailureCr
     EXPECT_EQ(consumed_entries.size(), 1u);
 
     EXPECT_EQ(eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->
-                    delete_participant(participant), fastdds::dds::RETCODE_OK);
+                    delete_participant(participant), ReturnCode_t::RETCODE_OK);
 #endif // FASTDDS_STATISTICS
 }
 
 /**
- * This test checks that disable_statistics_datawriter fails returning eprosima::fastdds::dds::RETCODE_ERROR when delete_datawriter fails.
+ * This test checks that disable_statistics_datawriter fails returning RETCODE_ERROR when delete_datawriter fails.
  * 1. Create a participant
  * 2. Mock delete_datawriter
  * 3. Enable a statistics datawriter
@@ -170,7 +143,6 @@ TEST_F(StatisticsDomainParticipantMockTests, DisableStatisticsDataWriterFailureD
 #ifdef FASTDDS_STATISTICS
     eprosima::fastdds::dds::TypeSupport null_type(nullptr);
     eprosima::fastdds::dds::TypeSupport count_type(new EntityCountPubSubType);
-    count_type->register_type_object_representation();
 
     // 1. Create DomainParticipant
     eprosima::fastdds::dds::DomainParticipant* participant =
@@ -182,42 +154,43 @@ TEST_F(StatisticsDomainParticipantMockTests, DisableStatisticsDataWriterFailureD
     ASSERT_NE(statistics_participant, nullptr);
 
     // 2. Mock delete_datawriter
-    DomainParticipantImpl* statistics_participant_impl_test = static_cast<DomainParticipantImpl*>(
-        participant->*get_domain_participant_impl_ptr());
+    DomainParticipantTest* participant_test = static_cast<DomainParticipantTest*>(participant);
+    ASSERT_NE(nullptr, participant_test);
+    DomainParticipantImplTest* statistics_participant_impl_test = static_cast<DomainParticipantImplTest*>(
+        participant_test->get_impl());
     ASSERT_NE(nullptr, statistics_participant_impl_test);
-    eprosima::fastdds::dds::Publisher* builtin_pub = statistics_participant_impl_test->*get_builtin_publisher_ptr();
+    eprosima::fastdds::dds::Publisher* builtin_pub = statistics_participant_impl_test->get_builtin_publisher();
     ASSERT_NE(nullptr, builtin_pub);
-    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->*get_builtin_publisher_impl_ptr();
+    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->get_builtin_publisher_impl();
     ASSERT_NE(nullptr, builtin_pub_impl);
     EXPECT_CALL(*builtin_pub, delete_datawriter_mock()).WillOnce(testing::Return(true));
     EXPECT_CALL(*statistics_participant_impl_test, delete_topic_mock()).WillOnce(testing::Return(false));
 
     // 3. enable_statistics_datawriter
     EXPECT_CALL(*builtin_pub_impl, create_datawriter_mock()).WillOnce(testing::Return(false));
-    EXPECT_EQ(fastdds::dds::RETCODE_OK,
-            statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
             STATISTICS_DATAWRITER_QOS));
 
     // 4. disable_statistics_datawriter
-    EXPECT_EQ(fastdds::dds::RETCODE_ERROR, statistics_participant->disable_statistics_datawriter(
+    EXPECT_EQ(ReturnCode_t::RETCODE_ERROR, statistics_participant->disable_statistics_datawriter(
                 HEARTBEAT_COUNT_TOPIC));
     EXPECT_NE(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
     EXPECT_TRUE(count_type == statistics_participant->find_type(count_type.get_type_name()));
 
     EXPECT_CALL(*builtin_pub, delete_datawriter_mock()).WillOnce(testing::Return(false));
     EXPECT_CALL(*statistics_participant_impl_test, delete_topic_mock()).WillOnce(testing::Return(false));
-    EXPECT_EQ(fastdds::dds::RETCODE_OK, statistics_participant->disable_statistics_datawriter(
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, statistics_participant->disable_statistics_datawriter(
                 HEARTBEAT_COUNT_TOPIC));
     EXPECT_EQ(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
     EXPECT_EQ(null_type, statistics_participant->find_type(count_type.get_type_name()));
 
     EXPECT_EQ(eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->
-                    delete_participant(statistics_participant), fastdds::dds::RETCODE_OK);
+                    delete_participant(statistics_participant), ReturnCode_t::RETCODE_OK);
 #endif // FASTDDS_STATISTICS
 }
 
 /**
- * This test checks that disable_statistics_datawriter fails returning eprosima::fastdds::dds::RETCODE_ERROR when delete_topic fails.
+ * This test checks that disable_statistics_datawriter fails returning RETCODE_ERROR when delete_topic fails.
  * 1. Create a participant
  * 2. Mock delete_topic
  * 3. Enable a statistics datawriter
@@ -236,37 +209,38 @@ TEST_F(StatisticsDomainParticipantMockTests, DisableStatisticsDataWriterFailureD
     ASSERT_NE(statistics_participant, nullptr);
 
     // 2. Mock delete_topic
-    DomainParticipantImpl* statistics_participant_impl_test = static_cast<DomainParticipantImpl*>(
-        participant->*get_domain_participant_impl_ptr());
+    DomainParticipantTest* participant_test = static_cast<DomainParticipantTest*>(participant);
+    ASSERT_NE(nullptr, participant_test);
+    DomainParticipantImplTest* statistics_participant_impl_test = static_cast<DomainParticipantImplTest*>(
+        participant_test->get_impl());
     ASSERT_NE(nullptr, statistics_participant_impl_test);
-    eprosima::fastdds::dds::Publisher* builtin_pub = statistics_participant_impl_test->*get_builtin_publisher_ptr();
+    eprosima::fastdds::dds::Publisher* builtin_pub = statistics_participant_impl_test->get_builtin_publisher();
     ASSERT_NE(nullptr, builtin_pub);
-    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->*get_builtin_publisher_impl_ptr();
+    PublisherImpl* builtin_pub_impl = statistics_participant_impl_test->get_builtin_publisher_impl();
     ASSERT_NE(nullptr, builtin_pub_impl);
     EXPECT_CALL(*statistics_participant_impl_test, delete_topic_mock()).WillOnce(testing::Return(true));
     EXPECT_CALL(*builtin_pub, delete_datawriter_mock()).WillOnce(testing::Return(false));
 
     // 3. enable_statistics_datawriter
     EXPECT_CALL(*builtin_pub_impl, create_datawriter_mock()).WillOnce(testing::Return(false));
-    EXPECT_EQ(fastdds::dds::RETCODE_OK,
-            statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, statistics_participant->enable_statistics_datawriter(HEARTBEAT_COUNT_TOPIC,
             STATISTICS_DATAWRITER_QOS));
     EXPECT_NE(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
 
     // 4. disable_statistics_datawriter
-    EXPECT_EQ(fastdds::dds::RETCODE_ERROR, statistics_participant->disable_statistics_datawriter(
+    EXPECT_EQ(ReturnCode_t::RETCODE_ERROR, statistics_participant->disable_statistics_datawriter(
                 HEARTBEAT_COUNT_TOPIC));
     EXPECT_NE(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
 
     // As the DataWriter has been deleted, the topic has to be removed manually
     EXPECT_CALL(*statistics_participant_impl_test, delete_topic_mock()).WillOnce(testing::Return(false));
-    EXPECT_EQ(fastdds::dds::RETCODE_OK, statistics_participant->delete_topic(
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, statistics_participant->delete_topic(
                 dynamic_cast<eprosima::fastdds::dds::Topic*>(statistics_participant->lookup_topicdescription(
                     HEARTBEAT_COUNT_TOPIC))));
     EXPECT_EQ(nullptr, statistics_participant->lookup_topicdescription(HEARTBEAT_COUNT_TOPIC));
 
     EXPECT_EQ(eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->
-                    delete_participant(statistics_participant), fastdds::dds::RETCODE_OK);
+                    delete_participant(statistics_participant), ReturnCode_t::RETCODE_OK);
 #endif // FASTDDS_STATISTICS
 }
 

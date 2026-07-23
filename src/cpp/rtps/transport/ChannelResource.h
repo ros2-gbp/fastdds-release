@@ -15,12 +15,10 @@
 #ifndef _FASTDDS_CHANNEL_RESOURCE_INFO_
 #define _FASTDDS_CHANNEL_RESOURCE_INFO_
 
-#include <atomic>
-
+#include <memory>
+#include <map>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/CDRMessage_t.hpp>
-
-#include <utils/thread.hpp>
+#include <fastdds/rtps/common/CDRMessage_t.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -40,7 +38,7 @@ public:
     virtual void clear();
 
     inline void thread(
-            eprosima::thread&& pThread)
+            std::thread&& pThread)
     {
         if (thread_.joinable())
         {
@@ -60,7 +58,7 @@ public:
         alive_.store(false);
     }
 
-    inline CDRMessage_t& message_buffer()
+    inline fastrtps::rtps::CDRMessage_t& message_buffer()
     {
         return message_buffer_;
     }
@@ -68,10 +66,10 @@ public:
 protected:
 
     //!Received message
-    CDRMessage_t message_buffer_;
+    fastrtps::rtps::CDRMessage_t message_buffer_;
 
     std::atomic<bool> alive_;
-    eprosima::thread thread_;
+    std::thread thread_;
 };
 
 } // namespace rtps

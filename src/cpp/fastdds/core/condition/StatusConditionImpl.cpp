@@ -61,19 +61,13 @@ ReturnCode_t StatusConditionImpl::set_enabled_statuses(
     {
         notifier_->notify();
     }
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 const StatusMask& StatusConditionImpl::get_enabled_statuses() const
 {
     std::lock_guard<std::mutex> guard(mutex_);
     return mask_;
-}
-
-const StatusMask& StatusConditionImpl::get_raw_status() const
-{
-    std::lock_guard<std::mutex> guard(mutex_);
-    return status_;
 }
 
 void StatusConditionImpl::set_status(

@@ -18,7 +18,7 @@
  */
 
 #include <fastdds/core/policy/QosPolicyUtils.hpp>
-#include <fastdds/dds/core/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 #include <utils/Host.hpp>
 
@@ -40,7 +40,7 @@ uint64_t default_domain_id()
 }
 
 bool is_duration_consistent(
-        const Duration_t& duration,
+        const fastrtps::Duration_t& duration,
         bool allow_infinite)
 {
     if (duration.is_infinite())

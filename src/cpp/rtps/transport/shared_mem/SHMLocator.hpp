@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_SHMLOCATOR_H_
 #define _FASTDDS_SHMLOCATOR_H_
 
-#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/Locator.h>
 #include <utils/Host.hpp>
 
 namespace eprosima {
@@ -45,6 +45,8 @@ public:
             uint32_t port,
             Type type)
     {
+        using namespace fastrtps::rtps;
+
         Locator_t locator(LOCATOR_KIND_SHM, port);
 
         locator.get_address()[0] = (type == Type::UNICAST) ? 'U' : 'M';
@@ -64,6 +66,8 @@ public:
     static bool is_shm_and_from_this_host(
             const Locator& locator)
     {
+        using namespace fastrtps::rtps;
+
         if (locator.kind == LOCATOR_KIND_SHM)
         {
             auto host_id = Host::instance().id();

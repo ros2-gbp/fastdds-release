@@ -17,16 +17,13 @@
  *
  */
 
-#include <fastdds/dds/core/policy/ParameterTypes.hpp>
+#include <fastrtps/qos/ParameterTypes.h>
 
 #include <fastdds/core/policy/ParameterSerializer.hpp>
 #include <fastdds/core/policy/ParameterList.hpp>
-#include <fastdds/rtps/transport/NetworkBuffer.hpp>
-
-using NetworkBuffer = eprosima::fastdds::rtps::NetworkBuffer;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 namespace {
@@ -127,21 +124,17 @@ struct DataMsgUtils
     {
         if (change->write_params.related_sample_identity() != SampleIdentity::unknown())
         {
-            fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_sample_identity(msg,
+            fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_sample_identity(msg,
                     change->write_params.related_sample_identity());
-            fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_custom_related_sample_identity(
-                msg,
-                change->write_params.related_sample_identity());
         }
 
         if (WITH_KEY == topicKind && (!change->writerGUID.is_builtin() || expectsInlineQos || ALIVE != change->kind))
         {
-            fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_key(msg,
-                    change->instanceHandle);
+            fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_key(msg, change->instanceHandle);
 
             if (ALIVE != change->kind)
             {
-                fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_status(msg, status);
+                fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_status(msg, status);
             }
         }
 
@@ -150,7 +143,7 @@ struct DataMsgUtils
             inlineQos->writeQosToCDRMessage(msg);
         }
 
-        fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_sentinel(msg);
+        fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_sentinel(msg);
     }
 
 };
@@ -171,12 +164,9 @@ bool RTPSMessageCreator::addMessageData(
 
     RTPSMessageCreator::addSubmessageInfoTS_Now(msg, false);
 
-    NetworkBuffer pending_buffer;
-    uint8_t pending_padding = 0;
-
     bool is_big_submessage;
     RTPSMessageCreator::addSubmessageData(msg, change, topicKind, readerId, expectsInlineQos, inlineQos,
-            is_big_submessage, true, pending_buffer, pending_padding);
+            &is_big_submessage);
 
     msg->length = msg->pos;
 
@@ -190,19 +180,10 @@ bool RTPSMessageCreator::addSubmessageData(
         const EntityId_t& readerId,
         bool expectsInlineQos,
         InlineQosWriter* inlineQos,
-        bool& is_big_submessage,
-        bool copy_data,
-        NetworkBuffer& pending_buffer,
-        uint8_t& pending_padding)
+        bool* is_big_submessage)
 {
     octet status = 0;
     octet flags = 0;
-
-    // Initialize output parameters
-    is_big_submessage = false;
-    pending_buffer = NetworkBuffer();
-    pending_padding = 0;
-
     //Find out flags
     bool dataFlag = false;
     bool keyFlag = false;
@@ -250,20 +231,7 @@ bool RTPSMessageCreator::addSubmessageData(
     //Add Serialized Payload
     if (dataFlag)
     {
-        if (copy_data)
-        {
-            added_no_error &=
-                    CDRMessage::addData(msg, change->serializedPayload.data, change->serializedPayload.length);
-        }
-        else if (msg->pos + change->serializedPayload.length > msg->max_size)
-        {
-            return false;
-        }
-        else
-        {
-            pending_buffer = NetworkBuffer(change->serializedPayload.data, change->serializedPayload.length);
-            msg->pos += pending_buffer.size;
-        }
+        added_no_error &= CDRMessage::addData(msg, change->serializedPayload.data, change->serializedPayload.length);
     }
 
     if (keyFlag)
@@ -280,27 +248,23 @@ bool RTPSMessageCreator::addSubmessageData(
 
         added_no_error &= CDRMessage::addUInt16(msg, 0); //ENCAPSULATION OPTIONS
         added_no_error &=
-                fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_key(msg,
+                fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_key(msg,
                         change->instanceHandle);
-        added_no_error &=
-                fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_status(msg,
-                        status);
-        added_no_error &= fastdds::dds::ParameterSerializer<fastdds::dds::Parameter_t>::add_parameter_sentinel(msg);
+        added_no_error &= fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_status(msg, status);
+        added_no_error &= fastdds::dds::ParameterSerializer<Parameter_t>::add_parameter_sentinel(msg);
     }
 
     // Align submessage to rtps alignment (4).
-    uint8_t align = (4 - msg->pos % 4) & 3;
-    if (copy_data)
+    uint32_t align = (4 - msg->pos % 4) & 3;
+    for (uint32_t count = 0; count < align; ++count)
     {
-        for (uint32_t count = 0; count < align; ++count)
-        {
-            added_no_error &= CDRMessage::addOctet(msg, 0);
-        }
+        added_no_error &= CDRMessage::addOctet(msg, 0);
     }
-    else
+
+    //if(align > 0)
     {
-        pending_padding = align;
-        msg->pos += align;
+        //submsgElem.pos += align;
+        //submsgElem.length += align;
     }
 
     uint32_t size32 = msg->pos - position_size_count_size;
@@ -318,18 +282,13 @@ bool RTPSMessageCreator::addSubmessageData(
             msg->buffer[submessage_size_pos] = *(o + 1);
             msg->buffer[submessage_size_pos + 1] = *(o);
         }
+
+        *is_big_submessage = false;
     }
     else
     {
-        // Submessage > 64 KB
-        is_big_submessage = true;
-    }
-
-    // Rewind position when not copying data. Needed for size checks.
-    if (!copy_data)
-    {
-        msg->pos -= pending_padding;
-        msg->pos -= pending_buffer.size;
+        // Submessage > 64KB
+        *is_big_submessage = true;
     }
 
     msg->msg_endian = old_endianess;
@@ -362,11 +321,8 @@ bool RTPSMessageCreator::addMessageDataFrag(
     payload.data = change->serializedPayload.data + fragment_start;
     payload.length = fragment_size;
 
-    NetworkBuffer pending_buffer;
-    uint8_t pending_padding = 0;
-
     RTPSMessageCreator::addSubmessageDataFrag(msg, change, fragment_number, payload,
-            topicKind, readerId, expectsInlineQos, inlineQos, true, pending_buffer, pending_padding);
+            topicKind, readerId, expectsInlineQos, inlineQos);
 
     payload.data = NULL;
 
@@ -382,10 +338,7 @@ bool RTPSMessageCreator::addSubmessageDataFrag(
         TopicKind_t topicKind,
         const EntityId_t& readerId,
         bool expectsInlineQos,
-        InlineQosWriter* inlineQos,
-        bool copy_data,
-        NetworkBuffer& pending_buffer,
-        uint8_t& pending_padding)
+        InlineQosWriter* inlineQos)
 {
     octet status = 0;
     octet flags = 0;
@@ -393,10 +346,6 @@ bool RTPSMessageCreator::addSubmessageDataFrag(
     bool dataFlag = false;
     bool keyFlag = false;
     bool inlineQosFlag = false;
-
-    // Initialize output parameters
-    pending_buffer = NetworkBuffer();
-    pending_padding = 0;
 
     Endianness_t old_endianess = msg->msg_endian;
 #if FASTDDS_IS_BIG_ENDIAN_TARGET
@@ -435,19 +384,7 @@ bool RTPSMessageCreator::addSubmessageDataFrag(
     //Add Serialized Payload XXX TODO
     if (!keyFlag) // keyflag = 0 means that the serializedPayload SubmessageElement contains the serialized Data
     {
-        if (copy_data)
-        {
-            added_no_error &= CDRMessage::addData(msg, payload.data, payload.length);
-        }
-        else if (msg->pos + payload.length > msg->max_size)
-        {
-            return false;
-        }
-        else
-        {
-            pending_buffer = NetworkBuffer(payload.data, payload.length);
-            msg->pos += pending_buffer.size;
-        }
+        added_no_error &= CDRMessage::addData(msg, payload.data, payload.length);
     }
     else
     {
@@ -471,21 +408,9 @@ bool RTPSMessageCreator::addSubmessageDataFrag(
     // TODO(Ricardo) This should be on cachechange.
     // Align submessage to rtps alignment (4).
     submessage_size = uint16_t(msg->pos - position_size_count_size);
-    for (; 0 != (submessage_size & 3); ++submessage_size)
+    for (; submessage_size& 3; ++submessage_size)
     {
-        if (copy_data)
-        {
-            added_no_error &= CDRMessage::addOctet(msg, 0);
-        }
-        else
-        {
-            ++pending_padding;
-        }
-    }
-
-    if (!copy_data)
-    {
-        msg->pos -= pending_buffer.size;
+        added_no_error &= CDRMessage::addOctet(msg, 0);
     }
 
     //TODO(Ricardo) Improve.
@@ -507,5 +432,5 @@ bool RTPSMessageCreator::addSubmessageDataFrag(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

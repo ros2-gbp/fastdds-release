@@ -2,7 +2,7 @@
 // local/basic_endpoint.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Derived from a public domain implementation written by Daniel Casimiro.
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -60,7 +60,7 @@ public:
 #endif
 
   /// Default constructor.
-  basic_endpoint() noexcept
+  basic_endpoint() ASIO_NOEXCEPT
   {
   }
 
@@ -85,51 +85,55 @@ public:
   #endif // defined(ASIO_HAS_STRING_VIEW)
 
   /// Copy constructor.
-  basic_endpoint(const basic_endpoint& other) noexcept
+  basic_endpoint(const basic_endpoint& other)
     : impl_(other.impl_)
   {
   }
 
+#if defined(ASIO_HAS_MOVE)
   /// Move constructor.
-  basic_endpoint(basic_endpoint&& other) noexcept
+  basic_endpoint(basic_endpoint&& other)
     : impl_(other.impl_)
   {
   }
+#endif // defined(ASIO_HAS_MOVE)
 
   /// Assign from another endpoint.
-  basic_endpoint& operator=(const basic_endpoint& other) noexcept
+  basic_endpoint& operator=(const basic_endpoint& other)
   {
     impl_ = other.impl_;
     return *this;
   }
 
+#if defined(ASIO_HAS_MOVE)
   /// Move-assign from another endpoint.
-  basic_endpoint& operator=(basic_endpoint&& other) noexcept
+  basic_endpoint& operator=(basic_endpoint&& other)
   {
     impl_ = other.impl_;
     return *this;
   }
+#endif // defined(ASIO_HAS_MOVE)
 
   /// The protocol associated with the endpoint.
-  protocol_type protocol() const noexcept
+  protocol_type protocol() const
   {
     return protocol_type();
   }
 
   /// Get the underlying endpoint in the native type.
-  data_type* data() noexcept
+  data_type* data()
   {
     return impl_.data();
   }
 
   /// Get the underlying endpoint in the native type.
-  const data_type* data() const noexcept
+  const data_type* data() const
   {
     return impl_.data();
   }
 
   /// Get the underlying size of the endpoint in the native type.
-  std::size_t size() const noexcept
+  std::size_t size() const
   {
     return impl_.size();
   }
@@ -141,7 +145,7 @@ public:
   }
 
   /// Get the capacity of the endpoint in the native type.
-  std::size_t capacity() const noexcept
+  std::size_t capacity() const
   {
     return impl_.capacity();
   }
@@ -166,42 +170,42 @@ public:
 
   /// Compare two endpoints for equality.
   friend bool operator==(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return e1.impl_ == e2.impl_;
   }
 
   /// Compare two endpoints for inequality.
   friend bool operator!=(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return !(e1.impl_ == e2.impl_);
   }
 
   /// Compare endpoints for ordering.
   friend bool operator<(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return e1.impl_ < e2.impl_;
   }
 
   /// Compare endpoints for ordering.
   friend bool operator>(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return e2.impl_ < e1.impl_;
   }
 
   /// Compare endpoints for ordering.
   friend bool operator<=(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return !(e2 < e1);
   }
 
   /// Compare endpoints for ordering.
   friend bool operator>=(const basic_endpoint<Protocol>& e1,
-      const basic_endpoint<Protocol>& e2) noexcept
+      const basic_endpoint<Protocol>& e2)
   {
     return !(e1 < e2);
   }

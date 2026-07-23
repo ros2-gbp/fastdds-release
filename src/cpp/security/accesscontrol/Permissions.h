@@ -19,11 +19,11 @@
 #ifndef _SECURITY_ACCESSCONTROL_PERMISSIONS_H_
 #define _SECURITY_ACCESSCONTROL_PERMISSIONS_H_
 
-#include <fastdds/rtps/common/Token.hpp>
-#include <rtps/security/accesscontrol/AccessControl.h>
+#include <fastdds/rtps/security/accesscontrol/AccessControl.h>
+#include <fastdds/rtps/common/Token.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -37,7 +37,7 @@ public:
             Authentication& auth_plugin,
             const IdentityHandle& identity,
             const uint32_t domain_id,
-            const PropertyPolicy& part_props,
+            const RTPSParticipantAttributes& participant_attr,
             SecurityException& exception) override;
 
     bool get_permissions_token(
@@ -77,6 +77,7 @@ public:
     bool check_create_participant(
             const PermissionsHandle& local_handle,
             const uint32_t domain_id,
+            const RTPSParticipantAttributes& qos,
             SecurityException& exception) override;
 
     bool check_remote_participant(
@@ -134,7 +135,7 @@ public:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_ACCESSCONTROL_PERMISSIONS_H_

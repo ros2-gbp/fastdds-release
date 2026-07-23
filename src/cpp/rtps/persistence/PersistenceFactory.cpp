@@ -23,11 +23,11 @@
 #include <rtps/persistence/SQLite3PersistenceService.h>
 #endif // if HAVE_SQLITE3
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
+#include <fastdds/rtps/history/WriterHistory.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 std::vector<CacheChange_t*>& IPersistenceService::get_changes(
@@ -56,13 +56,8 @@ IPersistenceService* PersistenceFactory::create_persistence_service(
         {
             const std::string* filename_property = PropertyPolicyHelper::find_property(property_policy,
                             "dds.persistence.sqlite3.filename");
-#ifdef ANDROID
-            const char* filename = (filename_property == nullptr) ?
-                    "/data/local/tmp/persistence.db" : filename_property->c_str();
-#else
             const char* filename = (filename_property == nullptr) ?
                     "persistence.db" : filename_property->c_str();
-#endif // if ANDROID
             bool update_schema = false;
             const std::string* update_schema_value = PropertyPolicyHelper::find_property(property_policy,
                             "dds.persistence.update_schema");
@@ -81,5 +76,5 @@ IPersistenceService* PersistenceFactory::create_persistence_service(
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

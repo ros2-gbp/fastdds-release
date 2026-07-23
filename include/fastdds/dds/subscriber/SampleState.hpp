@@ -16,8 +16,8 @@
  * @file SampleState.hpp
  */
 
-#ifndef FASTDDS_DDS_SUBSCRIBER__SAMPLESTATE_HPP
-#define FASTDDS_DDS_SUBSCRIBER__SAMPLESTATE_HPP
+#ifndef _FASTDDS_DDS_SUBSCRIBER_SAMPLESTATE_HPP_
+#define _FASTDDS_DDS_SUBSCRIBER_SAMPLESTATE_HPP_
 
 #include <cstdint>
 
@@ -57,4 +57,4 @@ constexpr SampleStateMask ANY_SAMPLE_STATE = READ_SAMPLE_STATE | NOT_READ_SAMPLE
 }  // namespace fastdds
 }  // namespace eprosima
 
-#endif  // FASTDDS_DDS_SUBSCRIBER__SAMPLESTATE_HPP
+#endif  // _FASTDDS_DDS_SUBSCRIBER_SAMPLESTATE_HPP_

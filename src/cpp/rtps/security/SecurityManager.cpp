@@ -20,35 +20,36 @@
 
 #include <cassert>
 #include <chrono>
-#include <mutex>
 #include <thread>
+#include <mutex>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/attributes/EndpointSecurityAttributes.hpp>
-#include <fastdds/rtps/attributes/HistoryAttributes.hpp>
-#include <fastdds/rtps/history/ReaderHistory.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
-#include <fastdds/rtps/participant/RTPSParticipantListener.hpp>
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/builtin/discovery/endpoint/EDP.h>
-#include <rtps/builtin/discovery/participant/PDP.h>
-#include <rtps/messages/CDRMessage.hpp>
+#include <fastdds/rtps/attributes/HistoryAttributes.h>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDP.h>
+#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
+#include <fastdds/rtps/history/ReaderHistory.h>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/messages/CDRMessage.h>
+#include <fastdds/rtps/network/NetworkFactory.h>
+#include <fastdds/rtps/participant/RTPSParticipantListener.h>
+#include <fastdds/rtps/reader/StatefulReader.h>
+#include <fastdds/rtps/reader/StatelessReader.h>
+#include <fastdds/rtps/security/accesscontrol/AccessControl.h>
+#include <fastdds/rtps/security/accesscontrol/EndpointSecurityAttributes.h>
+#include <fastdds/rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
+#include <fastdds/rtps/security/accesscontrol/SecurityMaskUtilities.h>
+#include <fastdds/rtps/security/authentication/Authentication.h>
+#include <fastdds/rtps/security/exceptions/SecurityException.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
+#include <fastdds/rtps/writer/StatelessWriter.h>
+
 #include <rtps/history/TopicPayloadPoolRegistry.hpp>
-#include <rtps/network/NetworkFactory.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/reader/StatefulReader.hpp>
-#include <rtps/reader/StatelessReader.hpp>
-#include <rtps/security/accesscontrol/AccessControl.h>
-#include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
-#include <rtps/security/accesscontrol/SecurityMaskUtilities.h>
-#include <rtps/security/authentication/Authentication.h>
-#include <rtps/security/exceptions/SecurityException.h>
+#include <rtps/participant/RTPSParticipantImpl.h>
 #include <security/cryptography/AESGCMGMAC_Types.h>
-#include <rtps/writer/StatefulWriter.hpp>
-#include <rtps/writer/StatelessWriter.hpp>
 #include <security/OpenSSLInit.hpp>
 
 #include <openssl/pem.h>
@@ -68,11 +69,9 @@
 
 // TODO(Ricardo) Add event because stateless messages can be not received.
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
-
-using namespace security;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 inline bool usleep_bool()
 {
@@ -80,39 +79,41 @@ inline bool usleep_bool()
     return true;
 }
 
-static CacheChange_t* create_change_for_message(
-        const ParticipantGenericMessage& message,
-        WriterHistory* history)
-{
-    uint32_t cdr_size = static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message));
-    cdr_size += (4 - (cdr_size % 4)) & (4 - 1); // Align to 4 bytes
-    cdr_size += 4; // Encapsulation
-    return history->create_change(cdr_size, ALIVE, c_InstanceHandle_Unknown);
-}
-
 SecurityManager::SecurityManager(
-        RTPSParticipantImpl* participant,
-        const RTPSParticipantAttributes& pattr,
-        ISecurityPluginFactory& plugin_factory)
+        RTPSParticipantImpl* participant)
     : participant_stateless_message_listener_(*this)
     , participant_volatile_message_secure_listener_(*this)
     , participant_(participant)
-    , factory_(plugin_factory)
+    , participant_stateless_message_writer_(nullptr)
+    , participant_stateless_message_writer_history_(nullptr)
+    , participant_stateless_message_reader_(nullptr)
+    , participant_stateless_message_reader_history_(nullptr)
+    , participant_volatile_message_secure_writer_(nullptr)
+    , participant_volatile_message_secure_writer_history_(nullptr)
+    , participant_volatile_message_secure_reader_(nullptr)
+    , participant_volatile_message_secure_reader_history_(nullptr)
+    , logging_plugin_(nullptr)
+    , authentication_plugin_(nullptr)
+    , access_plugin_(nullptr)
+    , crypto_plugin_(nullptr)
     , domain_id_(0)
-    , max_discovered_participants_(pattr.allocation.participants.maximum)
+    , local_identity_handle_(nullptr)
+    , local_permissions_handle_(nullptr)
+    , max_discovered_participants_(participant->getRTPSParticipantAttributes().allocation.participants.maximum)
     , auth_last_sequence_number_(1)
     , crypto_last_sequence_number_(1)
     , temp_reader_proxies_({
-                pattr.allocation.locators.max_unicast_locators,
-                pattr.allocation.locators.max_multicast_locators,
-                pattr.allocation.data_limits,
-                pattr.allocation.content_filter})
+                participant->getRTPSParticipantAttributes().allocation.locators.max_unicast_locators,
+                participant->getRTPSParticipantAttributes().allocation.locators.max_multicast_locators,
+                participant->getRTPSParticipantAttributes().allocation.data_limits,
+                participant->getRTPSParticipantAttributes().allocation.content_filter})
     , temp_writer_proxies_({
-                pattr.allocation.locators.max_unicast_locators,
-                pattr.allocation.locators.max_multicast_locators,
-                pattr.allocation.data_limits})
+                participant->getRTPSParticipantAttributes().allocation.locators.max_unicast_locators,
+                participant->getRTPSParticipantAttributes().allocation.locators.max_multicast_locators,
+                participant->getRTPSParticipantAttributes().allocation.data_limits})
 {
     assert(participant != nullptr);
+    static OpenSSLInit openssl_init;
 }
 
 SecurityManager::~SecurityManager()
@@ -124,12 +125,12 @@ bool SecurityManager::init(
         ParticipantSecurityAttributes& attributes,
         const PropertyPolicy& participant_properties)
 {
-    SecurityException exception;
     try
     {
+        SecurityException exception;
         domain_id_ = participant_->get_domain_id();
         const PropertyPolicy log_properties = PropertyPolicyHelper::get_properties_with_prefix(
-            participant_->get_const_attributes().properties,
+            participant_->getRTPSParticipantAttributes().properties,
             "dds.sec.log.builtin.DDS_LogTopic.");
 
         // length(log_properties) == 0 considered as logging disable.
@@ -192,25 +193,11 @@ bool SecurityManager::init(
             else
             {
                 //TODO(artivis): If the factory fails instantiating 'authentication_plugin_',
-                // a EPROSIMA_LOG_INFO is issued and this init function returns true. Is it a bug?
+                // a logInfo is issued and this init function returns true. Is it a bug?
                 // in the meantime we'll adopt a similar behavior here.
-                EPROSIMA_LOG_INFO(SECURITY, "Could not create logging plugin. Security logging will be disabled.");
+                logInfo(SECURITY, "Could not create logging plugin. Security logging will be disabled.");
             }
         }
-
-        const auto log_info_message = [this](const char* msg)
-                {
-                    if (logging_plugin_)
-                    {
-                        SecurityException logging_exception;
-                        logging_plugin_->log(LoggingLevel::INFORMATIONAL_LEVEL, msg, "SecurityManager,init",
-                                logging_exception);
-                    }
-                    else
-                    {
-                        EPROSIMA_LOG_INFO(SECURITY, msg);
-                    }
-                };
 
         authentication_plugin_ = factory_.create_authentication_plugin(participant_properties);
 
@@ -218,7 +205,7 @@ bool SecurityManager::init(
         {
             // retrieve authentication properties, if any
             const PropertyPolicy auth_handshake_properties = PropertyPolicyHelper::get_properties_with_prefix(
-                participant_->get_const_attributes().properties,
+                participant_->getRTPSParticipantAttributes().properties,
                 "dds.sec.auth.builtin.PKI-DH.");
 
             // if auth_handshake_properties is empty, the default values are used
@@ -244,7 +231,7 @@ bool SecurityManager::init(
                 ret = authentication_plugin_->validate_local_identity(&local_identity_handle_,
                                 adjusted_participant_key,
                                 domain_id_,
-                                participant_->get_const_attributes().properties,
+                                participant_->getRTPSParticipantAttributes(),
                                 participant_->getGuid(),
                                 exception);
             }
@@ -267,7 +254,7 @@ bool SecurityManager::init(
                     local_permissions_handle_ = access_plugin_->validate_local_permissions(
                         *authentication_plugin_, *local_identity_handle_,
                         domain_id_,
-                        participant_->get_const_attributes().properties,
+                        participant_->getRTPSParticipantAttributes(),
                         exception);
 
                     if (local_permissions_handle_ != nullptr)
@@ -275,7 +262,8 @@ bool SecurityManager::init(
                         if (!local_permissions_handle_->nil())
                         {
                             if (access_plugin_->check_create_participant(*local_permissions_handle_,
-                                    domain_id_, exception))
+                                    domain_id_,
+                                    participant_->getRTPSParticipantAttributes(), exception))
                             {
                                 // Set credentials.
                                 PermissionsCredentialToken* token = nullptr;
@@ -320,14 +308,20 @@ bool SecurityManager::init(
                             local_permissions_handle_ = nullptr;
                         }
                     }
-                    else
-                    {
-                        log_info_message(exception.what());
-                    }
                 }
-                else
+
+                if (access_plugin_ == nullptr)
                 {
-                    log_info_message("Access control plugin not configured");
+                    // Read participant properties.
+                    const std::string* property_value = PropertyPolicyHelper::find_property(participant_properties,
+                                    "rtps.participant.rtps_protection_kind");
+                    if (property_value != nullptr && property_value->compare("ENCRYPT") == 0)
+                    {
+                        attributes.is_rtps_protected = true;
+                        attributes.plugin_participant_attributes |=
+                                PLUGIN_PARTICIPANT_SECURITY_ATTRIBUTES_FLAG_IS_VALID |
+                                PLUGIN_PARTICIPANT_SECURITY_ATTRIBUTES_FLAG_IS_RTPS_ENCRYPTED;
+                    }
                 }
 
                 if (access_plugin_ == nullptr || local_permissions_handle_ != nullptr)
@@ -338,15 +332,10 @@ bool SecurityManager::init(
                     {
                         crypto_plugin_->set_logger(logging_plugin_, exception);
 
-                        // When no access control plugin is configured, local_permissions_handle_ is null
-                        NilHandle nil_permissions_handle;
-                        const PermissionsHandle& permissions_handle = (local_permissions_handle_ != nullptr) ?
-                                *local_permissions_handle_ : nil_permissions_handle;
-
                         local_participant_crypto_handle_ =
                                 crypto_plugin_->cryptokeyfactory()->register_local_participant(
                             *local_identity_handle_,
-                            permissions_handle,
+                            *local_permissions_handle_,
                             participant_properties.properties(),
                             attributes,
                             exception);
@@ -355,19 +344,22 @@ bool SecurityManager::init(
                         {
                             assert(!local_participant_crypto_handle_->nil());
                         }
-                        else
-                        {
-                            log_info_message(exception.what());
-                        }
                     }
                     else
                     {
-                        log_info_message(exception.what());
+                        if (logging_plugin_)
+                        {
+                            SecurityException logging_exception;
+                            logging_plugin_->log(LoggingLevel::INFORMATIONAL_LEVEL,
+                                    "Cryptography plugin not configured",
+                                    "SecurityManager,init",
+                                    logging_exception);
+                        }
+                        else
+                        {
+                            logInfo(SECURITY, "Cryptography plugin not configured.");
+                        }
                     }
-                }
-                else
-                {
-                    log_info_message("Cryptography plugin not configured");
                 }
 
                 if ((access_plugin_ == nullptr || local_permissions_handle_ != nullptr) &&
@@ -376,34 +368,29 @@ bool SecurityManager::init(
                     // Should be activated here, to enable encription buffer on created entities
                     throw true;
                 }
-                else
-                {
-                    if (access_plugin_ != nullptr && local_permissions_handle_ == nullptr)
-                    {
-                        EPROSIMA_LOG_ERROR(SECURITY, "Participant is not allowed with its own permissions file.");
-                    }
-
-                    if (crypto_plugin_ != nullptr && local_participant_crypto_handle_ == nullptr)
-                    {
-                        EPROSIMA_LOG_ERROR(SECURITY, "Participant cryptography could not be configured.");
-                    }
-                }
             }
 
-            // NOTE: This makes Participant creation fails, in some occasions without any info of what happened.
-            // However, it has been decided to leave it this way.
-            // For future developers struggling with security debugging issues, remember that the exception variable
-            // at this point has relevant information.
             throw false;
         }
         else
         {
-            log_info_message("Authentication plugin not configured. Security will be disabled");
+            if (logging_plugin_)
+            {
+                SecurityException logging_exception;
+                logging_plugin_->log(LoggingLevel::INFORMATIONAL_LEVEL,
+                        "Authentication plugin not configured. Security will be disable",
+                        "SecurityManager,init",
+                        logging_exception);
+            }
+            else
+            {
+                logInfo(SECURITY, "Authentication plugin not configured. Security will be disable");
+            }
         }
     }
     catch (const SecurityException& e)
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Logging plugin not configured. Security logging will be disabled. ("
+        logError(SECURITY, "Logging plugin not configured. Security logging will be disabled. ("
                 << e.what() << ").");
         delete logging_plugin_;
         logging_plugin_ = nullptr;
@@ -413,13 +400,6 @@ bool SecurityManager::init(
     {
         if (!e)
         {
-            // Unexpected code path. Let's log any errors
-            EPROSIMA_LOG_ERROR(SECURITY, "Error while configuring security plugin.");
-            if (0 != strlen(exception.what()))
-            {
-                EPROSIMA_LOG_ERROR(SECURITY, exception.what());
-            }
-
             cancel_init();
             return false;
         }
@@ -681,8 +661,8 @@ bool SecurityManager::discovered_participant(
     {
         std::lock_guard<shared_mutex> _(mutex_);
 
-        auto dp_it = discovered_participants_.lower_bound(participant_data.guid);
-        if ((dp_it != discovered_participants_.end()) && (dp_it->first == participant_data.guid))
+        auto dp_it = discovered_participants_.lower_bound(participant_data.m_guid);
+        if ((dp_it != discovered_participants_.end()) && (dp_it->first == participant_data.m_guid))
         {
             // Already exists, use the information from the collection
             remote_participant_info = dp_it->second->get_auth();
@@ -693,7 +673,7 @@ bool SecurityManager::discovered_participant(
             // Create new element, because it is not discovered yet
             auto map_ret = discovered_participants_.emplace_hint(
                 dp_it,
-                participant_data.guid,
+                participant_data.m_guid,
                 std::unique_ptr<DiscoveredParticipantInfo>(
                     new DiscoveredParticipantInfo(auth_status, participant_data)));
 
@@ -707,9 +687,9 @@ bool SecurityManager::discovered_participant(
         {
             // Using info level to avoid clogging the logs, since this could be triggered by an attacker flooding the
             // network with fake participants.
-            EPROSIMA_LOG_INFO(SECURITY,
+            logInfo(SECURITY,
                     "Maximum number of discovered participants reached. Ignoring participant "
-                    << participant_data.guid);
+                    << participant_data.m_guid);
             return false;
         }
     }
@@ -718,7 +698,7 @@ bool SecurityManager::discovered_participant(
     if (newly_discovered && remote_participant_info && remote_participant_data != nullptr)
     {
         // Configure the timed event but do not start it
-        const GUID_t guid = remote_participant_data->guid;
+        const GUID_t guid = remote_participant_data->m_guid;
         remote_participant_info->event_.reset(new TimedEvent(participant_->getEventResource(),
                 [&, guid]() -> bool
                 {
@@ -733,7 +713,7 @@ bool SecurityManager::discovered_participant(
         ValidationResult_t validation_ret = authentication_plugin_->validate_remote_identity(&remote_identity_handle,
                         *local_identity_handle_,
                         remote_participant_data->identity_token_,
-                        remote_participant_data->guid, exception);
+                        remote_participant_data->m_guid, exception);
 
         switch (validation_ret)
         {
@@ -758,13 +738,13 @@ bool SecurityManager::discovered_participant(
                 std::lock_guard<shared_mutex> _(mutex_);
 
                 // Remove created element, because authentication failed.
-                discovered_participants_.erase(remote_participant_data->guid);
+                discovered_participants_.erase(remote_participant_data->m_guid);
 
                 //TODO(Ricardo) cryptograhy registration in AUTHENTICAITON_OK
                 return false;
         }
 
-        EPROSIMA_LOG_INFO(SECURITY, "Discovered participant " << remote_participant_data->guid);
+        logInfo(SECURITY, "Discovered participant " << remote_participant_data->m_guid);
 
         // Match entities
         match_builtin_endpoints(*remote_participant_data);
@@ -806,7 +786,7 @@ bool SecurityManager::discovered_participant(
                         MessageIdentity(), HandshakeMessageToken(), notify_part_authorized);
     }
 
-    restore_discovered_participant_info(remote_participant_data->guid, remote_participant_info);
+    restore_discovered_participant_info(remote_participant_data->m_guid, remote_participant_info);
 
     if (notify_part_authorized)
     {
@@ -918,8 +898,8 @@ void SecurityManager::remove_participant_unlocked(
     SecurityException ignored;
     if (!remove_participant_unlocked(remote_guid, ignored))
     {
-        EPROSIMA_LOG_WARNING(SECURITY, "Cleanup errors while removing participant " << remote_guid
-                                                                                    << ": " << ignored.what());
+        logWarning(SECURITY, "Cleanup errors while removing participant " << remote_guid
+                                                                          << ": " << ignored.what());
     }
 }
 
@@ -933,7 +913,7 @@ void SecurityManager::remove_participant(
     }
 
     unmatch_builtin_endpoints(participant_data);
-    remove_participant_unlocked(participant_data.guid);
+    remove_participant_unlocked(participant_data.m_guid);
 }
 
 bool SecurityManager::on_process_handshake(
@@ -956,7 +936,7 @@ bool SecurityManager::on_process_handshake(
 
     assert(remote_participant_info->identity_handle_ != nullptr);
 
-    EPROSIMA_LOG_INFO(SECURITY, "Processing handshake from participant " << participant_data.guid);
+    logInfo(SECURITY, "Processing handshake from participant " << participant_data.m_guid);
 
     if (remote_participant_info->auth_status_ == AUTHENTICATION_REQUEST_NOT_SEND)
     {
@@ -1023,11 +1003,14 @@ bool SecurityManager::on_process_handshake(
 
         // Create message
         ParticipantGenericMessage message = generate_authentication_message(std::move(message_identity),
-                        participant_data.guid, *handshake_message);
+                        participant_data.m_guid, *handshake_message);
 
-        CacheChange_t* change = create_change_for_message(
-            message,
-            participant_stateless_message_writer_history_);
+        CacheChange_t* change = participant_stateless_message_writer_->new_change([&message]() -> uint32_t
+                        {
+                            return static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message)
+                                   + 4 /*encapsulation*/);
+                        }
+                        , ALIVE, c_InstanceHandle_Unknown);
 
         if (change != nullptr)
         {
@@ -1050,8 +1033,8 @@ bool SecurityManager::on_process_handshake(
                 change->serializedPayload.length = aux_msg.length;
 
                 // Send
-                EPROSIMA_LOG_INFO(SECURITY, "Authentication handshake sent to participant "
-                        << participant_data.guid);
+                logInfo(SECURITY, "Authentication handshake sent to participant "
+                        << participant_data.m_guid);
                 if (participant_stateless_message_writer_history_->add_change(change))
                 {
                     handshake_message_send = true;
@@ -1061,26 +1044,18 @@ bool SecurityManager::on_process_handshake(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot add the CacheChange_t");
-                    // Return the handshake handle
-                    authentication_plugin_->return_handshake_handle(remote_participant_info->handshake_handle_,
-                            exception);
-                    remote_participant_info->handshake_handle_ = nullptr;
-                    participant_stateless_message_writer_history_->release_change(change);
+                    logError(SECURITY, "WriterHistory cannot add the CacheChange_t");
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Cannot serialize ParticipantGenericMessage");
-                participant_stateless_message_writer_history_->release_change(change);
+                //TODO (Ricardo) Return change.
+                logError(SECURITY, "Cannot serialize ParticipantGenericMessage");
             }
         }
         else
         {
-            // Return the handshake handle
-            authentication_plugin_->return_handshake_handle(remote_participant_info->handshake_handle_, exception);
-            remote_participant_info->handshake_handle_ = nullptr;
-            EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
+            logError(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
         }
     }
 
@@ -1154,7 +1129,7 @@ bool SecurityManager::create_entities()
     {
         if (crypto_plugin_ == nullptr || create_participant_volatile_message_secure_entities())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Initialized security manager for participant " << participant_->getGuid());
+            logInfo(SECURITY, "Initialized security manager for participant " << participant_->getGuid());
             return true;
         }
 
@@ -1197,11 +1172,11 @@ void SecurityManager::delete_participant_stateless_message_entities()
 void SecurityManager::create_participant_stateless_message_pool()
 {
     participant_stateless_message_writer_hattr_ =
-    { PREALLOCATED_WITH_REALLOC_MEMORY_MODE, PARTICIPANT_STATELESS_MESSAGE_PAYLOAD_DEFAULT_SIZE, 20, 100};
+    { PREALLOCATED_MEMORY_MODE, participant_->getMaxMessageSize(), 20, 100 };
     participant_stateless_message_reader_hattr_ =
-    { PREALLOCATED_WITH_REALLOC_MEMORY_MODE, PARTICIPANT_STATELESS_MESSAGE_PAYLOAD_DEFAULT_SIZE, 10, 5000};
+    { PREALLOCATED_MEMORY_MODE, participant_->getMaxMessageSize(), 10, 5000 };
 
-    BasicPoolConfig cfg{ PREALLOCATED_WITH_REALLOC_MEMORY_MODE, PARTICIPANT_STATELESS_MESSAGE_PAYLOAD_DEFAULT_SIZE};
+    BasicPoolConfig cfg{ PREALLOCATED_MEMORY_MODE, participant_->getMaxMessageSize() };
     participant_stateless_message_pool_ = TopicPayloadPoolRegistry::get("DCPSParticipantStatelessMessage", cfg);
 
     PoolConfig writer_cfg = PoolConfig::from_history_attributes(participant_stateless_message_writer_hattr_);
@@ -1227,34 +1202,28 @@ void SecurityManager::delete_participant_stateless_message_pool()
 
 bool SecurityManager::create_participant_stateless_message_writer()
 {
-    participant_stateless_message_writer_history_ = new WriterHistory(
-        participant_stateless_message_writer_hattr_,
-        participant_stateless_message_pool_);
-
-    RTPSParticipantAttributes pattr = participant_->copy_attributes();
+    participant_stateless_message_writer_history_ = new WriterHistory(participant_stateless_message_writer_hattr_);
 
     WriterAttributes watt;
-    watt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
-    watt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
     watt.endpoint.endpointKind = WRITER;
     watt.endpoint.reliabilityKind = BEST_EFFORT;
     watt.endpoint.topicKind = NO_KEY;
-    watt.matched_readers_allocation = pattr.allocation.participants;
-    watt.separate_sending = true;
+    watt.matched_readers_allocation = participant_->getRTPSParticipantAttributes().allocation.participants;
 
     RTPSWriter* wout = nullptr;
-    if (participant_->createWriter(&wout, watt,
+    if (participant_->createWriter(&wout, watt, participant_stateless_message_pool_,
             participant_stateless_message_writer_history_, nullptr,
             participant_stateless_message_writer_entity_id, true))
     {
         participant_->set_endpoint_rtps_protection_supports(wout, false);
         participant_stateless_message_writer_ = dynamic_cast<StatelessWriter*>(wout);
+        participant_stateless_message_writer_->set_separate_sending(true);
         auth_source_guid = participant_stateless_message_writer_->getGuid();
 
         return true;
     }
 
-    EPROSIMA_LOG_ERROR(SECURITY, "Participant Stateless Message Writer creation failed");
+    logError(SECURITY, "Participant Stateless Message Writer creation failed");
     delete(participant_stateless_message_writer_history_);
     participant_stateless_message_writer_history_ = nullptr;
 
@@ -1280,19 +1249,18 @@ bool SecurityManager::create_participant_stateless_message_reader()
 {
     participant_stateless_message_reader_history_ = new ReaderHistory(participant_stateless_message_reader_hattr_);
 
-    RTPSParticipantAttributes pattr = participant_->copy_attributes();
-
     ReaderAttributes ratt;
     ratt.endpoint.topicKind = NO_KEY;
     ratt.endpoint.reliabilityKind = BEST_EFFORT;
-    if (!pattr.builtin.avoid_builtin_multicast)
+    if (!participant_->getRTPSParticipantAttributes().builtin.avoid_builtin_multicast)
     {
-        ratt.endpoint.multicastLocatorList = pattr.builtin.metatrafficMulticastLocatorList;
+        ratt.endpoint.multicastLocatorList =
+                participant_->getRTPSParticipantAttributes().builtin.metatrafficMulticastLocatorList;
     }
-    ratt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
-    ratt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
-    ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
-    ratt.matched_writers_allocation = pattr.allocation.participants;
+    ratt.endpoint.unicastLocatorList =
+            participant_->getRTPSParticipantAttributes().builtin.metatrafficUnicastLocatorList;
+    ratt.endpoint.remoteLocatorList = participant_->getRTPSParticipantAttributes().builtin.initialPeersList;
+    ratt.matched_writers_allocation = participant_->getRTPSParticipantAttributes().allocation.participants;
 
     RTPSReader* rout = nullptr;
     if (participant_->createReader(&rout, ratt, participant_stateless_message_pool_,
@@ -1305,7 +1273,7 @@ bool SecurityManager::create_participant_stateless_message_reader()
         return true;
     }
 
-    EPROSIMA_LOG_ERROR(SECURITY, "Participant Stateless Message Reader creation failed");
+    logError(SECURITY, "Participant Stateless Message Reader creation failed");
     delete(participant_stateless_message_reader_history_);
     participant_stateless_message_reader_history_ = nullptr;
     return false;
@@ -1354,7 +1322,7 @@ void SecurityManager::delete_participant_volatile_message_secure_entities()
 void SecurityManager::create_participant_volatile_message_secure_pool()
 {
     participant_volatile_message_secure_hattr_ =
-    { PREALLOCATED_WITH_REALLOC_MEMORY_MODE, PARTICIPANT_VOLATILE_MESSAGE_PAYLOAD_DEFAULT_SIZE, 10, 0 };
+    { PREALLOCATED_MEMORY_MODE, participant_->getMaxMessageSize(), 10, 0 };
 
     PoolConfig pool_cfg = PoolConfig::from_history_attributes(participant_volatile_message_secure_hattr_);
     participant_volatile_message_secure_pool_ =
@@ -1377,35 +1345,33 @@ void SecurityManager::delete_participant_volatile_message_secure_pool()
 bool SecurityManager::create_participant_volatile_message_secure_writer()
 {
     participant_volatile_message_secure_writer_history_ =
-            new WriterHistory(participant_volatile_message_secure_hattr_, participant_volatile_message_secure_pool_);
-
-    RTPSParticipantAttributes pattr = participant_->copy_attributes();
+            new WriterHistory(participant_volatile_message_secure_hattr_);
 
     WriterAttributes watt;
     watt.endpoint.endpointKind = WRITER;
     watt.endpoint.reliabilityKind = RELIABLE;
     watt.endpoint.topicKind = NO_KEY;
     watt.endpoint.durabilityKind = VOLATILE;
-    watt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
-    watt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
-    watt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
+    watt.endpoint.unicastLocatorList =
+            participant_->getRTPSParticipantAttributes().builtin.metatrafficUnicastLocatorList;
+    watt.endpoint.remoteLocatorList = participant_->getRTPSParticipantAttributes().builtin.initialPeersList;
     watt.endpoint.security_attributes().is_submessage_protected = true;
     watt.endpoint.security_attributes().plugin_endpoint_attributes =
             PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
-    watt.matched_readers_allocation = pattr.allocation.participants;
-    watt.separate_sending = true;
+    watt.matched_readers_allocation = participant_->getRTPSParticipantAttributes().allocation.participants;
 
     RTPSWriter* wout = nullptr;
-    if (participant_->createWriter(&wout, watt,
+    if (participant_->createWriter(&wout, watt, participant_volatile_message_secure_pool_,
             participant_volatile_message_secure_writer_history_,
             this, participant_volatile_message_secure_writer_entity_id, true))
     {
         participant_->set_endpoint_rtps_protection_supports(wout, false);
         participant_volatile_message_secure_writer_ = dynamic_cast<StatefulWriter*>(wout);
+        participant_volatile_message_secure_writer_->set_separate_sending(true);
         return true;
     }
 
-    EPROSIMA_LOG_ERROR(SECURITY, "Participant Volatile Message Writer creation failed");
+    logError(SECURITY, "Participant Volatile Message Writer creation failed");
     delete(participant_volatile_message_secure_writer_history_);
     participant_volatile_message_secure_writer_history_ = nullptr;
 
@@ -1432,19 +1398,17 @@ bool SecurityManager::create_participant_volatile_message_secure_reader()
     participant_volatile_message_secure_reader_history_ =
             new ReaderHistory(participant_volatile_message_secure_hattr_);
 
-    RTPSParticipantAttributes pattr = participant_->copy_attributes();
-
     ReaderAttributes ratt;
     ratt.endpoint.topicKind = NO_KEY;
     ratt.endpoint.reliabilityKind = RELIABLE;
     ratt.endpoint.durabilityKind = VOLATILE;
-    ratt.endpoint.unicastLocatorList = pattr.builtin.metatrafficUnicastLocatorList;
-    ratt.endpoint.external_unicast_locators = pattr.builtin.metatraffic_external_unicast_locators;
-    ratt.endpoint.ignore_non_matching_locators = pattr.ignore_non_matching_locators;
+    ratt.endpoint.unicastLocatorList =
+            participant_->getRTPSParticipantAttributes().builtin.metatrafficUnicastLocatorList;
+    ratt.endpoint.remoteLocatorList = participant_->getRTPSParticipantAttributes().builtin.initialPeersList;
     ratt.endpoint.security_attributes().is_submessage_protected = true;
     ratt.endpoint.security_attributes().plugin_endpoint_attributes =
             PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
-    ratt.matched_writers_allocation = pattr.allocation.participants;
+    ratt.matched_writers_allocation = participant_->getRTPSParticipantAttributes().allocation.participants;
 
     RTPSReader* rout = nullptr;
     if (participant_->createReader(&rout, ratt, participant_volatile_message_secure_pool_,
@@ -1457,7 +1421,7 @@ bool SecurityManager::create_participant_volatile_message_secure_reader()
         return true;
     }
 
-    EPROSIMA_LOG_ERROR(SECURITY, "Participant Volatile Message Reader creation failed");
+    logError(SECURITY, "Participant Volatile Message Reader creation failed");
     delete(participant_volatile_message_secure_reader_history_);
     participant_volatile_message_secure_reader_history_ = nullptr;
     return false;
@@ -1588,7 +1552,7 @@ void SecurityManager::process_participant_stateless_message(
 
     if (false == CDRMessage::readParticipantGenericMessage(&aux_msg, message))
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Cannot deserialize ParticipantGenericMessage");
+        logInfo(SECURITY, "Cannot deserialize ParticipantGenericMessage");
         return;
     }
 
@@ -1596,24 +1560,22 @@ void SecurityManager::process_participant_stateless_message(
     {
         if (message.message_identity().source_guid() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
             return;
         }
         if (message.destination_participant_key() != participant_->getGuid())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Destination of ParticipantGenericMessage is not me");
+            logInfo(SECURITY, "Destination of ParticipantGenericMessage is not me");
             return;
         }
         if (message.destination_endpoint_key() != GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. destination_endpoint_key is not GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is not GUID_t::unknown()");
             return;
         }
         if (message.source_endpoint_key() != GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is not GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is not GUID_t::unknown()");
             return;
         }
 
@@ -1642,14 +1604,14 @@ void SecurityManager::process_participant_stateless_message(
                 // Preconditions
                 if (message.related_message_identity().source_guid() != GUID_t::unknown())
                 {
-                    EPROSIMA_LOG_INFO(SECURITY,
+                    logInfo(SECURITY,
                             "Bad ParticipantGenericMessage. related_message_identity.source_guid is not GUID_t::unknown()");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
                 if (message.message_data().size() != 1)
                 {
-                    EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
+                    logInfo(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
@@ -1690,7 +1652,7 @@ void SecurityManager::process_participant_stateless_message(
                 if (message.related_message_identity().source_guid()
                         != participant_stateless_message_writer_->getGuid())
                 {
-                    EPROSIMA_LOG_INFO(SECURITY,
+                    logInfo(SECURITY,
                             "Bad ParticipantGenericMessage. related_message_identity.source_guid is not mine");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
@@ -1698,14 +1660,14 @@ void SecurityManager::process_participant_stateless_message(
                 if (message.related_message_identity().sequence_number()
                         != remote_participant_info->expected_sequence_number_)
                 {
-                    EPROSIMA_LOG_INFO(SECURITY,
+                    logInfo(SECURITY,
                             "Bad ParticipantGenericMessage. related_message_identity.sequence_number is not expected");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
                 if (message.message_data().size() != 1)
                 {
-                    EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
+                    logInfo(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
@@ -1716,7 +1678,7 @@ void SecurityManager::process_participant_stateless_message(
                 if (message.related_message_identity().source_guid()
                         != participant_stateless_message_writer_->getGuid())
                 {
-                    EPROSIMA_LOG_INFO(SECURITY,
+                    logInfo(SECURITY,
                             "Bad ParticipantGenericMessage. related_message_identity.source_guid is not mine");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
@@ -1724,14 +1686,14 @@ void SecurityManager::process_participant_stateless_message(
                 if (message.related_message_identity().sequence_number()
                         != remote_participant_info->expected_sequence_number_)
                 {
-                    EPROSIMA_LOG_INFO(SECURITY,
+                    logInfo(SECURITY,
                             "Bad ParticipantGenericMessage. related_message_identity.sequence_number is not expected");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
                 if (message.message_data().size() != 1)
                 {
-                    EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
+                    logInfo(SECURITY, "Bad ParticipantGenericMessage. message_data size is not 1");
                     restore_discovered_participant_info(remote_participant_key, remote_participant_info);
                     return;
                 }
@@ -1778,12 +1740,12 @@ void SecurityManager::process_participant_stateless_message(
         }
         else
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Received Authentication message but not found related remote_participant_key");
+            logInfo(SECURITY, "Received Authentication message but not found related remote_participant_key");
         }
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Discarted ParticipantGenericMessage with class id " << message.message_class_id());
+        logInfo(SECURITY, "Discarted ParticipantGenericMessage with class id " << message.message_class_id());
     }
 }
 
@@ -1827,7 +1789,7 @@ void SecurityManager::process_participant_volatile_message_secure(
 
     if (false == CDRMessage::readParticipantGenericMessage(&aux_msg, message))
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Cannot deserialize ParticipantGenericMessage");
+        logInfo(SECURITY, "Cannot deserialize ParticipantGenericMessage");
         return;
     }
 
@@ -1835,31 +1797,28 @@ void SecurityManager::process_participant_volatile_message_secure(
     {
         if (message.message_identity().source_guid() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
             return;
         }
         if (message.destination_participant_key() != participant_->getGuid())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Destination of ParticipantGenericMessage is not me");
+            logInfo(SECURITY, "Destination of ParticipantGenericMessage is not me");
             return;
         }
         if (message.destination_endpoint_key() != GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. destination_endpoint_key is not GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is not GUID_t::unknown()");
             return;
         }
         if (message.source_endpoint_key() != GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is not GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is not GUID_t::unknown()");
             return;
         }
 
         const GUID_t remote_participant_key(message.message_identity().source_guid().guidPrefix,
                 c_EntityId_RTPSParticipant);
         std::shared_ptr<ParticipantCryptoHandle> remote_participant_crypto;
-        DiscoveredParticipantInfo::AuthUniquePtr remote_participant_info;
 
         // Search remote participant crypto handle.
         {
@@ -1875,11 +1834,10 @@ void SecurityManager::process_participant_volatile_message_secure(
                 }
 
                 remote_participant_crypto = dp_it->second->get_participant_crypto();
-                remote_participant_info = dp_it->second->get_auth();
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY,
+                logInfo(SECURITY,
                         "Received Participant Cryptography message but not found related remote_participant_key");
             }
         }
@@ -1894,21 +1852,8 @@ void SecurityManager::process_participant_volatile_message_secure(
                         message.message_data(),
                         exception))
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote participant crypto tokens ("
+                logError(SECURITY, "Cannot set remote participant crypto tokens ("
                         << remote_participant_key << ") - (" << exception.what() << ")");
-            }
-            else
-            {
-                // Release the change from the participant_stateless_message_writer_pool_
-                // As both participants have already authorized each other
-
-                if (remote_participant_info &&
-                        remote_participant_info->change_sequence_number_ != SequenceNumber_t::unknown())
-                {
-                    participant_stateless_message_writer_history_->remove_change(
-                        remote_participant_info->change_sequence_number_);
-                    remote_participant_info->change_sequence_number_ = SequenceNumber_t::unknown();
-                }
             }
         }
         else
@@ -1916,33 +1861,27 @@ void SecurityManager::process_participant_volatile_message_secure(
             std::lock_guard<shared_mutex> _(mutex_);
             remote_participant_pending_messages_.emplace(remote_participant_key, std::move(message.message_data()));
         }
-
-        if (remote_participant_info)
-        {
-            restore_discovered_participant_info(remote_participant_key, remote_participant_info);
-        }
     }
     else if (message.message_class_id().compare(GMCLASSID_SECURITY_READER_CRYPTO_TOKENS) == 0)
     {
         if (message.message_identity().source_guid() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
             return;
         }
         if (message.destination_participant_key() != participant_->getGuid())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Destination of ParticipantGenericMessage is not me");
+            logInfo(SECURITY, "Destination of ParticipantGenericMessage is not me");
             return;
         }
         if (message.destination_endpoint_key() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is GUID_t::unknown()");
             return;
         }
         if (message.source_endpoint_key() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is GUID_t::unknown()");
             return;
         }
 
@@ -1974,7 +1913,7 @@ void SecurityManager::process_participant_volatile_message_secure(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote reader crypto tokens ("
+                        logError(SECURITY, "Cannot set remote reader crypto tokens ("
                                 << message.source_endpoint_key() << ") - (" << exception.what() << ")");
                     }
                 }
@@ -1987,7 +1926,7 @@ void SecurityManager::process_participant_volatile_message_secure(
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY, "Received Reader Cryptography message but not found local writer "
+                logInfo(SECURITY, "Received Reader Cryptography message but not found local writer "
                         << message.destination_endpoint_key());
             }
         }
@@ -2003,23 +1942,22 @@ void SecurityManager::process_participant_volatile_message_secure(
     {
         if (message.message_identity().source_guid() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY,
-                    "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. message_identity.source_guid is GUID_t::unknown()");
             return;
         }
         if (message.destination_participant_key() != participant_->getGuid())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Destination of ParticipantGenericMessage is not me");
+            logInfo(SECURITY, "Destination of ParticipantGenericMessage is not me");
             return;
         }
         if (message.destination_endpoint_key() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. destination_endpoint_key is GUID_t::unknown()");
             return;
         }
         if (message.source_endpoint_key() == GUID_t::unknown())
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is GUID_t::unknown()");
+            logInfo(SECURITY, "Bad ParticipantGenericMessage. source_endpoint_key is GUID_t::unknown()");
             return;
         }
 
@@ -2050,7 +1988,7 @@ void SecurityManager::process_participant_volatile_message_secure(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote writer crypto tokens ("
+                        logError(SECURITY, "Cannot set remote writer crypto tokens ("
                                 << message.source_endpoint_key() << ") - (" << exception.what() << ")");
                     }
                 }
@@ -2063,7 +2001,7 @@ void SecurityManager::process_participant_volatile_message_secure(
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY, "Received Writer Cryptography message but not found local reader "
+                logInfo(SECURITY, "Received Writer Cryptography message but not found local reader "
                         << message.destination_endpoint_key());
             }
         }
@@ -2076,28 +2014,28 @@ void SecurityManager::process_participant_volatile_message_secure(
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Discarded ParticipantGenericMessage with class id " << message.message_class_id());
+        logInfo(SECURITY, "Discarted ParticipantGenericMessage with class id " << message.message_class_id());
     }
 }
 
-void SecurityManager::ParticipantStatelessMessageListener::on_new_cache_change_added(
+void SecurityManager::ParticipantStatelessMessageListener::onNewCacheChangeAdded(
         RTPSReader* reader,
         const CacheChange_t* const change)
 {
     manager_.process_participant_stateless_message(change);
 
-    ReaderHistory* history = reader->get_history();
+    ReaderHistory* history = reader->getHistory();
     assert(history);
     history->remove_change(const_cast<CacheChange_t*>(change));
 }
 
-void SecurityManager::ParticipantVolatileMessageListener::on_new_cache_change_added(
+void SecurityManager::ParticipantVolatileMessageListener::onNewCacheChangeAdded(
         RTPSReader* reader,
         const CacheChange_t* const change)
 {
     manager_.process_participant_volatile_message_secure(change);
 
-    ReaderHistory* history = reader->get_history();
+    ReaderHistory* history = reader->getHistory();
     assert(history);
     history->remove_change(const_cast<CacheChange_t*>(change));
 }
@@ -2242,7 +2180,7 @@ bool SecurityManager::check_guid_comes_from(
 void SecurityManager::match_builtin_endpoints(
         const ParticipantProxyData& participant_data)
 {
-    uint32_t builtin_endpoints = participant_data.m_available_builtin_endpoints;
+    uint32_t builtin_endpoints = participant_data.m_availableBuiltinEndpoints;
     const NetworkFactory& network = participant_->network_factory();
 
     if (participant_stateless_message_reader_ != nullptr &&
@@ -2252,16 +2190,14 @@ void SecurityManager::match_builtin_endpoints(
         auto temp_stateless_writer_proxy_data_ = get_temporary_writer_proxies_pool().get();
 
         temp_stateless_writer_proxy_data_->clear();
-        temp_stateless_writer_proxy_data_->guid.guidPrefix = participant_data.guid.guidPrefix;
-        temp_stateless_writer_proxy_data_->guid.entityId = participant_stateless_message_writer_entity_id;
-        temp_stateless_writer_proxy_data_->persistence_guid = temp_stateless_writer_proxy_data_->guid;
-        temp_stateless_writer_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false,
-                participant_data.is_from_this_host());
-        temp_stateless_writer_proxy_data_->topic_kind = NO_KEY;
-        temp_stateless_writer_proxy_data_->reliability.kind =
-                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS;
-        temp_stateless_writer_proxy_data_->durability.kind = eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS;
-        participant_stateless_message_reader_->matched_writer_add_edp(*temp_stateless_writer_proxy_data_);
+        temp_stateless_writer_proxy_data_->guid().guidPrefix = participant_data.m_guid.guidPrefix;
+        temp_stateless_writer_proxy_data_->guid().entityId = participant_stateless_message_writer_entity_id;
+        temp_stateless_writer_proxy_data_->persistence_guid(temp_stateless_writer_proxy_data_->guid());
+        temp_stateless_writer_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false);
+        temp_stateless_writer_proxy_data_->topicKind(NO_KEY);
+        temp_stateless_writer_proxy_data_->m_qos.m_reliability.kind = BEST_EFFORT_RELIABILITY_QOS;
+        temp_stateless_writer_proxy_data_->m_qos.m_durability.kind = VOLATILE_DURABILITY_QOS;
+        participant_stateless_message_reader_->matched_writer_add(*temp_stateless_writer_proxy_data_);
     }
 
     if (participant_stateless_message_writer_ != nullptr &&
@@ -2270,23 +2206,21 @@ void SecurityManager::match_builtin_endpoints(
         auto temp_stateless_reader_proxy_data_ = get_temporary_reader_proxies_pool().get();
 
         temp_stateless_reader_proxy_data_->clear();
-        temp_stateless_reader_proxy_data_->expects_inline_qos = false;
-        temp_stateless_reader_proxy_data_->guid.guidPrefix = participant_data.guid.guidPrefix;
-        temp_stateless_reader_proxy_data_->guid.entityId = participant_stateless_message_reader_entity_id;
-        temp_stateless_reader_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false,
-                participant_data.is_from_this_host());
-        temp_stateless_reader_proxy_data_->topic_kind = NO_KEY;
-        temp_stateless_reader_proxy_data_->reliability.kind =
-                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS;
-        temp_stateless_reader_proxy_data_->durability.kind = eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS;
-        participant_stateless_message_writer_->matched_reader_add_edp(*temp_stateless_reader_proxy_data_);
+        temp_stateless_reader_proxy_data_->m_expectsInlineQos = false;
+        temp_stateless_reader_proxy_data_->guid().guidPrefix = participant_data.m_guid.guidPrefix;
+        temp_stateless_reader_proxy_data_->guid().entityId = participant_stateless_message_reader_entity_id;
+        temp_stateless_reader_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false);
+        temp_stateless_reader_proxy_data_->topicKind(NO_KEY);
+        temp_stateless_reader_proxy_data_->m_qos.m_reliability.kind = BEST_EFFORT_RELIABILITY_QOS;
+        temp_stateless_reader_proxy_data_->m_qos.m_durability.kind = VOLATILE_DURABILITY_QOS;
+        participant_stateless_message_writer_->matched_reader_add(*temp_stateless_reader_proxy_data_);
     }
 }
 
 void SecurityManager::match_builtin_key_exchange_endpoints(
         const ParticipantProxyData& participant_data)
 {
-    uint32_t builtin_endpoints = participant_data.m_available_builtin_endpoints;
+    uint32_t builtin_endpoints = participant_data.m_availableBuiltinEndpoints;
     const NetworkFactory& network = participant_->network_factory();
 
     if (participant_volatile_message_secure_reader_ != nullptr &&
@@ -2295,15 +2229,14 @@ void SecurityManager::match_builtin_key_exchange_endpoints(
         auto temp_volatile_writer_proxy_data_ = get_temporary_writer_proxies_pool().get();
 
         temp_volatile_writer_proxy_data_->clear();
-        temp_volatile_writer_proxy_data_->guid.guidPrefix = participant_data.guid.guidPrefix;
-        temp_volatile_writer_proxy_data_->guid.entityId = participant_volatile_message_secure_writer_entity_id;
-        temp_volatile_writer_proxy_data_->persistence_guid = temp_volatile_writer_proxy_data_->guid;
-        temp_volatile_writer_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false,
-                participant_data.is_from_this_host());
-        temp_volatile_writer_proxy_data_->topic_kind = NO_KEY;
-        temp_volatile_writer_proxy_data_->reliability.kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
-        temp_volatile_writer_proxy_data_->durability.kind = eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS;
-        participant_volatile_message_secure_reader_->matched_writer_add_edp(*temp_volatile_writer_proxy_data_);
+        temp_volatile_writer_proxy_data_->guid().guidPrefix = participant_data.m_guid.guidPrefix;
+        temp_volatile_writer_proxy_data_->guid().entityId = participant_volatile_message_secure_writer_entity_id;
+        temp_volatile_writer_proxy_data_->persistence_guid(temp_volatile_writer_proxy_data_->guid());
+        temp_volatile_writer_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false);
+        temp_volatile_writer_proxy_data_->topicKind(NO_KEY);
+        temp_volatile_writer_proxy_data_->m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
+        temp_volatile_writer_proxy_data_->m_qos.m_durability.kind = VOLATILE_DURABILITY_QOS;
+        participant_volatile_message_secure_reader_->matched_writer_add(*temp_volatile_writer_proxy_data_);
     }
 
     if (participant_volatile_message_secure_writer_ != nullptr &&
@@ -2312,24 +2245,23 @@ void SecurityManager::match_builtin_key_exchange_endpoints(
         auto temp_volatile_reader_proxy_data_ = get_temporary_reader_proxies_pool().get();
 
         temp_volatile_reader_proxy_data_->clear();
-        temp_volatile_reader_proxy_data_->expects_inline_qos = false;
-        temp_volatile_reader_proxy_data_->guid.guidPrefix = participant_data.guid.guidPrefix;
-        temp_volatile_reader_proxy_data_->guid.entityId = participant_volatile_message_secure_reader_entity_id;
-        temp_volatile_reader_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false,
-                participant_data.is_from_this_host());
-        temp_volatile_reader_proxy_data_->topic_kind = NO_KEY;
-        temp_volatile_reader_proxy_data_->reliability.kind = eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS;
-        temp_volatile_reader_proxy_data_->durability.kind = eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS;
-        participant_volatile_message_secure_writer_->matched_reader_add_edp(*temp_volatile_reader_proxy_data_);
+        temp_volatile_reader_proxy_data_->m_expectsInlineQos = false;
+        temp_volatile_reader_proxy_data_->guid().guidPrefix = participant_data.m_guid.guidPrefix;
+        temp_volatile_reader_proxy_data_->guid().entityId = participant_volatile_message_secure_reader_entity_id;
+        temp_volatile_reader_proxy_data_->set_remote_locators(participant_data.metatraffic_locators, network, false);
+        temp_volatile_reader_proxy_data_->topicKind(NO_KEY);
+        temp_volatile_reader_proxy_data_->m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
+        temp_volatile_reader_proxy_data_->m_qos.m_durability.kind = VOLATILE_DURABILITY_QOS;
+        participant_volatile_message_secure_writer_->matched_reader_add(*temp_volatile_reader_proxy_data_);
     }
 }
 
 void SecurityManager::unmatch_builtin_endpoints(
         const ParticipantProxyData& participant_data)
 {
-    uint32_t builtin_endpoints = participant_data.m_available_builtin_endpoints;
+    uint32_t builtin_endpoints = participant_data.m_availableBuiltinEndpoints;
     GUID_t tmp_guid;
-    tmp_guid.guidPrefix = participant_data.guid.guidPrefix;
+    tmp_guid.guidPrefix = participant_data.m_guid.guidPrefix;
 
     if (participant_stateless_message_reader_ != nullptr &&
             builtin_endpoints & BUILTIN_ENDPOINT_PARTICIPANT_STATELESS_MESSAGE_WRITER)
@@ -2363,12 +2295,20 @@ void SecurityManager::unmatch_builtin_endpoints(
 bool SecurityManager::send_token_message(
         ParticipantGenericMessage& message)
 {
-    CacheChange_t* change = create_change_for_message(
-        message, participant_volatile_message_secure_writer_history_);
+    CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
+        [&message]() -> uint32_t
+        {
+            uint32_t cdr_size =
+            static_cast<uint32_t>(ParticipantGenericMessageHelper::serialized_size(message));
+            cdr_size += (4 - (cdr_size % 4)) & (4 - 1);
+            cdr_size += 4;
+            return cdr_size;
+        }
+        , ALIVE, c_InstanceHandle_Unknown);
 
     if (change == nullptr)
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
+        logError(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
         return false;
     }
 
@@ -2386,8 +2326,8 @@ bool SecurityManager::send_token_message(
 
     if (!CDRMessage::addParticipantGenericMessage(&aux_msg, message))
     {
-        participant_volatile_message_secure_writer_history_->release_change(change);
-        EPROSIMA_LOG_ERROR(SECURITY, "Cannot serialize ParticipantGenericMessage");
+        participant_volatile_message_secure_writer_->release_change(change);
+        logError(SECURITY, "Cannot serialize ParticipantGenericMessage");
         return false;
     }
 
@@ -2395,8 +2335,8 @@ bool SecurityManager::send_token_message(
 
     if (!participant_volatile_message_secure_writer_history_->add_change(change))
     {
-        participant_volatile_message_secure_writer_history_->release_change(change);
-        EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot add the CacheChange_t");
+        participant_volatile_message_secure_writer_->release_change(change);
+        logError(SECURITY, "WriterHistory cannot add the CacheChange_t");
         return false;
     }
 
@@ -2414,7 +2354,7 @@ bool SecurityManager::exchange_participant_crypto(
                 local_participant_crypto_tokens,
                 *local_participant_crypto_handle_, *remote_participant_crypto, exception))
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
+        logError(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
         return false;
     }
 
@@ -2437,7 +2377,7 @@ bool SecurityManager::exchange_writer_endpoint_crypto(
     if (!crypto_plugin_->cryptokeyexchange()->create_local_datawriter_crypto_tokens(
                 tokens, writer_handle, reader_handle, exception))
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Error generating writer crypto token for reader "
+        logError(SECURITY, "Error generating writer crypto token for reader "
                 << remote_reader_guid << ": " << exception.what());
         return false;
     }
@@ -2461,7 +2401,7 @@ bool SecurityManager::exchange_reader_endpoint_crypto(
     if (!crypto_plugin_->cryptokeyexchange()->create_local_datareader_crypto_tokens(
                 tokens, reader_handle, writer_handle, exception))
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Error generating reader crypto token for writer "
+        logError(SECURITY, "Error generating reader crypto token for writer "
                 << remote_writer_guid << ": " << exception.what());
         return false;
     }
@@ -2496,8 +2436,7 @@ std::shared_ptr<ParticipantCryptoHandle> SecurityManager::register_and_match_cry
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SECURITY,
-                "Error registering remote participant in cryptography plugin. (" << exception.what() << ")");
+        logError(SECURITY, "Error registering remote participant in cryptography plugin. (" << exception.what() << ")");
     }
 
     return nullptr;
@@ -2518,7 +2457,7 @@ bool SecurityManager::encode_rtps_message(
 
     if (crypto_plugin_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Trying to encode rtps message without set cryptography plugin.");
+        logError(SECURITY, "Trying to encode rtps message without set cryptography plugin.");
         return false;
     }
 
@@ -2543,7 +2482,7 @@ bool SecurityManager::encode_rtps_message(
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY, "Cannot encode message for participant " << remote_participant_key);
+                logInfo(SECURITY, "Cannot encode message for participant " << remote_participant_key);
             }
         }
     }
@@ -2615,15 +2554,13 @@ int SecurityManager::decode_rtps_message(
         }
         else
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Cannot decode rtps message from participant " << remote_participant_key
-                                                                                       << "(" << exception.what()
-                                                                                       << ")");
+            logInfo(SECURITY, "Cannot decode rtps message from participant " << remote_participant_key
+                                                                             << "(" << exception.what() << ")");
         }
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY,
-                "Cannot decode message. Participant " << remote_participant_key << " is not yet authorized");
+        logInfo(SECURITY, "Cannot decode message. Participant " << remote_participant_key << " is not yet authorized");
     }
 
     return returnedValue;
@@ -2656,7 +2593,7 @@ bool SecurityManager::register_local_writer(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot register local writer in crypto plugin. (" << exception.what() << ")");
+            logError(SECURITY, "Cannot register local writer in crypto plugin. (" << exception.what() << ")");
             returned_value = false;
         }
     }
@@ -2717,21 +2654,47 @@ bool SecurityManager::get_datawriter_sec_attributes(
                 if ((returned_value = access_plugin_->get_datawriter_sec_attributes(*local_permissions_handle_,
                         topic_name, partitions, security_attributes, exception)) == false)
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Error getting security attributes of local writer "
+                    logError(SECURITY, "Error getting security attributes of local writer "
                             << " (" << exception.what() << ")" << std::endl);
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error checking creation of local writer "
+                logError(SECURITY, "Error checking creation of local writer "
                         << " (" << exception.what() << ")" << std::endl);
                 returned_value = false;
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Error. No topic_name." << std::endl);
+            logError(SECURITY, "Error. No topic_name." << std::endl);
             returned_value = false;
+        }
+    }
+    else
+    {
+        // Get properties.
+        const std::string* property_value = PropertyPolicyHelper::find_property(writer_properties,
+                        "rtps.endpoint.submessage_protection_kind");
+
+        if (property_value != nullptr && property_value->compare("ENCRYPT") == 0)
+        {
+            security_attributes.is_submessage_protected = true;
+            security_attributes.plugin_endpoint_attributes |=
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_VALID |
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
+        }
+
+        property_value = PropertyPolicyHelper::find_property(writer_properties,
+                        "rtps.endpoint.payload_protection_kind");
+
+        if (property_value != nullptr && property_value->compare("ENCRYPT") == 0)
+        {
+            security_attributes.is_payload_protected = true;
+            security_attributes.is_key_protected = true;
+            security_attributes.plugin_endpoint_attributes |=
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_VALID |
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_PAYLOAD_ENCRYPTED;
         }
     }
 
@@ -2765,7 +2728,7 @@ bool SecurityManager::register_local_builtin_writer(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot register local writer in crypto plugin. (" << exception.what() << ")");
+            logError(SECURITY, "Cannot register local writer in crypto plugin. (" << exception.what() << ")");
             returned_value = false;
         }
     }
@@ -2838,7 +2801,7 @@ bool SecurityManager::register_local_reader(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot register local reader in crypto plugin. (" << exception.what() << ")");
+            logError(SECURITY, "Cannot register local reader in crypto plugin. (" << exception.what() << ")");
             returned_value = false;
         }
     }
@@ -2899,21 +2862,47 @@ bool SecurityManager::get_datareader_sec_attributes(
                 if ((returned_value = access_plugin_->get_datareader_sec_attributes(*local_permissions_handle_,
                         topic_name, partitions, security_attributes, exception)) == false)
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Error getting security attributes of local reader "
+                    logError(SECURITY, "Error getting security attributes of local reader "
                             << " (" << exception.what() << ")" << std::endl);
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error checking creation of local reader "
+                logError(SECURITY, "Error checking creation of local reader "
                         << " (" << exception.what() << ")" << std::endl);
                 returned_value = false;
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Error. No topic_name." << std::endl);
+            logError(SECURITY, "Error. No topic_name." << std::endl);
             returned_value = false;
+        }
+    }
+    else
+    {
+        // Get properties.
+        const std::string* property_value = PropertyPolicyHelper::find_property(reader_properties,
+                        "rtps.endpoint.submessage_protection_kind");
+
+        if (property_value != nullptr && property_value->compare("ENCRYPT") == 0)
+        {
+            security_attributes.is_submessage_protected = true;
+            security_attributes.plugin_endpoint_attributes |=
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_VALID |
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_SUBMESSAGE_ENCRYPTED;
+        }
+
+        property_value = PropertyPolicyHelper::find_property(reader_properties,
+                        "rtps.endpoint.payload_protection_kind");
+
+        if (property_value != nullptr && property_value->compare("ENCRYPT") == 0)
+        {
+            security_attributes.is_payload_protected = true;
+            security_attributes.is_key_protected = true;
+            security_attributes.plugin_endpoint_attributes |=
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_VALID |
+                    PLUGIN_ENDPOINT_SECURITY_ATTRIBUTES_FLAG_IS_PAYLOAD_ENCRYPTED;
         }
     }
 
@@ -2947,7 +2936,7 @@ bool SecurityManager::register_local_builtin_reader(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot register local reader in crypto plugin. (" << exception.what() << ")");
+            logError(SECURITY, "Cannot register local reader in crypto plugin. (" << exception.what() << ")");
             returned_value = false;
         }
     }
@@ -3033,7 +3022,7 @@ void SecurityManager::remove_reader(
         }
         else
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Cannot find remote reader " << remote_reader_guid << std::endl);
+            logInfo(SECURITY, "Cannot find remote reader " << remote_reader_guid << std::endl);
         }
     }
 }
@@ -3099,12 +3088,12 @@ bool SecurityManager::discovered_reader(
 
     if (!is_builtin)
     {
-        //! Check if it is an unathenticated participant
+        // Check if it is an unathenticated participant
         if (participant_->security_attributes().allow_unauthenticated_participants &&
                 auth_status != AUTHENTICATION_NOT_AVAILABLE && auth_status != AUTHENTICATION_OK &&
                 (security_attributes.is_write_protected || security_attributes.is_read_protected))
         {
-            //!Do not match if read or write protection is enabled for this local endpoint
+            // Do not match if read or write protection is enabled for this local endpoint
             return false;
         }
 
@@ -3113,8 +3102,8 @@ bool SecurityManager::discovered_reader(
             if ((returned_value = access_plugin_->check_remote_datareader(
                         *remote_permissions, domain_id_, remote_reader_data, relay_only, exception)) == false)
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error checking create remote reader " << remote_reader_data.guid
-                                                                                    << " (" << exception.what() << ")");
+                logError(SECURITY, "Error checking create remote reader " << remote_reader_data.guid()
+                                                                          << " (" << exception.what() << ")");
             }
         }
     }
@@ -3122,14 +3111,14 @@ bool SecurityManager::discovered_reader(
     if (returned_value && crypto_plugin_ != nullptr && (security_attributes.is_submessage_protected ||
             security_attributes.is_payload_protected))
     {
-        bool is_key_exchange = (remote_reader_data.guid.entityId
+        bool is_key_exchange = (remote_reader_data.guid().entityId
                 == participant_volatile_message_secure_reader_entity_id);
         auto local_writer = writer_handles_.find(writer_guid);
         returned_value = false;
 
         if (local_writer != writer_handles_.end())
         {
-            if (remote_participant_crypto_handle != nullptr && shared_secret_handle != nullptr)
+            if (remote_participant_crypto_handle != nullptr)
             {
                 DatareaderCryptoHandle* remote_reader_handle =
                         crypto_plugin_->cryptokeyfactory()->register_matched_remote_datareader(
@@ -3140,9 +3129,8 @@ bool SecurityManager::discovered_reader(
                 {
                     if (is_key_exchange)
                     {
-                        EPROSIMA_LOG_INFO(SECURITY,
-                                "Process successful discovering local reader " << remote_reader_data.guid);
-                        local_writer->second.associated_readers.emplace(remote_reader_data.guid,
+                        logInfo(SECURITY, "Process successful discovering local reader " << remote_reader_data.guid());
+                        local_writer->second.associated_readers.emplace(remote_reader_data.guid(),
                                 std::make_tuple(remote_reader_data, remote_reader_handle));
                         lock.unlock();
                         participant_->pairing_remote_reader_with_local_writer_after_security(
@@ -3152,7 +3140,7 @@ bool SecurityManager::discovered_reader(
                     {
                         // Check pending reader crypto messages.
                         auto pending = remote_reader_pending_messages_.find(
-                            std::make_pair(remote_reader_data.guid, writer_guid));
+                            std::make_pair(remote_reader_data.guid(), writer_guid));
                         bool pairing_cause_pending_message = false;
 
                         if (pending != remote_reader_pending_messages_.end())
@@ -3167,8 +3155,8 @@ bool SecurityManager::discovered_reader(
                             }
                             else
                             {
-                                EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote reader crypto tokens ("
-                                        << remote_reader_data.guid << ") - (" << exception.what() << ")");
+                                logError(SECURITY, "Cannot set remote reader crypto tokens ("
+                                        << remote_reader_data.guid() << ") - (" << exception.what() << ")");
                             }
 
                             remote_reader_pending_messages_.erase(pending);
@@ -3186,13 +3174,13 @@ bool SecurityManager::discovered_reader(
                         {
                             if (remote_participant_key == participant_->getGuid())
                             {
-                                EPROSIMA_LOG_INFO(SECURITY, "Process successful discovering local reader "
-                                        << remote_reader_data.guid);
-                                local_writer->second.associated_readers.emplace(remote_reader_data.guid,
+                                logInfo(SECURITY, "Process successful discovering local reader "
+                                        << remote_reader_data.guid());
+                                local_writer->second.associated_readers.emplace(remote_reader_data.guid(),
                                         std::make_tuple(remote_reader_data, remote_reader_handle));
 
                                 // Search local reader.
-                                auto local_reader = reader_handles_.find(remote_reader_data.guid);
+                                auto local_reader = reader_handles_.find(remote_reader_data.guid());
 
                                 if (local_reader != reader_handles_.end())
                                 {
@@ -3212,8 +3200,8 @@ bool SecurityManager::discovered_reader(
                                         }
                                         else
                                         {
-                                            EPROSIMA_LOG_ERROR(SECURITY, "Cannot set local reader crypto tokens ("
-                                                    << remote_reader_data.guid << ") - (" << exception.what() << ")");
+                                            logError(SECURITY, "Cannot set local reader crypto tokens ("
+                                                    << remote_reader_data.guid() << ") - (" << exception.what() << ")");
                                         }
                                     }
                                     else
@@ -3226,23 +3214,28 @@ bool SecurityManager::discovered_reader(
                                 }
                                 else
                                 {
-                                    EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local reader ("
-                                            << remote_reader_data.guid << ") - (" << exception.what() << ")");
+                                    logError(SECURITY, "Cannot find local reader ("
+                                            << remote_reader_data.guid() << ") - (" << exception.what() << ")");
                                 }
                             }
                             else
                             {
                                 ParticipantGenericMessage message =
                                         generate_writer_crypto_token_message(remote_participant_key,
-                                                remote_reader_data.guid, writer_guid, local_writer_crypto_tokens);
+                                                remote_reader_data.guid(), writer_guid, local_writer_crypto_tokens);
 
-                                local_writer->second.associated_readers.emplace(remote_reader_data.guid,
+                                local_writer->second.associated_readers.emplace(remote_reader_data.guid(),
                                         std::make_tuple(remote_reader_data, remote_reader_handle));
                                 lock.unlock();
 
-                                CacheChange_t* change = create_change_for_message(
-                                    message,
-                                    participant_volatile_message_secure_writer_history_);
+                                CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
+                                    [&message]() -> uint32_t
+                                    {
+                                        return static_cast<uint32_t>(
+                                            ParticipantGenericMessageHelper::serialized_size(message)
+                                            + 4 /*encapsulation*/);
+                                    }
+                                    , ALIVE, c_InstanceHandle_Unknown);
 
                                 if (change != nullptr)
                                 {
@@ -3267,31 +3260,31 @@ bool SecurityManager::discovered_reader(
                                         // Send
                                         if (participant_volatile_message_secure_writer_history_->add_change(change))
                                         {
-                                            EPROSIMA_LOG_INFO(SECURITY, "Process successful discovering remote reader "
-                                                    << remote_reader_data.guid);
+                                            logInfo(SECURITY, "Process successful discovering remote reader "
+                                                    << remote_reader_data.guid());
                                             returned_value = true;
                                         }
                                         else
                                         {
-                                            participant_volatile_message_secure_writer_history_->release_change(change);
-                                            EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot add the CacheChange_t");
+                                            participant_volatile_message_secure_writer_->release_change(change);
+                                            logError(SECURITY, "WriterHistory cannot add the CacheChange_t");
                                         }
                                     }
                                     else
                                     {
-                                        participant_volatile_message_secure_writer_history_->release_change(change);
-                                        EPROSIMA_LOG_ERROR(SECURITY, "Cannot serialize ParticipantGenericMessage");
+                                        participant_volatile_message_secure_writer_->release_change(change);
+                                        logError(SECURITY, "Cannot serialize ParticipantGenericMessage");
                                     }
                                 }
                                 else
                                 {
-                                    EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
+                                    logError(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
                                 }
                             }
                         }
                         else
                         {
-                            EPROSIMA_LOG_ERROR(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
+                            logError(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
                         }
 
                         // Here the mutex has to be unlock.
@@ -3319,17 +3312,16 @@ bool SecurityManager::discovered_reader(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY,
-                            "Crypto plugin fails registering remote reader " << remote_reader_data.guid
-                                                                             << " of participant "
-                                                                             << remote_participant_key);
+                    logError(SECURITY, "Crypto plugin fails registering remote reader " << remote_reader_data.guid()
+                                                                                        << " of participant "
+                                                                                        << remote_participant_key);
                 }
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY, "Storing remote reader << " << remote_reader_data.guid
-                                                                        << " of participant "
-                                                                        << remote_participant_key << " on pendings");
+                logInfo(SECURITY, "Storing remote reader << " << remote_reader_data.guid()
+                                                              << " of participant " << remote_participant_key
+                                                              << " on pendings");
 
                 remote_reader_pending_discovery_messages_.push_back(std::make_tuple(remote_reader_data,
                         remote_participant_key, writer_guid));
@@ -3339,7 +3331,7 @@ bool SecurityManager::discovered_reader(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local writer " << writer_guid << std::endl);
+            logError(SECURITY, "Cannot find local writer " << writer_guid << std::endl);
         }
     }
     else if (returned_value)
@@ -3394,7 +3386,7 @@ void SecurityManager::remove_writer(
         }
         else
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Cannot find remote writer " << remote_writer_guid << std::endl);
+            logInfo(SECURITY, "Cannot find remote writer " << remote_writer_guid << std::endl);
         }
     }
 }
@@ -3459,12 +3451,12 @@ bool SecurityManager::discovered_writer(
 
     if (!is_builtin)
     {
-        //! Check if it is an unathenticated participant
+        // Check if it is an unathenticated participant
         if (participant_->security_attributes().allow_unauthenticated_participants &&
                 auth_status != AUTHENTICATION_NOT_AVAILABLE && auth_status != AUTHENTICATION_OK &&
                 (security_attributes.is_write_protected || security_attributes.is_read_protected))
         {
-            //!Do not match if read or write protection is enabled for this local endpoint
+            // Do not match if read or write protection is enabled for this local endpoint
             return false;
         }
 
@@ -3473,8 +3465,8 @@ bool SecurityManager::discovered_writer(
             if ((returned_value = access_plugin_->check_remote_datawriter(
                         *remote_permissions, domain_id_, remote_writer_data, exception)) == false)
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error checking create remote writer " << remote_writer_data.guid
-                                                                                    << " (" << exception.what() << ")");
+                logError(SECURITY, "Error checking create remote writer " << remote_writer_data.guid()
+                                                                          << " (" << exception.what() << ")");
             }
         }
     }
@@ -3482,14 +3474,14 @@ bool SecurityManager::discovered_writer(
     if (returned_value && crypto_plugin_ != nullptr && (security_attributes.is_submessage_protected ||
             security_attributes.is_payload_protected))
     {
-        bool is_key_exchange = (remote_writer_data.guid.entityId
+        bool is_key_exchange = (remote_writer_data.guid().entityId
                 == participant_volatile_message_secure_writer_entity_id);
         auto local_reader = reader_handles_.find(reader_guid);
         returned_value = false;
 
         if (local_reader != reader_handles_.end())
         {
-            if (remote_participant_crypto_handle != nullptr && shared_secret_handle != nullptr)
+            if (remote_participant_crypto_handle != nullptr)
             {
                 DatawriterCryptoHandle* remote_writer_handle =
                         crypto_plugin_->cryptokeyfactory()->register_matched_remote_datawriter(
@@ -3500,9 +3492,8 @@ bool SecurityManager::discovered_writer(
                 {
                     if (is_key_exchange)
                     {
-                        EPROSIMA_LOG_INFO(SECURITY,
-                                "Process successful discovering local writer " << remote_writer_data.guid);
-                        local_reader->second.associated_writers.emplace(remote_writer_data.guid,
+                        logInfo(SECURITY, "Process successful discovering local writer " << remote_writer_data.guid());
+                        local_reader->second.associated_writers.emplace(remote_writer_data.guid(),
                                 std::make_tuple(remote_writer_data, remote_writer_handle));
                         lock.unlock();
                         participant_->pairing_remote_writer_with_local_reader_after_security(
@@ -3512,7 +3503,7 @@ bool SecurityManager::discovered_writer(
                     {
                         // Check pending writer crypto messages.
                         auto pending = remote_writer_pending_messages_.find(
-                            std::make_pair(remote_writer_data.guid, reader_guid));
+                            std::make_pair(remote_writer_data.guid(), reader_guid));
                         bool pairing_cause_pending_message = false;
 
                         if (pending != remote_writer_pending_messages_.end())
@@ -3527,8 +3518,8 @@ bool SecurityManager::discovered_writer(
                             }
                             else
                             {
-                                EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote writer crypto tokens ("
-                                        << remote_writer_data.guid << ") - (" << exception.what() << ")");
+                                logError(SECURITY, "Cannot set remote writer crypto tokens ("
+                                        << remote_writer_data.guid() << ") - (" << exception.what() << ")");
                             }
 
                             remote_writer_pending_messages_.erase(pending);
@@ -3547,13 +3538,13 @@ bool SecurityManager::discovered_writer(
                         {
                             if (remote_participant_key == participant_->getGuid())
                             {
-                                EPROSIMA_LOG_INFO(SECURITY, "Process successful discovering local writer "
-                                        << remote_writer_data.guid);
-                                local_reader->second.associated_writers.emplace(remote_writer_data.guid,
+                                logInfo(SECURITY, "Process successful discovering local writer "
+                                        << remote_writer_data.guid());
+                                local_reader->second.associated_writers.emplace(remote_writer_data.guid(),
                                         std::make_tuple(remote_writer_data, remote_writer_handle));
 
                                 // Search local writer.
-                                auto local_writer = writer_handles_.find(remote_writer_data.guid);
+                                auto local_writer = writer_handles_.find(remote_writer_data.guid());
 
                                 if (local_writer != writer_handles_.end())
                                 {
@@ -3573,8 +3564,8 @@ bool SecurityManager::discovered_writer(
                                         }
                                         else
                                         {
-                                            EPROSIMA_LOG_ERROR(SECURITY, "Cannot set local writer crypto tokens ("
-                                                    << remote_writer_data.guid << ") - (" << exception.what() << ")");
+                                            logError(SECURITY, "Cannot set local writer crypto tokens ("
+                                                    << remote_writer_data.guid() << ") - (" << exception.what() << ")");
                                         }
                                     }
                                     else
@@ -3587,23 +3578,28 @@ bool SecurityManager::discovered_writer(
                                 }
                                 else
                                 {
-                                    EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local writer ("
-                                            << remote_writer_data.guid << ") - (" << exception.what() << ")");
+                                    logError(SECURITY, "Cannot find local writer ("
+                                            << remote_writer_data.guid() << ") - (" << exception.what() << ")");
                                 }
                             }
                             else
                             {
                                 ParticipantGenericMessage message =
                                         generate_reader_crypto_token_message(remote_participant_key,
-                                                remote_writer_data.guid, reader_guid, local_reader_crypto_tokens);
+                                                remote_writer_data.guid(), reader_guid, local_reader_crypto_tokens);
 
-                                local_reader->second.associated_writers.emplace(remote_writer_data.guid,
+                                local_reader->second.associated_writers.emplace(remote_writer_data.guid(),
                                         std::make_tuple(remote_writer_data, remote_writer_handle));
                                 lock.unlock();
 
-                                CacheChange_t* change = create_change_for_message(
-                                    message,
-                                    participant_volatile_message_secure_writer_history_);
+                                CacheChange_t* change = participant_volatile_message_secure_writer_->new_change(
+                                    [&message]() -> uint32_t
+                                    {
+                                        return static_cast<uint32_t>(
+                                            ParticipantGenericMessageHelper::serialized_size(message)
+                                            + 4 /*encapsulation*/);
+                                    }
+                                    , ALIVE, c_InstanceHandle_Unknown);
 
                                 if (change != nullptr)
                                 {
@@ -3628,32 +3624,32 @@ bool SecurityManager::discovered_writer(
                                         // Send
                                         if (participant_volatile_message_secure_writer_history_->add_change(change))
                                         {
-                                            EPROSIMA_LOG_INFO(SECURITY, "Process successful discovering remote writer "
-                                                    << remote_writer_data.guid);
+                                            logInfo(SECURITY, "Process successful discovering remote writer "
+                                                    << remote_writer_data.guid());
                                             returned_value = true;
                                         }
                                         else
                                         {
-                                            participant_volatile_message_secure_writer_history_->release_change(change);
-                                            EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot add the CacheChange_t");
+                                            participant_volatile_message_secure_writer_->release_change(change);
+                                            logError(SECURITY, "WriterHistory cannot add the CacheChange_t");
                                         }
                                     }
                                     else
                                     {
-                                        participant_volatile_message_secure_writer_history_->release_change(change);
-                                        EPROSIMA_LOG_ERROR(SECURITY, "Cannot serialize ParticipantGenericMessage");
+                                        participant_volatile_message_secure_writer_->release_change(change);
+                                        logError(SECURITY, "Cannot serialize ParticipantGenericMessage");
                                     }
                                 }
                                 else
                                 {
-                                    EPROSIMA_LOG_ERROR(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
+                                    logError(SECURITY, "WriterHistory cannot retrieve a CacheChange_t");
                                 }
 
                             }
                         }
                         else
                         {
-                            EPROSIMA_LOG_ERROR(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
+                            logError(SECURITY, "Error generating crypto token. (" << exception.what() << ")");
                         }
 
                         // Here the mutex has to be unlock.
@@ -3681,17 +3677,16 @@ bool SecurityManager::discovered_writer(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY,
-                            "Crypto plugin fails registering remote writer " << remote_writer_data.guid
-                                                                             << " of participant "
-                                                                             << remote_participant_key);
+                    logError(SECURITY, "Crypto plugin fails registering remote writer " << remote_writer_data.guid()
+                                                                                        << " of participant "
+                                                                                        << remote_participant_key);
                 }
             }
             else
             {
-                EPROSIMA_LOG_INFO(SECURITY, "Storing remote writer << " << remote_writer_data.guid
-                                                                        << " of participant "
-                                                                        << remote_participant_key << "on pendings");
+                logInfo(SECURITY, "Storing remote writer << " << remote_writer_data.guid()
+                                                              << " of participant " << remote_participant_key
+                                                              << "on pendings");
 
                 remote_writer_pending_discovery_messages_.push_back(std::make_tuple(remote_writer_data,
                         remote_participant_key, reader_guid));
@@ -3701,7 +3696,7 @@ bool SecurityManager::discovered_writer(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local reader " << reader_guid << std::endl);
+            logError(SECURITY, "Cannot find local reader " << reader_guid << std::endl);
         }
     }
     else if (returned_value)
@@ -3783,7 +3778,7 @@ bool SecurityManager::encode_writer_submessage(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Cannot find remote reader " << rd_it);
+                logError(SECURITY, "Cannot find remote reader " << rd_it);
             }
         }
 
@@ -3803,7 +3798,7 @@ bool SecurityManager::encode_writer_submessage(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local writer " << writer_guid);
+        logError(SECURITY, "Cannot find local writer " << writer_guid);
     }
 
     return false;
@@ -3879,7 +3874,7 @@ bool SecurityManager::encode_reader_submessage(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Cannot find remote writer " << wr_it);
+                logError(SECURITY, "Cannot find remote writer " << wr_it);
             }
         }
 
@@ -3899,7 +3894,7 @@ bool SecurityManager::encode_reader_submessage(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local reader " << reader_guid);
+        logError(SECURITY, "Cannot find local reader " << reader_guid);
     }
 
     return false;
@@ -3969,7 +3964,7 @@ int SecurityManager::decode_rtps_submessage(
                 }
                 else
                 {
-                    EPROSIMA_LOG_WARNING(SECURITY, "Cannot decode writer RTPS submessage (" << exception.what() << ")");
+                    logWarning(SECURITY, "Cannot decode writer RTPS submessage (" << exception.what() << ")");
                 }
             }
             else if (category == DATAREADER_SUBMESSAGE)
@@ -3981,18 +3976,18 @@ int SecurityManager::decode_rtps_submessage(
                 }
                 else
                 {
-                    EPROSIMA_LOG_WARNING(SECURITY, "Cannot decode reader RTPS submessage (" << exception.what() << ")");
+                    logWarning(SECURITY, "Cannot decode reader RTPS submessage (" << exception.what() << ")");
                 }
             }
         }
         else
         {
-            EPROSIMA_LOG_INFO(SECURITY, "Cannot preprocess RTPS submessage (" << exception.what() << ")");
+            logInfo(SECURITY, "Cannot preprocess RTPS submessage (" << exception.what() << ")");
         }
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Cannot decode RTPS submessage for participant " << remote_participant_key);
+        logInfo(SECURITY, "Cannot decode RTPS submessage for participant " << remote_participant_key);
     }
 
     return -1;
@@ -4033,12 +4028,12 @@ bool SecurityManager::encode_serialized_payload(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Error encoding payload failed");
+            logError(SECURITY, "Error encoding payload failed");
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local writer " << writer_guid);
+        logError(SECURITY, "Cannot find local writer " << writer_guid);
     }
 
     return false;
@@ -4082,17 +4077,17 @@ bool SecurityManager::decode_serialized_payload(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error decoding encoded payload (" << exception.what() << ")");
+                logError(SECURITY, "Error decoding encoded payload (" << exception.what() << ")");
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Cannot find remote writer " << writer_guid);
+            logError(SECURITY, "Cannot find remote writer " << writer_guid);
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Cannot find local reader " << reader_guid);
+        logError(SECURITY, "Cannot find local reader " << reader_guid);
     }
 
     return false;
@@ -4109,7 +4104,7 @@ bool SecurityManager::participant_authorized(
         return false;
     }
 
-    EPROSIMA_LOG_INFO(SECURITY, "Authorized participant " << participant_data.guid);
+    logInfo(SECURITY, "Authorized participant " << participant_data.m_guid);
 
     SecurityException exception;
     PermissionsHandle* remote_permissions = nullptr;
@@ -4133,16 +4128,16 @@ bool SecurityManager::participant_authorized(
                 if (!access_plugin_->check_remote_participant(*remote_permissions, domain_id_,
                         participant_data, exception))
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Error checking remote participant  "
-                            << participant_data.guid << " (" << exception.what() << ").");
+                    logError(SECURITY, "Error checking remote participant  "
+                            << participant_data.m_guid << " (" << exception.what() << ").");
                     access_plugin_->return_permissions_handle(remote_permissions, exception);
                     remote_permissions = nullptr;
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error validating remote permissions for "
-                        << participant_data.guid << " (" << exception.what() << ").");
+                logError(SECURITY, "Error validating remote permissions for "
+                        << participant_data.m_guid << " (" << exception.what() << ").");
 
                 if (remote_permissions != nullptr)
                 {
@@ -4156,8 +4151,8 @@ bool SecurityManager::participant_authorized(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Not receive remote permissions of participant "
-                    << participant_data.guid << " (" << exception.what() << ").");
+            logError(SECURITY, "Not receive remote permissions of participant "
+                    << participant_data.m_guid << " (" << exception.what() << ").");
         }
     }
 
@@ -4172,7 +4167,7 @@ bool SecurityManager::participant_authorized(
             // TODO(Ricardo) Study cryptography without sharedsecret
             if (!shared_secret_handle)
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Not shared secret for participant " << participant_data.guid);
+                logError(SECURITY, "Not shared secret for participant " << participant_data.m_guid);
                 return false;
             }
 
@@ -4187,7 +4182,7 @@ bool SecurityManager::participant_authorized(
                 std::lock_guard<shared_mutex> _(mutex_);
 
                 // Check there is a pending crypto message.
-                auto pending = remote_participant_pending_messages_.find(participant_data.guid);
+                auto pending = remote_participant_pending_messages_.find(participant_data.m_guid);
 
                 if (pending != remote_participant_pending_messages_.end())
                 {
@@ -4197,8 +4192,8 @@ bool SecurityManager::participant_authorized(
                                 pending->second,
                                 exception))
                     {
-                        EPROSIMA_LOG_ERROR(SECURITY, "Cannot set remote participant crypto tokens ("
-                                << participant_data.guid << ") - (" << exception.what() << ")");
+                        logError(SECURITY, "Cannot set remote participant crypto tokens ("
+                                << participant_data.m_guid << ") - (" << exception.what() << ")");
                     }
 
                     remote_participant_pending_messages_.erase(pending);
@@ -4208,7 +4203,7 @@ bool SecurityManager::participant_authorized(
                 auto rit = remote_reader_pending_discovery_messages_.begin();
                 while (rit != remote_reader_pending_discovery_messages_.end())
                 {
-                    if (std::get<1>(*rit) == participant_data.guid)
+                    if (std::get<1>(*rit) == participant_data.m_guid)
                     {
                         temp_readers.push_back(std::make_pair(std::get<0>(*rit), std::get<2>(*rit)));
                         rit = remote_reader_pending_discovery_messages_.erase(rit);
@@ -4221,7 +4216,7 @@ bool SecurityManager::participant_authorized(
                 auto wit = remote_writer_pending_discovery_messages_.begin();
                 while (wit != remote_writer_pending_discovery_messages_.end())
                 {
-                    if (std::get<1>(*wit) == participant_data.guid)
+                    if (std::get<1>(*wit) == participant_data.m_guid)
                     {
                         temp_writers.push_back(std::make_pair(std::get<0>(*wit), std::get<2>(*wit)));
                         wit = remote_writer_pending_discovery_messages_.erase(wit);
@@ -4231,7 +4226,7 @@ bool SecurityManager::participant_authorized(
                     ++wit;
                 }
 
-                auto dp_it = discovered_participants_.find(participant_data.guid);
+                auto dp_it = discovered_participants_.find(participant_data.m_guid);
 
                 if (dp_it != discovered_participants_.end())
                 {
@@ -4242,19 +4237,19 @@ bool SecurityManager::participant_authorized(
                 else
                 {
                     crypto_plugin_->cryptokeyfactory()->unregister_participant(participant_crypto_handle, exception);
-                    EPROSIMA_LOG_ERROR(SECURITY, "Cannot find remote participant " << participant_data.guid);
+                    logError(SECURITY, "Cannot find remote participant " << participant_data.m_guid);
                     return false;
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Cannot register remote participant in crypto plugin ("
-                        << participant_data.guid << ")");
+                logError(SECURITY, "Cannot register remote participant in crypto plugin ("
+                        << participant_data.m_guid << ")");
                 return false;
             }
 
             match_builtin_key_exchange_endpoints(participant_data);
-            exchange_participant_crypto(participant_crypto_handle, participant_data.guid);
+            exchange_participant_crypto(participant_crypto_handle, participant_data.m_guid);
         }
         else
         {
@@ -4262,7 +4257,7 @@ bool SecurityManager::participant_authorized(
                 shared_lock<shared_mutex> _(mutex_);
 
                 // Store shared_secret.
-                auto dp_it = discovered_participants_.find(participant_data.guid);
+                auto dp_it = discovered_participants_.find(participant_data.m_guid);
 
                 if (dp_it != discovered_participants_.end())
                 {
@@ -4276,14 +4271,14 @@ bool SecurityManager::participant_authorized(
 
         for (auto& remote_reader : temp_readers)
         {
-            participant_->pdp()->get_edp()->pairing_reader_proxy_with_local_writer(remote_reader.second,
-                    participant_data.guid, remote_reader.first);
+            participant_->pdp()->getEDP()->pairing_reader_proxy_with_local_writer(remote_reader.second,
+                    participant_data.m_guid, remote_reader.first);
         }
 
         for (auto& remote_writer : temp_writers)
         {
-            participant_->pdp()->get_edp()->pairing_writer_proxy_with_local_reader(remote_writer.second,
-                    participant_data.guid, remote_writer.first);
+            participant_->pdp()->getEDP()->pairing_writer_proxy_with_local_reader(remote_writer.second,
+                    participant_data.m_guid, remote_writer.first);
         }
 
         // The remote identity certificate-expiration timer is armed by the builtin
@@ -4301,14 +4296,14 @@ void SecurityManager::notify_participant_authorized(
 {
     participant_->pdp()->notifyAboveRemoteEndpoints(participant_data, true);
 
-    EPROSIMA_LOG_INFO(SECURITY, "Participant " << participant_data.guid << " authenticated");
+    logInfo(SECURITY, "Participant " << participant_data.m_guid << " authenticated");
 
     // Inform user about authenticated remote participant.
     if (participant_->getListener() != nullptr)
     {
         ParticipantAuthenticationInfo info;
         info.status = ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT;
-        info.guid = participant_data.guid;
+        info.guid = participant_data.m_guid;
         participant_->getListener()->onParticipantAuthentication(
             participant_->getUserRTPSParticipant(), std::move(info));
     }
@@ -4358,7 +4353,7 @@ uint32_t SecurityManager::calculate_extra_size_for_rtps_submessage(
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Not found local writer " << writer_guid);
+        logInfo(SECURITY, "Not found local writer " << writer_guid);
     }
 
     return 0;
@@ -4389,7 +4384,7 @@ uint32_t SecurityManager::calculate_extra_size_for_encoded_payload(
     }
     else
     {
-        EPROSIMA_LOG_INFO(SECURITY, "Not found local writer " << writer_guid);
+        logInfo(SECURITY, "Not found local writer " << writer_guid);
     }
 
     return 0;
@@ -4422,19 +4417,6 @@ void SecurityManager::resend_handshake_message_token(
                     remote_participant_info->event_->cancel_timer();
                     remote_participant_info->auth_status_ = AUTHENTICATION_FAILED;
                     on_validation_failed(dp_it->second->participant_data(), exception);
-                    if (remote_participant_info->change_sequence_number_ != SequenceNumber_t::unknown())
-                    {
-                        participant_stateless_message_writer_history_->remove_change(
-                            remote_participant_info->change_sequence_number_);
-                        remote_participant_info->change_sequence_number_ = SequenceNumber_t::unknown();
-                        // Return the handshake handle
-                        if (remote_participant_info->handshake_handle_ != nullptr)
-                        {
-                            authentication_plugin_->return_handshake_handle(
-                                remote_participant_info->handshake_handle_, exception);
-                            remote_participant_info->handshake_handle_ = nullptr;
-                        }
-                    }
                 }
             }
             else
@@ -4447,7 +4429,7 @@ void SecurityManager::resend_handshake_message_token(
 
                     if (p_change != nullptr)
                     {
-                        EPROSIMA_LOG_INFO(SECURITY, "Authentication handshake resent to participant "
+                        logInfo(SECURITY, "Authentication handshake resent to participant "
                                 << remote_participant_key);
                         if (participant_stateless_message_writer_history_->add_change(p_change))
                         {
@@ -4484,18 +4466,18 @@ void SecurityManager::on_validation_failed(
 
     if (strlen(exception.what()) > 0)
     {
-        EPROSIMA_LOG_ERROR(SECURITY_AUTHENTICATION, exception.what());
+        logError(SECURITY_AUTHENTICATION, exception.what());
     }
 
-    EPROSIMA_LOG_INFO(SECURITY, "Authentication failed for participant "
-            << participant_data.guid);
+    logInfo(SECURITY, "Authentication failed for participant "
+            << participant_data.m_guid);
 
     // Inform user about authenticated remote participant.
     if (participant_->getListener() != nullptr)
     {
         ParticipantAuthenticationInfo info;
         info.status = ParticipantAuthenticationInfo::UNAUTHORIZED_PARTICIPANT;
-        info.guid = participant_data.guid;
+        info.guid = participant_data.m_guid;
         participant_->getListener()->onParticipantAuthentication(
             participant_->getUserRTPSParticipant(), std::move(info));
     }
@@ -4510,7 +4492,7 @@ bool SecurityManager::on_revoke_identity(
 
     if (is_local)
     {
-        EPROSIMA_LOG_WARNING(SECURITY,
+        logWarning(SECURITY,
                 "Local identity certificate has expired. Participant is no longer authorized.");
 
         std::vector<GUID_t> remote_guids;
@@ -4539,7 +4521,7 @@ bool SecurityManager::on_revoke_identity(
             {
                 unmatch_builtin_endpoints(*proxy_snapshot);
 
-                auto* edp = participant_->pdp()->get_edp();
+                auto* edp = participant_->pdp()->getEDP();
                 if (edp != nullptr)
                 {
                     std::vector<GUID_t> remote_readers, remote_writers;
@@ -4580,9 +4562,9 @@ bool SecurityManager::on_revoke_identity(
             SecurityException remote_exception;
             if (!remove_participant_unlocked(remote_guid, remote_exception))
             {
-                EPROSIMA_LOG_ERROR(SECURITY, "Error tearing down remote " << remote_guid
-                                                                          << " during local expiry: "
-                                                                          << remote_exception.what());
+                logError(SECURITY, "Error tearing down remote " << remote_guid
+                                                                << " during local expiry: "
+                                                                << remote_exception.what());
                 if (teardown_ok)
                 {
                     // Preserve the first failure as the primary exception.
@@ -4606,7 +4588,7 @@ bool SecurityManager::on_revoke_identity(
                 if (!crypto_plugin_->cryptokeyfactory()->unregister_participant(
                             local_participant_crypto_handle_, local_exception))
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Failed to unregister local participant crypto: "
+                    logError(SECURITY, "Failed to unregister local participant crypto: "
                             << local_exception.what());
                     if (teardown_ok)
                     {
@@ -4621,7 +4603,7 @@ bool SecurityManager::on_revoke_identity(
             {
                 if (!access_plugin_->return_permissions_handle(local_permissions_handle_, local_exception))
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Failed to return local permissions handle: "
+                    logError(SECURITY, "Failed to return local permissions handle: "
                             << local_exception.what());
                     if (teardown_ok)
                     {
@@ -4636,7 +4618,7 @@ bool SecurityManager::on_revoke_identity(
             {
                 if (!plugin.return_identity_handle(local_identity_handle_, local_exception))
                 {
-                    EPROSIMA_LOG_ERROR(SECURITY, "Failed to return local identity handle: "
+                    logError(SECURITY, "Failed to return local identity handle: "
                             << local_exception.what());
                     if (teardown_ok)
                     {
@@ -4679,7 +4661,7 @@ bool SecurityManager::on_revoke_identity(
 
         if (revoked_guid == GUID_t::unknown())
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "on_revoke_identity: cannot resolve GUID from handle.");
+            logError(SECURITY, "on_revoke_identity: cannot resolve GUID from handle.");
             exception = SecurityException("Cannot resolve participant GUID from revoked handle");
             return false;
         }
@@ -4702,8 +4684,8 @@ bool SecurityManager::revoke_remote_participant(
         }
     }
 
-    EPROSIMA_LOG_WARNING(SECURITY, "Remote participant " << remote_guid
-                                                         << " identity revoked. Terminating communications.");
+    logWarning(SECURITY, "Remote participant " << remote_guid
+                                               << " identity revoked. Terminating communications.");
 
     {
         std::unique_ptr<ParticipantProxyData> proxy_snapshot;
@@ -4719,7 +4701,7 @@ bool SecurityManager::revoke_remote_participant(
         {
             unmatch_builtin_endpoints(*proxy_snapshot);
 
-            auto* edp = participant_->pdp()->get_edp();
+            auto* edp = participant_->pdp()->getEDP();
             if (edp != nullptr)
             {
                 std::vector<GUID_t> remote_readers, remote_writers;
@@ -4762,9 +4744,9 @@ bool SecurityManager::revoke_remote_participant(
     const bool teardown_ok = remove_participant_unlocked(remote_guid, teardown_exception);
     if (!teardown_ok)
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Teardown errors while revoking participant " << remote_guid
-                                                                                   << ": "
-                                                                                   << teardown_exception.what());
+        logError(SECURITY, "Teardown errors while revoking participant " << remote_guid
+                                                                         << ": "
+                                                                         << teardown_exception.what());
 
         exception = teardown_exception;
     }
@@ -4787,7 +4769,7 @@ bool SecurityManager::revoke_remote_participant(
     if (!crypto_plugin_->cryptokeyfactory()->regenerate_local_participant_key(
                 *local_participant_crypto_handle_, rekey_exception))
     {
-        EPROSIMA_LOG_ERROR(SECURITY, "Failed to regenerate local participant key: "
+        logError(SECURITY, "Failed to regenerate local participant key: "
                 << rekey_exception.what());
         exception = rekey_exception;
         return false;
@@ -4811,7 +4793,7 @@ bool SecurityManager::revoke_remote_participant(
 
             if (!exchange_participant_crypto(remote_crypto, dp_it.first))
             {
-                EPROSIMA_LOG_ERROR(SECURITY,
+                logError(SECURITY,
                         "Failed to send revised key material to " << dp_it.first);
                 redistribution_ok = false;
             }
@@ -4977,7 +4959,7 @@ bool SecurityManager::revoke_remote_participant(
         if (!exchange_writer_endpoint_crypto(e.local_writer_guid, *e.writer_handle,
                 e.remote_participant_guid, e.remote_reader_guid, *e.reader_handle))
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Failed to send writer endpoint token to reader "
+            logError(SECURITY, "Failed to send writer endpoint token to reader "
                     << e.remote_reader_guid);
             redistribution_ok = false;
         }
@@ -4988,7 +4970,7 @@ bool SecurityManager::revoke_remote_participant(
         if (!exchange_reader_endpoint_crypto(e.local_reader_guid, *e.reader_handle,
                 e.remote_participant_guid, e.remote_writer_guid, *e.writer_handle))
         {
-            EPROSIMA_LOG_ERROR(SECURITY, "Failed to send reader endpoint token to writer "
+            logError(SECURITY, "Failed to send reader endpoint token to writer "
                     << e.remote_writer_guid);
             redistribution_ok = false;
         }
@@ -5069,7 +5051,7 @@ bool SecurityManager::DiscoveredParticipantInfo::check_guid_comes_from(
     return ret;
 }
 
-void SecurityManager::on_writer_change_received_by_all(
+void SecurityManager::onWriterChangeReceivedByAll(
         RTPSWriter* writer,
         CacheChange_t* change)
 {
@@ -5081,7 +5063,3 @@ void SecurityManager::on_writer_change_received_by_all(
         participant_volatile_message_secure_writer_history_->remove_change(change);
     }
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

@@ -29,9 +29,9 @@
 #include "fastdds/dds/core/StackAllocatedSequence.hpp"
 #include "fastdds/dds/log/Log.hpp"
 
-#include "data_types/ContentFilterTestType.hpp"
-#include "data_types/ContentFilterTestTypePubSubTypes.hpp"
-#include "data_types/ContentFilterTestTypeTypeObjectSupport.hpp"
+#include "data_types/ContentFilterTestType.h"
+#include "data_types/ContentFilterTestTypePubSubTypes.h"
+#include "data_types/ContentFilterTestTypeTypeObject.h"
 
 namespace eprosima {
 namespace fastdds {
@@ -40,22 +40,21 @@ namespace dds {
 // Name of all the primitive fields used along the tests
 static const std::vector<std::pair<std::string, std::string>> primitive_fields
 {
-    {"char_field",         "CHAR"},
-    {"uint8_field",        "INT"},
-    {"int16_field",        "INT"},
-    {"uint16_field",       "INT"},
-    {"int32_field",        "INT"},
-    {"uint32_field",       "INT"},
-    {"int64_field",        "INT"},
-    {"uint64_field",       "INT"},
-    {"float_field",        "FLOAT"},
-    {"double_field",       "FLOAT"},
-    {"long_double_field",  "FLOAT"},
-    {"bool_field",         "BOOL"},
-    {"string_field",       "STRING"},
-    {"alias_string_field", "STRING"},
-    {"enum_field",         "ENUM"},
-    {"enum2_field",        "ENUM2"}
+    {"char_field",        "CHAR"},
+    {"uint8_field",       "INT"},
+    {"int16_field",       "INT"},
+    {"uint16_field",      "INT"},
+    {"int32_field",       "INT"},
+    {"uint32_field",      "INT"},
+    {"int64_field",       "INT"},
+    {"uint64_field",      "INT"},
+    {"float_field",       "FLOAT"},
+    {"double_field",      "FLOAT"},
+    {"long_double_field", "FLOAT"},
+    {"bool_field",        "BOOL"},
+    {"string_field",      "STRING"},
+    {"enum_field",        "ENUM"},
+    {"enum2_field",       "ENUM2"}
 };
 
 static const std::map<std::string, std::set<std::string>> type_compatibility_matrix
@@ -71,48 +70,6 @@ static const std::map<std::string, std::set<std::string>> type_compatibility_mat
     {"ENUM2_STR", {"ENUM2", "CHAR", "STRING"}}
 };
 
-static const std::vector<std::string> operators
-{
-    " = ", " > ", " >= ", " < ", " <= ", " <> ", " != "
-};
-
-static const std::vector<std::pair<std::string, std::string>> checks_compare
-{
-    // string values
-    {"'XYZ'", "STRING"},
-    {"'%XYZ'", "STRING"},
-    {"'XYZ%'", "STRING"},
-    {"'%X%Y%Z%'", "STRING"},
-    // Char values
-    {"'A'", "CHAR"},
-    {"'%'", "CHAR"},
-    {"'''", "CHAR"},
-    // Boolean values
-    {"FALSE", "BOOL"},
-    {"false", "BOOL"},
-    {"TRUE", "BOOL"},
-    {"true", "BOOL"},
-    // Integer values
-    {"1", "INT"},
-    {"-1", "INT"},
-    {"0xabcdef", "INT"},
-    {"-0xFEEDBAC0", "INT"},
-    // Floating point values
-    {"1.0", "FLOAT"},
-    {"-1.0", "FLOAT"},
-    {"1e2", "FLOAT"},
-    {"-1e2", "FLOAT"},
-    // Enum Color values
-    {"'RED'", "ENUM_STR"},
-    {"'GREEN'", "ENUM_STR"},
-    {"'BLUE'", "ENUM_STR"},
-    // Enum Material values
-    {"'WOOD'", "ENUM2_STR"},
-    {"'PLASTIC'", "ENUM2_STR"},
-    {"'METAL'", "ENUM2_STR"},
-    {"'CONCRETE'", "ENUM2_STR"},
-};
-
 static bool are_types_compatible(
         const std::string& type1,
         const std::string& type2)
@@ -121,6 +78,7 @@ static bool are_types_compatible(
 }
 
 using DDSFilterFactory = DDSSQLFilter::DDSFilterFactory;
+using ReturnCode_t = DDSFilterFactory::ReturnCode_t;
 
 static ReturnCode_t create_content_filter(
         DDSFilterFactory& factory,
@@ -148,15 +106,8 @@ class DDSSQLFilterTests : public testing::Test
 
 protected:
 
-    void SetUp() override
-    {
-        eprosima::fastdds::dds::xtypes::TypeIdentifierPair type_ids;
-        register_ContentFilterTestType_type_identifier(type_ids);
-        eprosima::fastdds::dds::Log::ClearConsumers();
-    }
-
-    const ReturnCode_t ok_code = RETCODE_OK;
-    const ReturnCode_t bad_code = RETCODE_BAD_PARAMETER;
+    const ReturnCode_t ok_code = ReturnCode_t::RETCODE_OK;
+    const ReturnCode_t bad_code = ReturnCode_t::RETCODE_BAD_PARAMETER;
 
     struct TestCase
     {
@@ -206,7 +157,7 @@ protected:
 
 TEST_F(DDSSQLFilterTests, empty_expression)
 {
-    TestCase empty{ "", {}, RETCODE_OK };
+    TestCase empty{ "", {}, ReturnCode_t::RETCODE_OK };
     run(empty);
 }
 
@@ -470,8 +421,13 @@ TEST_F(DDSSQLFilterTests, type_compatibility_match)
     }
 }
 
-TEST_F(DDSSQLFilterTests, type_compatibility_compare_field_op_field)
+TEST_F(DDSSQLFilterTests, type_compatibility_compare)
 {
+    static const std::vector<std::string> operators
+    {
+        " = ", " > ", " >= ", " < ", " <= ", " <> ", " != "
+    };
+
     // field1 OP field2
     {
         std::vector<TestCase> test_cases;
@@ -489,16 +445,52 @@ TEST_F(DDSSQLFilterTests, type_compatibility_compare_field_op_field)
         }
         run(test_cases);
     }
-}
 
-TEST_F(DDSSQLFilterTests, type_compatibility_compare_field_op_operand)
-{
     // field OP operand
+    // operand OP field
+    // operand OP operand
     {
+        static const std::vector<std::pair<std::string, std::string>> checks
+        {
+            // string values
+            {"'XYZ'", "STRING"},
+            {"'%XYZ'", "STRING"},
+            {"'XYZ%'", "STRING"},
+            {"'%X%Y%Z%'", "STRING"},
+            // Char values
+            {"'A'", "CHAR"},
+            {"'%'", "CHAR"},
+            {"'''", "CHAR"},
+            // Boolean values
+            {"FALSE", "BOOL"},
+            {"false", "BOOL"},
+            {"TRUE", "BOOL"},
+            {"true", "BOOL"},
+            // Integer values
+            {"1", "INT"},
+            {"-1", "INT"},
+            {"0xabcdef", "INT"},
+            {"-0xFEEDBAC0", "INT"},
+            // Floating point values
+            {"1.0", "FLOAT"},
+            {"-1.0", "FLOAT"},
+            {"1e2", "FLOAT"},
+            {"-1e2", "FLOAT"},
+            // Enum Color values
+            {"'RED'", "ENUM_STR"},
+            {"'GREEN'", "ENUM_STR"},
+            {"'BLUE'", "ENUM_STR"},
+            // Enum Material values
+            {"'WOOD'", "ENUM2_STR"},
+            {"'PLASTIC'", "ENUM2_STR"},
+            {"'METAL'", "ENUM2_STR"},
+            {"'CONCRETE'", "ENUM2_STR"},
+        };
+
         std::vector<TestCase> test_cases;
         for (const auto& field : primitive_fields)
         {
-            for (auto& check : checks_compare)
+            for (auto& check : checks)
             {
                 bool ok = are_types_compatible(field.second, check.second);
                 ReturnCode_t ret = ok ? ok_code : bad_code;
@@ -510,28 +502,8 @@ TEST_F(DDSSQLFilterTests, type_compatibility_compare_field_op_operand)
                     test_cases.emplace_back(TestCase{ field.first + op + "%0", {check.first}, ret });
                     test_cases.emplace_back(TestCase{ field.first + op + "%1", {check.first}, bad_code });
                     test_cases.emplace_back(TestCase{ field.first + op + "%0", {}, bad_code });
-                }
-            }
-        }
 
-        run(test_cases);
-    }
-}
-
-TEST_F(DDSSQLFilterTests, type_compatibility_compare_operand_op_field)
-{
-    // operand OP field
-    {
-        std::vector<TestCase> test_cases;
-        for (const auto& field : primitive_fields)
-        {
-            for (auto& check : checks_compare)
-            {
-                bool ok = are_types_compatible(field.second, check.second);
-                ReturnCode_t ret = ok ? ok_code : bad_code;
-
-                for (const std::string& op : operators)
-                {
+                    // operand OP field
                     test_cases.emplace_back(TestCase{ check.first + op + field.first, {}, ret });
                     test_cases.emplace_back(TestCase{ "%0" + op + field.first, {check.first}, ret });
                     test_cases.emplace_back(TestCase{ "%1" + op + field.first, {check.first}, bad_code });
@@ -540,18 +512,9 @@ TEST_F(DDSSQLFilterTests, type_compatibility_compare_operand_op_field)
             }
         }
 
-        run(test_cases);
-    }
-}
-
-TEST_F(DDSSQLFilterTests, type_compatibility_compare_operand_op_operand)
-{
-    // operand OP operand
-    {
-        std::vector<TestCase> test_cases;
-        for (const auto& check1 : checks_compare)
+        for (const auto& check1 : checks)
         {
-            for (auto& check2 : checks_compare)
+            for (auto& check2 : checks)
             {
                 for (const std::string& op : operators)
                 {
@@ -572,27 +535,6 @@ TEST_F(DDSSQLFilterTests, type_compatibility_compare_operand_op_operand)
 
         run(test_cases);
     }
-}
-
-/*
- * Regression test for https://eprosima.easyredmine.com/issues/23265
- *
- * This test checks that a DDSSQL content filter can be created with a type name that is different from the one
- * used to register the type object representation.
- */
-TEST_F(DDSSQLFilterTests, different_type_name)
-{
-    ContentFilterTestTypePubSubType type;
-    type.register_type_object_representation();
-
-    IContentFilter* filter_instance = nullptr;
-    DDSFilterFactory fac{DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH};
-    StackAllocatedSequence<const char*, 10> params;
-
-    EXPECT_EQ(fac.create_content_filter("DDSSQL", "MyCustomType", &type,
-            "uint16_field = 3", params, filter_instance), RETCODE_OK);
-
-    EXPECT_EQ(RETCODE_OK, fac.delete_content_filter("DDSSQL", filter_instance));
 }
 
 TEST_F(DDSSQLFilterTests, parenthesis)
@@ -747,10 +689,10 @@ private:
     {
         static ContentFilterTestTypePubSubType type_support;
         auto data_ptr = const_cast<ContentFilterTestType*>(&data);
-        auto data_size = type_support.calculate_serialized_size(data_ptr, fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        auto data_size = type_support.getSerializedSizeProvider(data_ptr)();
         auto payload = new IContentFilter::SerializedPayload(data_size);
         values_.emplace_back(payload);
-        type_support.serialize(data_ptr, *payload, fastdds::dds::DEFAULT_DATA_REPRESENTATION);
+        type_support.serialize(data_ptr, payload);
     }
 
     void add_char_values(
@@ -1007,21 +949,13 @@ private:
         for (size_t i = 0; i < values.size(); ++i)
         {
             data[i].string_field(values[i]);
-            data[i].alias_string_field(values[i]);
             data[i].struct_field().string_field(values[i]);
-            data[i].struct_field().alias_string_field(values[i]);
             data[i].array_struct_field()[0].string_field(values[i]);
-            data[i].array_struct_field()[0].alias_string_field(values[i]);
             data[i].bounded_sequence_struct_field()[0].string_field(values[i]);
-            data[i].bounded_sequence_struct_field()[0].alias_string_field(values[i]);
             data[i].unbounded_sequence_struct_field()[0].string_field(values[i]);
-            data[i].unbounded_sequence_struct_field()[0].alias_string_field(values[i]);
             data[i].array_string_field()[0] = values[i];
-            data[i].array_alias_string_field()[0] = values[i];
             data[i].bounded_sequence_string_field().push_back(values[i]);
-            data[i].bounded_sequence_alias_string_field().push_back(values[i]);
             data[i].unbounded_sequence_string_field().push_back(values[i]);
-            data[i].unbounded_sequence_alias_string_field().push_back(values[i]);
         }
     }
 
@@ -1092,13 +1026,6 @@ public:
 
 protected:
 
-    void SetUp() override
-    {
-        eprosima::fastdds::dds::xtypes::TypeIdentifierPair type_ids;
-        register_ContentFilterTestType_type_identifier(type_ids);
-        eprosima::fastdds::dds::Log::ClearConsumers();
-    }
-
     DDSFilterFactory uut{DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS, DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH};
     ContentFilterTestTypePubSubType type_support;
 
@@ -1140,13 +1067,13 @@ TEST_P(DDSSQLFilterValueTests, test_filtered_value)
 
     IContentFilter* filter_instance = nullptr;
     auto ret = create_content_filter(uut, input.expression, input.params, &type_support, filter_instance);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     ASSERT_NE(nullptr, filter_instance);
 
     perform_basic_check(filter_instance, results, values);
 
     ret = uut.delete_content_filter("DDSSQL", filter_instance);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
 
     Log::Flush();
     Log::ClearConsumers();
@@ -1173,7 +1100,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { param_values.back() }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1188,7 +1115,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
             // Update parameter value
             params[0] = param_values[i].c_str();
             ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-            EXPECT_EQ(RETCODE_OK, ret);
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
             ASSERT_NE(nullptr, filter);
 
             // Update expected results
@@ -1203,7 +1130,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_not)
         }
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1219,7 +1146,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_and)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { "-3.14159", "3.14159" }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1229,7 +1156,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_and)
         perform_basic_check(filter, results, values);
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1245,7 +1172,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_or)
     {
         IContentFilter* filter = nullptr;
         auto ret = create_content_filter(uut, expression, { "-3.14159", "3.14159" }, &type_support, filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
         ASSERT_NE(nullptr, filter);
 
         const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1255,7 +1182,7 @@ TEST_F(DDSSQLFilterValueTests, test_compound_or)
         perform_basic_check(filter, results, values);
 
         ret = uut.delete_content_filter("DDSSQL", filter);
-        EXPECT_EQ(RETCODE_OK, ret);
+        EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     }
 }
 
@@ -1265,7 +1192,7 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
 
     IContentFilter* filter = nullptr;
     auto ret = create_content_filter(uut, expression, { "'BBB'", "'X'" }, &type_support, filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     ASSERT_NE(nullptr, filter);
 
     const auto& values = DDSSQLFilterValueGlobalData::values();
@@ -1281,28 +1208,28 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
     params[0] = "'Z??"; // Wrong (missing ending quote)
     params[1] = "'X'";  // Unchanged
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %0 to a wrong parameter should preserve filter state and results
     params[0] = "'Z??"; // Wrong (missing ending quote)
     params[1] = "'%'";   // Changed
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %1 to a wrong parameter should preserve filter state and results
     params[0] = "'BBB'"; // Unchanged
     params[1] = "'";  // Wrong (missing ending quote)
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Change %1 to a wrong parameter should preserve filter state and results
     params[0] = "'.*'"; // Changed
     params[1] = "'";  // Wrong (missing ending quote)
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_BAD_PARAMETER, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_BAD_PARAMETER, ret);
     perform_basic_check(filter, results, values);
 
     // Correctly changing both parameters should change results
@@ -1310,11 +1237,11 @@ TEST_F(DDSSQLFilterValueTests, test_update_params)
     params[1] = "''";  // Only first value matches
     results[0] = results[4] = true;
     ret = uut.create_content_filter("DDSSQL", "ContentFilterTestType", &type_support, nullptr, params, filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
     perform_basic_check(filter, results, values);
 
     ret = uut.delete_content_filter("DDSSQL", filter);
-    EXPECT_EQ(RETCODE_OK, ret);
+    EXPECT_EQ(ReturnCode_t::RETCODE_OK, ret);
 }
 
 static void add_test_filtered_value_inputs(
@@ -1522,112 +1449,6 @@ static std::vector<DDSSQLFilterValueParams> get_test_filtered_value_string_input
 
     input.test_case_name = "match_space_and_range";
     input.expression = "string_field match ' ([A-Z])+'";
-    input.samples_filtered.assign({ false, false, true, true, false });
-    inputs.push_back(input);
-
-    return inputs;
-}
-
-static std::vector<DDSSQLFilterValueParams> get_test_filtered_value_alias_string_inputs()
-{
-    static const std::array<std::pair<std::string, std::string>, 5> values =
-    {
-        std::pair<std::string, std::string>{"''", "minus_2"},
-        std::pair<std::string, std::string>{"'   '", "minus_1"},
-        std::pair<std::string, std::string>{"' AA'", "0"},
-        std::pair<std::string, std::string>{"' AZ'", "plus_1"},
-        std::pair<std::string, std::string>{"'ZZZ'", "plus_2"}
-    };
-
-    // Adding standard tests
-    std::vector<DDSSQLFilterValueParams> inputs;
-    inputs = get_test_filtered_value_inputs_given_values_and_results("alias_string_field", values);
-
-    // Adding tests for LIKE operator
-    DDSSQLFilterValueParams input;
-    input.test_case_name = "like_any_percent";
-    input.expression = "alias_string_field LIKE '%'";
-    input.samples_filtered.assign(5, true);
-    inputs.push_back(input);
-
-    input.test_case_name = "like_any_star";
-    input.expression = "alias_string_field LIKE '*'";
-    input.samples_filtered.assign(5, true);
-    inputs.push_back(input);
-
-    input.test_case_name = "like_space_percent";
-    input.expression = "alias_string_field LIKE ' %'";
-    input.samples_filtered.assign({ false, true, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_space_star";
-    input.expression = "alias_string_field LIKE ' *'";
-    input.samples_filtered.assign({ false, true, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_A_question";
-    input.expression = "alias_string_field LIKE '?A?'";
-    input.samples_filtered.assign({ false, false, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_A_underscore";
-    input.expression = "alias_string_field LIKE '_A_'";
-    input.samples_filtered.assign({ false, false, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_exact_empty";
-    input.expression = "alias_string_field LIKE ''";
-    input.samples_filtered.assign({ true, false, false, false, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_exact_ZZZ";
-    input.expression = "alias_string_field LIKE 'ZZZ'";
-    input.samples_filtered.assign({ false, false, false, false, true });
-    inputs.push_back(input);
-
-    input.test_case_name = "like_exact_none";
-    input.expression = "alias_string_field LIKE 'BBB'";
-    input.samples_filtered.assign({ false, false, false, false, false });
-    inputs.push_back(input);
-
-    // Adding tests for MATCH operator
-    input.test_case_name = "match_any";
-    input.expression = "alias_string_field match '.*'";
-    input.samples_filtered.assign(5, true);
-    inputs.push_back(input);
-
-    input.test_case_name = "match_space";
-    input.expression = "alias_string_field match ' .*'";
-    input.samples_filtered.assign({ false, true, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_A";
-    input.expression = "alias_string_field match '.A.'";
-    input.samples_filtered.assign({ false, false, true, true, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_exact_empty";
-    input.expression = "alias_string_field match ''";
-    input.samples_filtered.assign({ true, false, false, false, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_exact_ZZZ";
-    input.expression = "alias_string_field match 'ZZZ'";
-    input.samples_filtered.assign({ false, false, false, false, true });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_exact_none";
-    input.expression = "alias_string_field match 'BBB'";
-    input.samples_filtered.assign({ false, false, false, false, false });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_range";
-    input.expression = "alias_string_field match '([A-Z])+'";
-    input.samples_filtered.assign({ false, false, false, false, true });
-    inputs.push_back(input);
-
-    input.test_case_name = "match_space_and_range";
-    input.expression = "alias_string_field match ' ([A-Z])+'";
     input.samples_filtered.assign({ false, false, true, true, false });
     inputs.push_back(input);
 
@@ -2193,12 +2014,6 @@ INSTANTIATE_TEST_SUITE_P(
     DDSSQLFilterValueTests::PrintToStringParamName());
 
 INSTANTIATE_TEST_SUITE_P(
-    DDSSQLFilterValueTestsAliasString,
-    DDSSQLFilterValueTests,
-    ::testing::ValuesIn(get_test_filtered_value_alias_string_inputs()),
-    DDSSQLFilterValueTests::PrintToStringParamName());
-
-INSTANTIATE_TEST_SUITE_P(
     DDSSQLFilterValueTestsBool,
     DDSSQLFilterValueTests,
     ::testing::ValuesIn(get_test_filtered_value_boolean_inputs()),
@@ -2291,5 +2106,7 @@ int main(
         char** argv)
 {
     testing::InitGoogleMock(&argc, argv);
+    registerContentFilterTestTypeTypes();
+    eprosima::fastdds::dds::Log::ClearConsumers();
     return RUN_ALL_TESTS();
 }

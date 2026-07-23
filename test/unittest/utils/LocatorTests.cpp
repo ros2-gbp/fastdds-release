@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <string>
+#include <fastrtps/utils/IPLocator.h>
+#include <fastrtps/rtps/common/Locator.h>
+#include <fastrtps/rtps/common/RemoteLocators.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/rtps/common/LocatorListComparisons.hpp>
 
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/rtps/common/LocatorListComparisons.hpp>
-#include <fastdds/rtps/common/RemoteLocators.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
-#include <fastdds/utils/IPLocator.hpp>
+#include <string>
 
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps::rtps;
 
 // Checks whether the address of two locators are equal byte to byte
 static bool address_match(
@@ -76,7 +75,6 @@ public:
 
     const std::string ipv4_any = "0.0.0.0";
     const std::string ipv4_invalid = "0.0.0.0";
-    const std::string ipv4_invalid_format = "192.168.1.256.1";
     const std::string ipv6_any = "::";
     const std::string ipv6_invalid = "0:0:0:0:0:0:0:0";
 
@@ -130,9 +128,6 @@ TEST_F(IPLocatorTests, setIPv4_from_string)
     }
 
     {
-#ifdef WIN32
-        ASSERT_FALSE(IPLocator::setIPv4(locator, "01.002.0003.000104"));
-#else
         // Std string with 0 forwarding number -> should fall back to dns resolution so last octet may become 68 (0104u -> 68)
         ASSERT_TRUE(IPLocator::setIPv4(locator, "01.002.0003.000104"));
         std::vector<unsigned int> vec{1, 2, 3, 104};
@@ -147,7 +142,6 @@ TEST_F(IPLocatorTests, setIPv4_from_string)
         }
         // Depending on the platform, the last octet may be read as an octal number, so we check for both possibilities
         ASSERT_TRUE(locator.address[15] == vec[3] || locator.address[15] == 0104u);
-#endif // WIN32
     }
 
     {
@@ -168,6 +162,7 @@ TEST_F(IPLocatorTests, setIPv4_from_string)
     {
         // Error cases
         ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1.256")); // Too high number
+        ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1"));     // Too few args
         ASSERT_FALSE(IPLocator::setIPv4(locator, "1.1.1.1.1")); // Too much args
 
         // Change to IPv6
@@ -774,37 +769,6 @@ TEST_F(IPLocatorTests, copyIPv6)
 }
 
 /*
- * Check to copy an address
- */
-TEST_F(IPLocatorTests, copy_address)
-{
-    // Copy IPv4
-    Locator_t locator1(LOCATOR_KIND_UDPv4);
-    Locator_t locator2(LOCATOR_KIND_UDPv4);
-    IPLocator::setIPv4(locator1, ipv4_lo_address);
-    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator2));
-    ASSERT_TRUE(IPLocator::copy_address(locator1, locator2));
-    ASSERT_TRUE(IPLocator::compareAddress(locator1, locator2));
-
-    // Check cannot copy between different kinds
-    locator1.kind = LOCATOR_KIND_UDPv6;
-    ASSERT_FALSE(IPLocator::copy_address(locator1, locator2));
-
-    // Copy IPv6
-    locator2.kind = LOCATOR_KIND_UDPv6;
-    IPLocator::setIPv6(locator1, ipv6_lo_address);
-    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator2));
-    ASSERT_TRUE(IPLocator::copy_address(locator1, locator2));
-    ASSERT_TRUE(IPLocator::compareAddress(locator1, locator2));
-
-    // Check cannot copy between SHM locators
-    locator1.kind = LOCATOR_KIND_SHM;
-    Locator_t locator3(LOCATOR_KIND_SHM);
-    ASSERT_FALSE(IPLocator::copy_address(locator1, locator3));
-    ASSERT_FALSE(IPLocator::compareAddress(locator1, locator3));
-}
-
-/*
  * Check to set ip of any kind
  */
 TEST_F(IPLocatorTests, ip)
@@ -1355,8 +1319,8 @@ TEST_F(IPLocatorTests, setIPv4address)
     }
 
     ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7", "9.10.11.12", "13.14.15.16"));
-    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", ipv4_invalid_format, "13.14.15.16"));
-    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", ipv4_invalid_format));
+    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11", "13.14.15.16"));
+    ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", "13.14.15"));
 
     locator.kind = LOCATOR_KIND_TCPv6;
     ASSERT_FALSE(IPLocator::setIPv4address(locator, "1.2.3.4.5.6.7.8", "9.10.11.12", "13.14.15.16"));
@@ -1639,7 +1603,7 @@ TEST(LocatorTests, LocatorList_deserialization)
  */
 TEST(RemoteLocatorsTests, add_unicast_locator_repetead)
 {
-    eprosima::fastdds::rtps::RemoteLocatorList rll;
+    eprosima::fastrtps::rtps::RemoteLocatorList rll;
     Locator_t locator_1;
     Locator_t locator_2;
     Locator_t locator_3;
@@ -1663,7 +1627,7 @@ TEST(RemoteLocatorsTests, add_unicast_locator_repetead)
  */
 TEST(RemoteLocatorsTests, add_multicast_locator_repetead)
 {
-    eprosima::fastdds::rtps::RemoteLocatorList rll;
+    eprosima::fastrtps::rtps::RemoteLocatorList rll;
     Locator_t locator_1, locator_2, locator_3;
     ASSERT_EQ(rll.multicast.size(), 0u);
 
@@ -1685,7 +1649,7 @@ TEST(RemoteLocatorsTests, add_multicast_locator_repetead)
  */
 TEST(RemoteLocatorsTests, RemoteLocator_serialization)
 {
-    eprosima::fastdds::rtps::RemoteLocatorList rll;
+    eprosima::fastrtps::rtps::RemoteLocatorList rll;
     Locator_t locator;
     std::string serialized;
     std::stringstream serialized_ss;
@@ -1721,7 +1685,7 @@ TEST(RemoteLocatorsTests, RemoteLocator_serialization)
     ASSERT_EQ(serialized_ss.str(), str_result);
 
     // Check unicast List
-    eprosima::fastdds::rtps::RemoteLocatorList rll_2;
+    eprosima::fastrtps::rtps::RemoteLocatorList rll_2;
     IPLocator::createLocator(LOCATOR_KIND_UDPv4, "1.2.3.4", 3, locator);
     rll_2.add_unicast_locator(locator);
     IPLocator::createLocator(LOCATOR_KIND_UDPv4, "04.03.02.01", 4, locator);
@@ -1735,7 +1699,7 @@ TEST(RemoteLocatorsTests, RemoteLocator_serialization)
  */
 TEST(RemoteLocatorsTests, RemoteLocator_deserialization)
 {
-    eprosima::fastdds::rtps::RemoteLocatorList rll;
+    eprosima::fastrtps::rtps::RemoteLocatorList rll;
     Locator_t locator;
     std::string serialized;
     std::stringstream serialized_ss;
@@ -1761,16 +1725,6 @@ TEST(RemoteLocatorsTests, RemoteLocator_deserialization)
     serialized_ss >> rll;
     ASSERT_EQ(rll.multicast.size(), 2u);
     ASSERT_EQ(rll.unicast.size(), 2u);
-    Locator_t loc_test2;
-    IPLocator::createLocator(LOCATOR_KIND_UDPv4, "239.255.255.255", 2, loc_test2);
-    Locator_t loc_test3;
-    IPLocator::createLocator(LOCATOR_KIND_UDPv4, "1.2.3.4", 3, loc_test3);
-    Locator_t loc_test4;
-    IPLocator::createLocator(LOCATOR_KIND_UDPv4, "4.3.2.1", 4, loc_test4);
-    ASSERT_EQ(rll.multicast[0], locator);
-    ASSERT_EQ(rll.multicast[1], loc_test2);
-    ASSERT_EQ(rll.unicast[0], loc_test3);
-    ASSERT_EQ(rll.unicast[1], loc_test4);
 
     // Check error List
     serialized_ss.clear();
@@ -1790,8 +1744,8 @@ TEST(RemoteLocatorsTests, RemoteLocator_deserialization)
 TEST(LocatorListComparisonTests, locatorList_comparison)
 {
     Locator_t locator;
-    eprosima::fastdds::ResourceLimitedVector<Locator_t> locator_list_1;
-    eprosima::fastdds::ResourceLimitedVector<Locator_t> locator_list_2;
+    eprosima::fastrtps::ResourceLimitedVector<Locator_t> locator_list_1;
+    eprosima::fastrtps::ResourceLimitedVector<Locator_t> locator_list_2;
 
     IPLocator::createLocator(LOCATOR_KIND_TCPv4, "1.2.3.4", 1, locator);
     locator_list_1.push_back(locator);

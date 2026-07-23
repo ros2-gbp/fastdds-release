@@ -25,12 +25,13 @@
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/common/SerializedPayload.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/SerializedPayload.h>
+#include <fastdds/rtps/history/IPayloadPool.h>
 
-#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 
 #include <rtps/history/PoolConfig.h>
 
@@ -41,18 +42,17 @@ namespace detail {
 
 struct SampleLoanManager
 {
-    using CacheChange_t = eprosima::fastdds::rtps::CacheChange_t;
-    using IPayloadPool = eprosima::fastdds::rtps::IPayloadPool;
-    using PoolConfig = eprosima::fastdds::rtps::PoolConfig;
-    using SampleIdentity = eprosima::fastdds::rtps::SampleIdentity;
-    using SerializedPayload_t = eprosima::fastdds::rtps::SerializedPayload_t;
+    using CacheChange_t = eprosima::fastrtps::rtps::CacheChange_t;
+    using IPayloadPool = eprosima::fastrtps::rtps::IPayloadPool;
+    using PoolConfig = eprosima::fastrtps::rtps::PoolConfig;
+    using ReturnCode_t = eprosima::fastrtps::types::ReturnCode_t;
+    using SampleIdentity = eprosima::fastrtps::rtps::SampleIdentity;
+    using SerializedPayload_t = eprosima::fastrtps::rtps::SerializedPayload_t;
 
     SampleLoanManager(
             const PoolConfig& pool_config,
-            const TypeSupport& type,
-            const bool is_plain)
-        : is_plain_(is_plain)
-        , limits_(pool_config.initial_size,
+            const TypeSupport& type)
+        : limits_(pool_config.initial_size,
                 pool_config.maximum_size ? pool_config.maximum_size : std::numeric_limits<size_t>::max(),
                 1)
         , free_loans_(limits_)
@@ -62,21 +62,21 @@ struct SampleLoanManager
         for (size_t n = 0; n < limits_.initial; ++n)
         {
             OutstandingLoanItem item;
-            if (!is_plain_)
+            if (!type_->is_plain())
             {
-                item.sample = type_->create_data();
+                item.sample = type_->createData();
             }
-            free_loans_.push_back(std::move(item));
+            free_loans_.push_back(item);
         }
     }
 
     ~SampleLoanManager()
     {
-        if (!is_plain_)
+        if (!type_->is_plain())
         {
             for (const OutstandingLoanItem& item : free_loans_)
             {
-                type_->delete_data(item.sample);
+                type_->deleteData(item.sample);
             }
         }
     }
@@ -108,16 +108,16 @@ struct SampleLoanManager
             if (nullptr != item)
             {
                 // Create sample if necessary
-                if (!is_plain_)
+                if (!type_->is_plain())
                 {
-                    item->sample = type_->create_data();
+                    item->sample = type_->createData();
                 }
             }
         }
         else
         {
             // Reuse a free entry
-            item = used_loans_.push_back(std::move(free_loans_.back()));
+            item = used_loans_.push_back(free_loans_.back());
             assert(nullptr != item);
             free_loans_.pop_back();
         }
@@ -129,10 +129,17 @@ struct SampleLoanManager
         assert(item->num_refs == 0);
 
         // Increment references of input payload
-        change->serializedPayload.payload_owner->get_payload(change->serializedPayload, item->payload);
+        CacheChange_t tmp;
+        tmp.copy_not_memcpy(change);
+        item->owner = change->payload_owner();
+        change->payload_owner()->get_payload(change->serializedPayload, item->owner, tmp);
+        item->owner = tmp.payload_owner();
+        item->payload = tmp.serializedPayload;
+        tmp.payload_owner(nullptr);
+        tmp.serializedPayload.data = nullptr;
 
         // Perform deserialization
-        if (is_plain_)
+        if (type_->is_plain())
         {
             auto ptr = item->payload.data;
             ptr += item->payload.representation_header_size;
@@ -140,7 +147,7 @@ struct SampleLoanManager
         }
         else
         {
-            type_->deserialize(item->payload, item->sample);
+            type_->deserialize(&item->payload, item->sample);
         }
 
         // Increment reference counter and return sample
@@ -157,11 +164,14 @@ struct SampleLoanManager
         item->num_refs -= 1;
         if (item->num_refs == 0)
         {
-            item->payload.payload_owner->release_payload(item->payload);
-            assert(item->payload.data == nullptr);
-            assert(item->payload.payload_owner == nullptr);
+            CacheChange_t tmp;
+            tmp.payload_owner(item->owner);
+            tmp.serializedPayload = item->payload;
+            item->owner->release_payload(tmp);
+            item->payload.data = nullptr;
+            item->owner = nullptr;
 
-            item = free_loans_.push_back(std::move(*item));
+            item = free_loans_.push_back(*item);
             assert(nullptr != item);
             used_loans_.remove(*item);
         }
@@ -174,20 +184,19 @@ private:
         void* sample = nullptr;
         SampleIdentity identity;
         SerializedPayload_t payload;
+        IPayloadPool* owner = nullptr;
         uint32_t num_refs = 0;
 
         ~OutstandingLoanItem()
         {
-            // Avoid releasing payload and freeing data
-            payload.payload_owner = nullptr;
             payload.data = nullptr;
         }
 
         OutstandingLoanItem() = default;
         OutstandingLoanItem(
-                const OutstandingLoanItem&) = delete;
+                const OutstandingLoanItem&) = default;
         OutstandingLoanItem& operator =(
-                const OutstandingLoanItem&) = delete;
+                const OutstandingLoanItem&) = default;
         OutstandingLoanItem(
                 OutstandingLoanItem&&) = default;
         OutstandingLoanItem& operator =(
@@ -201,10 +210,9 @@ private:
 
     };
 
-    using collection_type = eprosima::fastdds::ResourceLimitedVector<OutstandingLoanItem>;
+    using collection_type = eprosima::fastrtps::ResourceLimitedVector<OutstandingLoanItem>;
 
-    bool is_plain_;
-    eprosima::fastdds::ResourceLimitedContainerConfig limits_;
+    eprosima::fastrtps::ResourceLimitedContainerConfig limits_;
     collection_type free_loans_;
     collection_type used_loans_;
     TypeSupport type_;

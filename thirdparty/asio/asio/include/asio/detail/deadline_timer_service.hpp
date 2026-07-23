@@ -2,7 +2,7 @@
 // detail/deadline_timer_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,8 +17,6 @@
 
 #include "asio/detail/config.hpp"
 #include <cstddef>
-#include "asio/associated_cancellation_slot.hpp"
-#include "asio/cancellation_type.hpp"
 #include "asio/error.hpp"
 #include "asio/execution_context.hpp"
 #include "asio/detail/bind_handler.hpp"
@@ -45,7 +43,7 @@ namespace detail {
 
 template <typename Time_Traits>
 class deadline_timer_service
-  : public execution_context_service_base<deadline_timer_service<Time_Traits>>
+  : public execution_context_service_base<deadline_timer_service<Time_Traits> >
 {
 public:
   // The time type.
@@ -67,7 +65,7 @@ public:
   // Constructor.
   deadline_timer_service(execution_context& context)
     : execution_context_service_base<
-        deadline_timer_service<Time_Traits>>(context),
+        deadline_timer_service<Time_Traits> >(context),
       scheduler_(asio::use_service<timer_scheduler>(context))
   {
     scheduler_.init_task();
@@ -103,11 +101,7 @@ public:
   void move_construct(implementation_type& impl,
       implementation_type& other_impl)
   {
-    if (other_impl.might_have_pending_waits)
-    {
-      scheduler_.move_timer(timer_queue_,
-          impl.timer_data, other_impl.timer_data);
-    }
+    scheduler_.move_timer(timer_queue_, impl.timer_data, other_impl.timer_data);
 
     impl.expiry = other_impl.expiry;
     other_impl.expiry = time_type();
@@ -251,21 +245,11 @@ public:
   void async_wait(implementation_type& impl,
       Handler& handler, const IoExecutor& io_ex)
   {
-    associated_cancellation_slot_t<Handler> slot
-      = asio::get_associated_cancellation_slot(handler);
-
     // Allocate and construct an operation to wrap the handler.
     typedef wait_handler<Handler, IoExecutor> op;
     typename op::ptr p = { asio::detail::addressof(handler),
       op::ptr::allocate(handler), 0 };
     p.p = new (p.v) op(handler, io_ex);
-
-    // Optionally register for per-operation cancellation.
-    if (slot.is_connected())
-    {
-      p.p->cancellation_key_ =
-        &slot.template emplace<op_cancellation>(this, &impl.timer_data);
-    }
 
     impl.might_have_pending_waits = true;
 
@@ -295,34 +279,6 @@ private:
     socket_ops::select(0, 0, 0, 0, &tv, ec);
 #endif // defined(ASIO_WINDOWS_RUNTIME)
   }
-
-  // Helper class used to implement per-operation cancellation.
-  class op_cancellation
-  {
-  public:
-    op_cancellation(deadline_timer_service* s,
-        typename timer_queue<Time_Traits>::per_timer_data* p)
-      : service_(s),
-        timer_data_(p)
-    {
-    }
-
-    void operator()(cancellation_type_t type)
-    {
-      if (!!(type &
-            (cancellation_type::terminal
-              | cancellation_type::partial
-              | cancellation_type::total)))
-      {
-        service_->scheduler_.cancel_timer_by_key(
-            service_->timer_queue_, timer_data_, this);
-      }
-    }
-
-  private:
-    deadline_timer_service* service_;
-    typename timer_queue<Time_Traits>::per_timer_data* timer_data_;
-  };
 
   // The queue of timers.
   timer_queue<Time_Traits> timer_queue_;

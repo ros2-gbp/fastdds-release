@@ -24,18 +24,13 @@ Param(
     $test_name
 )
 
-try
-{
-    & $python_path $test_script $tool_path $test_name
-    $exit_code = $LASTEXITCODE
-}
-catch
-{
-    throw "Failed to launch test '$test_name': $($_.Exception.Message)"
-}
+$test = Start-Process -Passthru -Wait `
+    -FilePath $python_path `
+    -ArgumentList ($test_script, $tool_path, $test_name) `
+    -WindowStyle Hidden
 
-if ($exit_code -ne 0)
+if( $test.ExitCode -ne 0 )
 {
-    $error_message = "Test: $test_name failed with exit code $exit_code."
+    $error_message = "Test: $test_name failed with exit code $($test.ExitCode)."
     throw $error_message
 }

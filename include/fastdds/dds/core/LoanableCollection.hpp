@@ -16,8 +16,8 @@
  * @file LoanableCollection.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE__LOANABLECOLLECTION_HPP
-#define FASTDDS_DDS_CORE__LOANABLECOLLECTION_HPP
+#ifndef _FASTDDS_DDS_CORE_LOANABLECOLLECTION_HPP_
+#define _FASTDDS_DDS_CORE_LOANABLECOLLECTION_HPP_
 
 #include <cstdint>
 
@@ -247,4 +247,4 @@ protected:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_CORE__LOANABLECOLLECTION_HPP
+#endif // _FASTDDS_DDS_CORE_LOANABLECOLLECTION_HPP_

@@ -18,20 +18,13 @@
 
 #include <statistics/rtps/StatisticsBase.hpp>
 
-#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/reader/RTPSReader.h>
 
-#include <rtps/reader/BaseReader.hpp>
-#include <statistics/types/types.hpp>
+using namespace eprosima::fastdds::statistics;
 
-using eprosima::fastdds::RecursiveTimedMutex;
-using eprosima::fastdds::rtps::RTPSReader;
-using eprosima::fastdds::rtps::GUID_t;
-
-namespace eprosima {
-namespace fastdds {
-namespace statistics {
-
-using BaseReader = fastdds::rtps::BaseReader;
+using eprosima::fastrtps::RecursiveTimedMutex;
+using eprosima::fastrtps::rtps::RTPSReader;
+using eprosima::fastrtps::rtps::GUID_t;
 
 StatisticsReaderImpl::StatisticsReaderImpl()
 {
@@ -50,33 +43,28 @@ StatisticsReaderAncillary* StatisticsReaderImpl::get_members() const
 RecursiveTimedMutex& StatisticsReaderImpl::get_statistics_mutex()
 {
     static_assert(
-        std::is_base_of<StatisticsReaderImpl, BaseReader>::value,
+        std::is_base_of<StatisticsReaderImpl, RTPSReader>::value,
         "Must be call from a writer.");
 
-    return static_cast<BaseReader*>(this)->getMutex();
+    return static_cast<RTPSReader*>(this)->getMutex();
 }
 
 const GUID_t& StatisticsReaderImpl::get_guid() const
 {
     static_assert(
-        std::is_base_of<StatisticsReaderImpl, BaseReader>::value,
+        std::is_base_of<StatisticsReaderImpl, RTPSReader>::value,
         "This method should be called from an actual RTPSReader");
 
-    return static_cast<const BaseReader*>(this)->getGuid();
+    return static_cast<const RTPSReader*>(this)->getGuid();
 }
 
 void StatisticsReaderImpl::on_data_notify(
-        const fastdds::rtps::GUID_t& writer_guid,
-        const fastdds::rtps::Time_t& source_timestamp)
+        const eprosima::fastrtps::rtps::GUID_t& writer_guid,
+        const eprosima::fastrtps::rtps::Time_t& source_timestamp)
 {
-    if (!are_statistics_writers_enabled(EventKind::HISTORY2HISTORY_LATENCY))
-    {
-        return;
-    }
-
     // Get current timestamp
-    fastdds::rtps::Time_t current_time;
-    fastdds::rtps::Time_t::now(current_time);
+    fastrtps::rtps::Time_t current_time;
+    fastrtps::rtps::Time_t::now(current_time);
 
     // Calc latency
     auto ns = (current_time - source_timestamp).to_ns();
@@ -100,11 +88,6 @@ void StatisticsReaderImpl::on_data_notify(
 void StatisticsReaderImpl::on_acknack(
         int32_t count)
 {
-    if (!are_statistics_writers_enabled(EventKind::ACKNACK_COUNT))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
     notification.count(count);
@@ -124,11 +107,6 @@ void StatisticsReaderImpl::on_acknack(
 void StatisticsReaderImpl::on_nackfrag(
         int32_t count)
 {
-    if (!are_statistics_writers_enabled(EventKind::NACKFRAG_COUNT))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
     notification.count(count);
@@ -153,15 +131,11 @@ void StatisticsReaderImpl::on_subscribe_throughput(
 
     if (payload > 0 )
     {
-        if (!are_statistics_writers_enabled(EventKind::SUBSCRIPTION_THROUGHPUT))
-        {
-            return;
-        }
         // update state
         time_point<steady_clock> former_timepoint;
         auto& current_timepoint = get_members()->last_history_change_;
         {
-            lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+            lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
             former_timepoint = current_timepoint;
             current_timepoint = steady_clock::now();
         }
@@ -182,7 +156,3 @@ void StatisticsReaderImpl::on_subscribe_throughput(
                 });
     }
 }
-
-}  // namespace statistics
-}  // namespace fastdds
-}  // namespace eprosima

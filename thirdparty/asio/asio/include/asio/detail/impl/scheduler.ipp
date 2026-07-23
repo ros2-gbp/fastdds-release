@@ -2,7 +2,7 @@
 // detail/impl/scheduler.ipp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,18 +17,13 @@
 
 #include "asio/detail/config.hpp"
 
-#include "asio/config.hpp"
+#include "asio/detail/concurrency_hint.hpp"
 #include "asio/detail/event.hpp"
 #include "asio/detail/limits.hpp"
+#include "asio/detail/reactor.hpp"
 #include "asio/detail/scheduler.hpp"
 #include "asio/detail/scheduler_thread_info.hpp"
 #include "asio/detail/signal_blocker.hpp"
-
-#if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-# include "asio/detail/io_uring_service.hpp"
-#else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-# include "asio/detail/reactor.hpp"
-#endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 
 #include "asio/detail/push_options.hpp"
 
@@ -109,20 +104,21 @@ struct scheduler::work_cleanup
 };
 
 scheduler::scheduler(asio::execution_context& ctx,
-    bool own_thread, get_task_func_type get_task)
+    int concurrency_hint, bool own_thread)
   : asio::detail::execution_context_service_base<scheduler>(ctx),
-    one_thread_(config(ctx).get("scheduler", "concurrency_hint", 0) == 1),
-    mutex_(config(ctx).get("scheduler", "locking", true),
-        config(ctx).get("scheduler", "locking_spin_count", 0)),
+    one_thread_(concurrency_hint == 1
+        || !ASIO_CONCURRENCY_HINT_IS_LOCKING(
+          SCHEDULER, concurrency_hint)
+        || !ASIO_CONCURRENCY_HINT_IS_LOCKING(
+          REACTOR_IO, concurrency_hint)),
+    mutex_(ASIO_CONCURRENCY_HINT_IS_LOCKING(
+          SCHEDULER, concurrency_hint)),
     task_(0),
-    get_task_(get_task),
     task_interrupted_(true),
     outstanding_work_(0),
     stopped_(false),
     shutdown_(false),
-    concurrency_hint_(config(ctx).get("scheduler", "concurrency_hint", 0)),
-    task_usec_(config(ctx).get("scheduler", "task_usec", -1L)),
-    wait_usec_(config(ctx).get("scheduler", "wait_usec", -1L)),
+    concurrency_hint_(concurrency_hint),
     thread_(0)
 {
   ASIO_HANDLER_TRACKING_INIT;
@@ -182,7 +178,7 @@ void scheduler::init_task()
   mutex::scoped_lock lock(mutex_);
   if (!shutdown_ && !task_)
   {
-    task_ = get_task_(this->context());
+    task_ = &use_service<reactor>(this->context());
     op_queue_.push(&task_operation_);
     wake_one_thread_and_unlock(lock);
   }
@@ -325,13 +321,7 @@ void scheduler::restart()
 void scheduler::compensating_work_started()
 {
   thread_info_base* this_thread = thread_call_stack::contains(this);
-  ASIO_ASSUME(this_thread != 0); // Only called from inside scheduler.
   ++static_cast<thread_info*>(this_thread)->private_outstanding_work;
-}
-
-bool scheduler::can_dispatch()
-{
-  return thread_call_stack::contains(this) != 0;
 }
 
 void scheduler::capture_current_exception()
@@ -458,9 +448,9 @@ std::size_t scheduler::do_run_one(mutex::scoped_lock& lock,
 
       if (o == &task_operation_)
       {
-        task_interrupted_ = more_handlers || task_usec_ == 0;
+        task_interrupted_ = more_handlers;
 
-        if (more_handlers && !one_thread_ && wait_usec_ != 0)
+        if (more_handlers && !one_thread_)
           wakeup_event_.unlock_and_signal_one(lock);
         else
           lock.unlock();
@@ -471,8 +461,7 @@ std::size_t scheduler::do_run_one(mutex::scoped_lock& lock,
         // Run the task. May throw an exception. Only block if the operation
         // queue is empty and we're not polling, otherwise we want to return
         // as soon as possible.
-        task_->run(more_handlers ? 0 : task_usec_,
-            this_thread.private_op_queue);
+        task_->run(more_handlers ? 0 : -1, this_thread.private_op_queue);
       }
       else
       {
@@ -496,19 +485,8 @@ std::size_t scheduler::do_run_one(mutex::scoped_lock& lock,
     }
     else
     {
-      if (wait_usec_ == 0)
-      {
-        lock.unlock();
-        lock.lock();
-      }
-      else
-      {
-        wakeup_event_.clear(lock);
-        if (wait_usec_ > 0)
-          wakeup_event_.wait_for_usec(lock, wait_usec_);
-        else
-          wakeup_event_.wait(lock);
-      }
+      wakeup_event_.clear(lock);
+      wakeup_event_.wait(lock);
     }
   }
 
@@ -526,7 +504,6 @@ std::size_t scheduler::do_wait_one(mutex::scoped_lock& lock,
   if (o == 0)
   {
     wakeup_event_.clear(lock);
-    usec = (wait_usec_ >= 0 && wait_usec_ < usec) ? wait_usec_ : usec;
     wakeup_event_.wait_for_usec(lock, usec);
     usec = 0; // Wait at most once.
     o = op_queue_.front();
@@ -537,10 +514,9 @@ std::size_t scheduler::do_wait_one(mutex::scoped_lock& lock,
     op_queue_.pop();
     bool more_handlers = (!op_queue_.empty());
 
-    usec = (task_usec_ >= 0 && task_usec_ < usec) ? task_usec_ : usec;
-    task_interrupted_ = more_handlers || usec == 0;
+    task_interrupted_ = more_handlers;
 
-    if (more_handlers && !one_thread_ && wait_usec_ != 0)
+    if (more_handlers && !one_thread_)
       wakeup_event_.unlock_and_signal_one(lock);
     else
       lock.unlock();
@@ -659,7 +635,7 @@ void scheduler::stop_all_threads(
 void scheduler::wake_one_thread_and_unlock(
     mutex::scoped_lock& lock)
 {
-  if (wait_usec_ == 0 || !wakeup_event_.maybe_unlock_and_signal_one(lock))
+  if (!wakeup_event_.maybe_unlock_and_signal_one(lock))
   {
     if (!task_interrupted_ && task_)
     {
@@ -668,15 +644,6 @@ void scheduler::wake_one_thread_and_unlock(
     }
     lock.unlock();
   }
-}
-
-scheduler_task* scheduler::get_default_task(asio::execution_context& ctx)
-{
-#if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  return &use_service<io_uring_service>(ctx);
-#else // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
-  return &use_service<reactor>(ctx);
-#endif // defined(ASIO_HAS_IO_URING_AS_DEFAULT)
 }
 
 } // namespace detail

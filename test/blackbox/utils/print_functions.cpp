@@ -54,13 +54,6 @@ void default_receive_print(
 
 template<>
 void default_receive_print(
-        const Data100kb& data)
-{
-    std::cout << "Received Data100kb " << (uint16_t)data.data()[0] << std::endl;
-}
-
-template<>
-void default_receive_print(
         const Data1mb& data)
 {
     std::cout << "Received Data1mb " << (uint16_t)data.data()[0] << std::endl;
@@ -114,13 +107,6 @@ void default_send_print(
         const Data64kb& data)
 {
     std::cout << "Sent Data64kb " << (uint16_t)data.data()[0] << std::endl;
-}
-
-template<>
-void default_send_print(
-        const Data100kb& data)
-{
-    std::cout << "Sent Data100kb " << (uint16_t)data.data()[0] << std::endl;
 }
 
 template<>

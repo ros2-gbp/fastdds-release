@@ -22,7 +22,10 @@
 
 #include <optionparser.hpp>
 
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastrtps/Domain.h>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "MemoryTestPublisher.h"
 #include "MemoryTestSubscriber.h"
@@ -32,8 +35,11 @@
 #pragma warning (disable:4512)
 #endif // if defined(_MSC_VER)
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
+
+using std::cout;
+using std::endl;
 
 #if FASTDDS_IS_BIG_ENDIAN_TARGET
 const Endianness_t DEFAULT_ENDIAN = BIGEND;
@@ -400,8 +406,6 @@ int main(
             return -1;
         }
 
-        // Subscriber
-        // Auth
         sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.plugin",
                 "builtin.PKI-DH"));
         sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
@@ -412,21 +416,10 @@ int main(
                 "file://" + certs_path + "/mainsubkey.pem"));
         sub_part_property_policy.properties().emplace_back(Property("dds.sec.crypto.plugin",
                 "builtin.AES-GCM-GMAC"));
-        // Access
-        sub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
-                "builtin.Access-Permissions"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.governance",
-                    "file://" + certs_path + "/governance_performance_tests.smime"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions",
-                    "file://" + certs_path + "/permissions_performance_tests.smime"));
+        sub_part_property_policy.properties().emplace_back("rtps.participant.rtps_protection_kind", "ENCRYPT");
+        sub_property_policy.properties().emplace_back("rtps.endpoint.submessage_protection_kind", "ENCRYPT");
+        sub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
 
-        // Publisher
-        // Auth
         pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.plugin",
                 "builtin.PKI-DH"));
         pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
@@ -437,31 +430,21 @@ int main(
                 "file://" + certs_path + "/mainpubkey.pem"));
         pub_part_property_policy.properties().emplace_back(Property("dds.sec.crypto.plugin",
                 "builtin.AES-GCM-GMAC"));
-        // Access
-        pub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
-                "builtin.Access-Permissions"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.governance",
-                    "file://" + certs_path + "/governance_performance_tests.smime"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions",
-                    "file://" + certs_path + "/permissions_performance_tests.smime"));
+        pub_part_property_policy.properties().emplace_back("rtps.participant.rtps_protection_kind", "ENCRYPT");
+        pub_property_policy.properties().emplace_back("rtps.endpoint.submessage_protection_kind", "ENCRYPT");
+        pub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
     }
 #endif // if HAVE_SECURITY
 
     // Load an XML file with predefined profiles for publisher and subscriber
     if (sXMLConfigFile.length() > 0)
     {
-        eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->load_XML_profiles_file(sXMLConfigFile);
+        xmlparser::XMLProfileManager::loadXMLFile(sXMLConfigFile);
     }
 
     if (pub_sub)
     {
-        std::cout << "Performing test with " << sub_number << " subscribers and " << n_samples << " samples"
-                  << std::endl;
+        cout << "Performing test with " << sub_number << " subscribers and " << n_samples << " samples" << endl;
         MemoryTestPublisher memoryPub;
         memoryPub.init(sub_number, n_samples, reliable, seed, hostname, export_csv, export_prefix,
                 pub_part_property_policy, pub_property_policy, sXMLConfigFile, data_size, dynamic_types);
@@ -477,7 +460,7 @@ int main(
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-    std::cout << "EVERYTHING STOPPED FINE" << std::endl;
+    cout << "EVERYTHING STOPPED FINE" << endl;
 
     return 0;
 }

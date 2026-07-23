@@ -17,32 +17,31 @@
  *
  */
 
-#include <rtps/builtin/discovery/endpoint/EDPClient.h>
+#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
+#include <fastdds/rtps/reader/RTPSReader.h>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+
+#include <fastdds/dds/log/Log.hpp>
 
 #include <mutex>
 
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/builtin/discovery/participant/PDP.h>
-#if HAVE_SECURITY
-#include <rtps/security/accesscontrol/ParticipantSecurityAttributes.h>
-#endif // if HAVE_SECURITY
-#include <rtps/writer/StatefulWriter.hpp>
+#include <rtps/builtin/discovery/endpoint/EDPClient.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-bool EDPClient::process_reader_proxy_data(
+using namespace fastrtps::rtps;
+
+bool EDPClient::processLocalReaderProxyData(
         RTPSReader* local_reader,
         ReaderProxyData* rdata)
 {
-    EPROSIMA_LOG_INFO(RTPS_EDP, rdata->guid.entityId);
+    logInfo(RTPS_EDP, rdata->guid().entityId);
     (void)local_reader;
 
     auto* writer = &subscriptions_writer_;
@@ -71,17 +70,17 @@ bool EDPClient::process_reader_proxy_data(
     return ret_val;
 }
 
-bool EDPClient::process_writer_proxy_data(
-        RTPSWriter* rtps_writer,
+bool EDPClient::processLocalWriterProxyData(
+        RTPSWriter* local_writer,
         WriterProxyData* wdata)
 {
-    EPROSIMA_LOG_INFO(RTPS_EDP, wdata->guid.entityId);
-    (void)rtps_writer;
+    logInfo(RTPS_EDP, wdata->guid().entityId);
+    (void)local_writer;
 
     auto* writer = &publications_writer_;
 
 #if HAVE_SECURITY
-    if (rtps_writer->getAttributes().security_attributes().is_discovery_protected)
+    if (local_writer->getAttributes().security_attributes().is_discovery_protected)
     {
         writer = &publications_secure_writer_;
     }
@@ -104,15 +103,15 @@ bool EDPClient::process_writer_proxy_data(
     return ret_val;
 }
 
-bool EDPClient::remove_writer(
-        RTPSWriter* rtps_writer)
+bool EDPClient::removeLocalWriter(
+        RTPSWriter* W)
 {
-    EPROSIMA_LOG_INFO(RTPS_EDP, rtps_writer->getGuid().entityId);
+    logInfo(RTPS_EDP, W->getGuid().entityId);
 
     auto* writer = &publications_writer_;
 
 #if HAVE_SECURITY
-    if (rtps_writer->getAttributes().security_attributes().is_discovery_protected)
+    if (W->getAttributes().security_attributes().is_discovery_protected)
     {
         writer = &publications_secure_writer_;
     }
@@ -121,13 +120,17 @@ bool EDPClient::remove_writer(
     if (writer->first != nullptr)
     {
         InstanceHandle_t iH;
-        iH = rtps_writer->getGuid();
-        CacheChange_t* change = EDPUtils::create_change(*writer, NOT_ALIVE_DISPOSED_UNREGISTERED, iH,
-                        mp_PDP->builtin_attributes().writerPayloadSize);
+        iH = W->getGuid();
+        CacheChange_t* change = writer->first->new_change(
+            [this]() -> uint32_t
+            {
+                return mp_PDP->builtin_attributes().writerPayloadSize;
+            },
+            NOT_ALIVE_DISPOSED_UNREGISTERED, iH);
         if (change != nullptr)
         {
             {
-                std::lock_guard<fastdds::RecursiveTimedMutex> guard(*writer->second->getMutex());
+                std::lock_guard<fastrtps::RecursiveTimedMutex> guard(*writer->second->getMutex());
                 for (auto ch = writer->second->changesBegin(); ch != writer->second->changesEnd(); ++ch)
                 {
                     if ((*ch)->instanceHandle == change->instanceHandle)
@@ -150,18 +153,18 @@ bool EDPClient::remove_writer(
             writer->second->add_change(change, wp);
         }
     }
-    return mp_PDP->removeWriterProxyData(rtps_writer->getGuid());
+    return mp_PDP->removeWriterProxyData(W->getGuid());
 }
 
-bool EDPClient::remove_reader(
-        RTPSReader* rtps_reader)
+bool EDPClient::removeLocalReader(
+        RTPSReader* R)
 {
-    EPROSIMA_LOG_INFO(RTPS_EDP, rtps_reader->getGuid().entityId);
+    logInfo(RTPS_EDP, R->getGuid().entityId);
 
     auto* writer = &subscriptions_writer_;
 
 #if HAVE_SECURITY
-    if (rtps_reader->getAttributes().security_attributes().is_discovery_protected)
+    if (R->getAttributes().security_attributes().is_discovery_protected)
     {
         writer = &subscriptions_secure_writer_;
     }
@@ -170,13 +173,17 @@ bool EDPClient::remove_reader(
     if (writer->first != nullptr)
     {
         InstanceHandle_t iH;
-        iH = (rtps_reader->getGuid());
-        CacheChange_t* change = EDPUtils::create_change(*writer, NOT_ALIVE_DISPOSED_UNREGISTERED, iH,
-                        mp_PDP->builtin_attributes().writerPayloadSize);
+        iH = (R->getGuid());
+        CacheChange_t* change = writer->first->new_change(
+            [this]() -> uint32_t
+            {
+                return mp_PDP->builtin_attributes().writerPayloadSize;
+            },
+            NOT_ALIVE_DISPOSED_UNREGISTERED, iH);
         if (change != nullptr)
         {
             {
-                std::lock_guard<fastdds::RecursiveTimedMutex> guard(*writer->second->getMutex());
+                std::lock_guard<fastrtps::RecursiveTimedMutex> guard(*writer->second->getMutex());
                 for (auto ch = writer->second->changesBegin(); ch != writer->second->changesEnd(); ++ch)
                 {
                     if ((*ch)->instanceHandle == change->instanceHandle)
@@ -198,7 +205,7 @@ bool EDPClient::remove_reader(
             writer->second->add_change(change, wp);
         }
     }
-    return mp_PDP->removeReaderProxyData(rtps_reader->getGuid());
+    return mp_PDP->removeReaderProxyData(R->getGuid());
 }
 
 } /* namespace rtps */

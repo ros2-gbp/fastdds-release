@@ -23,10 +23,11 @@
 #include <memory>
 #include <atomic>
 
+#include <fastdds/rtps/common/all_common.h>
+#include <fastdds/rtps/writer/StatelessWriter.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
 #include <rtps/transport/tcp/TCPControlMessage.h>
 #include <rtps/transport/tcp/RTCPHeader.h>
-#include <rtps/writer/StatefulWriter.hpp>
-#include <rtps/writer/StatelessWriter.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -35,7 +36,7 @@ namespace rtps {
 class TCPChannelResource;
 class TCPTransportInterface;
 
-const fastdds::rtps::ProtocolVersion_t c_rtcpProtocolVersion = {1, 0};
+const fastrtps::rtps::ProtocolVersion_t c_rtcpProtocolVersion = {1, 0};
 
 /**
  * Class RTCPMessageManager, process the received TCP messages.
@@ -147,13 +148,13 @@ public:
 
     ResponseCode processRTCPMessage(
             std::shared_ptr<TCPChannelResource>& channel,
-            fastdds::rtps::octet* receive_buffer,
+            fastrtps::rtps::octet* receive_buffer,
             size_t receivedSize,
-            fastdds::rtps::Endianness_t msg_endian);
+            fastrtps::rtps::Endianness_t msg_endian);
 
     static uint32_t& addToCRC(
             uint32_t& crc,
-            fastdds::rtps::octet data);
+            fastrtps::rtps::octet data);
 
     void dispose()
     {
@@ -208,20 +209,20 @@ protected:
 
     size_t sendMessage(
             TCPChannelResource* channel,
-            const fastdds::rtps::CDRMessage_t& msg) const;
+            const fastrtps::rtps::CDRMessage_t& msg) const;
 
     bool sendData(
             std::shared_ptr<TCPChannelResource>& channel,
             TCPCPMKind kind,
             const TCPTransactionId& transactionId,
-            const fastdds::rtps::SerializedPayload_t* payload = nullptr,
+            const fastrtps::rtps::SerializedPayload_t* payload = nullptr,
             const ResponseCode respCode = RETCODE_VOID);
 
     bool sendData(
             TCPChannelResource* channel,
             TCPCPMKind kind,
             const TCPTransactionId& transactionId,
-            const fastdds::rtps::SerializedPayload_t* payload = nullptr,
+            const fastrtps::rtps::SerializedPayload_t* payload = nullptr,
             const ResponseCode respCode = RETCODE_VOID);
 
     void fillHeaders(
@@ -229,11 +230,11 @@ protected:
             const TCPTransactionId& transactionId,
             TCPControlMsgHeader& retCtrlHeader,
             TCPHeader& header,
-            const fastdds::rtps::SerializedPayload_t* payload = nullptr,
+            const fastrtps::rtps::SerializedPayload_t* payload = nullptr,
             const ResponseCode* respCode = nullptr);
 
     bool isCompatibleProtocol(
-            const fastdds::rtps::ProtocolVersion_t& protocol) const;
+            const fastrtps::rtps::ProtocolVersion_t& protocol) const;
 
     inline bool alive() const
     {

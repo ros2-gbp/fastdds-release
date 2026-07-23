@@ -16,14 +16,14 @@
  * @file ReaderDataLifecycleQosPolicy.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE_POLICY__READERDATALIFECYCLEQOSPOLICY_HPP
-#define FASTDDS_DDS_CORE_POLICY__READERDATALIFECYCLEQOSPOLICY_HPP
+#ifndef _FASTDDS_READERDATALIFECYCLEQOSPOLICY_HPP_
+#define _FASTDDS_READERDATALIFECYCLEQOSPOLICY_HPP_
 
-#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 
-using eprosima::fastdds::dds::Duration_t;
+using eprosima::fastrtps::Duration_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -48,7 +48,7 @@ public:
     /**
      * @brief Destructor
      */
-    virtual FASTDDS_EXPORTED_API ~ReaderDataLifecycleQosPolicy()
+    virtual RTPS_DllAPI ~ReaderDataLifecycleQosPolicy()
     {
     }
 
@@ -70,19 +70,19 @@ public:
     /**
      * @brief Indicates the duration the DataReader must retain information regarding instances that have the
      * instance_state NOT_ALIVE_NO_WRITERS. <br>
-     * By default, dds::c_TimeInfinite.
+     * By default, c_TimeInfinite.
      */
-    dds::Duration_t autopurge_no_writer_samples_delay;
+    Duration_t autopurge_no_writer_samples_delay;
     /**
      * @brief Indicates the duration the DataReader must retain information regarding instances that have the
      * instance_state NOT_ALIVE_DISPOSED. <br>
-     * By default, dds::c_TimeInfinite.
+     * By default, c_TimeInfinite.
      */
-    dds::Duration_t autopurge_disposed_samples_delay;
+    Duration_t autopurge_disposed_samples_delay;
 };
 
 } //namespace dds
 } //namespace fastdds
 } //namespace eprosima
 
-#endif // FASTDDS_DDS_CORE_POLICY__READERDATALIFECYCLEQOSPOLICY_HPP
+#endif // _FASTDDS_READERDATALIFECYCLEQOSPOLICY_HPP_

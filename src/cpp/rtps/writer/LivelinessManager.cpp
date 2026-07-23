@@ -1,27 +1,12 @@
-// Copyright 2019 Proyectos y Sistemas de Mantenimiento SL (eProsima).
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-#include <rtps/writer/LivelinessManager.hpp>
+#include <fastdds/rtps/writer/LivelinessManager.h>
+#include <fastdds/dds/log/Log.hpp>
 
 #include <algorithm>
-
-#include <fastdds/dds/log/Log.hpp>
 
 using namespace std::chrono;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 using LivelinessDataIterator = ResourceLimitedVector<LivelinessData>::iterator;
@@ -55,12 +40,12 @@ LivelinessManager::~LivelinessManager()
 
 bool LivelinessManager::add_writer(
         GUID_t guid,
-        fastdds::dds::LivelinessQosPolicyKind kind,
-        dds::Duration_t lease_duration)
+        LivelinessQosPolicyKind kind,
+        Duration_t lease_duration)
 {
-    if (!manage_automatic_ && kind == fastdds::dds::LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
+    if (!manage_automatic_ && kind == LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
     {
-        EPROSIMA_LOG_WARNING(RTPS_WRITER, "Liveliness manager not managing automatic writers, writer not added");
+        logWarning(RTPS_WRITER, "Liveliness manager not managing automatic writers, writer not added");
         return false;
     }
 
@@ -107,7 +92,7 @@ bool LivelinessManager::add_writer(
 bool LivelinessManager::remove_writer(
         GUID_t guid,
         fastdds::dds::LivelinessQosPolicyKind kind,
-        dds::Duration_t lease_duration,
+        Duration_t lease_duration,
         LivelinessData::WriterStatus& writer_status)
 {
     bool removed = false;
@@ -162,8 +147,8 @@ bool LivelinessManager::remove_writer(
 
 bool LivelinessManager::assert_liveliness(
         GUID_t guid,
-        fastdds::dds::LivelinessQosPolicyKind kind,
-        dds::Duration_t lease_duration)
+        LivelinessQosPolicyKind kind,
+        Duration_t lease_duration)
 {
     bool found = false;
 
@@ -185,8 +170,8 @@ bool LivelinessManager::assert_liveliness(
                 found = true;
 
                 // Execute the callbacks
-                if (writer.kind == fastdds::dds::LivelinessQosPolicyKind::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS ||
-                        writer.kind == fastdds::dds::LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
+                if (writer.kind == LivelinessQosPolicyKind::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS ||
+                        writer.kind == LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
                 {
                     for (LivelinessData& w: writers_)
                     {
@@ -197,7 +182,7 @@ bool LivelinessManager::assert_liveliness(
                         }
                     }
                 }
-                else if (writer.kind == fastdds::dds::LivelinessQosPolicyKind::MANUAL_BY_TOPIC_LIVELINESS_QOS)
+                else if (writer.kind == LivelinessQosPolicyKind::MANUAL_BY_TOPIC_LIVELINESS_QOS)
                 {
                     assert_writer_liveliness(writer);
                 }
@@ -217,7 +202,7 @@ bool LivelinessManager::assert_liveliness(
     // Updates the timer owner
     if (!calculate_next())
     {
-        EPROSIMA_LOG_ERROR(RTPS_WRITER, "Error when restarting liveliness timer");
+        logError(RTPS_WRITER, "Error when restarting liveliness timer");
         return false;
     }
 
@@ -236,13 +221,13 @@ bool LivelinessManager::assert_liveliness(
 }
 
 bool LivelinessManager::assert_liveliness(
-        fastdds::dds::LivelinessQosPolicyKind kind,
+        LivelinessQosPolicyKind kind,
         GuidPrefix_t guid_prefix)
 {
 
-    if (!manage_automatic_ && kind == fastdds::dds::LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
+    if (!manage_automatic_ && kind == LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS)
     {
-        EPROSIMA_LOG_WARNING(RTPS_WRITER, "Liveliness manager not managing automatic writers, writer not added");
+        logWarning(RTPS_WRITER, "Liveliness manager not managing automatic writers, writer not added");
         return false;
     }
 
@@ -271,7 +256,7 @@ bool LivelinessManager::assert_liveliness(
     // Updates the timer owner
     if (!calculate_next())
     {
-        EPROSIMA_LOG_INFO(RTPS_WRITER,
+        logInfo(RTPS_WRITER,
                 "Error when restarting liveliness timer: " << writers_.size() << " writers, liveliness " <<
                 kind);
         return false;
@@ -298,7 +283,7 @@ bool LivelinessManager::calculate_next()
     std::lock_guard<std::mutex> __(mutex_);
 
     bool any_alive = false;
-    steady_clock::time_point min_time = steady_clock::now() + nanoseconds(dds::c_TimeInfinite.to_ns());
+    steady_clock::time_point min_time = steady_clock::now() + nanoseconds(c_TimeInfinite.to_ns());
 
     timer_owner_ = nullptr;
 
@@ -325,7 +310,7 @@ bool LivelinessManager::timer_expired()
 
     if (timer_owner_ == nullptr)
     {
-        EPROSIMA_LOG_ERROR(RTPS_WRITER, "Liveliness timer expired but there is no writer");
+        logError(RTPS_WRITER, "Liveliness timer expired but there is no writer");
         return false;
     }
     else
@@ -363,7 +348,7 @@ bool LivelinessManager::timer_expired()
 }
 
 bool LivelinessManager::is_any_alive(
-        fastdds::dds::LivelinessQosPolicyKind kind)
+        LivelinessQosPolicyKind kind)
 {
     // Keep this lock order to prevent ABBA deadlocks
     shared_lock<shared_mutex> _(col_mutex_);
@@ -415,5 +400,5 @@ const ResourceLimitedVector<LivelinessData>& LivelinessManager::get_liveliness_d
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

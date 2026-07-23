@@ -17,20 +17,56 @@
  */
 
 
-#ifndef FASTDDS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
-#define FASTDDS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
+#ifndef _FASTDDS_DATAWRITERQOS_HPP
+#define _FASTDDS_DATAWRITERQOS_HPP
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
-#include <fastdds/dds/core/policy/RTPSReliableWriterQos.hpp>
+#include <fastdds/dds/publisher/qos/WriterQos.hpp>
+#include <fastdds/dds/publisher/qos/PublisherQos.hpp>
 #include <fastdds/dds/core/policy/WriterDataLifecycleQosPolicy.hpp>
 #include <fastdds/dds/publisher/qos/PublisherQos.hpp>
 #include <fastdds/dds/publisher/qos/WriterQos.hpp>
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
-#include <fastdds/rtps/attributes/WriterAttributes.hpp>
+#include <fastdds/rtps/attributes/WriterAttributes.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
+
+//! Qos Policy to configure the DisablePositiveACKsQos and the writer timing attributes
+class RTPSReliableWriterQos
+{
+public:
+
+    /**
+     * @brief Constructor
+     */
+    RTPS_DllAPI RTPSReliableWriterQos()
+    {
+    }
+
+    /**
+     * @brief Destructor
+     */
+    virtual RTPS_DllAPI ~RTPSReliableWriterQos() = default;
+
+    bool operator ==(
+            const RTPSReliableWriterQos& b) const
+    {
+        return (this->times == b.times) &&
+               (this->disable_positive_acks == b.disable_positive_acks) &&
+               (this->disable_heartbeat_piggyback == b.disable_heartbeat_piggyback);
+    }
+
+    //!Writer Timing Attributes
+    fastrtps::rtps::WriterTimes times;
+
+    //!Disable positive acks QoS, implemented in the library.
+    DisablePositiveACKsQosPolicy disable_positive_acks;
+
+    //! Disable heartbeat piggyback mechanism.
+    bool disable_heartbeat_piggyback = false;
+};
 
 /**
  * Class DataWriterQos, containing all the possible Qos that can be set for a determined DataWriter.
@@ -47,14 +83,14 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API DataWriterQos();
+    RTPS_DllAPI DataWriterQos();
 
     /**
      * @brief Destructor
      */
-    FASTDDS_EXPORTED_API ~DataWriterQos() = default;
+    RTPS_DllAPI ~DataWriterQos() = default;
 
-    FASTDDS_EXPORTED_API bool operator ==(
+    RTPS_DllAPI bool operator ==(
             const DataWriterQos& b) const
     {
         return (this->durability_ == b.durability()) &&
@@ -78,10 +114,11 @@ public:
                (this->reliable_writer_qos_ == b.reliable_writer_qos()) &&
                (this->endpoint_ == b.endpoint()) &&
                (this->writer_resource_limits_ == b.writer_resource_limits()) &&
+               (this->throughput_controller_ == b.throughput_controller()) &&
                (this->data_sharing_ == b.data_sharing());
     }
 
-    FASTDDS_EXPORTED_API WriterQos get_writerqos(
+    RTPS_DllAPI WriterQos get_writerqos(
             const PublisherQos& pqos,
             const TopicQos& tqos) const;
 
@@ -90,7 +127,7 @@ public:
      *
      * @return DurabilityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DurabilityQosPolicy& durability()
+    RTPS_DllAPI DurabilityQosPolicy& durability()
     {
         return durability_;
     }
@@ -100,7 +137,7 @@ public:
      *
      * @return DurabilityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DurabilityQosPolicy& durability() const
+    RTPS_DllAPI const DurabilityQosPolicy& durability() const
     {
         return durability_;
     }
@@ -110,7 +147,7 @@ public:
      *
      * @param durability new value for the DurabilityQosPolicy
      */
-    FASTDDS_EXPORTED_API void durability(
+    RTPS_DllAPI void durability(
             const DurabilityQosPolicy& durability)
     {
         durability_ = durability;
@@ -121,7 +158,7 @@ public:
      *
      * @return DurabilityServiceQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DurabilityServiceQosPolicy& durability_service()
+    RTPS_DllAPI DurabilityServiceQosPolicy& durability_service()
     {
         return durability_service_;
     }
@@ -131,7 +168,7 @@ public:
      *
      * @return DurabilityServiceQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DurabilityServiceQosPolicy& durability_service() const
+    RTPS_DllAPI const DurabilityServiceQosPolicy& durability_service() const
     {
         return durability_service_;
     }
@@ -141,7 +178,7 @@ public:
      *
      * @param durability_service new value for the DurabilityServiceQosPolicy
      */
-    FASTDDS_EXPORTED_API void durability_service(
+    RTPS_DllAPI void durability_service(
             const DurabilityServiceQosPolicy& durability_service)
     {
         durability_service_ = durability_service;
@@ -152,7 +189,7 @@ public:
      *
      * @return DeadlineQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DeadlineQosPolicy& deadline()
+    RTPS_DllAPI DeadlineQosPolicy& deadline()
     {
         return deadline_;
     }
@@ -162,7 +199,7 @@ public:
      *
      * @return DeadlineQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DeadlineQosPolicy& deadline() const
+    RTPS_DllAPI const DeadlineQosPolicy& deadline() const
     {
         return deadline_;
     }
@@ -172,7 +209,7 @@ public:
      *
      * @param deadline new value for the DeadlineQosPolicy
      */
-    FASTDDS_EXPORTED_API void deadline(
+    RTPS_DllAPI void deadline(
             const DeadlineQosPolicy& deadline)
     {
         deadline_ = deadline;
@@ -183,7 +220,7 @@ public:
      *
      * @return LatencyBudgetQosPolicy reference
      */
-    FASTDDS_EXPORTED_API LatencyBudgetQosPolicy& latency_budget()
+    RTPS_DllAPI LatencyBudgetQosPolicy& latency_budget()
     {
         return latency_budget_;
     }
@@ -193,7 +230,7 @@ public:
      *
      * @return LatencyBudgetQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const LatencyBudgetQosPolicy& latency_budget() const
+    RTPS_DllAPI const LatencyBudgetQosPolicy& latency_budget() const
     {
         return latency_budget_;
     }
@@ -203,7 +240,7 @@ public:
      *
      * @param latency_budget new value for the LatencyBudgetQosPolicy
      */
-    FASTDDS_EXPORTED_API void latency_budget(
+    RTPS_DllAPI void latency_budget(
             const LatencyBudgetQosPolicy& latency_budget)
     {
         latency_budget_ = latency_budget;
@@ -214,7 +251,7 @@ public:
      *
      * @return LivelinessQosPolicy reference
      */
-    FASTDDS_EXPORTED_API LivelinessQosPolicy& liveliness()
+    RTPS_DllAPI LivelinessQosPolicy& liveliness()
     {
         return liveliness_;
     }
@@ -224,7 +261,7 @@ public:
      *
      * @return LivelinessQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const LivelinessQosPolicy& liveliness() const
+    RTPS_DllAPI const LivelinessQosPolicy& liveliness() const
     {
         return liveliness_;
     }
@@ -234,7 +271,7 @@ public:
      *
      * @param liveliness new value for the LivelinessQosPolicy
      */
-    FASTDDS_EXPORTED_API void liveliness(
+    RTPS_DllAPI void liveliness(
             const LivelinessQosPolicy& liveliness)
     {
         liveliness_ = liveliness;
@@ -245,7 +282,7 @@ public:
      *
      * @return ReliabilityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API ReliabilityQosPolicy& reliability()
+    RTPS_DllAPI ReliabilityQosPolicy& reliability()
     {
         return reliability_;
     }
@@ -255,7 +292,7 @@ public:
      *
      * @return ReliabilityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const ReliabilityQosPolicy& reliability() const
+    RTPS_DllAPI const ReliabilityQosPolicy& reliability() const
     {
         return reliability_;
     }
@@ -265,7 +302,7 @@ public:
      *
      * @param reliability new value for the ReliabilityQosPolicy
      */
-    FASTDDS_EXPORTED_API void reliability(
+    RTPS_DllAPI void reliability(
             const ReliabilityQosPolicy& reliability)
     {
         reliability_ = reliability;
@@ -276,7 +313,7 @@ public:
      *
      * @return DestinationOrderQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DestinationOrderQosPolicy& destination_order()
+    RTPS_DllAPI DestinationOrderQosPolicy& destination_order()
     {
         return destination_order_;
     }
@@ -286,7 +323,7 @@ public:
      *
      * @return DestinationOrderQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DestinationOrderQosPolicy& destination_order() const
+    RTPS_DllAPI const DestinationOrderQosPolicy& destination_order() const
     {
         return destination_order_;
     }
@@ -296,7 +333,7 @@ public:
      *
      * @param destination_order new value for the DestinationOrderQosPolicy
      */
-    FASTDDS_EXPORTED_API void destination_order(
+    RTPS_DllAPI void destination_order(
             const DestinationOrderQosPolicy& destination_order)
     {
         destination_order_ = destination_order;
@@ -307,7 +344,7 @@ public:
      *
      * @return HistoryQosPolicy reference
      */
-    FASTDDS_EXPORTED_API HistoryQosPolicy& history()
+    RTPS_DllAPI HistoryQosPolicy& history()
     {
         return history_;
     }
@@ -317,7 +354,7 @@ public:
      *
      * @return HistoryQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const HistoryQosPolicy& history() const
+    RTPS_DllAPI const HistoryQosPolicy& history() const
     {
         return history_;
     }
@@ -327,7 +364,7 @@ public:
      *
      * @param history new value for the HistoryQosPolicy
      */
-    FASTDDS_EXPORTED_API void history(
+    RTPS_DllAPI void history(
             const HistoryQosPolicy& history)
     {
         history_ = history;
@@ -338,7 +375,7 @@ public:
      *
      * @return ResourceLimitsQosPolicy reference
      */
-    FASTDDS_EXPORTED_API ResourceLimitsQosPolicy& resource_limits()
+    RTPS_DllAPI ResourceLimitsQosPolicy& resource_limits()
     {
         return resource_limits_;
     }
@@ -348,7 +385,7 @@ public:
      *
      * @return ResourceLimitsQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const ResourceLimitsQosPolicy& resource_limits() const
+    RTPS_DllAPI const ResourceLimitsQosPolicy& resource_limits() const
     {
         return resource_limits_;
     }
@@ -358,7 +395,7 @@ public:
      *
      * @param resource_limits new value for the ResourceLimitsQosPolicy
      */
-    FASTDDS_EXPORTED_API void resource_limits(
+    RTPS_DllAPI void resource_limits(
             const ResourceLimitsQosPolicy& resource_limits)
     {
         resource_limits_ = resource_limits;
@@ -369,7 +406,7 @@ public:
      *
      * @return TransportPriorityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API TransportPriorityQosPolicy& transport_priority()
+    RTPS_DllAPI TransportPriorityQosPolicy& transport_priority()
     {
         return transport_priority_;
     }
@@ -379,7 +416,7 @@ public:
      *
      * @return TransportPriorityQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const TransportPriorityQosPolicy& transport_priority() const
+    RTPS_DllAPI const TransportPriorityQosPolicy& transport_priority() const
     {
         return transport_priority_;
     }
@@ -389,7 +426,7 @@ public:
      *
      * @param transport_priority new value for the TransportPriorityQosPolicy
      */
-    FASTDDS_EXPORTED_API void transport_priority(
+    RTPS_DllAPI void transport_priority(
             const TransportPriorityQosPolicy& transport_priority)
     {
         transport_priority_ = transport_priority;
@@ -400,7 +437,7 @@ public:
      *
      * @return LifespanQosPolicy reference
      */
-    FASTDDS_EXPORTED_API LifespanQosPolicy& lifespan()
+    RTPS_DllAPI LifespanQosPolicy& lifespan()
     {
         return lifespan_;
     }
@@ -410,7 +447,7 @@ public:
      *
      * @return LifespanQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const LifespanQosPolicy& lifespan() const
+    RTPS_DllAPI const LifespanQosPolicy& lifespan() const
     {
         return lifespan_;
     }
@@ -420,7 +457,7 @@ public:
      *
      * @param lifespan new value for the LifespanQosPolicy
      */
-    FASTDDS_EXPORTED_API void lifespan(
+    RTPS_DllAPI void lifespan(
             const LifespanQosPolicy& lifespan)
     {
         lifespan_ = lifespan;
@@ -431,7 +468,7 @@ public:
      *
      * @return UserDataQosPolicy reference
      */
-    FASTDDS_EXPORTED_API UserDataQosPolicy& user_data()
+    RTPS_DllAPI UserDataQosPolicy& user_data()
     {
         return user_data_;
     }
@@ -441,7 +478,7 @@ public:
      *
      * @return UserDataQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const UserDataQosPolicy& user_data() const
+    RTPS_DllAPI const UserDataQosPolicy& user_data() const
     {
         return user_data_;
     }
@@ -451,7 +488,7 @@ public:
      *
      * @param user_data new value for the UserDataQosPolicy
      */
-    FASTDDS_EXPORTED_API void user_data(
+    RTPS_DllAPI void user_data(
             const UserDataQosPolicy& user_data)
     {
         user_data_ = user_data;
@@ -462,7 +499,7 @@ public:
      *
      * @return OwnershipQosPolicy reference
      */
-    FASTDDS_EXPORTED_API OwnershipQosPolicy& ownership()
+    RTPS_DllAPI OwnershipQosPolicy& ownership()
     {
         return ownership_;
     }
@@ -472,7 +509,7 @@ public:
      *
      * @return OwnershipQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const OwnershipQosPolicy& ownership() const
+    RTPS_DllAPI const OwnershipQosPolicy& ownership() const
     {
         return ownership_;
     }
@@ -482,7 +519,7 @@ public:
      *
      * @param ownership new value for the OwnershipQosPolicy
      */
-    FASTDDS_EXPORTED_API void ownership(
+    RTPS_DllAPI void ownership(
             const OwnershipQosPolicy& ownership)
     {
         ownership_ = ownership;
@@ -493,7 +530,7 @@ public:
      *
      * @return OwnershipStrengthQosPolicy reference
      */
-    FASTDDS_EXPORTED_API OwnershipStrengthQosPolicy& ownership_strength()
+    RTPS_DllAPI OwnershipStrengthQosPolicy& ownership_strength()
     {
         return ownership_strength_;
     }
@@ -503,7 +540,7 @@ public:
      *
      * @return OwnershipStrengthQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const OwnershipStrengthQosPolicy& ownership_strength() const
+    RTPS_DllAPI const OwnershipStrengthQosPolicy& ownership_strength() const
     {
         return ownership_strength_;
     }
@@ -513,7 +550,7 @@ public:
      *
      * @param ownership_strength new value for the OwnershipStrengthQosPolicy
      */
-    FASTDDS_EXPORTED_API void ownership_strength(
+    RTPS_DllAPI void ownership_strength(
             const OwnershipStrengthQosPolicy& ownership_strength)
     {
         ownership_strength_ = ownership_strength;
@@ -524,7 +561,7 @@ public:
      *
      * @return WriterDataLifecycleQosPolicy reference
      */
-    FASTDDS_EXPORTED_API WriterDataLifecycleQosPolicy& writer_data_lifecycle()
+    RTPS_DllAPI WriterDataLifecycleQosPolicy& writer_data_lifecycle()
     {
         return writer_data_lifecycle_;
     }
@@ -534,7 +571,7 @@ public:
      *
      * @return WriterDataLifecycleQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const WriterDataLifecycleQosPolicy& writer_data_lifecycle() const
+    RTPS_DllAPI const WriterDataLifecycleQosPolicy& writer_data_lifecycle() const
     {
         return writer_data_lifecycle_;
     }
@@ -544,7 +581,7 @@ public:
      *
      * @param writer_data_lifecycle new value for the WriterDataLifecycleQosPolicy
      */
-    FASTDDS_EXPORTED_API void writer_data_lifecycle(
+    RTPS_DllAPI void writer_data_lifecycle(
             const WriterDataLifecycleQosPolicy& writer_data_lifecycle)
     {
         writer_data_lifecycle_ = writer_data_lifecycle;
@@ -555,7 +592,7 @@ public:
      *
      * @return PublishModeQosPolicy reference
      */
-    FASTDDS_EXPORTED_API PublishModeQosPolicy& publish_mode()
+    RTPS_DllAPI PublishModeQosPolicy& publish_mode()
     {
         return publish_mode_;
     }
@@ -565,7 +602,7 @@ public:
      *
      * @return PublishModeQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const PublishModeQosPolicy& publish_mode() const
+    RTPS_DllAPI const PublishModeQosPolicy& publish_mode() const
     {
         return publish_mode_;
     }
@@ -575,7 +612,7 @@ public:
      *
      * @param publish_mode new value for the PublishModeQosPolicy
      */
-    FASTDDS_EXPORTED_API void publish_mode(
+    RTPS_DllAPI void publish_mode(
             const PublishModeQosPolicy& publish_mode)
     {
         publish_mode_ = publish_mode;
@@ -586,7 +623,7 @@ public:
      *
      * @return DataRepresentationQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DataRepresentationQosPolicy& representation()
+    RTPS_DllAPI DataRepresentationQosPolicy& representation()
     {
         return representation_;
     }
@@ -596,7 +633,7 @@ public:
      *
      * @return DataRepresentationQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DataRepresentationQosPolicy& representation() const
+    RTPS_DllAPI const DataRepresentationQosPolicy& representation() const
     {
         return representation_;
     }
@@ -606,7 +643,7 @@ public:
      *
      * @param representation new value for the DataRepresentationQosPolicy
      */
-    FASTDDS_EXPORTED_API void representation(
+    RTPS_DllAPI void representation(
             const DataRepresentationQosPolicy& representation)
     {
         representation_ = representation;
@@ -617,7 +654,7 @@ public:
      *
      * @return PropertyPolicyQos reference
      */
-    FASTDDS_EXPORTED_API PropertyPolicyQos& properties()
+    RTPS_DllAPI PropertyPolicyQos& properties()
     {
         return properties_;
     }
@@ -627,7 +664,7 @@ public:
      *
      * @return PropertyPolicyQos reference
      */
-    FASTDDS_EXPORTED_API const PropertyPolicyQos& properties() const
+    RTPS_DllAPI const PropertyPolicyQos& properties() const
     {
         return properties_;
     }
@@ -637,7 +674,7 @@ public:
      *
      * @param properties new value for the PropertyPolicyQos
      */
-    FASTDDS_EXPORTED_API void properties(
+    RTPS_DllAPI void properties(
             const PropertyPolicyQos& properties)
     {
         properties_ = properties;
@@ -648,7 +685,7 @@ public:
      *
      * @return RTPSReliableWriterQos reference
      */
-    FASTDDS_EXPORTED_API RTPSReliableWriterQos& reliable_writer_qos()
+    RTPS_DllAPI RTPSReliableWriterQos& reliable_writer_qos()
     {
         return reliable_writer_qos_;
     }
@@ -658,7 +695,7 @@ public:
      *
      * @return RTPSReliableWriterQos reference
      */
-    FASTDDS_EXPORTED_API const RTPSReliableWriterQos& reliable_writer_qos() const
+    RTPS_DllAPI const RTPSReliableWriterQos& reliable_writer_qos() const
     {
         return reliable_writer_qos_;
     }
@@ -668,7 +705,7 @@ public:
      *
      * @param reliable_writer_qos new value for the RTPSReliableWriterQos
      */
-    FASTDDS_EXPORTED_API void reliable_writer_qos(
+    RTPS_DllAPI void reliable_writer_qos(
             const RTPSReliableWriterQos& reliable_writer_qos)
     {
         reliable_writer_qos_ = reliable_writer_qos;
@@ -679,7 +716,7 @@ public:
      *
      * @return RTPSEndpointQos reference
      */
-    FASTDDS_EXPORTED_API RTPSEndpointQos& endpoint()
+    RTPS_DllAPI RTPSEndpointQos& endpoint()
     {
         return endpoint_;
     }
@@ -688,7 +725,7 @@ public:
      * Getter for RTPSEndpointQos
      * @return RTPSEndpointQos reference
      */
-    FASTDDS_EXPORTED_API const RTPSEndpointQos& endpoint() const
+    RTPS_DllAPI const RTPSEndpointQos& endpoint() const
     {
         return endpoint_;
     }
@@ -698,7 +735,7 @@ public:
      *
      * @param endpoint new value for the RTPSEndpointQos
      */
-    FASTDDS_EXPORTED_API void endpoint(
+    RTPS_DllAPI void endpoint(
             const RTPSEndpointQos& endpoint)
     {
         endpoint_ = endpoint;
@@ -709,7 +746,7 @@ public:
      *
      * @return WriterResourceLimitsQos reference
      */
-    FASTDDS_EXPORTED_API WriterResourceLimitsQos& writer_resource_limits()
+    RTPS_DllAPI WriterResourceLimitsQos& writer_resource_limits()
     {
         return writer_resource_limits_;
     }
@@ -719,7 +756,7 @@ public:
      *
      * @return WriterResourceLimitsQos reference
      */
-    FASTDDS_EXPORTED_API const WriterResourceLimitsQos& writer_resource_limits() const
+    RTPS_DllAPI const WriterResourceLimitsQos& writer_resource_limits() const
     {
         return writer_resource_limits_;
     }
@@ -729,10 +766,44 @@ public:
      *
      * @param writer_resource_limits new value for the WriterResourceLimitsQos
      */
-    FASTDDS_EXPORTED_API void writer_resource_limits(
+    RTPS_DllAPI void writer_resource_limits(
             const WriterResourceLimitsQos& writer_resource_limits)
     {
         writer_resource_limits_ = writer_resource_limits;
+    }
+
+    /**
+     * Getter for ThroughputControllerDescriptor
+     *
+     * @return ThroughputControllerDescriptor reference
+     * @deprecated Use flow_controllers() on DomainParticipantQoS
+     */
+    RTPS_DllAPI fastrtps::rtps::ThroughputControllerDescriptor& throughput_controller()
+    {
+        return throughput_controller_;
+    }
+
+    /**
+     * Getter for ThroughputControllerDescriptor
+     *
+     * @return ThroughputControllerDescriptor reference
+     * @deprecated Use flow_controllers() on DomainParticipantQoS
+     */
+    RTPS_DllAPI const fastrtps::rtps::ThroughputControllerDescriptor& throughput_controller() const
+    {
+        return throughput_controller_;
+    }
+
+    /**
+     * Setter for ThroughputControllerDescriptor
+     *
+     * @param throughput_controller new value for the ThroughputControllerDescriptor
+     * @deprecated Use flow_controllers() on DomainParticipantQoS
+     */
+    RTPS_DllAPI void throughput_controller(
+            const fastrtps::rtps::ThroughputControllerDescriptor& throughput_controller)
+    {
+        throughput_controller_ = throughput_controller;
     }
 
     /**
@@ -740,7 +811,7 @@ public:
      *
      * @return DataSharingQosPolicy reference
      */
-    FASTDDS_EXPORTED_API DataSharingQosPolicy& data_sharing()
+    RTPS_DllAPI DataSharingQosPolicy& data_sharing()
     {
         return data_sharing_;
     }
@@ -750,7 +821,7 @@ public:
      *
      * @return DataSharingQosPolicy reference
      */
-    FASTDDS_EXPORTED_API const DataSharingQosPolicy& data_sharing() const
+    RTPS_DllAPI const DataSharingQosPolicy& data_sharing() const
     {
         return data_sharing_;
     }
@@ -760,7 +831,7 @@ public:
      *
      * @param data_sharing new value for the DataSharingQosPolicy
      */
-    FASTDDS_EXPORTED_API void data_sharing(
+    RTPS_DllAPI void data_sharing(
             const DataSharingQosPolicy& data_sharing)
     {
         data_sharing_ = data_sharing;
@@ -831,15 +902,17 @@ private:
     //!Writer Resource Limits Qos
     WriterResourceLimitsQos writer_resource_limits_;
 
+    //!Throughput controller
+    fastrtps::rtps::ThroughputControllerDescriptor throughput_controller_;
+
     //!DataSharing configuration
     DataSharingQosPolicy data_sharing_;
 };
 
-FASTDDS_EXPORTED_API extern const DataWriterQos DATAWRITER_QOS_DEFAULT;
-FASTDDS_EXPORTED_API extern const DataWriterQos DATAWRITER_QOS_USE_TOPIC_QOS;
+RTPS_DllAPI extern const DataWriterQos DATAWRITER_QOS_DEFAULT;
 
 } // namespace dds
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_DDS_PUBLISHER_QOS__DATAWRITERQOS_HPP
+#endif // _FASTDDS_DATAWRITERQOS_HPP

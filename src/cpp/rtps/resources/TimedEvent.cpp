@@ -17,13 +17,13 @@
  *
  */
 
-#include <rtps/resources/TimedEvent.h>
-#include <rtps/resources/ResourceEvent.h>
+#include <fastdds/rtps/resources/TimedEvent.h>
+#include <fastdds/rtps/resources/ResourceEvent.h>
 
 #include "TimedEventImpl.h"
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 TimedEvent::TimedEvent(
@@ -36,17 +36,6 @@ TimedEvent::TimedEvent(
     impl_ = new TimedEventImpl(
         callback,
         std::chrono::microseconds(static_cast<int64_t>(milliseconds * 1000)));
-    service_.register_timer(impl_);
-}
-
-TimedEvent::TimedEvent(
-        ResourceEvent& service,
-        std::function<bool()> callback,
-        std::chrono::microseconds interval)
-    : service_(service)
-    , impl_(nullptr)
-{
-    impl_ = new TimedEventImpl(callback, interval);
     service_.register_timer(impl_);
 }
 
@@ -81,15 +70,8 @@ void TimedEvent::restart_timer(
     }
 }
 
-void TimedEvent::recreate_timer()
-{
-    service_.unregister_timer(impl_);
-    impl_->go_cancel();
-    service_.register_timer(impl_);
-}
-
 bool TimedEvent::update_interval(
-        const dds::Duration_t& inter)
+        const Duration_t& inter)
 {
     return impl_->update_interval(inter);
 }
@@ -111,5 +93,5 @@ double TimedEvent::getRemainingTimeMilliSec()
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

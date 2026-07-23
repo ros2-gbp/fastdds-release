@@ -17,6 +17,7 @@
 
 #include "../fastcdr_dll.h"
 #include <string>
+#include <exception>
 
 namespace eprosima {
 namespace fastcdr {
@@ -25,22 +26,22 @@ namespace exception {
  * @brief This abstract class is used to create exceptions.
  * @ingroup EXCEPTIONMODULE
  */
-class Cdr_DllAPI Exception
+class Exception : public std::exception
 {
 public:
 
     //! \brief Default destructor.
-    virtual ~Exception() noexcept;
+    virtual Cdr_DllAPI ~Exception() noexcept;
 
     //! \brief This function throws the object as exception.
-    virtual void raise() const = 0;
+    virtual Cdr_DllAPI void raise() const = 0;
 
     /*!
      * @brief This function returns the error message.
      *
      * @return The error message.
      */
-    virtual const char* what() const noexcept;
+    virtual Cdr_DllAPI const char* what() const noexcept override;
 
 protected:
 
@@ -49,7 +50,7 @@ protected:
      *
      * @param message A error message. This message pointer is copied.
      */
-    Exception(
+    Cdr_DllAPI Exception(
             const char* const& message) noexcept;
 
     /*!
@@ -57,32 +58,36 @@ protected:
      *
      * @param ex Exception that will be copied.
      */
-    Exception(
+    Cdr_DllAPI Exception(
             const Exception& ex) noexcept;
 
+#if HAVE_CXX0X
     /*!
      * @brief Default move constructor.
      *
      * @param ex Exception that will be moved.
      */
-    Exception(
+    Cdr_DllAPI Exception(
             Exception&& ex) noexcept;
+#endif // if HAVE_CXX0X
 
     /*!
      * @brief Assigment operation.
      *
      * @param ex Exception that will be copied.
      */
-    Exception& operator =(
+    Cdr_DllAPI Exception& operator =(
             const Exception& ex) noexcept;
 
+#if HAVE_CXX0X
     /*!
      * @brief Assigment operation.
      *
      * @param ex Exception that will be moved.
      */
-    Exception& operator =(
-            Exception&& ex) noexcept;
+    Cdr_DllAPI Exception& operator =(
+            Exception&&) noexcept;
+#endif // if HAVE_CXX0X
 
 private:
 

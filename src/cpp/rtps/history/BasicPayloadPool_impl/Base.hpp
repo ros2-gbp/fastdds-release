@@ -22,33 +22,37 @@ public:
 
     bool get_payload(
             uint32_t size,
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        payload.reserve(size);
-        payload.payload_owner = this;
+        cache_change.serializedPayload.reserve(size);
+        cache_change.payload_owner(this);
         return true;
     }
 
     bool get_payload(
-            const SerializedPayload_t& data,
-            SerializedPayload_t& payload) override
+            SerializedPayload_t& data,
+            IPayloadPool*& /* data_owner */,
+            CacheChange_t& cache_change) override
     {
-        if (payload.copy(&data, false))
+        assert(cache_change.writerGUID != GUID_t::unknown());
+        assert(cache_change.sequenceNumber != SequenceNumber_t::unknown());
+
+        if (cache_change.serializedPayload.copy(&data, false))
         {
-            payload.payload_owner = this;
+            cache_change.payload_owner(this);
             return true;
         }
         return false;
     }
 
     bool release_payload(
-            SerializedPayload_t& payload) override
+            CacheChange_t& cache_change) override
     {
-        assert(payload.payload_owner == this);
+        assert(cache_change.payload_owner() == this);
 
-        payload.length = 0;
-        payload.pos = 0;
-        payload.payload_owner = nullptr;
+        cache_change.serializedPayload.length = 0;
+        cache_change.serializedPayload.pos = 0;
+        cache_change.payload_owner(nullptr);
 
         return true;
     }

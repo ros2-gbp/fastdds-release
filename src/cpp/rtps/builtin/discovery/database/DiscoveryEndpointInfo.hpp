@@ -20,14 +20,13 @@
 #ifndef _FASTDDS_RTPS_DISCOVERY_ENDPOINT_INFO_H_
 #define _FASTDDS_RTPS_DISCOVERY_ENDPOINT_INFO_H_
 
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/common/GuidPrefix_t.hpp>
+#include <fastrtps/utils/fixed_size_string.hpp>
+
 #include <rtps/builtin/discovery/database/DiscoverySharedInfo.hpp>
 
-#include <fastcdr/cdr/fixed_size_string.hpp>
-
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/common/GuidPrefix_t.hpp>
-
-#include <nlohmann/json.hpp>
+#include <json.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -44,10 +43,10 @@ class DiscoveryEndpointInfo : public DiscoverySharedInfo
 public:
 
     DiscoveryEndpointInfo(
-            CacheChange_t* change,
+            eprosima::fastrtps::rtps::CacheChange_t* change,
             std::string topic,
             bool is_virtual,
-            const GuidPrefix_t& known_participant)
+            const eprosima::fastrtps::rtps::GuidPrefix_t& known_participant)
         : DiscoverySharedInfo(change, known_participant)
         , topic_(topic)
         , is_virtual_(is_virtual)

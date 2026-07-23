@@ -16,13 +16,11 @@
  * @file PropertyPolicy.cpp
  */
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
 
 #include <algorithm>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastrtps::rtps;
 
 PropertyPolicy PropertyPolicyHelper::get_properties_with_prefix(
         const PropertyPolicy& property_policy,
@@ -120,7 +118,3 @@ const Property* PropertyPolicyHelper::get_property(
 
     return returnedValue;
 }
-
-}  // namespace rtps
-}  // namespace fastdds
-}  // namespace eprosima

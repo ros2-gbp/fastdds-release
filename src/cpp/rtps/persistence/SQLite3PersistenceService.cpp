@@ -20,14 +20,15 @@
 #include <rtps/persistence/SQLite3PersistenceService.h>
 #include <rtps/persistence/SQLite3PersistenceServiceStatements.h>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastrtps/utils/TimeConversion.h>
 
 #include <rtps/persistence/sqlite3.h>
 
 #include <sstream>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -89,7 +90,7 @@ static int upgrade(
     }
 
     // unsupported upgrade path
-    EPROSIMA_LOG_ERROR(RTPS_PERSISTENCE, "Unsupported database upgrade from version " << from << " to version " << to);
+    logError(RTPS_PERSISTENCE, "Unsupported database upgrade from version " << from << " to version " << to);
     return SQLITE_ERROR;
 }
 
@@ -119,7 +120,7 @@ static sqlite3* open_or_create_database(
         rc = sqlite3_open_v2(filename, &db, flags, 0);
         if (rc != SQLITE_OK)
         {
-            EPROSIMA_LOG_ERROR(RTPS_PERSISTENCE, "Unable to create persistence database " << filename);
+            logError(RTPS_PERSISTENCE, "Unable to create persistence database " << filename);
             sqlite3_close(db);
             return NULL;
         }
@@ -130,7 +131,7 @@ static sqlite3* open_or_create_database(
         int db_version = database_version(db);
         if (db_version == 0)
         {
-            EPROSIMA_LOG_ERROR(RTPS_PERSISTENCE, "Error retrieving version on database " << filename);
+            logError(RTPS_PERSISTENCE, "Error retrieving version on database " << filename);
             sqlite3_close(db);
             return NULL;
         }
@@ -147,8 +148,8 @@ static sqlite3* open_or_create_database(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(RTPS_PERSISTENCE, "Old schema version " << db_version << " on database " << filename
-                                                                           << ". Set property dds.persistence.update_schema to force automatic schema upgrade");
+                logError(RTPS_PERSISTENCE, "Old schema version " << db_version << " on database " << filename
+                                                                 << ". Set property dds.persistence.update_schema to force automatic schema upgrade");
                 sqlite3_close(db);
                 return NULL;
             }
@@ -175,7 +176,7 @@ static void finalize_statement(
         int res = sqlite3_finalize(stmt);
         if (res != SQLITE_OK)
         {
-            EPROSIMA_LOG_WARNING(RTPS_PERSISTENCE, "Statement could not be finalized. sqlite3_finalize code: " << res);
+            logWarning(RTPS_PERSISTENCE, "Statement could not be finalized. sqlite3_finalize code: " << res);
         }
         stmt = NULL;
     }
@@ -241,28 +242,29 @@ SQLite3PersistenceService::~SQLite3PersistenceService()
     int res = sqlite3_close(db_);
     if (res != SQLITE_OK) // (0) SQLITE_OK
     {
-        EPROSIMA_LOG_ERROR(RTPS_PERSISTENCE, "Database could not be closed. sqlite3_close code: " << res);
+        logError(RTPS_PERSISTENCE, "Database could not be closed. sqlite3_close code: " << res);
     }
     db_ = NULL;
 }
 
 /**
  * Get all data stored for a writer.
- *
- * @param [in]     persistence_guid   GUID of the writer used to store samples.
- * @param [in]     writer_guid        GUID of the writer to load.
- * @param [in,out] history            History of the writer to load.
- * @param [out]    next_sequence      Sequence that should be applied to the next created sample.
- *
+ * @param persistence_guid GUID of persistence service that holds the data.
+ * @param writer_guid GUID of the writer to load.
+ * @param changes History of CacheChanges of the writer. It will be filled.
+ * @param pool Pool of CacheChanges from which new ones are reserved to add to the history.
+ * @param next_sequence Buffer to fill with the last sequence number on the history.
  * @return True if operation was successful.
  */
 bool SQLite3PersistenceService::load_writer_from_storage(
         const std::string& persistence_guid,
         const GUID_t& writer_guid,
         WriterHistory* history,
+        const std::shared_ptr<IChangePool>& change_pool,
+        const std::shared_ptr<IPayloadPool>& payload_pool,
         SequenceNumber_t& next_sequence)
 {
-    EPROSIMA_LOG_INFO(RTPS_PERSISTENCE, "Loading writer " << writer_guid);
+    logInfo(RTPS_PERSISTENCE, "Loading writer " << writer_guid);
 
     if (load_writer_stmt_ != NULL)
     {
@@ -277,8 +279,7 @@ bool SQLite3PersistenceService::load_writer_from_storage(
             CacheChange_t* change = nullptr;
             int size = sqlite3_column_bytes(load_writer_stmt_, 2);
 
-            change = history->create_change(size, ALIVE);
-            if (nullptr == change)
+            if (!change_pool->reserve_cache(change))
             {
                 continue;
             }
@@ -286,6 +287,11 @@ bool SQLite3PersistenceService::load_writer_from_storage(
             SampleIdentity identity;
             identity.writer_guid(writer_guid);
             identity.sequence_number(sn);
+            if (!payload_pool->get_payload(size, *change))
+            {
+                change_pool->release_cache(change);
+                continue;
+            }
 
             int instance_size = sqlite3_column_bytes(load_writer_stmt_, 1);
             instance_size = (instance_size > 16) ? 16 : instance_size;
@@ -298,7 +304,6 @@ bool SQLite3PersistenceService::load_writer_from_storage(
             change->writer_info.previous = nullptr;
             change->writer_info.next = nullptr;
             change->writer_info.num_sent_submessages = 0;
-            change->vendor_id = c_VendorId_eProsima;
 
             // related sample identity
             {
@@ -341,8 +346,7 @@ bool SQLite3PersistenceService::add_writer_change_to_storage(
         const std::string& persistence_guid,
         const CacheChange_t& change)
 {
-    EPROSIMA_LOG_INFO(RTPS_PERSISTENCE,
-            "Writer " << change.writerGUID << " storing change for seq " << change.sequenceNumber);
+    logInfo(RTPS_PERSISTENCE, "Writer " << change.writerGUID << " storing change for seq " << change.sequenceNumber);
 
     if (add_writer_change_stmt_ != NULL)
     {
@@ -368,17 +372,16 @@ bool SQLite3PersistenceService::add_writer_change_to_storage(
                     change.serializedPayload.length, SQLITE_STATIC);
 
             // related sample identity
-            std::ostringstream os;
-            auto& si = change.write_params.related_sample_identity();
-            os << si.writer_guid();
+            {
+                using namespace std;
+                ostringstream os;
+                auto& si = change.write_params.related_sample_identity();
+                os << si.writer_guid();
+                auto guids = os.str();
 
-            // IMPORTANT: this element must survive until the call (sqlite3_step) has been fulfilled.
-            // Another way would be to use SQLITE_TRANSIENT instead of static, forcing an internal copy,
-            // but this way a copy is saved (with cost of taking care that this string should survive)
-            std::string guids = os.str();
-
-            sqlite3_bind_text(add_writer_change_stmt_, 5, guids.c_str(), -1, SQLITE_STATIC);
-            sqlite3_bind_int64(add_writer_change_stmt_, 6, si.sequence_number().to64long());
+                sqlite3_bind_text(add_writer_change_stmt_, 5, guids.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_int64(add_writer_change_stmt_, 6, si.sequence_number().to64long());
+            }
 
             // source time stamp
             sqlite3_bind_int64(add_writer_change_stmt_, 7, change.sourceTimestamp.to_ns());
@@ -399,8 +402,7 @@ bool SQLite3PersistenceService::remove_writer_change_from_storage(
         const std::string& persistence_guid,
         const CacheChange_t& change)
 {
-    EPROSIMA_LOG_INFO(RTPS_PERSISTENCE,
-            "Writer " << change.writerGUID << " removing change for seq " << change.sequenceNumber);
+    logInfo(RTPS_PERSISTENCE, "Writer " << change.writerGUID << " removing change for seq " << change.sequenceNumber);
 
     if (remove_writer_change_stmt_ != NULL)
     {
@@ -422,7 +424,7 @@ bool SQLite3PersistenceService::load_reader_from_storage(
         const std::string& reader_guid,
         foonathan::memory::map<GUID_t, SequenceNumber_t, IPersistenceService::map_allocator_t>& seq_map)
 {
-    EPROSIMA_LOG_INFO(RTPS_PERSISTENCE, "Loading reader " << reader_guid);
+    logInfo(RTPS_PERSISTENCE, "Loading reader " << reader_guid);
 
     if (load_reader_stmt_ != NULL)
     {
@@ -455,7 +457,7 @@ bool SQLite3PersistenceService::update_writer_seq_on_storage(
         const GUID_t& writer_guid,
         const SequenceNumber_t& seq_number)
 {
-    EPROSIMA_LOG_INFO(RTPS_PERSISTENCE,
+    logInfo(RTPS_PERSISTENCE,
             "Reader " << reader_guid << " setting seq for writer " << writer_guid << " to " << seq_number);
 
     if (update_reader_stmt_ != NULL)
@@ -566,5 +568,5 @@ int64_t SQLite3PersistenceServiceSchemaV3::now()
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

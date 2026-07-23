@@ -22,7 +22,7 @@
 
 #include <cstdint>
 
-#include <fastdds/dds/core/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -41,7 +41,7 @@ uint64_t default_domain_id();
  * @return true if the duration is consistent, false otherwise.
  */
 bool is_duration_consistent(
-        const Duration_t& duration,
+        const fastrtps::Duration_t& duration,
         bool allow_infinite = true);
 
 }  // namespace utils

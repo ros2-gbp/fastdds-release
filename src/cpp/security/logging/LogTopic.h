@@ -18,20 +18,17 @@
 #ifndef _FASTDDS_RTPS_SECURITY_LOGGING_LOGTOPIC_H_
 #define _FASTDDS_RTPS_SECURITY_LOGGING_LOGTOPIC_H_
 
+#include <fastdds/rtps/security/logging/Logging.h>
+#include <fastdds/rtps/security/logging/BuiltinLoggingType.h>
+
+#include <utils/collections/concurrent_queue.h>
+
 #include <atomic>
 #include <fstream>
-#include <memory>
-
-#include <fastdds/rtps/attributes/ThreadSettings.hpp>
-
-#include <rtps/security/exceptions/SecurityException.h>
-#include <rtps/security/logging/Logging.h>
-#include <rtps/security/logging/BuiltinLoggingType.h>
-#include <utils/collections/concurrent_queue.h>
-#include <utils/thread.hpp>
+#include <thread>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -44,9 +41,7 @@ class LogTopic final : public Logging
 
 public:
 
-    LogTopic(
-            uint32_t thread_id = 0,
-            const fastdds::rtps::ThreadSettings& thr_config = {});
+    LogTopic();
     ~LogTopic();
 
 private:
@@ -78,12 +73,12 @@ private:
 
     std::atomic_bool stop_;
 
-    eprosima::thread thread_;
+    std::thread thread_;
 };
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _FASTDDS_RTPS_SECURITY_LOGGING_LOGTOPIC_H_

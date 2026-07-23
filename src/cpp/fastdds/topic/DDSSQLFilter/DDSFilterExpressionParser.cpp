@@ -15,21 +15,25 @@
 /**
  * @file DDSFilterExpressionParser.cpp
  */
+
 #include "DDSFilterExpressionParser.hpp"
 
 #include <memory>
 
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/xtypes/type_representation/TypeObject.hpp>
+
+#include <fastrtps/types/TypeIdentifier.h>
+#include <fastrtps/types/TypeObject.h>
+#include <fastrtps/types/TypeObjectFactory.h>
 
 #include "pegtl.hpp"
 #include "pegtl/contrib/parse_tree.hpp"
 
-#include "DDSFilterField.hpp"
 #include "DDSFilterGrammar.hpp"
 #include "DDSFilterParseNode.hpp"
+
 #include "DDSFilterValue.hpp"
+#include "DDSFilterField.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -38,7 +42,7 @@ namespace DDSSQLFilter {
 namespace parser {
 
 using namespace tao::TAO_PEGTL_NAMESPACE;
-using namespace xtypes;
+using namespace eprosima::fastrtps::types;
 
 #include "DDSFilterExpressionParserImpl/rearrange.hpp"
 #include "DDSFilterExpressionParserImpl/literal_values.hpp"
@@ -93,24 +97,24 @@ using selector = parse_tree::selector <
 
 std::unique_ptr<ParseNode> parse_filter_expression(
         const char* expression,
-        const std::shared_ptr<TypeObject>& type_object)
+        const TypeObject* type_object)
 {
     memory_input<> in(expression, "");
     try
     {
-        CurrentIdentifierState identifier_state { type_object, {}, {} };
+        CurrentIdentifierState identifier_state { type_object, nullptr, {} };
         return parse_tree::parse< FilterExpressionGrammar, ParseNode, selector >(in, identifier_state);
     }
     catch (const parse_error& e)
     {
         const auto p = e.positions.front();
-        EPROSIMA_LOG_ERROR(DDSSQLFILTER, "PARSE ERROR: " << e.what() << std::endl
-                                                         << in.line_at(p) << std::endl
-                                                         << std::string(p.byte_in_line, ' ') << '^');
+        logError(DDSSQLFILTER, "PARSE ERROR: " << e.what() << std::endl
+                                               << in.line_at(p) << std::endl
+                                               << std::string(p.byte_in_line, ' ') << '^');
     }
     catch (const std::exception& e)
     {
-        EPROSIMA_LOG_ERROR(DDSSQLFILTER, "ERROR '" << e.what() << "' while parsing " << expression);
+        logError(DDSSQLFILTER, "ERROR '" << e.what() << "' while parsing " << expression);
     }
 
     return nullptr;
@@ -128,13 +132,13 @@ std::unique_ptr<ParseNode> parse_literal_value(
     catch (const parse_error& e)
     {
         const auto p = e.positions.front();
-        EPROSIMA_LOG_ERROR(DDSSQLFILTER, "PARSE ERROR: " << e.what() << std::endl
-                                                         << in.line_at(p) << std::endl
-                                                         << std::string(p.byte_in_line, ' ') << '^');
+        logError(DDSSQLFILTER, "PARSE ERROR: " << e.what() << std::endl
+                                               << in.line_at(p) << std::endl
+                                               << std::string(p.byte_in_line, ' ') << '^');
     }
     catch (const std::exception& e)
     {
-        EPROSIMA_LOG_ERROR(DDSSQLFILTER, "ERROR '" << e.what() << "' while parsing " << expression);
+        logError(DDSSQLFILTER, "ERROR '" << e.what() << "' while parsing " << expression);
     }
 
     return nullptr;

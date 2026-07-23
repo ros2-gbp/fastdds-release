@@ -20,20 +20,16 @@
 #define _SECURITY_ARTIFACTPROVIDERS_FILEPROVIDER_HPP_
 
 #include <functional>
-#include <string>
 
-#if OPENSSL_VERSION_NUMBER < 0x30000000L
 #include <openssl/engine.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#else
-#include <openssl/types.h>
-#endif // if OPENSSL_VERSION_NUMBER < 0x30000000L
 
-#include <rtps/security/exceptions/SecurityException.h>
+#include <fastdds/rtps/security/exceptions/SecurityException.h>
+
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -67,10 +63,10 @@ public:
 
 };
 
-}  // namespace detail
-}  // namespace security
-}  // namespace rtps
-}  // namespace fastdds
-}  // namespace eprosima
+} // namespace detail
+} //namespace security
+} //namespace rtps
+} //namespace fastrtps
+} //namespace eprosima
 
 #endif  // _SECURITY_ARTIFACTPROVIDERS_FILEPROVIDER_HPP_

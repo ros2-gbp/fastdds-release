@@ -23,7 +23,7 @@
 #include <fastdds/statistics/IListeners.hpp>
 
 #include <fastdds/subscriber/DataReaderImpl.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
+#include <fastdds/rtps/reader/RTPSReader.h>
 
 #include <statistics/fastdds/domain/DomainParticipantImpl.hpp>
 
@@ -48,23 +48,22 @@ public:
             efd::TopicDescription* topic,
             const efd::DataReaderQos& qos,
             efd::DataReaderListener* listener,
-            std::shared_ptr<fastdds::rtps::IPayloadPool> payload_pool,
             std::shared_ptr<IListener> stat_listener)
-        : BaseType(s, type, topic, qos, listener, payload_pool)
+        : BaseType(s, type, topic, qos, listener)
         , statistics_listener_(stat_listener)
     {
     }
 
-    efd::ReturnCode_t enable() override
+    ReturnCode_t enable() override
     {
         if (nullptr != reader_)
         {
-            return efd::RETCODE_OK;
+            return ReturnCode_t::RETCODE_OK;
         }
 
-        efd::ReturnCode_t ret = BaseType::enable();
+        ReturnCode_t ret = BaseType::enable();
 
-        if (efd::RETCODE_OK == ret &&
+        if (ReturnCode_t::RETCODE_OK == ret &&
                 !DomainParticipantImpl::is_statistics_topic_name(topic_->get_name()))
         {
             reader_->add_statistics_listener(statistics_listener_);

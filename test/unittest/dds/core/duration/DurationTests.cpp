@@ -16,11 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include <fastdds/dds/core/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
 
 namespace eprosima {
-namespace fastdds {
-namespace dds {
+namespace fastrtps {
 
 /* Test the constructor with default values and with user values */
 TEST(DurationTests, duration_constructor)
@@ -58,8 +57,7 @@ TEST(DurationTests, conversion_methods)
     }
 }
 
-}  // namespace dds
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 int main(

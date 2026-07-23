@@ -2,7 +2,7 @@
 // use_future.cpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,7 +19,7 @@
 #include <string>
 #include "unit_test.hpp"
 
-#if defined(ASIO_HAS_STD_FUTURE_CLASS)
+#if defined(ASIO_HAS_STD_FUTURE)
 
 #include "archetypes/async_ops.hpp"
 
@@ -659,7 +659,7 @@ ASIO_TEST_SUITE
   ASIO_TEST_CASE(use_future_package_3_test)
 )
 
-#else // defined(ASIO_HAS_STD_FUTURE_CLASS)
+#else // defined(ASIO_HAS_STD_FUTURE)
 
 ASIO_TEST_SUITE
 (
@@ -667,4 +667,4 @@ ASIO_TEST_SUITE
   ASIO_TEST_CASE(null_test)
 )
 
-#endif // defined(ASIO_HAS_STD_FUTURE_CLASS)
+#endif // defined(ASIO_HAS_STD_FUTURE)

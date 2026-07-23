@@ -17,7 +17,6 @@ if(WIN32)
 endif()
 
 set(DURATION_TESTS_SOURCE
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     DurationTests.cpp)
 
@@ -34,6 +33,6 @@ target_include_directories(DurationTests PRIVATE
     ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
 )
-target_link_libraries(DurationTests
-    GTest::gtest)
-gtest_discover_tests(DurationTests)
+target_link_libraries(DurationTests GTest::gtest)
+add_gtest(DurationTests SOURCES ${DURATION_TESTS_SOURCE})
+
