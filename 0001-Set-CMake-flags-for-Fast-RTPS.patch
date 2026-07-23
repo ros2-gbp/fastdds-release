@@ -1,4 +1,4 @@
-From 8cc340f603edeaf222b96c753885231fc277cbb8 Mon Sep 17 00:00:00 2001
+From 0ebe39e4b92f2953e98e86e6500d96137eec4b95 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Steven!=20Ragnar=C3=B6k?=
  <nuclearsandwich@users.noreply.github.com>
 Date: Sat, 12 Feb 2022 10:36:47 -0500
@@ -12,10 +12,10 @@ Co-authored-by: Scott K Logan <logans@cottsay.net>
  1 file changed, 2 insertions(+)
 
 diff --git a/rpm/template.spec.em b/rpm/template.spec.em
-index b1217d05..adfa6050 100644
+index 3464a0bc..91b8a7fd 100644
 --- a/rpm/template.spec.em
 +++ b/rpm/template.spec.em
-@@ -51,6 +51,8 @@ mkdir -p .obj-%{_target_platform} && cd .obj-%{_target_platform}
+@@ -53,6 +53,8 @@ mkdir -p .obj-%{_target_platform} && cd .obj-%{_target_platform}
  %if !0%{?with_tests}
      -DBUILD_TESTING=OFF \
  %endif
