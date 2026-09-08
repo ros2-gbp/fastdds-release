@@ -29,7 +29,7 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastrtps VERSION "2.14.6" LANGUAGES C CXX)
+project(fastrtps VERSION "2.14.7" LANGUAGES C CXX)
 
 set(PROJECT_NAME_LARGE "Fast RTPS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
@@ -169,6 +169,23 @@ if (SANITIZER)
 
         else()
             message(FATAL_ERROR "Thread sanitizer requires Clang or GCC. Aborting.")
+        endif()
+
+    elseif(${SANITIZER} STREQUAL "UNDEFINED")
+        message(STATUS "Enabling undefined behavior sanitizer...")
+        # Warning/Error messages
+        if(NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+            message(WARNING "Undefined behavior sanitizer results with an optimized (non-Debug) build may be misleading")
+        endif()
+
+        if(CMAKE_COMPILER_IS_GNUCXX)
+            message(STATUS "Building with Undefined behavior sanitizer Tools")
+
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero -fsanitize=bounds-strict")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero -fsanitize=bounds-strict")
+
+        else()
+            message(FATAL_ERROR "Undefined behavior sanitizer requires GCC. Aborting.")
         endif()
 
     else()
@@ -539,10 +556,15 @@ if(BUILD_DOCUMENTATION)
             # file(ARCHIVE_EXTRACT INPUT "./eprosima-fast-rtps.zip" DESTINATION  "${PROJECT_BINARY_DIR}/doc/")
             execute_process(COMMAND "${UNZIP_EXE}" "./eprosima-fast-rtps.zip" -d "${PROJECT_BINARY_DIR}/doc/")
             file(REMOVE_RECURSE "${PROJECT_BINARY_DIR}/doc/manual")
-            if (DOWNLOAD_RC)
+
+            if (EXISTS "${PROJECT_BINARY_DIR}/doc/html")
+                file(RENAME "${PROJECT_BINARY_DIR}/doc/html" "${PROJECT_BINARY_DIR}/doc/manual")
+            elseif (EXISTS "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}")
+                file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}" "${PROJECT_BINARY_DIR}/doc/manual")
+            elseif (EXISTS "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-latest")
                 file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-latest" "${PROJECT_BINARY_DIR}/doc/manual")
             else()
-                file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}" "${PROJECT_BINARY_DIR}/doc/manual")
+                message(FATAL_ERROR "The downloaded documentation did not extract any known directory into ${PROJECT_BINARY_DIR}/doc")
             endif()
             file(REMOVE  "./eprosima-fast-rtps.zip")
 

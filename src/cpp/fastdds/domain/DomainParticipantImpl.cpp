@@ -60,6 +60,7 @@
 #include <fastdds/publisher/DataWriterImpl.hpp>
 #include <fastdds/subscriber/SubscriberImpl.hpp>
 #include <fastdds/topic/ContentFilteredTopicImpl.hpp>
+#include <fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp>
 #include <fastdds/topic/TopicImpl.hpp>
 #include <fastdds/topic/TopicProxy.hpp>
 #include <fastdds/topic/TopicProxyFactory.hpp>
@@ -93,6 +94,54 @@ using fastrtps::rtps::EndpointKind_t;
 using fastrtps::rtps::ResourceEvent;
 using eprosima::fastdds::dds::Log;
 
+static size_t get_filter_max_subexpressions(
+        const DomainParticipantQos& qos)
+{
+    constexpr const char parameter_name[] = "dds.sql.expression.max_subexpressions";
+    const std::string* property = fastrtps::rtps::PropertyPolicyHelper::find_property(
+        qos.properties(), parameter_name);
+    if (nullptr != property)
+    {
+        try
+        {
+            return std::stoul(*property);
+        }
+        catch (...)
+        {
+            EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT,
+                    "Invalid value for dds.sql.expression.max_subexpressions property: "
+                    << *property << ". Will use default value of "
+                    << DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS);
+        }
+    }
+
+    return DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_SUBEXPRESSIONS;
+}
+
+static size_t get_filter_max_expression_length(
+        const DomainParticipantQos& qos)
+{
+    constexpr const char parameter_name[] = "dds.sql.expression.max_expression_length";
+    const std::string* property = fastrtps::rtps::PropertyPolicyHelper::find_property(
+        qos.properties(), parameter_name);
+    if (nullptr != property)
+    {
+        try
+        {
+            return std::stoul(*property);
+        }
+        catch (...)
+        {
+            EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT,
+                    "Invalid value for dds.sql.expression.max_expression_length property: "
+                    << *property << ". Will use default value of "
+                    << DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH);
+        }
+    }
+
+    return DDSSQLFilter::DDSFilterFactory::DEFAULT_MAX_EXPRESSION_LENGTH;
+}
+
 DomainParticipantImpl::DomainParticipantImpl(
         DomainParticipant* dp,
         DomainId_t did,
@@ -106,6 +155,7 @@ DomainParticipantImpl::DomainParticipantImpl(
     , listener_(listen)
     , default_pub_qos_(PUBLISHER_QOS_DEFAULT)
     , default_sub_qos_(SUBSCRIBER_QOS_DEFAULT)
+    , dds_sql_filter_factory_(get_filter_max_subexpressions(qos), get_filter_max_expression_length(qos))
     , default_topic_qos_(TOPIC_QOS_DEFAULT)
     , id_counter_(0)
 #pragma warning (disable : 4355 )
@@ -379,7 +429,7 @@ ReturnCode_t DomainParticipantImpl::set_qos(
             else
             {
                 // Trigger update of network interfaces by calling update_attributes with current attributes
-                patt = rtps_participant->getRTPSParticipantAttributes();
+                patt = rtps_participant->copy_attributes();
             }
         }
     }
@@ -573,7 +623,8 @@ ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
 
     if (related_topic->get_participant() != get_participant())
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Creating ContentFilteredTopic with name " << name <<
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Creating ContentFilteredTopic with name " << name
+                                                                                   <<
                 ": related_topic not from this participant");
         return nullptr;
     }
@@ -619,8 +670,8 @@ ContentFilteredTopic* DomainParticipantImpl::create_contentfilteredtopic(
             filter_factory->create_content_filter(filter_class_name, related_topic->get_type_name().c_str(),
             type.get(), filter_expression.c_str(), filter_parameters, filter_instance))
     {
-        EPROSIMA_LOG_ERROR(PARTICIPANT, "Could not create filter of class " << filter_class_name << " for expression \"" <<
-                filter_expression);
+        EPROSIMA_LOG_ERROR(PARTICIPANT, "Could not create filter of class " << filter_class_name << " for expression \""
+                                                                            << filter_expression);
         return nullptr;
     }
 
@@ -2277,7 +2328,8 @@ bool DomainParticipantImpl::can_qos_be_updated(
                 from.wire_protocol().builtin.discovery_config.ignoreParticipantFlags))))
         {
             updatable = false;
-            EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK, "WireProtocolConfigQos cannot be changed after the participant is enabled, "
+            EPROSIMA_LOG_WARNING(RTPS_QOS_CHECK,
+                    "WireProtocolConfigQos cannot be changed after the participant is enabled, "
                     << "with the exception of builtin.discovery_config.m_DiscoveryServers");
         }
         else

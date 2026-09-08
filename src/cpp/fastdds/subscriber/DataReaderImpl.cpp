@@ -17,6 +17,8 @@
  */
 #include <fastdds/subscriber/DataReaderImpl.hpp>
 
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #if defined(__has_include) && __has_include(<version>)
@@ -941,6 +943,8 @@ void DataReaderImpl::InnerDataReaderListener::onReaderMatched(
         RTPSReader* /*reader*/,
         const SubscriptionMatchedStatus& info)
 {
+    std::lock_guard<std::mutex> scoped_lock(matching_info_mutex_);
+
     data_reader_->update_subscription_matched_status(info);
 
     StatusMask notify_status = StatusMask::subscription_matched();
@@ -1232,7 +1236,7 @@ void DataReaderImpl::configure_deadline_timer_()
                 return deadline_missed();
             },
             // Park timer with a huge interval (prevents spurious callbacks); we'll arm/cancel explicitly
-            std::numeric_limits<double>::max()
+            std::chrono::microseconds::max()
             );
     }
 
@@ -1526,8 +1530,29 @@ LivelinessChangedStatus& DataReaderImpl::update_liveliness_status(
 const SampleLostStatus& DataReaderImpl::update_sample_lost_status(
         int32_t sample_lost_since_last_update)
 {
-    sample_lost_status_.total_count += sample_lost_since_last_update;
-    sample_lost_status_.total_count_change += sample_lost_since_last_update;
+    constexpr int32_t int32_max = std::numeric_limits<int32_t>::max();
+
+    // Perform the addition in 64-bit space to avoid signed-integer-overflow UB on int32_t
+    const int32_t prev_total = sample_lost_status_.total_count;
+    const int64_t new_total =
+            static_cast<int64_t>(prev_total) + sample_lost_since_last_update;
+    const int64_t new_change =
+            static_cast<int64_t>(sample_lost_status_.total_count_change) + sample_lost_since_last_update;
+
+    // Saturate at int32_t max
+    sample_lost_status_.total_count =
+            (new_total > int32_max) ? int32_max : static_cast<int32_t>(new_total);
+    sample_lost_status_.total_count_change =
+            (new_change > int32_max) ? int32_max : static_cast<int32_t>(new_change);
+
+    // Warn only when the counter reaches the max value
+    if (prev_total < int32_max && sample_lost_status_.total_count == int32_max)
+    {
+        EPROSIMA_LOG_WARNING(DATA_READER,
+                "SampleLostStatus counter for DataReader "
+                << guid() << " reached max value. The cumulative count will remain saturated, "
+                << "but listener notifications for further lost samples will continue.");
+    }
 
     return sample_lost_status_;
 }
@@ -1583,6 +1608,33 @@ ReturnCode_t DataReaderImpl::check_qos(
                                   << qos.resource_limits().max_samples_per_instance
                                   << "'. Consistency rule: depth <= max_samples_per_instance."
                                   << " Effectively using max_samples_per_instance as depth.");
+    }
+    // Check for nanoseconds in all duration policies
+    if (!utils::is_duration_consistent(qos.deadline().period))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "Deadline period is not consistent");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+    }
+    if (!utils::is_duration_consistent(qos.lifespan().duration))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "Lifespan duration is not consistent");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+    }
+    if (!utils::is_duration_consistent(qos.liveliness().lease_duration))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "Liveliness lease duration is not consistent");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+    }
+    if (!utils::is_duration_consistent(qos.liveliness().announcement_period))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "Liveliness announcement period is not consistent");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
+    }
+    if (qos.reliability().kind == RELIABLE_RELIABILITY_QOS &&
+            !utils::is_duration_consistent(qos.reliability().max_blocking_time, false))
+    {
+        EPROSIMA_LOG_ERROR(DDS_QOS_CHECK, "Reliability max blocking time is not consistent");
+        return ReturnCode_t::RETCODE_INCONSISTENT_POLICY;
     }
     return ReturnCode_t::RETCODE_OK;
 }

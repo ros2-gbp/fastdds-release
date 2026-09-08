@@ -14,8 +14,11 @@
 
 #include <array>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <set>
+#include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -2734,6 +2737,248 @@ TEST(BuiltinDataSerializationTests, security_attributes_update)
     }
 
 #endif  // HAVE_SECURITY
+}
+
+// Regression test for redmine issue #24419.
+// A default-configured receiver (max_domains == 0) must reject the parameter without allocating.
+TEST(BuiltinDataSerializationTests, msg_datasharing_malformed_num_domains)
+{
+    uint8_t buffer[] =
+    {
+        // Encapsulation
+        0x00, 0x03, 0x00, 0xff,
+        // PID 0x1000, length 0
+        0x00, 0x10, 0x00, 0x00,
+        // PID_DATASHARING (0x8006), length 16
+        0x06, 0x80, 0x10, 0x00,
+        // num_domains = 0x00100000 (~1M); only 12 bytes of domain data follow
+        0x00, 0x00, 0x10, 0x00,
+        0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
+        0x62, 0x62, 0x62, 0x62,
+        // Sentinel
+        0x01, 0x00, 0x00, 0x00
+    };
+
+    // DATA(w)
+    {
+        CDRMessage_t msg(0);
+        msg.init(buffer, static_cast<uint32_t>(sizeof(buffer)));
+        msg.length = msg.max_size;
+
+        WriterProxyData out(max_unicast_locators, max_multicast_locators);
+        ASSERT_FALSE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+        ASSERT_EQ(out.m_qos.data_sharing.domain_ids().size(), 0u);
+    }
+
+    // DATA(r)
+    {
+        CDRMessage_t msg(0);
+        msg.init(buffer, static_cast<uint32_t>(sizeof(buffer)));
+        msg.length = msg.max_size;
+
+        ReaderProxyData out(max_unicast_locators, max_multicast_locators);
+        ASSERT_FALSE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+        ASSERT_EQ(out.m_qos.data_sharing.domain_ids().size(), 0u);
+    }
+}
+
+// Regression test for redmine issue #24419.
+// datasize is wire-attacker-controlled; without a bound against parameter_length the loop
+// exhausts memory via unbounded push_backs into m_value.
+TEST(BuiltinDataSerializationTests, msg_data_representation_malformed_datasize)
+{
+    uint8_t buffer[] =
+    {
+        // Encapsulation
+        0x00, 0x03, 0x00, 0x00,
+        // PID_DATA_REPRESENTATION (0x0073), length 8
+        0x73, 0x00, 0x08, 0x00,
+        // datasize = 0x00100000 (~1M); only 4 bytes of representation data follow
+        0x00, 0x00, 0x10, 0x00,
+        0x02, 0x00, 0x00, 0x00,
+        // Sentinel
+        0x01, 0x00, 0x00, 0x00
+    };
+
+    // DATA(w)
+    {
+        CDRMessage_t msg(0);
+        msg.init(buffer, static_cast<uint32_t>(sizeof(buffer)));
+        msg.length = msg.max_size;
+
+        WriterProxyData out(max_unicast_locators, max_multicast_locators);
+        ASSERT_FALSE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+        ASSERT_EQ(out.m_qos.representation.m_value.size(), 0u);
+    }
+
+    // DATA(r)
+    {
+        CDRMessage_t msg(0);
+        msg.init(buffer, static_cast<uint32_t>(sizeof(buffer)));
+        msg.length = msg.max_size;
+
+        ReaderProxyData out(max_unicast_locators, max_multicast_locators);
+        ASSERT_FALSE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+        ASSERT_EQ(out.m_qos.representation.m_value.size(), 0u);
+    }
+}
+
+// Regression test for redmine issue #24472.
+// PID_PARTITION push_back calls strlen on wire bytes with no NUL terminator -> heap OOB read.
+TEST(BuiltinDataSerializationTests, msg_partition_oob_strlen)
+{
+    // PL_CDR_BE: PID_PARTITION with num_partitions=1, partition_size=4, no NUL terminator.
+    // Partition string sits at the end of the allocation so strlen() reads past it.
+    const uint8_t header[] = {
+        0x00, 0x02, 0x00, 0x00,  // PL_CDR_BE encapsulation
+        0x00, 0x29, 0x00, 0x0c,  // PID_PARTITION, parameter_length=12
+        0x00, 0x00, 0x00, 0x01,  // num_partitions=1
+        0x00, 0x00, 0x00, 0x04,  // partition_size=4
+    };
+    const size_t header_size = sizeof(header);
+    const size_t data_size = 4;
+    std::vector<uint8_t> buffer(header_size + data_size);
+    std::memcpy(buffer.data(), header, header_size);
+    std::memset(buffer.data() + header_size, 0xa2, data_size);
+
+    CDRMessage_t msg(0);
+    msg.init(buffer.data(), static_cast<uint32_t>(buffer.size()));
+    msg.length = static_cast<uint32_t>(buffer.size());
+    msg.msg_endian = BIGEND;
+
+    ReaderProxyData out(max_unicast_locators, max_multicast_locators);
+    ASSERT_NO_FATAL_FAILURE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+}
+
+// Regression test for redmine issue #24564.
+// sequence_length inside TypeInformation is wire-controlled; without a bound against
+// parameter_length, vector::resize drives a ~1.4 GB allocation.
+TEST(BuiltinDataSerializationTests, msg_type_information_oom_sequence_count)
+{
+    const uint8_t msg_data[] = {
+        // Encapsulation
+        0x00, 0x03, 0x00, 0x00,
+        // PID_TYPE_INFORMATION (0x0075), parameter_length=41
+        0x75, 0x00, 0x29, 0x00,
+        // TypeInformation payload: sequence count of ~26M TypeIdentfierWithSize elements
+        0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x10, 0x00, 0x50,
+        0x00, 0x01, 0x00, 0xcf, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x3f, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0x03, 0x00, 0x50, 0x75, 0x00, 0x29, 0x00, 0x11, 0x00,
+        // Sentinel
+        0x01, 0x00, 0x00, 0x00
+    };
+
+    std::vector<uint8_t> buffer(msg_data, msg_data + sizeof(msg_data));
+    CDRMessage_t msg(0);
+    msg.init(buffer.data(), static_cast<uint32_t>(buffer.size()));
+    msg.length = static_cast<uint32_t>(buffer.size());
+    msg.msg_endian = LITTLEEND;
+
+    ReaderProxyData out(max_unicast_locators, max_multicast_locators);
+    ASSERT_NO_FATAL_FAILURE(out.readFromCDRMessage(&msg, network, true, true, c_VendorId_eProsima));
+}
+
+// Regression test for redmine issue #24473.
+TEST(BuiltinDataSerializationTests, msg_property_list_oversized_num_properties)
+{
+    std::vector<uint8_t> pid_payload;
+
+    pid_payload.insert(pid_payload.end(), {0xe8, 0x03, 0x00, 0x00});
+    pid_payload.insert(pid_payload.end(), {0x02, 0x00, 0x00, 0x00, 'a', 0x00, 0x00, 0x00});
+    pid_payload.insert(pid_payload.end(), {0x02, 0x00, 0x00, 0x00, 'b', 0x00, 0x00, 0x00});
+
+    uint16_t pid_length = static_cast<uint16_t>(pid_payload.size());
+
+    std::vector<uint8_t> buffer;
+    buffer.insert(buffer.end(), {0x00, 0x03, 0x00, 0x00});
+    buffer.insert(buffer.end(), {0x59, 0x00});
+    buffer.push_back(pid_length & 0xFF); buffer.push_back((pid_length >> 8) & 0xFF);
+    buffer.insert(buffer.end(), pid_payload.begin(), pid_payload.end());
+    buffer.insert(buffer.end(), {0x01, 0x00, 0x00, 0x00});
+
+    CDRMessage_t msg(0);
+    msg.init(buffer.data(), static_cast<uint32_t>(buffer.size()));
+    msg.length = static_cast<uint32_t>(buffer.size());
+
+    ParticipantProxyData out(RTPSParticipantAllocationAttributes{});
+    ASSERT_NO_FATAL_FAILURE(out.readFromCDRMessage(&msg, true, network, true, true, c_VendorId_eProsima));
+
+    EXPECT_EQ(0u, out.m_properties.size());
+}
+
+// Loads the raw bytes of a minimized ClusterFuzz testcase from regressions/.
+// Returns the selector (0, 1, or 2) and the message with the bytes after the selector.
+void read_cdr_message_from_regression_file(
+        const std::string& filename,
+        uint8_t& selector,
+        CDRMessage_t& msg)
+{
+    // Read file
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    ASSERT_TRUE(file.is_open()) << "Could not open regression file: " << filename;
+
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // Check file size
+    ASSERT_LE(file_size, std::numeric_limits<uint32_t>::max());
+    ASSERT_GE(file_size, 1u);
+    uint32_t payload_size = static_cast<uint32_t>(file_size) - 1u;
+
+    // Reserve payload
+    msg.reserve(payload_size);
+    ASSERT_NE(msg.buffer, nullptr);
+    ASSERT_EQ(msg.max_size, payload_size);
+    msg.length = payload_size;
+
+    // Read selector
+    ASSERT_TRUE(static_cast<bool>(file.read(reinterpret_cast<char*>(&selector), 1u)));
+    selector = selector % 3u;
+
+    // Read payload
+    ASSERT_TRUE(static_cast<bool>(file.read(reinterpret_cast<char*>(msg.buffer), msg.max_size)));
+}
+
+// Load and check the files from regressions/
+
+TEST(BuiltinDataSerializationTests, regressions)
+{
+    std::vector<std::string> test_files = {
+        "./regressions/25507.bin"           // Redmine issue #25507
+    };
+
+    uint8_t selector = 0;
+    std::vector<uint8_t> payload;
+
+    for (const auto& test_file : test_files)
+    {
+        CDRMessage_t msg(0);
+        read_cdr_message_from_regression_file(test_file, selector, msg);
+
+        // Dispatch on the same selector used by fuzz_proxy_cdr, exercising the exact
+        // deserialization path used when receiving PDP/SEDP discovery data.
+        switch (selector)
+        {
+            case 0:
+            {
+                ParticipantProxyData pdata(RTPSParticipantAllocationAttributes{});
+                EXPECT_NO_THROW(pdata.readFromCDRMessage(&msg, true, network, false, false, c_VendorId_eProsima));
+                break;
+            }
+            case 1:
+            {
+                ReaderProxyData pdata(max_unicast_locators, max_multicast_locators);
+                EXPECT_NO_THROW(pdata.readFromCDRMessage(&msg, network, false, false, c_VendorId_eProsima));
+                break;
+            }
+            default:
+            {
+                WriterProxyData pdata(max_unicast_locators, max_multicast_locators);
+                EXPECT_NO_THROW(pdata.readFromCDRMessage(&msg, network, false, false, c_VendorId_eProsima));
+                break;
+            }
+        }
+    }
 }
 
 } // namespace rtps
