@@ -27,7 +27,7 @@
 #include <mutex>
 #include <thread>
 
-#include <rtps/security/SecurityPluginFactory.h>
+#include <rtps/security/ISecurityPluginFactory.h>
 
 #include <fastdds/rtps/attributes/HistoryAttributes.h>
 #include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
@@ -73,6 +73,9 @@ struct EndpointSecurityAttributes;
  */
 class SecurityManager : private WriterListener, public AuthenticationListener
 {
+    static constexpr std::size_t PARTICIPANT_STATELESS_MESSAGE_PAYLOAD_DEFAULT_SIZE = 8192;
+    static constexpr std::size_t PARTICIPANT_VOLATILE_MESSAGE_PAYLOAD_DEFAULT_SIZE = 1024;
+
 public:
 
     /**
@@ -81,7 +84,9 @@ public:
      * @param participant RTPSParticipantImpl* references the associated participant
      */
     SecurityManager(
-            RTPSParticipantImpl* participant);
+            RTPSParticipantImpl* participant,
+            const RTPSParticipantAttributes& pattr,
+            ISecurityPluginFactory& plugin_factory);
 
     // @brief Destructor
     ~SecurityManager();
@@ -405,7 +410,7 @@ private:
             }
 
             AuthenticationInfo(
-                    AuthenticationInfo&& auth)
+                    AuthenticationInfo&& auth) noexcept
                 : identity_handle_(std::move(auth.identity_handle_))
                 , handshake_handle_(std::move(auth.handshake_handle_))
                 , auth_status_(auth.auth_status_)
@@ -413,6 +418,11 @@ private:
                 , change_sequence_number_(std::move(auth.change_sequence_number_))
                 , event_(std::move(auth.event_))
             {
+                auth.identity_handle_ = nullptr;
+                auth.handshake_handle_ = nullptr;
+                auth.auth_status_ = AUTHENTICATION_NOT_AVAILABLE;
+                auth.expected_sequence_number_ = 0;
+                auth.change_sequence_number_ = SequenceNumber_t::unknown();
             }
 
             int32_t handshake_requests_sent_;
@@ -523,6 +533,11 @@ private:
             return participant_data_;
         }
 
+        bool check_guid_comes_from(
+                Authentication* const auth_plugin,
+                const GUID_t& adjusted,
+                const GUID_t& original);
+
         AuthenticationStatus get_auth_status() const
         {
             std::lock_guard<std::mutex> g(mtx_);
@@ -534,12 +549,8 @@ private:
             {
                 return AUTHENTICATION_NOT_AVAILABLE;
             }
-        }
 
-        bool check_guid_comes_from(
-                Authentication* const auth_plugin,
-                const GUID_t& adjusted,
-                const GUID_t& original);
+        }
 
     private:
 
@@ -859,32 +870,29 @@ private:
             const IdentityHandle& handle,
             SecurityException& exception) override;
 
-    RTPSParticipantImpl* participant_;
-    StatelessWriter* participant_stateless_message_writer_;
-    WriterHistory* participant_stateless_message_writer_history_;
-    StatelessReader* participant_stateless_message_reader_;
-    ReaderHistory* participant_stateless_message_reader_history_;
-    StatefulWriter* participant_volatile_message_secure_writer_;
-    WriterHistory* participant_volatile_message_secure_writer_history_;
-    StatefulReader* participant_volatile_message_secure_reader_;
-    ReaderHistory* participant_volatile_message_secure_reader_history_;
-    SecurityPluginFactory factory_;
+    RTPSParticipantImpl* participant_ = nullptr;
+    StatelessWriter* participant_stateless_message_writer_ = nullptr;
+    WriterHistory* participant_stateless_message_writer_history_ = nullptr;
+    StatelessReader* participant_stateless_message_reader_ = nullptr;
+    ReaderHistory* participant_stateless_message_reader_history_ = nullptr;
+    StatefulWriter* participant_volatile_message_secure_writer_ = nullptr;
+    WriterHistory* participant_volatile_message_secure_writer_history_ = nullptr;
+    StatefulReader* participant_volatile_message_secure_reader_ = nullptr;
+    ReaderHistory* participant_volatile_message_secure_reader_history_ = nullptr;
+    ISecurityPluginFactory& factory_;
 
-    Logging* logging_plugin_;
+    Logging* logging_plugin_ = nullptr;
+    Authentication* authentication_plugin_ = nullptr;
+    AccessControl* access_plugin_ = nullptr;
+    Cryptography* crypto_plugin_ = nullptr;
 
-    Authentication* authentication_plugin_;
-
-    AccessControl* access_plugin_;
-
-    Cryptography* crypto_plugin_;
-
-    uint32_t domain_id_;
+    uint32_t domain_id_ = 0;
 
     AuthenticationHandshakeProperties auth_handshake_props_;
 
     IdentityHandle* local_identity_handle_ = nullptr;
 
-    PermissionsHandle* local_permissions_handle_;
+    PermissionsHandle* local_permissions_handle_ = nullptr;
 
     std::shared_ptr<ParticipantCryptoHandle> local_participant_crypto_handle_;
 

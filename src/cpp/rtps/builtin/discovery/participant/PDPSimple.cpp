@@ -16,43 +16,36 @@
  * @file PDPSimple.cpp
  *
  */
-
 #include <fastdds/rtps/builtin/discovery/participant/PDPSimple.h>
 
 #include <mutex>
 
+#include <fastdds/dds/builtin/typelookup/TypeLookupManager.hpp>
 #include <fastdds/dds/log/Log.hpp>
-
-#include <fastdds/rtps/builtin/discovery/participant/PDPListener.h>
-#include <fastdds/rtps/builtin/discovery/endpoint/EDPSimple.h>
-#include <fastdds/rtps/builtin/discovery/endpoint/EDPStatic.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
 #include <fastdds/rtps/builtin/BuiltinProtocols.h>
-#include <fastdds/rtps/builtin/liveliness/WLP.h>
 #include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
 #include <fastdds/rtps/builtin/data/ReaderProxyData.h>
 #include <fastdds/rtps/builtin/data/WriterProxyData.h>
-
-#include <fastdds/rtps/participant/RTPSParticipantListener.h>
-#include <fastdds/rtps/writer/StatelessWriter.h>
-
-#include <fastdds/rtps/reader/StatelessReader.h>
-#include <fastdds/rtps/reader/StatefulReader.h>
-
-#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDPSimple.h>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDPStatic.h>
+#include <fastdds/rtps/builtin/discovery/participant/PDPListener.h>
+#include <fastdds/rtps/builtin/liveliness/WLP.h>
 #include <fastdds/rtps/history/ReaderHistory.h>
-
-#include <fastdds/dds/builtin/typelookup/TypeLookupManager.hpp>
-
-#include <fastrtps/utils/TimeConversion.h>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/participant/RTPSParticipantListener.h>
+#include <fastdds/rtps/reader/StatefulReader.h>
+#include <fastdds/rtps/reader/StatelessReader.h>
+#include <fastdds/rtps/resources/TimedEvent.h>
+#include <fastdds/rtps/writer/StatelessWriter.h>
 #include <fastrtps/utils/IPLocator.h>
+#include <fastrtps/utils/TimeConversion.h>
 
 #include <rtps/builtin/discovery/participant/DS/PDPSecurityInitiatorListener.hpp>
 #include <rtps/builtin/discovery/participant/simple/SimplePDPEndpoints.hpp>
 #include <rtps/builtin/discovery/participant/simple/SimplePDPEndpointsSecure.hpp>
 #include <rtps/history/TopicPayloadPoolRegistry.hpp>
+#include <rtps/network/NetworkConfiguration.hpp>
 #include <rtps/participant/RTPSParticipantImpl.h>
-
 
 namespace eprosima {
 namespace fastrtps {
@@ -112,8 +105,9 @@ void PDPSimple::initializeParticipantProxyData(
 {
     PDP::initializeParticipantProxyData(participant_data);
 
-    if (getRTPSParticipant()->getAttributes().builtin.discovery_config.
-                    use_SIMPLE_EndpointDiscoveryProtocol)
+    const auto& discovery_config = getRTPSParticipant()->get_const_attributes().builtin.discovery_config;
+
+    if (discovery_config.use_SIMPLE_EndpointDiscoveryProtocol)
     {
         if (getRTPSParticipant()->getAttributes().builtin.discovery_config.m_simpleEDP.
                         use_PublicationWriterANDSubscriptionReader)
@@ -148,7 +142,7 @@ void PDPSimple::initializeParticipantProxyData(
     else if (!getRTPSParticipant()->getAttributes().builtin.discovery_config.
                     use_STATIC_EndpointDiscoveryProtocol)
     {
-        logError(RTPS_PDP, "Neither EDP simple nor EDP static enabled. Endpoints will not be discovered.");
+        EPROSIMA_LOG_ERROR(RTPS_PDP, "Neither EDP simple nor EDP static enabled. Endpoints will not be discovered.");
     }
 }
 
@@ -167,7 +161,7 @@ bool PDPSimple::init(
         mp_EDP = new EDPStatic(this, mp_RTPSParticipant);
         if (!mp_EDP->initEDP(m_discovery))
         {
-            logError(RTPS_PDP, "Endpoint discovery configuration failed");
+            EPROSIMA_LOG_ERROR(RTPS_PDP, "Endpoint discovery configuration failed");
             delete mp_EDP;
             mp_EDP = nullptr;
             return false;
@@ -178,7 +172,7 @@ bool PDPSimple::init(
         mp_EDP = new EDPSimple(this, mp_RTPSParticipant);
         if (!mp_EDP->initEDP(m_discovery))
         {
-            logError(RTPS_PDP, "Endpoint discovery configuration failed");
+            EPROSIMA_LOG_ERROR(RTPS_PDP, "Endpoint discovery configuration failed");
             delete mp_EDP;
             mp_EDP = nullptr;
             return false;
@@ -186,7 +180,7 @@ bool PDPSimple::init(
     }
     else
     {
-        logWarning(RTPS_PDP, "No EndpointDiscoveryProtocol defined");
+        EPROSIMA_LOG_WARNING(RTPS_PDP, "No EndpointDiscoveryProtocol defined");
         return false;
     }
 
@@ -258,6 +252,14 @@ bool PDPSimple::updateInfoMatchesEDP()
 
 void PDPSimple::announceParticipantState(
         bool new_change,
+        bool dispose /* = false */)
+{
+    WriteParams __wp = WriteParams::write_params_default();
+    announceParticipantState(new_change, dispose, __wp);
+}
+
+void PDPSimple::announceParticipantState(
+        bool new_change,
         bool dispose,
         WriteParams& wp)
 {
@@ -284,14 +286,30 @@ void PDPSimple::announceParticipantState(
 
         if (!(dispose || new_change))
         {
-            endpoints->writer.writer_->unsent_changes_reset();
+            endpoints->writer.writer_->send_periodic_announcement();
+
+#if HAVE_SECURITY
+            if (mp_RTPSParticipant->is_secure())
+            {
+                // PDP non-secure endpoints are unmatched after participant authentication succeeds (and secure PDP
+                // endpoints are matched), and since the secure ones are TRANSIENT_LOCAL, we send periodic heartbeats
+                // to assert liveliness on remote participants
+                auto secure = dynamic_cast<fastdds::rtps::SimplePDPEndpointsSecure*>(builtin_endpoints_.get());
+                assert(secure && secure->secure_writer.writer_);
+                if (!secure || !secure->secure_writer.writer_)
+                {
+                    FASTDDS_UNREACHABLE();   // “cannot happen” invariant
+                }
+                secure->secure_writer.writer_->send_periodic_heartbeat(true, true);
+            }
+#endif // HAVE_SECURITY
         }
     }
 }
 
 bool PDPSimple::createPDPEndpoints()
 {
-    logInfo(RTPS_PDP, "Beginning");
+    EPROSIMA_LOG_INFO(RTPS_PDP, "Beginning");
 
     fastdds::rtps::SimplePDPEndpoints* endpoints = nullptr;
 #if HAVE_SECURITY
@@ -303,7 +321,11 @@ bool PDPSimple::createPDPEndpoints()
         secure_endpoints->secure_reader.listener_.reset(new PDPListener(this));
 
         endpoints = secure_endpoints;
-        endpoints->reader.listener_.reset(new PDPSecurityInitiatorListener(this));
+        endpoints->reader.listener_.reset(new PDPSecurityInitiatorListener(this,
+                [this](const ParticipantProxyData& participant_data)
+                {
+                    match_pdp_remote_endpoints(participant_data, false, true);
+                }));
     }
     else
 #endif  // HAVE_SECURITY
@@ -320,14 +342,13 @@ bool PDPSimple::createPDPEndpoints()
         create_dcps_participant_secure_endpoints();
     }
 #endif  // HAVE_SECURITY
-    logInfo(RTPS_PDP, "SPDP Endpoints creation finished");
+    EPROSIMA_LOG_INFO(RTPS_PDP, "SPDP Endpoints creation finished");
     return ret_val;
 }
 
 bool PDPSimple::create_dcps_participant_endpoints()
 {
-    const RTPSParticipantAttributes& pattr = mp_RTPSParticipant->getRTPSParticipantAttributes();
-    const RTPSParticipantAllocationAttributes& allocation = pattr.allocation;
+    const RTPSParticipantAllocationAttributes& allocation = mp_RTPSParticipant->get_const_attributes().allocation;
     const BuiltinAttributes& builtin_att = mp_builtin->m_att;
     auto endpoints = dynamic_cast<fastdds::rtps::SimplePDPEndpoints*>(builtin_endpoints_.get());
     assert(nullptr != endpoints);
@@ -362,7 +383,7 @@ bool PDPSimple::create_dcps_participant_endpoints()
     }
     else
     {
-        logError(RTPS_PDP, "'" << topic_name << "' builtin reader creation failed");
+        EPROSIMA_LOG_ERROR(RTPS_PDP, "'" << topic_name << "' builtin reader creation failed");
         reader.release();
         return false;
     }
@@ -380,27 +401,17 @@ bool PDPSimple::create_dcps_participant_endpoints()
     watt.endpoint.reliabilityKind = BEST_EFFORT;
     if (!m_discovery.initialPeersList.empty())
     {
-        if (mp_RTPSParticipant->has_tcp_transports())
-        {
-            mp_RTPSParticipant->create_tcp_connections(m_discovery.initialPeersList);
-        }
-        else
-        {
-            watt.endpoint.remoteLocatorList = m_discovery.initialPeersList;
-        }
+        auto entry = LocatorSelectorEntry::create_fully_selected_entry(
+            m_discovery.initialPeersList, LocatorList_t());
+        mp_RTPSParticipant->createSenderResources(entry);
     }
 
-    if (mp_RTPSParticipant->getRTPSParticipantAttributes().throughputController.bytesPerPeriod != UINT32_MAX &&
-            mp_RTPSParticipant->getRTPSParticipantAttributes().throughputController.periodMillisecs != 0)
-    {
-        watt.mode = ASYNCHRONOUS_WRITER;
-    }
 
     RTPSWriter* rtps_writer = nullptr;
     if (mp_RTPSParticipant->createWriter(&rtps_writer, watt, writer.payload_pool_, writer.history_.get(),
             nullptr, writer_entity_id, true))
     {
-        writer.writer_ = dynamic_cast<StatelessWriter*>(rtps_writer);
+        writer.writer_ = dynamic_cast<PDPStatelessWriter*>(rtps_writer);
         assert(nullptr != writer.writer_);
 
 #if HAVE_SECURITY
@@ -409,19 +420,54 @@ bool PDPSimple::create_dcps_participant_endpoints()
 
         const NetworkFactory& network = mp_RTPSParticipant->network_factory();
         LocatorList_t fixed_locators;
-        Locator_t local_locator;
         for (const Locator_t& loc : mp_builtin->m_initialPeersList)
         {
-            if (network.transform_remote_locator(loc, local_locator))
+            if (network.is_locator_remote_or_allowed(loc))
             {
-                fixed_locators.push_back(local_locator);
+                // Add initial peers locator without transformation as we don't know whether the
+                // remote transport will allow localhost
+                fixed_locators.push_back(loc);
+
+                /**
+                 * TCP special case:
+                 *
+                 * In TCP, it is not possible to open a socket with 'any' (0.0.0.0) address as it's done
+                 * in UDP, so when the TCP transports receive a locator with 'any', they open an input
+                 * channel for the specified port in each of the machine interfaces (with the exception
+                 * of localhost). In fact, a participant with a TCP transport will only listen on localhost
+                 * if localhost is the address of any of the initial peers.
+                 *
+                 * However, when the TCP enabled participant does not have a whitelist (or localhost is in
+                 * it), it allows for transformation of its locators to localhost for performance optimizations.
+                 * In this case, the remote TCP participant it will send data using a socket in localhost,
+                 * and for that the participant with the initial peers list needs to be listening there
+                 * to receive it.
+                 *
+                 * That means:
+                 *   1. Checking that the initial peer is not already localhost
+                 *   2. Checking that the initial peer locator is of TCP kind
+                 *   3. Checking that the network configuration allows for localhost locators
+                 */
+                Locator_t local_locator;
+                network.transform_remote_locator(loc, local_locator,
+                        DISC_NETWORK_CONFIGURATION_LISTENING_LOCALHOST_ALL);
+                if (loc != local_locator
+                        && (loc.kind == LOCATOR_KIND_TCPv4 || loc.kind == LOCATOR_KIND_TCPv6)
+                        && network.is_locator_allowed(local_locator))
+                {
+                    fixed_locators.push_back(local_locator);
+                }
+            }
+            else
+            {
+                EPROSIMA_LOG_WARNING(RTPS_PDP, "Ignoring initial peers locator " << loc << " : not allowed.");
             }
         }
-        writer.writer_->set_fixed_locators(fixed_locators);
+        writer.writer_->set_initial_peers(fixed_locators);
     }
     else
     {
-        logError(RTPS_PDP, "'" << topic_name << "' builtin writer creation failed");
+        EPROSIMA_LOG_ERROR(RTPS_PDP, "'" << topic_name << "' builtin writer creation failed");
         writer.release();
         return false;
     }
@@ -431,8 +477,7 @@ bool PDPSimple::create_dcps_participant_endpoints()
 #if HAVE_SECURITY
 bool PDPSimple::create_dcps_participant_secure_endpoints()
 {
-    const RTPSParticipantAttributes& pattr = mp_RTPSParticipant->getRTPSParticipantAttributes();
-    const RTPSParticipantAllocationAttributes& allocation = pattr.allocation;
+    const RTPSParticipantAllocationAttributes& allocation = mp_RTPSParticipant->get_const_attributes().allocation;
     const BuiltinAttributes& builtin_att = mp_builtin->m_att;
     auto endpoints = dynamic_cast<fastdds::rtps::SimplePDPEndpointsSecure*>(builtin_endpoints_.get());
     assert(nullptr != endpoints);
@@ -464,7 +509,7 @@ bool PDPSimple::create_dcps_participant_secure_endpoints()
     }
     else
     {
-        logError(RTPS_PDP, "'" << topic_name << "' builtin reader creation failed");
+        EPROSIMA_LOG_ERROR(RTPS_PDP, "'" << topic_name << "' builtin reader creation failed");
         reader.release();
         return false;
     }
@@ -487,7 +532,7 @@ bool PDPSimple::create_dcps_participant_secure_endpoints()
     }
     else
     {
-        logError(RTPS_PDP, "'" << topic_name << "' builtin writer creation failed");
+        EPROSIMA_LOG_ERROR(RTPS_PDP, "'" << topic_name << "' builtin writer creation failed");
         writer.release();
         return false;
     }
@@ -520,7 +565,7 @@ void PDPSimple::assignRemoteEndpoints(
         {
             // This participant is not secure.
             // Match PDP and other builtin endpoints.
-            match_pdp_remote_endpoints(*pdata, false);
+            match_pdp_remote_endpoints(*pdata, false, false);
             assign_low_level_remote_endpoints(*pdata, false);
         }
     }
@@ -529,9 +574,14 @@ void PDPSimple::assignRemoteEndpoints(
 void PDPSimple::removeRemoteEndpoints(
         ParticipantProxyData* pdata)
 {
-    logInfo(RTPS_PDP, "For RTPSParticipant: " << pdata->m_guid);
+    EPROSIMA_LOG_INFO(RTPS_PDP, "For RTPSParticipant: " << pdata->m_guid);
+    unmatch_pdp_remote_endpoints(pdata->m_guid);
+}
 
-    GUID_t guid = pdata->m_guid;
+void PDPSimple::unmatch_pdp_remote_endpoints(
+        const GUID_t& participant_guid)
+{
+    GUID_t guid = participant_guid;
 
     {
         auto endpoints = dynamic_cast<fastdds::rtps::SimplePDPEndpoints*>(builtin_endpoints_.get());
@@ -563,7 +613,8 @@ void PDPSimple::notifyAboveRemoteEndpoints(
 {
     if (notify_secure_endpoints)
     {
-        match_pdp_remote_endpoints(pdata, true);
+        unmatch_pdp_remote_endpoints(pdata.m_guid);
+        match_pdp_remote_endpoints(pdata, true, false);
     }
     else
     {
@@ -576,7 +627,7 @@ void PDPSimple::notifyAboveRemoteEndpoints(
             notify_and_maybe_ignore_new_participant(part_data, ignored);
             if (!ignored)
             {
-                match_pdp_remote_endpoints(*part_data, false);
+                match_pdp_remote_endpoints(*part_data, false, false);
                 assign_low_level_remote_endpoints(*part_data, false);
             }
         }
@@ -586,7 +637,8 @@ void PDPSimple::notifyAboveRemoteEndpoints(
 
 void PDPSimple::match_pdp_remote_endpoints(
         const ParticipantProxyData& pdata,
-        bool notify_secure_endpoints)
+        bool notify_secure_endpoints,
+        bool writer_only)
 {
 #if !HAVE_SECURITY
     static_cast<void>(notify_secure_endpoints);
@@ -595,7 +647,7 @@ void PDPSimple::match_pdp_remote_endpoints(
     auto endpoints = static_cast<fastdds::rtps::SimplePDPEndpoints*>(builtin_endpoints_.get());
 
     const NetworkFactory& network = mp_RTPSParticipant->network_factory();
-    bool use_multicast_locators = !mp_RTPSParticipant->getAttributes().builtin.avoid_builtin_multicast ||
+    bool use_multicast_locators = !mp_RTPSParticipant->get_const_attributes().builtin.avoid_builtin_multicast ||
             pdata.metatraffic_locators.unicast.empty();
     const uint32_t endp = pdata.m_availableBuiltinEndpoints;
 
@@ -623,7 +675,7 @@ void PDPSimple::match_pdp_remote_endpoints(
     }
 #endif // HAVE_SECURITY
 
-    if (0 != (endp & pdp_writer_mask))
+    if (!writer_only && (0 != (endp & pdp_writer_mask)))
     {
         auto temp_writer_data = get_temporary_writer_proxies_pool().get();
 
@@ -642,8 +694,8 @@ void PDPSimple::match_pdp_remote_endpoints(
                         reader->getGuid(), pdata.m_guid, *temp_writer_data,
                         reader->getAttributes().security_attributes()))
             {
-                logError(RTPS_EDP, "Security manager returns an error for writer " <<
-                        temp_writer_data->guid());
+                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for writer "
+                        << temp_writer_data->guid());
             }
         }
         else
@@ -671,19 +723,14 @@ void PDPSimple::match_pdp_remote_endpoints(
                         writer->getGuid(), pdata.m_guid, *temp_reader_data,
                         writer->getAttributes().security_attributes()))
             {
-                logError(RTPS_EDP, "Security manager returns an error for reader " <<
-                        temp_reader_data->guid());
+                EPROSIMA_LOG_ERROR(RTPS_EDP, "Security manager returns an error for reader "
+                        << temp_reader_data->guid());
             }
         }
         else
 #endif // HAVE_SECURITY
         {
             writer->matched_reader_add(*temp_reader_data);
-        }
-
-        if (BEST_EFFORT_RELIABILITY_QOS == reliability_kind)
-        {
-            endpoints->writer.writer_->unsent_changes_reset();
         }
     }
 }

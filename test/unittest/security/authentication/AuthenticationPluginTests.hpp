@@ -23,6 +23,8 @@
 #include <fastrtps/rtps/builtin/data/WriterProxyData.h>
 #include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
 
+#include <fastdds/dds/log/Log.hpp>
+
 #include <gtest/gtest.h>
 
 class AuthenticationPluginTest : public ::testing::Test
@@ -35,6 +37,8 @@ protected:
 
     virtual void TearDown()
     {
+        eprosima::fastdds::dds::Log::Flush();
+        eprosima::fastdds::dds::Log::KillThread();
     }
 
 public:
@@ -108,7 +112,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_validation_ok)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr,
+                    participant_attr.properties,
                     candidate_participant_key,
                     exception);
 
@@ -137,7 +141,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_wrong_validation)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr,
+                    participant_attr.properties,
                     candidate_participant_key,
                     exception);
 
@@ -162,11 +166,12 @@ TEST_F(AuthenticationPluginTest, handshake_process_ok)
             ValidationResult_t::VALIDATION_FAILED;
 
     participant_attr.properties = get_valid_policy();
+    participant_attr.properties.properties().emplace_back("dds.sec.auth.builtin.PKI-DH.preferred_key_agreement", "DH");
 
     result = plugin.validate_local_identity(&local_identity_handle1,
                     adjusted_participant_key1,
                     domain_id,
-                    participant_attr,
+                    participant_attr.properties,
                     candidate_participant_key1,
                     exception);
 
@@ -178,7 +183,7 @@ TEST_F(AuthenticationPluginTest, handshake_process_ok)
     result = plugin.validate_local_identity(&local_identity_handle2,
                     adjusted_participant_key2,
                     domain_id,
-                    participant_attr,
+                    participant_attr.properties,
                     candidate_participant_key2,
                     exception);
 

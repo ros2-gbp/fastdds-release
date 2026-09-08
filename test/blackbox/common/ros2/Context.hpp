@@ -67,7 +67,7 @@ public:
 
     Context()
     {
-        factory_ = DomainParticipantFactory::get_instance();
+        factory_ = DomainParticipantFactory::get_shared_instance();
 
         uint32_t domain_id = static_cast<uint32_t>(GET_PID() % 230);
         participant_ = factory_->create_participant(domain_id, PARTICIPANT_QOS_DEFAULT);
@@ -279,7 +279,7 @@ private:
     }
 
     std::mutex mutex_;
-    DomainParticipantFactory* factory_{};
+    std::shared_ptr<DomainParticipantFactory> factory_{};
     DomainParticipant* participant_ = nullptr;
     Publisher* publisher_ = nullptr;
     Subscriber* subscriber_ = nullptr;

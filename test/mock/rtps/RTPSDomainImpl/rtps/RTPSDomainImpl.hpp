@@ -15,7 +15,11 @@
 #ifndef _RTPS_RTPSDOMAINIMPL_HPP_
 #define _RTPS_RTPSDOMAINIMPL_HPP_
 
+#include <memory>
+
 #include <fastdds/rtps/RTPSDomain.h>
+
+#include <fastdds/rtps/reader/LocalReaderPointer.hpp>
 
 namespace eprosima {
 namespace fastrtps {
@@ -31,6 +35,12 @@ class IChangePool;
 class RTPSDomainImpl
 {
 public:
+
+    static std::shared_ptr<RTPSDomainImpl> get_instance()
+    {
+        static std::shared_ptr<RTPSDomainImpl> instance = std::make_shared<RTPSDomainImpl>();
+        return instance;
+    }
 
     /**
      * Check whether intraprocess delivery should be used between two GUIDs.
@@ -53,10 +63,12 @@ public:
         return nullptr;
     }
 
-    static void create_participant_guid(
+    static bool create_participant_guid(
             int32_t& /*participant_id*/,
-            GUID_t& /*guid*/)
+            GUID_t& guid)
     {
+        guid.guidPrefix.value[11] = 1;
+        return true;
     }
 
     /**
@@ -83,6 +95,23 @@ public:
     {
         static_cast<void>(change_pool);
         return RTPSDomain::createRTPSWriter(p, entity_id, watt, payload_pool, hist, listen);
+    }
+
+    static RTPSParticipant* clientServerEnvironmentCreationOverride(
+            uint32_t domain_id,
+            bool enabled,
+            const RTPSParticipantAttributes& att,
+            RTPSParticipantListener* listen)
+    {
+        return RTPSDomain::createParticipant(domain_id, enabled, att, listen);
+    }
+
+    static void find_local_reader(
+            std::shared_ptr<LocalReaderPointer>& local_reader,
+            const GUID_t& reader_guid)
+    {
+        static_cast<void>(local_reader);
+        static_cast<void>(reader_guid);
     }
 
 };

@@ -22,7 +22,6 @@
 #include "mock/MockTCPChannelResource.h"
 #include "mock/MockTCPv4Transport.h"
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
 #include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastrtps/transport/TCPv4TransportDescriptor.h>
 #include <fastrtps/utils/Semaphore.h>
@@ -551,6 +550,95 @@ static void GetIP4s(
             });
 }
 
+// Send and receive between allowed interfaces (the first available except the local) added by name
+TEST_F(TCPv4Tests, send_and_receive_between_allowed_interfaces_ports_by_name)
+{
+    std::vector<IPFinder::info_IP> interfaces;
+
+    GetIP4s(interfaces);
+
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Info);
+    std::regex filter("RTCP(?!_SEQ)");
+    eprosima::fastdds::dds::Log::SetCategoryFilter(filter);
+    TCPv4TransportDescriptor recvDescriptor;
+    std::cout << "Adding to whitelist: " << interfaces[0].dev << " " << interfaces[0].name << " "
+              << interfaces[0].locator << std::endl;
+    recvDescriptor.interfaceWhiteList.emplace_back(interfaces[0].dev);
+
+    recvDescriptor.add_listener_port(g_default_port);
+    TCPv4Transport receiveTransportUnderTest(recvDescriptor);
+    receiveTransportUnderTest.init();
+
+    TCPv4TransportDescriptor sendDescriptor;
+    sendDescriptor.interfaceWhiteList.emplace_back(interfaces[0].dev);
+
+    TCPv4Transport sendTransportUnderTest(sendDescriptor);
+    sendTransportUnderTest.init();
+
+    Locator_t inputLocator;
+    inputLocator.kind = LOCATOR_KIND_TCPv4;
+    inputLocator.port = g_default_port;
+    inputLocator.set_address(interfaces[0].locator);
+    IPLocator::setLogicalPort(inputLocator, 7410);
+
+    LocatorList_t locator_list;
+    locator_list.push_back(inputLocator);
+
+    Locator_t outputLocator;
+    outputLocator.kind = LOCATOR_KIND_TCPv4;
+    outputLocator.set_address(interfaces[0].locator);
+    outputLocator.port = g_default_port;
+    IPLocator::setLogicalPort(outputLocator, 7410);
+
+    {
+        MockReceiverResource receiver(receiveTransportUnderTest, inputLocator);
+        MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
+        ASSERT_TRUE(receiveTransportUnderTest.IsInputChannelOpen(inputLocator));
+
+        SendResourceList send_resource_list;
+        ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
+        ASSERT_FALSE(send_resource_list.empty());
+        octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+        bool bOk = false;
+        std::function<void()> recCallback = [&]()
+                {
+                    EXPECT_EQ(memcmp(message, msg_recv->data, 5), 0);
+                    bOk = true;
+                };
+
+        msg_recv->setCallback(recCallback);
+
+        bool bFinish(false);
+        auto sendThreadFunction = [&]()
+                {
+                    Locators input_begin(locator_list.begin());
+                    Locators input_end(locator_list.end());
+
+                    bool sent =
+                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                    while (!bFinish && !sent)
+                    {
+                        Locators input_begin2(locator_list.begin());
+                        Locators input_end2(locator_list.end());
+
+                        sent =
+                                send_resource_list.at(0)->send(message, 5, &input_begin2, &input_end2,
+                                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                    EXPECT_TRUE(sent);
+                    //EXPECT_TRUE(transportUnderTest.send(message, 5, outputLocator, inputLocator));
+                };
+
+        senderThread.reset(new std::thread(sendThreadFunction));
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        bFinish = true;
+        senderThread->join();
+        ASSERT_TRUE(bOk);
+    }
+}
+
 TEST_F(TCPv4Tests, check_TCPv4_interface_whitelist_initialization)
 {
     std::vector<IPFinder::info_IP> interfaces;
@@ -580,7 +668,7 @@ TEST_F(TCPv4Tests, check_TCPv4_interface_whitelist_initialization)
     auto check_whitelist = transportUnderTest.get_interface_whitelist();
     for (auto& ip : mock_interfaces)
     {
-        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::address_v4::from_string(
+        ASSERT_NE(std::find(check_whitelist.begin(), check_whitelist.end(), asio::ip::make_address_v4(
                     ip)), check_whitelist.end());
     }
 
@@ -1200,6 +1288,113 @@ TEST_F(TCPv4Tests, send_and_receive_between_secure_ports_untrusted_server)
     }
 }
 
+/**
+ * @brief This test replicates the test \c send_and_receive_between_both_secure_ports but adds SNI server name
+ * to client to check that this does not affect communication
+ */
+TEST_F(TCPv4Tests, send_and_receive_between_both_secure_ports_with_sni)
+{
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Info);
+
+    using TLSOptions = TCPTransportDescriptor::TLSConfig::TLSOptions;
+    using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
+
+    TCPv4TransportDescriptor recvDescriptor;
+    recvDescriptor.add_listener_port(g_default_port);
+    recvDescriptor.apply_security = true;
+    recvDescriptor.tls_config.password = "testkey";
+    recvDescriptor.tls_config.cert_chain_file = "mainpubcert.pem";
+    recvDescriptor.tls_config.private_key_file = "mainpubkey.pem";
+    recvDescriptor.tls_config.verify_file = "maincacert.pem";
+    // Server doesn't accept clients without certs
+    recvDescriptor.tls_config.verify_mode = TLSVerifyMode::VERIFY_PEER | TLSVerifyMode::VERIFY_FAIL_IF_NO_PEER_CERT;
+    recvDescriptor.tls_config.add_option(TLSOptions::DEFAULT_WORKAROUNDS);
+    recvDescriptor.tls_config.add_option(TLSOptions::SINGLE_DH_USE);
+    recvDescriptor.tls_config.add_option(TLSOptions::NO_COMPRESSION);
+    recvDescriptor.tls_config.add_option(TLSOptions::NO_SSLV2);
+    recvDescriptor.tls_config.add_option(TLSOptions::NO_SSLV3);
+    TCPv4Transport receiveTransportUnderTest(recvDescriptor);
+    receiveTransportUnderTest.init();
+
+    TCPv4TransportDescriptor sendDescriptor;
+    sendDescriptor.apply_security = true;
+    sendDescriptor.tls_config.password = "testkey";
+    sendDescriptor.tls_config.cert_chain_file = "mainsubcert.pem";
+    sendDescriptor.tls_config.private_key_file = "mainsubkey.pem";
+    sendDescriptor.tls_config.verify_file = "maincacert.pem";
+    sendDescriptor.tls_config.verify_mode = TLSVerifyMode::VERIFY_PEER;
+    sendDescriptor.tls_config.add_option(TLSOptions::DEFAULT_WORKAROUNDS);
+    sendDescriptor.tls_config.add_option(TLSOptions::SINGLE_DH_USE);
+    sendDescriptor.tls_config.add_option(TLSOptions::NO_COMPRESSION);
+    sendDescriptor.tls_config.add_option(TLSOptions::NO_SSLV2);
+    sendDescriptor.tls_config.add_option(TLSOptions::NO_SSLV3);
+    sendDescriptor.tls_config.server_name = "specific_server.com";
+    TCPv4Transport sendTransportUnderTest(sendDescriptor);
+    sendTransportUnderTest.init();
+
+    Locator_t inputLocator;
+    inputLocator.kind = LOCATOR_KIND_TCPv4;
+    inputLocator.port = g_default_port;
+    IPLocator::setIPv4(inputLocator, 127, 0, 0, 1);
+    IPLocator::setLogicalPort(inputLocator, 7410);
+
+    LocatorList_t locator_list;
+    locator_list.push_back(inputLocator);
+
+    Locator_t outputLocator;
+    outputLocator.kind = LOCATOR_KIND_TCPv4;
+    IPLocator::setIPv4(outputLocator, 127, 0, 0, 1);
+    outputLocator.port = g_default_port;
+    IPLocator::setLogicalPort(outputLocator, 7410);
+
+    {
+        MockReceiverResource receiver(receiveTransportUnderTest, inputLocator);
+        MockMessageReceiver* msg_recv = dynamic_cast<MockMessageReceiver*>(receiver.CreateMessageReceiver());
+        ASSERT_TRUE(receiveTransportUnderTest.IsInputChannelOpen(inputLocator));
+
+        SendResourceList send_resource_list;
+        ASSERT_TRUE(sendTransportUnderTest.OpenOutputChannel(send_resource_list, outputLocator));
+        ASSERT_FALSE(send_resource_list.empty());
+        octet message[5] = { 'H', 'e', 'l', 'l', 'o' };
+
+        Semaphore sem;
+        std::function<void()> recCallback = [&]()
+                {
+                    EXPECT_EQ(memcmp(message, msg_recv->data, 5), 0);
+                    sem.post();
+                };
+
+        msg_recv->setCallback(recCallback);
+
+        auto sendThreadFunction = [&]()
+                {
+                    Locators input_begin(locator_list.begin());
+                    Locators input_end(locator_list.end());
+
+                    bool sent =
+                            send_resource_list.at(0)->send(message, 5, &input_begin, &input_end,
+                                    (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                    while (!sent)
+                    {
+                        Locators l_input_begin(locator_list.begin());
+                        Locators l_input_end(locator_list.end());
+
+                        sent =
+                                send_resource_list.at(0)->send(message, 5, &l_input_begin, &l_input_end,
+                                        (std::chrono::steady_clock::now() + std::chrono::microseconds(100)));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                    EXPECT_TRUE(sent);
+                    //EXPECT_TRUE(transportUnderTest.send(message, 5, outputLocator, inputLocator));
+                };
+
+        senderThread.reset(new std::thread(sendThreadFunction));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        senderThread->join();
+        sem.wait();
+    }
+}
+
 #ifndef _WIN32
 // The primary purpose of this test is to check the non-blocking behavior of a secure socket sending data to a
 // destination that does not read or does it so slowly.
@@ -1215,6 +1410,7 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     TCPv4TransportDescriptor senderDescriptor;
     senderDescriptor.add_listener_port(port);
     senderDescriptor.apply_security = true;
+    senderDescriptor.non_blocking_send = true;
     senderDescriptor.sendBufferSize = msg_size;
     senderDescriptor.tls_config.password = "fastddspwd";
     senderDescriptor.tls_config.cert_chain_file = "fastdds.crt";
@@ -1226,9 +1422,7 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     senderDescriptor.tls_config.add_option(TLSOptions::NO_SSLV2);
     senderDescriptor.tls_config.add_option(TLSOptions::NO_COMPRESSION);
     MockTCPv4Transport senderTransportUnderTest(senderDescriptor);
-    eprosima::fastrtps::rtps::RTPSParticipantAttributes att;
-    att.properties.properties().emplace_back("fastdds.tcp_transport.non_blocking_send", "true");
-    senderTransportUnderTest.init(&att.properties);
+    senderTransportUnderTest.init();
 
     // Create a TCP Client socket.
     // The creation of a reception transport for testing this functionality is not
@@ -1259,47 +1453,36 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     options |= asio::ssl::context::no_compression;
     ssl_context.set_options(options);
 
-    asio::io_service io_service;
-    auto ioServiceFunction = [&]()
+    asio::io_context io_context;
+    auto ioContextFunction = [&]()
             {
-#if ASIO_VERSION >= 101200
-                asio::executor_work_guard<asio::io_service::executor_type> work(io_service.get_executor());
-#else
-                io_service::work work(io_service_);
-#endif // if ASIO_VERSION >= 101200
-                io_service.run();
+                asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context);
+                io_context.run();
             };
-    std::thread ioServiceThread(ioServiceFunction);
+    std::thread ioContextThread(ioContextFunction);
 
     // TCPChannelResourceSecure::connect() like connection
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_service, ssl_context);
+    auto secure_socket = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(io_context, ssl_context);
     asio::ssl::verify_mode vm = 0x00;
     vm |= asio::ssl::verify_peer;
     secure_socket->set_verify_mode(vm);
 
-    asio::async_connect(secure_socket->lowest_layer(), endpoints,
-            [secure_socket](const std::error_code& ec
-#if ASIO_VERSION >= 101200
-            , asio::ip::tcp::endpoint
-#else
-            , const tcp::resolver::iterator&     /*endpoint*/
-#endif // if ASIO_VERSION >= 101200
-            )
-            {
-                ASSERT_TRUE(!ec);
-                asio::ssl::stream_base::handshake_type role = asio::ssl::stream_base::client;
-                secure_socket->async_handshake(role,
-                [](const std::error_code& ec)
-                {
-                    ASSERT_TRUE(!ec);
-                });
-            });
+    // Synchronous socket connection
+    std::error_code ec;
+    asio::connect(secure_socket->lowest_layer(), endpoints, ec);
+    ASSERT_TRUE(!ec);
 
+    // Synchronous handshake
+    asio::ssl::stream_base::handshake_type role = asio::ssl::stream_base::client;
+    secure_socket->handshake(role, ec);
+    ASSERT_TRUE(!ec);
+
+    // Wait a bit until server accepts the connection
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     /*
@@ -1310,18 +1493,18 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
      */
     // auto sender_unbound_channel_resources = senderTransportUnderTest.get_unbound_channel_resources();
     auto sender_unbound_channel_resources = senderTransportUnderTest.get_unbound_channel_resources();
-    ASSERT_TRUE(sender_unbound_channel_resources.size() == 1);
+    ASSERT_TRUE(sender_unbound_channel_resources.size() == 1u);
     auto sender_channel_resource =
-            std::static_pointer_cast<TCPChannelResourceBasic>(sender_unbound_channel_resources[0]);
+            std::static_pointer_cast<eprosima::fastdds::rtps::TCPChannelResourceSecure>(
+        sender_unbound_channel_resources[0]);
 
     // Prepare the message
-    asio::error_code ec;
-    std::vector<octet> message(msg_size * 2, 0);
+    std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
 
-    // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
-    // it should be able to send a message of msg_size*2.
+    // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
+    // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
     size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
@@ -1332,16 +1515,17 @@ TEST_F(TCPv4Tests, secure_non_blocking_send)
     ASSERT_EQ(ec, asio::error_code());
     ASSERT_EQ(bytes_read, size);
 
-    // Now try to send a message that is bigger than the buffer size: (msg_size*2 + 1) + bytes_in_send_buffer(0) > 2*sendBufferSize
-    message.resize(msg_size * 2 + 1);
+    // Now try to send a message whose size surpasses the threshold to discard (sendBufferSize):
+    //  (msg_size + 1) + bytes_in_send_buffer(0) > sendBufferSize
+    message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
     bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
     secure_socket->lowest_layer().close(ec);
-    io_service.stop();
-    ioServiceThread.join();
+    io_context.stop();
+    ioContextThread.join();
 }
 #endif // ifndef _WIN32
 
@@ -1595,7 +1779,7 @@ TEST_F(TCPv4Tests, receive_unordered_data)
     asio::ip::tcp::socket sender(ctx);
     asio::ip::tcp::endpoint destination;
     destination.port(g_default_port);
-    destination.address(asio::ip::address::from_string("127.0.0.1"));
+    destination.address(asio::ip::make_address("127.0.0.1"));
     sender.connect(destination, ec);
     ASSERT_TRUE(!ec) << ec;
 
@@ -1723,27 +1907,14 @@ TEST_F(TCPv4Tests, autofill_port)
 
     EXPECT_TRUE(transportUnderTest_autofill.configuration()->listening_ports[0] != 0);
     EXPECT_TRUE(transportUnderTest_autofill.configuration()->listening_ports.size() == 1);
-
-    uint16_t port = 12345;
-    TCPv4TransportDescriptor test_descriptor_multiple_autofill;
-    test_descriptor_multiple_autofill.add_listener_port(0);
-    test_descriptor_multiple_autofill.add_listener_port(port);
-    test_descriptor_multiple_autofill.add_listener_port(0);
-    TCPv4Transport transportUnderTest_multiple_autofill(test_descriptor_multiple_autofill);
-    transportUnderTest_multiple_autofill.init();
-
-    EXPECT_TRUE(transportUnderTest_multiple_autofill.configuration()->listening_ports[0] != 0);
-    EXPECT_TRUE(transportUnderTest_multiple_autofill.configuration()->listening_ports[1] == port);
-    EXPECT_TRUE(transportUnderTest_multiple_autofill.configuration()->listening_ports[2] != 0);
-    EXPECT_TRUE(
-        transportUnderTest_multiple_autofill.configuration()->listening_ports[0] !=
-        transportUnderTest_multiple_autofill.configuration()->listening_ports[2]);
-    EXPECT_TRUE(transportUnderTest_multiple_autofill.configuration()->listening_ports.size() == 3);
 }
 
 // This test verifies server's channel resources mapping keys uniqueness, where keys are clients locators.
 // Clients typically communicated its PID as its locator port. When having several clients in the same
 // process this lead to overwriting server's channel resources map elements.
+// In order to ensure communication in TCP Discovery Server, a different entry is created in the server's
+// channel resources map for each IP interface found, all of them using the same TCP channel. Thus, two
+// clients will generate at least two entries in the server's channel resources map.
 TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 {
     TCPv4TransportDescriptor recvDescriptor;
@@ -1775,7 +1946,13 @@ TEST_F(TCPv4Tests, client_announced_local_port_uniqueness)
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    ASSERT_EQ(receiveTransportUnderTest.get_channel_resources().size(), 2);
+    EXPECT_GT(receiveTransportUnderTest.get_channel_resources().size(), 2u);
+    std::set<std::shared_ptr<TCPChannelResource>> channels_created;
+    for (const auto& channel_resource : receiveTransportUnderTest.get_channel_resources())
+    {
+        channels_created.insert(channel_resource.second);
+    }
+    ASSERT_EQ(channels_created.size(), 2u);
 }
 
 #ifndef _WIN32
@@ -1788,11 +1965,10 @@ TEST_F(TCPv4Tests, non_blocking_send)
     // Create a TCP Server transport
     TCPv4TransportDescriptor senderDescriptor;
     senderDescriptor.add_listener_port(port);
+    senderDescriptor.non_blocking_send = true;
     senderDescriptor.sendBufferSize = msg_size;
     MockTCPv4Transport senderTransportUnderTest(senderDescriptor);
-    eprosima::fastrtps::rtps::RTPSParticipantAttributes att;
-    att.properties.properties().emplace_back("fastdds.tcp_transport.non_blocking_send", "true");
-    senderTransportUnderTest.init(&att.properties);
+    senderTransportUnderTest.init();
 
     // Create a TCP Client socket.
     // The creation of a reception transport for testing this functionality is not
@@ -1809,28 +1985,19 @@ TEST_F(TCPv4Tests, non_blocking_send)
     IPLocator::setLogicalPort(serverLoc, 7410);
 
     // TCPChannelResourceBasic::connect() like connection
-    asio::io_service io_service;
-    asio::ip::tcp::resolver resolver(io_service);
+    asio::io_context io_context;
+    asio::ip::tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(
         IPLocator::ip_to_string(serverLoc),
         std::to_string(IPLocator::getPhysicalPort(serverLoc)));
 
-    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_service);
-    asio::async_connect(
-        socket,
-        endpoints,
-        [](std::error_code ec
-#if ASIO_VERSION >= 101200
-        , asio::ip::tcp::endpoint
-#else
-        , asio::ip::tcp::resolver::iterator
-#endif // if ASIO_VERSION >= 101200
-        )
-        {
-            ASSERT_TRUE(!ec);
-        }
-        );
+    // Synchronous socket connection
+    asio::ip::tcp::socket socket = asio::ip::tcp::socket (io_context);
+    std::error_code ec;
+    asio::connect(socket, endpoints, ec);
+    ASSERT_TRUE(!ec);
 
+    // Wait a bit until server accepts the connection
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     /*
@@ -1840,18 +2007,17 @@ TEST_F(TCPv4Tests, non_blocking_send)
        as communication lacks most of the discovery messages using a raw socket as participant.
      */
     auto sender_unbound_channel_resources = senderTransportUnderTest.get_unbound_channel_resources();
-    ASSERT_TRUE(sender_unbound_channel_resources.size() == 1);
+    ASSERT_TRUE(sender_unbound_channel_resources.size() == 1u);
     auto sender_channel_resource =
             std::static_pointer_cast<TCPChannelResourceBasic>(sender_unbound_channel_resources[0]);
 
     // Prepare the message
-    asio::error_code ec;
-    std::vector<octet> message(msg_size * 2, 0);
+    std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
 
-    // Send the message with no header. Since TCP actually allocates twice the size of the buffer requested
-    // it should be able to send a message of msg_size*2.
+    // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
+    // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
     size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
@@ -1860,16 +2026,17 @@ TEST_F(TCPv4Tests, non_blocking_send)
     size_t bytes_read = asio::read(socket, asio::buffer(buffer, size), asio::transfer_exactly(size), ec);
     ASSERT_EQ(bytes_read, size);
 
-    // Now try to send a message that is bigger than the buffer size: (msg_size*2 + 1) + bytes_in_send_buffer(0) > 2*sendBufferSize
-    message.resize(msg_size * 2 + 1);
+    // Now try to send a message whose size surpasses the threshold to discard (sendBufferSize):
+    //  (msg_size + 1) + bytes_in_send_buffer(0) > sendBufferSize
+    message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
     bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
-    socket.shutdown(asio::ip::tcp::socket::shutdown_both);
-    socket.cancel();
-    socket.close();
+    socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+    socket.cancel(ec);
+    socket.close(ec);
 }
 #endif // ifndef _WIN32
 
@@ -1980,11 +2147,101 @@ TEST_F(TCPv4Tests, opening_output_channel_with_same_locator_as_local_listening_p
     // If the remote address is lower than the local one, no channel must be created but it must be added to the send_resource_list
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, lowerOutputChannelLocator));
     ASSERT_FALSE(transportUnderTest.is_output_channel_open_for(lowerOutputChannelLocator));
-    ASSERT_EQ(send_resource_list.size(), 1);
+    ASSERT_EQ(send_resource_list.size(), 1u);
     // If the remote address is higher than the local one, a CONNECT channel must be created and added to the send_resource_list
     ASSERT_TRUE(transportUnderTest.OpenOutputChannel(send_resource_list, higherOutputChannelLocator));
     ASSERT_TRUE(transportUnderTest.is_output_channel_open_for(higherOutputChannelLocator));
-    ASSERT_EQ(send_resource_list.size(), 2);
+    ASSERT_EQ(send_resource_list.size(), 2u);
+}
+
+// This test verifies that the send resource list is correctly cleaned both in LAN and WAN cases.
+TEST_F(TCPv4Tests, remove_from_send_resource_list)
+{
+    // Three scenarios are considered: LAN, WAN1 and WAN2
+    // LAN: The remote locator is in the same LAN as the local locator
+    // WAN1: The remote locator is in a different LAN than the local locator, and initial peers have LAN and WAN remote addresses.
+    // WAN2: The remote locator is in a different LAN than the local locator, and initial peers have WANtoLANLocator ([0][WAN] address).
+    std::vector<std::string> test_cases = {
+        "LAN",
+        "WAN1",
+        "WAN2"
+    };
+
+    for (const std::string& test_case : test_cases)
+    {
+        TCPv4TransportDescriptor send_descriptor;
+
+        MockTCPv4Transport send_transport_under_test(send_descriptor);
+        send_transport_under_test.init();
+
+        Locator_t discovery_locator;
+        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port, discovery_locator);
+        IPLocator::setLogicalPort(discovery_locator, 7410);
+
+        Locator_t initial_peer_locator;
+        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port + 1, initial_peer_locator);
+        IPLocator::setLogicalPort(initial_peer_locator, 7410);
+        LocatorList_t initial_peer_list;
+
+        if (test_case == "WAN1" || test_case == "WAN2")
+        {
+            IPLocator::setWan(discovery_locator, g_test_wan_address);
+            IPLocator::setWan(initial_peer_locator, g_test_wan_address);
+
+            if (test_case == "WAN2")
+            {
+                initial_peer_locator = IPLocator::WanToLanLocator(initial_peer_locator);
+            }
+        }
+
+        initial_peer_list.push_back(initial_peer_locator);
+
+        SendResourceList send_resource_list;
+        ASSERT_TRUE(send_transport_under_test.OpenOutputChannel(send_resource_list, discovery_locator));
+        ASSERT_TRUE(send_transport_under_test.OpenOutputChannel(send_resource_list, initial_peer_locator));
+        ASSERT_EQ(send_resource_list.size(), 2u);
+
+        // Using a wrong locator should not remove the channel resource
+        LocatorList_t wrong_remote_participant_physical_locators;
+        Locator_t wrong_output_locator;
+        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port + 2, wrong_output_locator);
+        IPLocator::setLogicalPort(wrong_output_locator, 7410);
+
+        if (test_case == "WAN1" || test_case == "WAN2")
+        {
+            IPLocator::setWan(wrong_output_locator, g_test_wan_address);
+        }
+        wrong_remote_participant_physical_locators.push_back(wrong_output_locator);
+        send_transport_under_test.cleanup_sender_resources(
+            send_resource_list,
+            wrong_remote_participant_physical_locators,
+            initial_peer_list);
+        ASSERT_EQ(send_resource_list.size(), 2);
+
+        // Using the correct locator should remove the channel resource
+        LocatorList_t remote_participant_physical_locators;
+        remote_participant_physical_locators.push_back(discovery_locator);
+        send_transport_under_test.cleanup_sender_resources(
+            send_resource_list,
+            remote_participant_physical_locators,
+            initial_peer_list);
+        ASSERT_EQ(send_resource_list.size(), 1);
+
+        // Using the initial peer locator should not remove the channel resource
+        remote_participant_physical_locators.clear();
+        if (test_case == "WAN2")
+        {
+            // In WAN2, the remote_participant_physical_locators are the real Locators, not the WANtoLANLocators.
+            IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
+            IPLocator::setWan(initial_peer_locator, g_test_wan_address);
+        }
+        remote_participant_physical_locators.push_back(initial_peer_locator);
+        send_transport_under_test.cleanup_sender_resources(
+            send_resource_list,
+            remote_participant_physical_locators,
+            initial_peer_list);
+        ASSERT_EQ(send_resource_list.size(), 1);
+    }
 }
 
 // This test verifies the logical port passed to OpenOutputChannel is correctly added to the channel pending list or the
@@ -2088,95 +2345,59 @@ TEST_F(TCPv4Tests, add_logical_port_on_send_resource_creation)
     }
 }
 
-// This test verifies that the send resource list is correctly cleaned both in LAN and WAN cases.
-TEST_F(TCPv4Tests, remove_from_send_resource_list)
+// This test verifies that TCP channels of type ACCEPT are correctly removed from the channel resources map when
+// the channel is disabled by asio. This is the case when a client disconnects from the server. There is no need
+// maintain the channel resource of a disconnected client because new connections will generate new channel resources
+// and no unbind operation is needed at destruction time for a removed participant (eDisconnected channel).
+TEST_F(TCPv4Tests, remove_stale_channel_resources_of_server)
 {
-    // Three scenarios are considered: LAN, WAN1 and WAN2
-    // LAN: The remote locator is in the same LAN as the local locator
-    // WAN1: The remote locator is in a different LAN than the local locator, and initial peers have LAN and WAN remote addresses.
-    // WAN2: The remote locator is in a different LAN than the local locator, and initial peers have WANtoLANLocator ([0][WAN] address).
-    std::vector<std::string> test_cases = {
-        "LAN",
-        "WAN1",
-        "WAN2"
-    };
+    // Server
+    TCPv4TransportDescriptor serverDescriptor;
+    serverDescriptor.add_listener_port(g_default_port);
+    MockTCPv4Transport server(serverDescriptor);
+    ASSERT_TRUE(server.init());
 
-    for (const std::string& test_case : test_cases)
+    // Client
     {
-        TCPv4TransportDescriptor send_descriptor;
+        TCPv4TransportDescriptor clientDescriptor;
+        auto client = std::unique_ptr<TCPv4Transport>(new TCPv4Transport(clientDescriptor));
+        ASSERT_TRUE(client->init());
 
-        MockTCPv4Transport send_transport_under_test(send_descriptor);
-        send_transport_under_test.init();
-
-        Locator_t discovery_locator;
-        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port, discovery_locator);
-        IPLocator::setLogicalPort(discovery_locator, 7410);
-
-        Locator_t initial_peer_locator;
-        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port + 1, initial_peer_locator);
-        IPLocator::setLogicalPort(initial_peer_locator, 7410);
-        LocatorList_t initial_peer_list;
-
-        if (test_case == "WAN1" || test_case == "WAN2")
-        {
-            IPLocator::setWan(discovery_locator, g_test_wan_address);
-            IPLocator::setWan(initial_peer_locator, g_test_wan_address);
-
-            if (test_case == "WAN2")
-            {
-                initial_peer_locator = IPLocator::WanToLanLocator(initial_peer_locator);
-            }
-        }
-
-        initial_peer_list.push_back(initial_peer_locator);
+        Locator_t outputLocator;
+        outputLocator.kind = LOCATOR_KIND_TCPv4;
+        IPLocator::setIPv4(outputLocator, 127, 0, 0, 1);
+        IPLocator::setPhysicalPort(outputLocator, g_default_port);
+        IPLocator::setLogicalPort(outputLocator, 7410);
 
         SendResourceList send_resource_list;
-        ASSERT_TRUE(send_transport_under_test.OpenOutputChannel(send_resource_list, discovery_locator));
-        ASSERT_TRUE(send_transport_under_test.OpenOutputChannel(send_resource_list, initial_peer_locator));
-        ASSERT_EQ(send_resource_list.size(), 2u);
+        ASSERT_TRUE(client->OpenOutputChannel(send_resource_list, outputLocator));
 
-        // Using a wrong locator should not remove the channel resource
-        LocatorList_t wrong_remote_participant_physical_locators;
-        Locator_t wrong_output_locator;
-        IPLocator::createLocator(LOCATOR_KIND_TCPv4, "127.0.0.1", g_default_port + 2, wrong_output_locator);
-        IPLocator::setLogicalPort(wrong_output_locator, 7410);
-
-        if (test_case == "WAN1" || test_case == "WAN2")
+        // Wait for the server to finish the BindConnectionRequest handshake
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (server.get_channel_resources_size() == 0 &&
+                std::chrono::steady_clock::now() < deadline)
         {
-            IPLocator::setWan(wrong_output_locator, g_test_wan_address);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        wrong_remote_participant_physical_locators.push_back(wrong_output_locator);
-        send_transport_under_test.CloseOutputChannel(
-            send_resource_list,
-            wrong_remote_participant_physical_locators,
-            initial_peer_list);
-        ASSERT_EQ(send_resource_list.size(), 2);
+        // Ensure there are channel resources in the server. Bind socket adds an entry per interface available, so there could be more than one.
+        ASSERT_GT(server.get_channel_resources_size(), 0u);
 
-        // Using the correct locator should remove the channel resource
-        LocatorList_t remote_participant_physical_locators;
-        remote_participant_physical_locators.push_back(discovery_locator);
-        send_transport_under_test.CloseOutputChannel(
-            send_resource_list,
-            remote_participant_physical_locators,
-            initial_peer_list);
-        ASSERT_EQ(send_resource_list.size(), 1);
-
-        // Using the initial peer locator should not remove the channel resource
-        remote_participant_physical_locators.clear();
-        if (test_case == "WAN2")
-        {
-            // In WAN2, the remote_participant_physical_locators are the real Locators, not the WANtoLANLocators.
-            IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
-            IPLocator::setWan(initial_peer_locator, g_test_wan_address);
-        }
-        remote_participant_physical_locators.push_back(initial_peer_locator);
-        send_transport_under_test.CloseOutputChannel(
-            send_resource_list,
-            remote_participant_physical_locators,
-            initial_peer_list);
-        ASSERT_EQ(send_resource_list.size(), 1);
+        // Tear down the client: clean send_resource_list and then close the TCP socket.
+        send_resource_list.clear();
+        client.reset();
     }
+
+    // Check that the server correctly removes the channel resource of type ACCEPT after the client disconnection
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (server.get_channel_resources_size() != 0 &&
+            std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    EXPECT_EQ(server.get_channel_resources_size(), 0u);
+    EXPECT_EQ(server.get_unbound_channel_resources_size(), 0u);
 }
+
 
 void TCPv4Tests::HELPER_SetDescriptorDefaults()
 {
@@ -2191,7 +2412,7 @@ protected:
     void SetUp() override
     {
         TCPv4TransportDescriptor descriptor;
-        transport_.reset(new MockTCPv4Transport(descriptor));
+        transport_ = std::make_unique<MockTCPv4Transport>(descriptor);
         transport_->init();
 
         rtcp_manager_ = std::make_shared<RTCPMessageManager>(transport_.get());
@@ -2259,7 +2480,8 @@ TEST_F(RTCPMessageManagerTests, process_bind_request_valid)
     auto buf = build_bind_request_buffer(reported, payload.length, payload.length);
     std::memcpy(buf.data() + 16 + 6, payload.data, payload.length);
 
-    auto result = rtcp_manager_->processRTCPMessage(channel_, buf.data(), buf.size(), DEFAULT_ENDIAN);
+    auto result = rtcp_manager_->processRTCPMessage(
+        channel_, buf.data(), buf.size(), Endianness_t::LITTLEEND);
 
     EXPECT_NE(result, RETCODE_BAD_REQUEST);
 
@@ -2288,7 +2510,8 @@ TEST_F(RTCPMessageManagerTests, process_bind_request_oob_payload_length)
 
     auto mock_channel = std::static_pointer_cast<MockTCPChannelResource>(channel_);
 
-    auto result = rtcp_manager_->processRTCPMessage(channel_, buf.data(), buf.size(), DEFAULT_ENDIAN);
+    auto result = rtcp_manager_->processRTCPMessage(
+        channel_, buf.data(), buf.size(), Endianness_t::LITTLEEND);
 
     EXPECT_EQ(result, RETCODE_OK);
 
@@ -2308,7 +2531,8 @@ TEST_F(RTCPMessageManagerTests, process_message_too_short)
 
     std::vector<octet> buf(8, 0x00);
 
-    auto result = rtcp_manager_->processRTCPMessage(channel_, buf.data(), buf.size(), DEFAULT_ENDIAN);
+    auto result = rtcp_manager_->processRTCPMessage(
+        channel_, buf.data(), buf.size(), Endianness_t::LITTLEEND);
 
     EXPECT_EQ(result, RETCODE_BAD_REQUEST);
 }

@@ -21,8 +21,8 @@
 #define FASTDDS_CORE_PLICY__QOSPOLICIESSERIALIZER_HPP_
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastdds/rtps/common/CdrSerialization.hpp>
 #include "ParameterSerializer.hpp"
-#include <fastcdr/Cdr.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -97,7 +97,7 @@ inline bool QosPoliciesSerializer<DurabilityQosPolicy>::read_content_from_cdr_me
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH)
+    if (parameter_length < PARAMETER_KIND_LENGTH)
     {
         return false;
     }
@@ -126,7 +126,7 @@ inline bool QosPoliciesSerializer<DeadlineQosPolicy>::read_content_from_cdr_mess
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -155,7 +155,7 @@ inline bool QosPoliciesSerializer<LatencyBudgetQosPolicy>::read_content_from_cdr
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -190,7 +190,7 @@ inline bool QosPoliciesSerializer<LivelinessQosPolicy>::read_content_from_cdr_me
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH + PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_KIND_LENGTH + PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -229,7 +229,7 @@ inline bool QosPoliciesSerializer<ReliabilityQosPolicy>::read_content_from_cdr_m
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH + PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_KIND_LENGTH + PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -263,7 +263,7 @@ inline bool QosPoliciesSerializer<OwnershipQosPolicy>::read_content_from_cdr_mes
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH)
+    if (parameter_length < PARAMETER_KIND_LENGTH)
     {
         return false;
     }
@@ -292,7 +292,7 @@ inline bool QosPoliciesSerializer<DestinationOrderQosPolicy>::read_content_from_
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH)
+    if (parameter_length < PARAMETER_KIND_LENGTH)
     {
         return false;
     }
@@ -323,7 +323,7 @@ inline bool QosPoliciesSerializer<ResourceLimitsQosPolicy>::read_content_from_cd
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != 12)
+    if (parameter_length < 12)
     {
         return false;
     }
@@ -357,7 +357,7 @@ inline bool QosPoliciesSerializer<TimeBasedFilterQosPolicy>::read_content_from_c
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -397,7 +397,7 @@ inline bool QosPoliciesSerializer<PresentationQosPolicy>::read_content_from_cdr_
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_PRESENTATION_LENGTH)
+    if (parameter_length < PARAMETER_PRESENTATION_LENGTH)
     {
         return false;
     }
@@ -481,7 +481,7 @@ inline bool QosPoliciesSerializer<PartitionQosPolicy>::read_content_from_cdr_mes
         uint32_t partition_size, alignment;
 
         valid &= fastrtps::rtps::CDRMessage::readUInt32(cdr_message, &partition_size);
-        if (!valid || cdr_message->pos + partition_size > cdr_message->length)
+        if (!valid || partition_size > cdr_message->length - cdr_message->pos)
         {
             return false;
         }
@@ -527,7 +527,7 @@ inline bool QosPoliciesSerializer<HistoryQosPolicy>::read_content_from_cdr_messa
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_KIND_LENGTH + 4)
+    if (parameter_length < PARAMETER_KIND_LENGTH + 4)
     {
         return false;
     }
@@ -564,7 +564,7 @@ inline bool QosPoliciesSerializer<DurabilityServiceQosPolicy>::read_content_from
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_TIME_LENGTH + PARAMETER_KIND_LENGTH + 16)
+    if (parameter_length < PARAMETER_TIME_LENGTH + PARAMETER_KIND_LENGTH + 16)
     {
         return false;
     }
@@ -599,7 +599,7 @@ inline bool QosPoliciesSerializer<LifespanQosPolicy>::read_content_from_cdr_mess
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_TIME_LENGTH)
+    if (parameter_length < PARAMETER_TIME_LENGTH)
     {
         return false;
     }
@@ -626,7 +626,7 @@ inline bool QosPoliciesSerializer<OwnershipStrengthQosPolicy>::read_content_from
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != 4)
+    if (parameter_length < 4)
     {
         return false;
     }
@@ -649,7 +649,7 @@ inline bool QosPoliciesSerializer<TransportPriorityQosPolicy>::read_content_from
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != 4)
+    if (parameter_length < 4)
     {
         return false;
     }
@@ -816,7 +816,7 @@ inline bool QosPoliciesSerializer<DisablePositiveACKsQosPolicy>::read_content_fr
         fastrtps::rtps::CDRMessage_t* cdr_message,
         const uint16_t parameter_length)
 {
-    if (parameter_length != PARAMETER_BOOL_LENGTH)
+    if (parameter_length < PARAMETER_BOOL_LENGTH)
     {
         return false;
     }
@@ -884,7 +884,7 @@ inline bool QosPoliciesSerializer<DataSharingQosPolicy>::read_content_from_cdr_m
 
     for (size_t i = 0; i < num_domains; ++i)
     {
-        uint64_t domain;
+        uint64_t domain {0};
         valid &= fastrtps::rtps::CDRMessage::readUInt64(cdr_message, &domain);
         qos_policy.add_domain_id(domain);
     }
@@ -898,7 +898,9 @@ template<>
 inline uint32_t QosPoliciesSerializer<TypeIdV1>::cdr_serialized_size(
         const TypeIdV1& qos_policy)
 {
-    size_t size = fastrtps::types::TypeIdentifier::getCdrSerializedSize(qos_policy.m_type_identifier) + 4;
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size = calculator.calculate_serialized_size(qos_policy.m_type_identifier, current_alignment) + 4;
     return 2 + 2 + static_cast<uint32_t>(size);
 }
 
@@ -907,20 +909,27 @@ inline bool QosPoliciesSerializer<TypeIdV1>::add_to_cdr_message(
         const TypeIdV1& qos_policy,
         fastrtps::rtps::CDRMessage_t* cdr_message)
 {
-    size_t size = fastrtps::types::TypeIdentifier::getCdrSerializedSize(qos_policy.m_type_identifier)
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size = calculator.calculate_serialized_size(qos_policy.m_type_identifier, current_alignment)
             + eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
     fastrtps::rtps::SerializedPayload_t payload(static_cast<uint32_t>(size));
     eprosima::fastcdr::FastBuffer fastbuffer((char*) payload.data, payload.max_size);
 
     eprosima::fastcdr::Cdr ser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that serializes the data.
+            eprosima::fastcdr::CdrVersion::XCDRv1); // Object that serializes the data.
     payload.encapsulation = ser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
     ser.serialize_encapsulation();
 
-    qos_policy.m_type_identifier.serialize(ser);
+    ser << qos_policy.m_type_identifier;
+#if FASTCDR_VERSION_MAJOR == 1
     payload.length = (uint32_t)ser.getSerializedDataLength(); //Get the serialized length
     size = (ser.getSerializedDataLength() + 3) & ~3;
+#else
+    payload.length = (uint32_t)ser.get_serialized_data_length(); //Get the serialized length
+    size = (ser.get_serialized_data_length() + 3) & ~3;
+#endif // FASTCDR_VERSION_MAJOR == 1
 
     bool valid = fastrtps::rtps::CDRMessage::addUInt16(cdr_message, qos_policy.Pid);
     valid &= fastrtps::rtps::CDRMessage::addUInt16(cdr_message, static_cast<uint16_t>(size));
@@ -945,8 +954,11 @@ inline bool QosPoliciesSerializer<TypeIdV1>::read_content_from_cdr_message(
 
     fastrtps::rtps::CDRMessage::readData(cdr_message, payload.data, parameter_length); // Object that manages the raw buffer.
 
-    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that deserializes the data.
+    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN
+#if FASTCDR_VERSION_MAJOR == 1
+            , eprosima::fastcdr::Cdr::CdrType::DDS_CDR
+#endif // FASTCDR_VERSION_MAJOR == 1
+            );
 
     try
     {
@@ -954,7 +966,7 @@ inline bool QosPoliciesSerializer<TypeIdV1>::read_content_from_cdr_message(
         deser.read_encapsulation();
         payload.encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
-        qos_policy.m_type_identifier.deserialize(deser);
+        deser >> qos_policy.m_type_identifier;
     }
     catch (eprosima::fastcdr::exception::Exception& /*exception*/)
     {
@@ -968,7 +980,9 @@ template<>
 inline uint32_t QosPoliciesSerializer<TypeObjectV1>::cdr_serialized_size(
         const TypeObjectV1& qos_policy)
 {
-    size_t size = fastrtps::types::TypeObject::getCdrSerializedSize(qos_policy.m_type_object) + 4;
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size = calculator.calculate_serialized_size(qos_policy.m_type_object, current_alignment) + 4;
     return 2 + 2 + static_cast<uint32_t>(size);
 }
 
@@ -977,20 +991,27 @@ inline bool QosPoliciesSerializer<TypeObjectV1>::add_to_cdr_message(
         const TypeObjectV1& qos_policy,
         fastrtps::rtps::CDRMessage_t* cdr_message)
 {
-    size_t size = fastrtps::types::TypeObject::getCdrSerializedSize(qos_policy.m_type_object)
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size = calculator.calculate_serialized_size(qos_policy.m_type_object, current_alignment)
             + eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
     fastrtps::rtps::SerializedPayload_t payload(static_cast<uint32_t>(size));
     eprosima::fastcdr::FastBuffer fastbuffer((char*) payload.data, payload.max_size);
 
     eprosima::fastcdr::Cdr ser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that serializes the data.
+            eprosima::fastcdr::CdrVersion::XCDRv1); // Object that serializes the data.
     payload.encapsulation = ser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
     ser.serialize_encapsulation();
 
-    qos_policy.m_type_object.serialize(ser);
+    ser << qos_policy.m_type_object;
+#if FASTCDR_VERSION_MAJOR == 1
     payload.length = (uint32_t)ser.getSerializedDataLength(); //Get the serialized length
     size = (ser.getSerializedDataLength() + 3) & ~3;
+#else
+    payload.length = (uint32_t)ser.get_serialized_data_length(); //Get the serialized length
+    size = (ser.get_serialized_data_length() + 3) & ~3;
+#endif // FASTCDR_VERSION_MAJOR == 1
 
     bool valid = fastrtps::rtps::CDRMessage::addUInt16(cdr_message, qos_policy.Pid);
     valid &= fastrtps::rtps::CDRMessage::addUInt16(cdr_message, static_cast<uint16_t>(size));
@@ -1015,8 +1036,11 @@ inline bool QosPoliciesSerializer<TypeObjectV1>::read_content_from_cdr_message(
 
     fastrtps::rtps::CDRMessage::readData(cdr_message, payload.data, parameter_length); // Object that manages the raw buffer.
 
-    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that deserializes the data.
+    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN
+#if FASTCDR_VERSION_MAJOR == 1
+            , eprosima::fastcdr::Cdr::CdrType::DDS_CDR
+#endif // FASTCDR_VERSION_MAJOR == 1
+            );
 
     try
     {
@@ -1024,7 +1048,7 @@ inline bool QosPoliciesSerializer<TypeObjectV1>::read_content_from_cdr_message(
         deser.read_encapsulation();
         payload.encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
-        qos_policy.m_type_object.deserialize(deser);
+        deser >> qos_policy.m_type_object;
     }
     catch (eprosima::fastcdr::exception::Exception& /*exception*/)
     {
@@ -1038,7 +1062,9 @@ template<>
 inline uint32_t QosPoliciesSerializer<xtypes::TypeInformation>::cdr_serialized_size(
         const xtypes::TypeInformation& qos_policy)
 {
-    size_t size = fastrtps::types::TypeInformation::getCdrSerializedSize(qos_policy.type_information) + 4;
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size = calculator.calculate_serialized_size(qos_policy.type_information, current_alignment) + 4;
     return 2 + 2 + static_cast<uint32_t>(size);
 }
 
@@ -1047,20 +1073,28 @@ inline bool QosPoliciesSerializer<xtypes::TypeInformation>::add_to_cdr_message(
         const xtypes::TypeInformation& qos_policy,
         fastrtps::rtps::CDRMessage_t* cdr_message)
 {
-    size_t size = fastrtps::types::TypeInformation::getCdrSerializedSize(qos_policy.type_information)
-            + eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
+    eprosima::fastcdr::CdrSizeCalculator calculator(eprosima::fastcdr::CdrVersion::XCDRv1);
+    size_t current_alignment {0};
+    size_t size =
+            calculator.calculate_serialized_size(qos_policy.type_information,
+                    current_alignment) + eprosima::fastrtps::rtps::SerializedPayload_t::representation_header_size;
     fastrtps::rtps::SerializedPayload_t payload(static_cast<uint32_t>(size));
     eprosima::fastcdr::FastBuffer fastbuffer((char*) payload.data, payload.max_size);
 
     eprosima::fastcdr::Cdr ser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that serializes the data.
+            eprosima::fastcdr::CdrVersion::XCDRv1); // Object that serializes the data.
     payload.encapsulation = ser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
     ser.serialize_encapsulation();
 
-    qos_policy.type_information.serialize(ser);
+    ser << qos_policy.type_information;
+#if FASTCDR_VERSION_MAJOR == 1
     payload.length = (uint32_t)ser.getSerializedDataLength(); //Get the serialized length
     size = (ser.getSerializedDataLength() + 3) & ~3;
+#else
+    payload.length = (uint32_t)ser.get_serialized_data_length(); //Get the serialized length
+    size = (ser.get_serialized_data_length() + 3) & ~3;
+#endif // FASTCDR_VERSION_MAJOR == 1
 
     bool valid = fastrtps::rtps::CDRMessage::addUInt16(cdr_message, qos_policy.Pid);
     valid &= fastrtps::rtps::CDRMessage::addUInt16(cdr_message, static_cast<uint16_t>(size));
@@ -1085,8 +1119,11 @@ inline bool QosPoliciesSerializer<xtypes::TypeInformation>::read_content_from_cd
 
     fastrtps::rtps::CDRMessage::readData(cdr_message, payload.data, parameter_length); // Object that manages the raw buffer.
 
-    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN,
-            eprosima::fastcdr::Cdr::DDS_CDR); // Object that deserializes the data.
+    eprosima::fastcdr::Cdr deser(fastbuffer, eprosima::fastcdr::Cdr::DEFAULT_ENDIAN
+#if FASTCDR_VERSION_MAJOR == 1
+            , eprosima::fastcdr::Cdr::CdrType::DDS_CDR
+#endif // FASTCDR_VERSION_MAJOR == 1
+            );
 
     try
     {
@@ -1094,7 +1131,7 @@ inline bool QosPoliciesSerializer<xtypes::TypeInformation>::read_content_from_cd
         deser.read_encapsulation();
         payload.encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
 
-        qos_policy.type_information.deserialize(deser);
+        deser >> qos_policy.type_information;
         qos_policy.assigned(true);
     }
     catch (eprosima::fastcdr::exception::Exception& /*exception*/)
@@ -1103,7 +1140,7 @@ inline bool QosPoliciesSerializer<xtypes::TypeInformation>::read_content_from_cd
     }
     catch (const std::bad_alloc&)
     {
-        logWarning(QOS_POLICIES_SERIALIZER,
+        EPROSIMA_LOG_WARNING(QOS_POLICIES_SERIALIZER,
                 "PID_TYPE_INFORMATION rejected: wire-controlled sequence count would exhaust memory.");
         qos_policy.assigned(false);
     }

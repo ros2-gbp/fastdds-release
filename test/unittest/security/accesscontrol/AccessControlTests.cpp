@@ -169,6 +169,7 @@ void AccessControlTest::get_access_handle(
         bool should_success)
 {
     IdentityHandle* identity_handle = nullptr;
+    auto part_props = participant_attr.properties;
 
     ValidationResult_t result = ValidationResult_t::VALIDATION_FAILED;
     SecurityException exception;
@@ -178,7 +179,7 @@ void AccessControlTest::get_access_handle(
         &identity_handle,
         adjusted_participant_key,
         domain_id,
-        participant_attr,
+        part_props,
         candidate_participant_key,
         exception);
 
@@ -190,7 +191,7 @@ void AccessControlTest::get_access_handle(
         authentication_plugin,
         *identity_handle,
         domain_id,
-        participant_attr,
+        part_props,
         exception);
 
     bool success = *access_handle != nullptr;
@@ -497,7 +498,7 @@ TEST_F(AccessControlTest, validation_ok_on_chained_ca)
     permissions_ca = "chainedcacert.pem";
     permissions_file = "permissions_signed_by_chained_ca.smime";
     governance_file = "governance_signed_by_chained_ca.smime";
-    
+
     topic_name = "HelloWorldTopic_no_partitions";
 
     RTPSParticipantAttributes subscriber_participant_attr;
@@ -565,12 +566,15 @@ int main(
 {
     testing::InitGoogleTest(&argc, argv);
 
-    certs_path = std::getenv("CERTS_PATH");
-
-    if (certs_path == nullptr)
+    if (!::testing::GTEST_FLAG(list_tests))
     {
-        std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
-        exit(-1);
+        certs_path = std::getenv("CERTS_PATH");
+
+        if (certs_path == nullptr)
+        {
+            std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
+            exit(-1);
+        }
     }
 
     return RUN_ALL_TESTS();

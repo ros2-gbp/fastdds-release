@@ -18,7 +18,8 @@
 
 #include <fastdds/rtps/transport/ChainingTransport.h>
 #include <fastdds/rtps/transport/ChainingTransportDescriptor.h>
-#include <fastdds/rtps/network/SenderResource.h>
+#include <fastdds/rtps/transport/SenderResource.h>
+#include <fastdds/rtps/transport/TransportReceiverInterface.h>
 
 using SenderResource = eprosima::fastrtps::rtps::SenderResource;
 
@@ -119,7 +120,7 @@ public:
         std::basic_ifstream<char> file(filename, std::ios::binary | std::ios::in);
 
         file.seekg(0, file.end);
-        size_t file_size = file.tellg();
+        size_t file_size = static_cast<size_t>(file.tellg());
         file.seekg(0, file.beg);
 
         std::vector<uint8_t> buf(file_size);

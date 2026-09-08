@@ -28,12 +28,14 @@
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
 
+namespace {
 enum communication_type
 {
     TRANSPORT,
     INTRAPROCESS,
     DATASHARING
 };
+}  // namespace
 
 class PersistenceLargeData : public testing::TestWithParam<communication_type>
 {
@@ -72,9 +74,9 @@ protected:
         std::ostringstream ss;
         std::string test_case_name(info->test_case_name());
         std::string test_name(info->name());
-        ss <<
-            test_case_name.replace(test_case_name.find_first_of('/'), 1, "_") << "_" <<
-            test_name.replace(test_name.find_first_of('/'), 1, "_")  << "_" << GET_PID() << ".db";
+        ss
+            << test_case_name.replace(test_case_name.find_first_of('/'), 1, "_") << "_"
+            << test_name.replace(test_name.find_first_of('/'), 1, "_")  << "_" << GET_PID() << ".db";
         db_file_name_ = ss.str();
 
     }
@@ -384,7 +386,7 @@ TEST_P(PersistenceLargeData, PubSubAsReliablePubPersistentWithStaticDiscovery)
             .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
             .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
             .make_persistent(db_file_name(), "78.73.69.74.65.72.5f.70.65.72.73.5f|67.75.69.1")
-            .static_discovery("file://PubSubWriterPersistence.xml")
+            .static_discovery("file://PubSubWriterPersistence_static_disc.xml")
             .unicastLocatorList(WriterUnicastLocators)
             .setPublisherIDs(1, 2)
             .setManualTopicName(std::string("BlackBox_StaticDiscovery_") + TOPIC_RANDOM_NUMBER)
@@ -406,7 +408,7 @@ TEST_P(PersistenceLargeData, PubSubAsReliablePubPersistentWithStaticDiscovery)
             .history_depth(10)
             .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
             .make_persistent(db_file_name(), "78.73.69.74.65.72.5f.70.65.72.73.5f|67.75.69.3")
-            .static_discovery("file://PubSubReaderPersistence.xml")
+            .static_discovery("file://PubSubReaderPersistence_static_disc.xml")
             .unicastLocatorList(ReaderUnicastLocators)
             .setSubscriberIDs(3, 4)
             .setManualTopicName(std::string("BlackBox_StaticDiscovery_") + TOPIC_RANDOM_NUMBER)

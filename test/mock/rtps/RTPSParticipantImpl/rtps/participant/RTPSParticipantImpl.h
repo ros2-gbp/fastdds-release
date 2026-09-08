@@ -21,7 +21,7 @@
 
 // Include first possible mocks (depending on include on CMakeLists.txt)
 #include <fastrtps/rtps/attributes/RTPSParticipantAttributes.h>
-#include <fastrtps/rtps/network/NetworkFactory.h>
+#include <rtps/network/NetworkFactory.h>
 #include <fastrtps/rtps/participant/RTPSParticipantListener.h>
 #include <fastrtps/rtps/reader/RTPSReader.h>
 #include <fastrtps/rtps/resources/ResourceEvent.h>
@@ -34,6 +34,7 @@
 
 #include <gmock/gmock.h>
 
+#include <atomic>
 #include <map>
 #include <sstream>
 
@@ -69,10 +70,20 @@ public:
             RTPSParticipant* participant,
             ParticipantDiscoveryInfo&& info) override
     {
-        onParticipantDiscovery(participant, info);
+        onParticipantDiscovery_mock(participant, info);
     }
 
-    MOCK_METHOD2(onParticipantDiscovery, void (RTPSParticipant*, const ParticipantDiscoveryInfo&));
+    MOCK_METHOD2(onParticipantDiscovery_mock, void (RTPSParticipant*, const ParticipantDiscoveryInfo&));
+
+    void onParticipantDiscovery(
+            RTPSParticipant* participant,
+            ParticipantDiscoveryInfo&& info,
+            bool& should_be_ignored) override
+    {
+        onParticipantDiscovery_mock(participant, info, should_be_ignored);
+    }
+
+    MOCK_METHOD3(onParticipantDiscovery_mock, void (RTPSParticipant*, const ParticipantDiscoveryInfo&, bool&));
 
 #if HAVE_SECURITY
     void onParticipantAuthentication(
@@ -101,6 +112,10 @@ public:
 
     MOCK_CONST_METHOD0(network_factory, const NetworkFactory& ());
 
+    MOCK_METHOD0(is_intraprocess_only, bool());
+
+    MOCK_METHOD0(get_persistence_guid_prefix, GuidPrefix_t());
+
 #if HAVE_SECURITY
     MOCK_CONST_METHOD0(security_attributes, const security::ParticipantSecurityAttributes& ());
 
@@ -117,6 +132,11 @@ public:
 
     MOCK_METHOD1(setGuid, void(GUID_t &));
 
+    MOCK_METHOD1(check_type, bool(std::string));
+
+    MOCK_METHOD2(on_entity_discovery,
+            void(const fastrtps::rtps::GUID_t&, const fastdds::dds::ParameterPropertyList_t&));
+
     // *INDENT-OFF* Uncrustify makes a mess with MOCK_METHOD macros
     MOCK_METHOD6(createWriter_mock,
             bool (RTPSWriter** writer, WriterAttributes& param, WriterHistory* hist,
@@ -129,7 +149,7 @@ public:
             const EntityId_t& entityId, bool isBuiltin, bool enable));
     // *INDENT-ON*
 
-    MOCK_CONST_METHOD0(getParticipantMutex, std::recursive_mutex* ());
+    MOCK_CONST_METHOD0(getParticipantMutex, std::recursive_mutex * ());
 
     bool createWriter(
             RTPSWriter** writer,
@@ -279,15 +299,30 @@ public:
         return attr_;
     }
 
+    const RTPSParticipantConstantAttributes& get_const_attributes() const
+    {
+        return const_attr_;
+    }
+
+    const RTPSParticipantMutableAttributes get_mutable_attributes() const
+    {
+        return RTPSParticipantMutableAttributes{attr_};
+    }
+
+    RTPSParticipantAttributes copy_attributes() const
+    {
+        return attr_;
+    }
+
     void get_sending_locators(
             rtps::LocatorList_t& /*locators*/) const
     {
     }
 
-    template <EndpointKind_t kind, octet no_key, octet with_key>
+    template<EndpointKind_t kind, octet no_key, octet with_key>
     static bool preprocess_endpoint_attributes(
             const EntityId_t&,
-            uint32_t&,
+            std::atomic<uint32_t>&,
             EndpointAttributes&,
             EntityId_t&)
     {
@@ -308,6 +343,8 @@ public:
         return f;
     }
 
+    MOCK_METHOD(bool, should_match_local_endpoints, ());
+
     MOCK_METHOD(bool, ignore_participant, (const GuidPrefix_t&));
 
     MOCK_METHOD(bool, update_removed_participant, (rtps::LocatorList_t&));
@@ -319,6 +356,7 @@ private:
     ResourceEvent events_;
 
     RTPSParticipantAttributes attr_;
+    RTPSParticipantConstantAttributes const_attr_;
 
     std::map<GUID_t, Endpoint*> endpoints_;
 

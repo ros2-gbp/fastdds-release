@@ -44,6 +44,7 @@
 #include <fastrtps/xmlparser/XMLProfileManager.h>
 #include <rtps/transport/test_UDPv4Transport.h>
 #include <utils/SystemInfo.hpp>
+#include "../utils/filter_helpers.hpp"
 
 // Regression test for redmine issue 11857
 TEST(DDSDiscovery, IgnoreParticipantFlags)
@@ -52,7 +53,7 @@ TEST(DDSDiscovery, IgnoreParticipantFlags)
     // - ignoreParticipantFlags = FILTER_SAME_PROCESS (will avoid discovery of p2)
     // - metatrafficUnicastLocatorList = 127.0.0.1:7399, 127.0.0.1:7398 (to ensure two listening threads are created)
     PubSubReader<HelloWorldPubSubType> p1(TEST_TOPIC_NAME);
-    p1.set_xml_filename("discovery_participant_flags.xml");
+    p1.set_xml_filename("discovery_participant_flags_profile.xml");
     p1.set_participant_profile("participant_1");
     p1.init();
     EXPECT_TRUE(p1.isInitialized());
@@ -61,7 +62,7 @@ TEST(DDSDiscovery, IgnoreParticipantFlags)
     // When the announcements of this participant arrive to p1, they will be ignored, and thus p1 will not
     // announce itself back to p2.
     PubSubReader<HelloWorldPubSubType> p2(TEST_TOPIC_NAME);
-    p2.set_xml_filename("discovery_participant_flags.xml");
+    p2.set_xml_filename("discovery_participant_flags_profile.xml");
     p2.set_participant_profile("participant_2");
     p2.init();
     EXPECT_TRUE(p2.isInitialized());
@@ -74,7 +75,7 @@ TEST(DDSDiscovery, IgnoreParticipantFlags)
     // The announcements of this participant will arrive to p1 on a different listening thread.
     // Due to the custom prefix, they should not be ignored, and mutual discovery should happen
     PubSubReader<HelloWorldPubSubType> p3(TEST_TOPIC_NAME);
-    p3.set_xml_filename("discovery_participant_flags.xml");
+    p3.set_xml_filename("discovery_participant_flags_profile.xml");
     p3.set_participant_profile("participant_3");
     p3.init();
     EXPECT_TRUE(p1.wait_participant_discovery());
@@ -95,11 +96,18 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     using namespace eprosima::fastdds::dds;
     using namespace eprosima::fastrtps::rtps;
 
+    char* value = nullptr;
+    std::string W_UNICAST_PORT_RANDOM_NUMBER_STR;
+
     /* Get random port from the environment */
-    std::string value;
-    if (eprosima::ReturnCode_t::RETCODE_OK != SystemInfo::get_env("W_UNICAST_PORT_RANDOM_NUMBER", value))
+    value = std::getenv("W_UNICAST_PORT_RANDOM_NUMBER");
+    if (value != nullptr)
     {
-        value = std::string("11811");
+        W_UNICAST_PORT_RANDOM_NUMBER_STR = value;
+    }
+    else
+    {
+        W_UNICAST_PORT_RANDOM_NUMBER_STR = "11811";
     }
 
     /* Create first server */
@@ -118,7 +126,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     // Generate server's listening locator
     Locator_t locator_server_1;
     IPLocator::setIPv4(locator_server_1, 127, 0, 0, 1);
-    uint32_t server_1_port = atol(value.c_str());
+    uint32_t server_1_port = stoi(W_UNICAST_PORT_RANDOM_NUMBER_STR);
     locator_server_1.port = server_1_port;
     server_1_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server_1);
     // Init server
@@ -136,7 +144,7 @@ TEST(DDSDiscovery, AddDiscoveryServerToListUDP)
     // Generate server's listening locator
     Locator_t locator_server_2;
     IPLocator::setIPv4(locator_server_2, 127, 0, 0, 1);
-    uint32_t server_2_port = atol(value.c_str()) + 1;
+    uint32_t server_2_port = stoi(W_UNICAST_PORT_RANDOM_NUMBER_STR) + 1;
     locator_server_2.port = server_2_port;
     server_2_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server_2);
     // Init server
@@ -596,6 +604,125 @@ TEST(DDSDiscovery, UpdateMatchedStatus)
     datawriter_2.destroy();
 }
 
+/*
+ * This is a regression test for redmine issue 21355.
+ *
+ * In order to check that the on_publication_matched() and on_subscription_matched() callbacks are always called with
+ * either +1 or -1 as the current_count_change, this test creates and destroys multiple DataReaders and DataWriters in
+ * different threads, with a listener that counts the number of times on_publication_matched() and
+ * on_subscription_matched() are called with current_count_change different than 1 or -1.
+ *
+ * The test fails if any of the calls to on_publication_matched() or on_subscription_matched() is made with a
+ * current_count_change different than 1 or -1.
+ */
+TEST(DDSDiscovery, MatchedCallbackListenerMultithread)
+{
+    constexpr size_t NUM_THREADS = 25;
+
+    struct TestListener
+        : public eprosima::fastdds::dds::DataReaderListener
+        , public eprosima::fastdds::dds::DataWriterListener
+    {
+        std::atomic<uint32_t> reader_other_calls{ 0 };
+        std::atomic<uint32_t> writer_other_calls{ 0 };
+
+        void on_publication_matched(
+                eprosima::fastdds::dds::DataWriter*,
+                const eprosima::fastdds::dds::PublicationMatchedStatus& info) override
+        {
+            if ((info.current_count_change != 1) && (info.current_count_change != -1))
+            {
+                ++writer_other_calls;
+            }
+        }
+
+        void on_subscription_matched(
+                eprosima::fastdds::dds::DataReader*,
+                const eprosima::fastdds::dds::SubscriptionMatchedStatus& info) override
+        {
+            if ((info.current_count_change != 1) && (info.current_count_change != -1))
+            {
+                ++reader_other_calls;
+            }
+        }
+
+    };
+
+    std::ostringstream t;
+    t << TEST_TOPIC_NAME << "_" << asio::ip::host_name() << "_" << GET_PID();
+    std::string topic_name = t.str();
+    TestListener listener;
+    eprosima::fastdds::dds::TypeSupport type(new HelloWorldPubSubType());
+
+    auto create_entities = [&listener, &topic_name, &type]()
+            {
+                using namespace eprosima::fastdds::dds;
+
+                uint32_t domain_id = static_cast<uint32_t>(GET_PID()) % 100;
+                auto factory = DomainParticipantFactory::get_shared_instance();
+                DomainParticipantQos participant_qos;
+                factory->get_default_participant_qos(participant_qos);
+                participant_qos.setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4);
+                participant_qos.wire_protocol().builtin.discovery_config.leaseDuration.seconds = 0;
+                participant_qos.wire_protocol().builtin.discovery_config.leaseDuration.nanosec = 100000000;
+                participant_qos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod.seconds = 0;
+                participant_qos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod.nanosec =
+                        50000000;
+
+                auto participant = factory->create_participant(domain_id, participant_qos);
+                ASSERT_NE(participant, nullptr);
+
+                type.register_type(participant);
+                auto topic = participant->create_topic(topic_name, type.get_type_name(), TOPIC_QOS_DEFAULT);
+                ASSERT_NE(topic, nullptr);
+
+                auto publisher = participant->create_publisher(PUBLISHER_QOS_DEFAULT);
+                ASSERT_NE(publisher, nullptr);
+
+                DataWriterQos datawriter_qos;
+                publisher->get_default_datawriter_qos(datawriter_qos);
+                datawriter_qos.data_sharing().off();
+                auto datawriter = publisher->create_datawriter(topic, datawriter_qos, &listener);
+                ASSERT_NE(datawriter, nullptr);
+
+                auto subscriber = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
+                ASSERT_NE(subscriber, nullptr);
+
+                DataReaderQos datareader_qos;
+                subscriber->get_default_datareader_qos(datareader_qos);
+                datareader_qos.data_sharing().off();
+                auto datareader = subscriber->create_datareader(topic, datareader_qos, &listener);
+                ASSERT_NE(datareader, nullptr);
+
+                HelloWorld msg;
+                msg.index(1);
+                datawriter->write(&msg);
+
+                SampleInfo info;
+                datareader->take_next_sample(&msg, &info);
+
+                participant->delete_contained_entities();
+                factory->delete_participant(participant);
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            };
+
+    std::vector<std::thread> threads;
+    threads.reserve(NUM_THREADS);
+    for (size_t i = 0; i < NUM_THREADS; ++i)
+    {
+        threads.emplace_back(create_entities);
+    }
+
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
+    EXPECT_EQ(listener.reader_other_calls.load(), 0u);
+    EXPECT_EQ(listener.writer_other_calls.load(), 0u);
+}
+
 /**
  * This test checks that the physical properties are correctly sent on the DATA[p], and that the
  * ParticipantProxyData on the receiver side has the correct values.
@@ -663,6 +790,8 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
         ParticipantProxyData* remote_participant_info;
 
     private:
+
+        using DomainParticipantListener::on_participant_discovery;
 
         std::condition_variable* cv_;
 
@@ -795,6 +924,1068 @@ TEST(DDSDiscovery, ParticipantProxyPhysicalData)
     DomainParticipantFactory::get_instance()->delete_participant(part_2);
 }
 
+/**
+ * This is a regression test for readmine issue #16104.
+ *
+ * It first creates a participant with an external locator on IP address 8.8.8.8 and a custom listener that keeps
+ * the locators information of the last discovered participant.
+ *
+ * It then creates participants with different addresses on their external locators, and checks the corresponding
+ * ones are selected.
+ */
+TEST(DDSDiscovery, DDSDiscoveryDoesNotDropUDPLocator)
+{
+    using namespace eprosima::fastdds::dds;
+    using namespace eprosima::fastrtps::rtps;
+
+    struct CustomDomainParticipantListener : public DomainParticipantListener
+    {
+        using DomainParticipantListener::on_participant_discovery;
+
+        std::mutex mtx;
+        std::condition_variable cv;
+        GUID_t guid;
+        RemoteLocatorList metatraffic;
+
+        void on_participant_discovery(
+                DomainParticipant* /*participant*/,
+                ParticipantDiscoveryInfo&& info) override
+        {
+            if (info.status == info.DISCOVERED_PARTICIPANT)
+            {
+                std::lock_guard<std::mutex> guard(mtx);
+                guid = info.info.m_guid;
+                metatraffic = info.info.metatraffic_locators;
+                cv.notify_all();
+            }
+        }
+
+    };
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+
+    CustomDomainParticipantListener listener;
+
+    eprosima::fastdds::rtps::LocatorWithMask loc;
+    loc.port = 1234;
+    loc.mask(24);
+
+    DomainParticipantQos qos1;
+    IPLocator::setIPv4(loc, "8.8.8.8");
+    qos1.allocation().locators.max_unicast_locators = 100;
+    qos1.wire_protocol().builtin.metatraffic_external_unicast_locators[1][0].push_back(loc);
+    DomainParticipant* part1 = factory->create_participant(0, qos1, &listener, StatusMask::none());
+
+    auto perform_check = [&](const char* address, bool shold_be_local)
+            {
+                DomainParticipantQos qos2;
+                IPLocator::setIPv4(loc, address);
+                qos2.allocation().locators.max_unicast_locators = 100;
+                qos2.wire_protocol().builtin.metatraffic_external_unicast_locators[1][0].push_back(loc);
+
+                {
+                    DomainParticipant* part2 = factory->create_participant(0, qos2, nullptr, StatusMask::none());
+                    auto part2_guid = part2->guid();
+                    {
+                        std::unique_lock<std::mutex> lock(listener.mtx);
+                        listener.cv.wait(lock, [&]
+                                {
+                                    return listener.guid == part2_guid;
+                                });
+                    }
+                    factory->delete_participant(part2);
+
+                    std::cout << listener.metatraffic << std::endl;
+                    if (shold_be_local)
+                    {
+                        EXPECT_NE(listener.metatraffic.unicast[0], loc);
+                    }
+                    else
+                    {
+                        EXPECT_EQ(listener.metatraffic.unicast[0], loc);
+                    }
+                }
+            };
+
+    perform_check("8.8.8.8", true);
+    perform_check("8.8.8.9", false);
+
+    factory->delete_participant(part1);
+}
+
+/**
+ * This is a regression test for #1929
+ * Checks that the disposal of an matched Endpoint is correctly received
+ * by a remote participant when DYNAMIC_REUSABLE memory mode is used
+ */
+TEST(DDSDiscovery, WriterAndReaderMatchUsingDynamicReusableMemoryMode)
+{
+    using namespace eprosima::fastdds::dds;
+    using namespace eprosima::fastrtps::rtps;
+
+    WireProtocolConfigQos qos;
+
+    qos.builtin.readerHistoryMemoryPolicy = eprosima::fastrtps::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
+
+    PubSubWriter<HelloWorldPubSubType> writer("test");
+    PubSubReader<HelloWorldPubSubType> reader("test");
+
+    writer.set_wire_protocol_qos(qos).init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    reader.set_wire_protocol_qos(qos).init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    ASSERT_TRUE(reader.is_matched());
+    ASSERT_TRUE(writer.is_matched());
+
+    reader.delete_datareader();
+
+    ASSERT_TRUE(writer.wait_reader_undiscovery(std::chrono::seconds(3)));
+
+}
+
+/**
+ * This test checks the missing file case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckMissingFileXmlStaticDiscoveryFile)
+{
+    std::string file = "MissingFile.xml";
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the correct data case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_OK
+ */
+TEST(DDSDiscovery, CheckCorrectXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_OK);
+}
+
+/**
+ * This test checks the incorrect <staticdiscovery> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectStaticdiscoveryXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscoveryBROKEN>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect <participant> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectParticipantXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participantBROKEN>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect <reader> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</readerBROKEN>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <userId> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderUserIDXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userIdBROKEN>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+/**
+ * This test checks the incorrect reader <entityID> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderEntityIDXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityIDBROKEN>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <topicName> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderTopicNameXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicNameBROKEN>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect data case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderTopicDataTypeXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataTypeBROKEN>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <topicKind> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderTopicKindXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKindBROKEN>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <partitionQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderPartitionQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQosBROKEN>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <reliabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderReliabilityQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQosBROKEN>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <durabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderDurabilityQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQosBROKEN>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect reader <multicastLocator> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectReaderMulticastLocatorXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" BROKEN/>" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect <writer> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writerBROKEN>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <userId> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterUserIDXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userIdBROKEN>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <entityID> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterEntityIDXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityIDBROKEN>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <topicName> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterTopicNameXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicNameBROKEN>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <topicDataType> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterTopicDataTypeXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataTypeBROKEN>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <topicKind> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterTopicKindXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKindBROKEN>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <partitionQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterPartitionQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQosBROKEN>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <reliabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterReliabilityQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQosBROKEN>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * This test checks the incorrect writer <durabilityQos> case of DomainParticipantFactory->check_xml_static_discovery
+ * method and checks it returns RETCODE_ERROR
+ */
+TEST(DDSDiscovery, CheckIncorrectWriterDurabilityQosXmlStaticDiscoveryFile)
+{
+    std::string file = "data://<?xml version=\"1.0\" encoding=\"utf-8\"?>" \
+            "<staticdiscovery>" \
+            "<participant>" \
+            "<name>SPMDEETISS10_DefaultPartition</name>" \
+            "<reader>" \
+            "<userId>11</userId>" \
+            "<entityID>11</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQos>" \
+            "<multicastLocator address=\"239.255.0.1\" port=\"7401\" />" \
+            "</reader>" \
+            "<writer>" \
+            "<userId>12</userId>" \
+            "<entityID>12</entityID>" \
+            "<topicName>topic1</topicName>" \
+            "<topicDataType>Topic1</topicDataType>" \
+            "<topicKind>WITH_KEY</topicKind>" \
+            "<partitionQos>DefaultPartition</partitionQos>" \
+            "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos>" \
+            "<durabilityQos>TRANSIENT_LOCAL_DURABILITY_QOS</durabilityQosBROKEN>" \
+            "</writer>" \
+            "</participant>" \
+            "</staticdiscovery>";
+
+    DomainParticipantFactory* factory = DomainParticipantFactory::get_instance();
+    ASSERT_EQ(factory->check_xml_static_discovery(file), ReturnCode_t::RETCODE_ERROR);
+}
+
+/**
+ * Regression test for redmine issue #17919
+ */
+static void test_DDSDiscovery_WaitSetMatchedStatus(
+        bool with_listener)
+{
+    using namespace eprosima;
+
+    auto factory = fastdds::dds::DomainParticipantFactory::get_instance();
+    fastdds::dds::DomainParticipantQos pqos;
+    factory->get_default_participant_qos(pqos);
+    uint32_t ignore_flags =
+            fastrtps::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST |
+            fastrtps::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_PROCESS;
+    pqos.wire_protocol().builtin.discovery_config.ignoreParticipantFlags =
+            static_cast<fastrtps::rtps::ParticipantFilteringFlags>(ignore_flags);
+
+    fastdds::dds::DomainParticipantListener listener;
+    auto listener_to_use = with_listener ? &listener : nullptr;
+
+    fastdds::dds::DomainParticipant* participant = factory->create_participant(0, pqos, listener_to_use);
+    ASSERT_NE(participant, nullptr);
+
+    fastdds::dds::TypeSupport type(new HelloWorldPubSubType());
+    EXPECT_EQ(type.register_type(participant), ReturnCode_t::RETCODE_OK);
+
+    auto topic = participant->create_topic(TEST_TOPIC_NAME, type->getName(), fastdds::dds::TOPIC_QOS_DEFAULT);
+    ASSERT_NE(topic, nullptr);
+
+    auto publisher = participant->create_publisher(fastdds::dds::PUBLISHER_QOS_DEFAULT);
+    ASSERT_NE(publisher, nullptr);
+
+    auto data_writer = publisher->create_datawriter(topic, fastdds::dds::DATAWRITER_QOS_DEFAULT);
+    ASSERT_NE(data_writer, nullptr);
+
+    auto thread_run = [data_writer]()
+            {
+                fastdds::dds::WaitSet wait_set;
+                fastdds::dds::ConditionSeq triggered_conditions;
+
+                fastdds::dds::StatusCondition& condition = data_writer->get_statuscondition();
+                condition.set_enabled_statuses(fastdds::dds::StatusMask::publication_matched());
+                wait_set.attach_condition(condition);
+
+                fastdds::dds::PublicationMatchedStatus matched_status{};
+                while (1 > matched_status.current_count)
+                {
+                    ReturnCode_t ret_code = wait_set.wait(triggered_conditions, fastrtps::c_TimeInfinite);
+                    if (ReturnCode_t::RETCODE_OK != ret_code)
+                    {
+                        continue;
+                    }
+
+                    for (fastdds::dds::Condition* cond : triggered_conditions)
+                    {
+                        fastdds::dds::StatusCondition* status_cond = dynamic_cast<fastdds::dds::StatusCondition*>(cond);
+                        if (nullptr != status_cond)
+                        {
+                            EXPECT_EQ(status_cond, &condition);
+                            fastdds::dds::Entity* entity = status_cond->get_entity();
+                            EXPECT_EQ(entity, data_writer);
+                            fastdds::dds::StatusMask changed_statuses = entity->get_status_changes();
+
+                            if (changed_statuses.is_active(fastdds::dds::StatusMask::publication_matched()))
+                            {
+                                data_writer->get_publication_matched_status(matched_status);
+                            }
+                        }
+                    }
+                }
+            };
+
+    std::thread waiting_thread(thread_run);
+
+    auto subscriber = participant->create_subscriber(fastdds::dds::SUBSCRIBER_QOS_DEFAULT);
+    ASSERT_NE(subscriber, nullptr);
+
+    auto data_reader = subscriber->create_datareader(topic, fastdds::dds::DATAREADER_QOS_DEFAULT);
+    ASSERT_NE(data_reader, nullptr);
+
+    waiting_thread.join();
+
+    participant->delete_contained_entities();
+    factory->delete_participant(participant);
+}
+
+TEST(DDSDiscovery, WaitSetMatchedStatus)
+{
+    test_DDSDiscovery_WaitSetMatchedStatus(false);
+    test_DDSDiscovery_WaitSetMatchedStatus(true);
+}
+
 // Regression test for redmine issue 20409
 TEST(DDSDiscovery, DataracePDP)
 {
@@ -805,6 +1996,8 @@ TEST(DDSDiscovery, DataracePDP)
     class CustomDomainParticipantListener : public DomainParticipantListener
     {
     public:
+
+        using DomainParticipantListener::on_participant_discovery;
 
         CustomDomainParticipantListener()
             : DomainParticipantListener()
@@ -929,37 +2122,490 @@ TEST(DDSDiscovery, DataracePDP)
     fastrtps::xmlparser::XMLProfileManager::library_settings(settings);
 }
 
-/**
- * This is a regression test for #1929
- * Checks that the disposal of an matched Endpoint is correctly received
- * by a remote participant when DYNAMIC_REUSABLE memory mode is used
- */
-TEST(DDSDiscovery, WriterAndReaderMatchUsingDynamicReusableMemoryMode)
+// This test checks that a Discover Server does not send duplicated PDP messages of itself when new clients
+// are discovered
+TEST(Discovery, discovery_server_pdp_messages_sent)
 {
+    using namespace eprosima;
     using namespace eprosima::fastdds::dds;
     using namespace eprosima::fastrtps::rtps;
 
-    WireProtocolConfigQos qos;
+    // One discovery server will be created, with multiple direct clients connected to it.
+    // Initial announcements will be disabled and lease announcements will be configured to control discovery sequence.
+    // The main participant will use the test transport to count the number of Data(p) sent.
 
-    qos.builtin.readerHistoryMemoryPolicy = eprosima::fastrtps::rtps::DYNAMIC_REUSABLE_MEMORY_MODE;
+    // Look for the PID_PARTICIPANT_LEASE_DURATION in the message as it is only present in Data(p) messages
+    auto builtin_msg_is_data_p = [](fastrtps::rtps::CDRMessage_t& msg, std::atomic<size_t>& num_data_p)
+            {
+                uint32_t qos_size = 0;
+                uint32_t original_pos = msg.pos;
+                bool is_sentinel = false;
+                bool inline_qos_msg = false;
 
-    PubSubWriter<HelloWorldPubSubType> writer("test");
-    PubSubReader<HelloWorldPubSubType> reader("test");
+                while (!is_sentinel)
+                {
+                    msg.pos = original_pos + qos_size;
 
-    writer.set_wire_protocol_qos(qos).init();
-    ASSERT_TRUE(writer.isInitialized());
+                    uint16_t pid = fastdds::helpers::cdr_parse_u16(
+                        (char*)&msg.buffer[msg.pos]);
+                    msg.pos += 2;
+                    uint16_t plength = fastdds::helpers::cdr_parse_u16(
+                        (char*)&msg.buffer[msg.pos]);
+                    msg.pos += 2;
+                    bool valid = true;
 
-    reader.set_wire_protocol_qos(qos).init();
-    ASSERT_TRUE(reader.isInitialized());
+                    // If inline_qos submessage is found we will have an additional Sentinel
+                    if (pid == eprosima::fastdds::dds::PID_RELATED_SAMPLE_IDENTITY)
+                    {
+                        inline_qos_msg = true;
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_SENTINEL)
+                    {
+                        // PID_SENTINEL is always considered of length 0
+                        plength = 0;
+                        if (!inline_qos_msg)
+                        {
+                            // If the PID is not inline qos, then we need to set the sentinel
+                            // to true, as it is the last PID
+                            is_sentinel = true;
+                        }
+                    }
 
-    writer.wait_discovery();
-    reader.wait_discovery();
+                    qos_size += (4 + plength);
 
-    ASSERT_TRUE(reader.is_matched());
-    ASSERT_TRUE(writer.is_matched());
+                    // Align to 4 byte boundary and prepare for next iteration
+                    qos_size = (qos_size + 3) & ~3;
 
-    reader.delete_datareader();
+                    if (!valid || ((msg.pos + plength) > msg.length))
+                    {
+                        return false;
+                    }
+                    else if (!is_sentinel)
+                    {
+                        if (pid == eprosima::fastdds::dds::PID_PARTICIPANT_LEASE_DURATION)
+                        {
+                            std::cout << "Data(p) sent by the server" << std::endl;
+                            inline_qos_msg = false;
+                            num_data_p.fetch_add(1u, std::memory_order_seq_cst);
+                            break;
+                        }
+                    }
+                }
 
-    ASSERT_TRUE(writer.wait_reader_undiscovery(std::chrono::seconds(3)));
+                // Do not drop the packet in any case
+                return false;
+            };
 
+    // Declare a test transport that will count the number of Data(p) messages sent
+    std::atomic<size_t> num_data_p_sends{ 0 };
+    auto test_transport = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
+            {
+                return builtin_msg_is_data_p(msg, num_data_p_sends);
+            };
+
+    // Create the main participant
+    auto server = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server;  // UDPv4 locator by default
+    IPLocator::setIPv4(locator_server, 127, 0, 0, 1);
+    IPLocator::setPhysicalPort(locator_server, global_port);
+
+    WireProtocolConfigQos server_wp_qos;
+    server_wp_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
+    std::istringstream("44.53.00.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos.prefix;
+    server_wp_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server);
+
+    server_wp_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
+    server_wp_qos.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
+    server_wp_qos.builtin.discovery_config.initial_announcements.count = 0;
+
+    // The main participant will use the test transport and a specific announcements configuration
+    server->disable_builtin_transport().add_user_transport_to_pparams(test_transport)
+            .wire_protocol(server_wp_qos);
+
+    // Start the main participant
+    ASSERT_TRUE(server->init_participant());
+
+    // Create a client that connects to the first server
+    PubSubParticipant<HelloWorldPubSubType> client_1(0u, 0u, 0u, 0u);
+    PubSubParticipant<HelloWorldPubSubType> client_2(0u, 0u, 0u, 0u);
+    PubSubParticipant<HelloWorldPubSubType> client_3(0u, 0u, 0u, 0u);
+    // Set participant as client
+    WireProtocolConfigQos client_qos;
+    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+    RemoteServerAttributes remote_server_att;
+    remote_server_att.ReadguidPrefix("44.53.00.5f.45.50.52.4f.53.49.4d.41");
+    remote_server_att.metatrafficUnicastLocatorList.push_back(locator_server);
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att);
+    client_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
+    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
+    client_qos.builtin.discovery_config.initial_announcements.count = 1;
+    // Init client 1
+    ASSERT_TRUE(client_1.wire_protocol(client_qos)
+                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+                    .init_participant());
+
+    // Wait for the initial announcements to be sent
+    server->wait_discovery(std::chrono::seconds(5), 1, true);
+    // Let some time for the server to run the internal routine and check if it sent Data(p)
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 1u);
+
+    // Init client 2
+    ASSERT_TRUE(client_2.wire_protocol(client_qos)
+                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+                    .init_participant());
+
+
+    // Wait for the initial announcements to be sent
+    server->wait_discovery(std::chrono::seconds(5), 2, true);
+    // Let some time for the server to run the internal routine and check if it sent Data(p)
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 2u);
+
+    // Init client 3
+    ASSERT_TRUE(client_3.wire_protocol(client_qos)
+                    .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+                    .init_participant());
+
+
+    // Wait for the initial announcements to be sent
+    server->wait_discovery(std::chrono::seconds(5), 3, true);
+    // Let some time for the server to run the internal routine and check if it sent Data(p)
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    EXPECT_EQ(num_data_p_sends.load(std::memory_order::memory_order_seq_cst), 3u);
+}
+
+TEST(Discovery, discovery_server_edp_messages_sent)
+{
+    using namespace eprosima;
+    using namespace eprosima::fastdds::dds;
+    using namespace eprosima::fastrtps::rtps;
+
+    // Two discovery servers will be created, each with a direct client connected to them.
+    // Initial announcements will be disabled and lease announcements will be configured to control discovery sequence.
+    // The main participant will use the test transport to count the number of Data(r/w) sent.
+
+    // Look for the PID_ENDPOINT_GUID in the message as it is only present in Data(r/w) messages
+    auto builtin_msg_is_data_r_w = [](fastrtps::rtps::CDRMessage_t& msg, std::atomic<size_t>& num_data_r_w)
+            {
+                uint32_t qos_size = 0;
+                uint32_t original_pos = msg.pos;
+                bool is_sentinel = false;
+                bool inline_qos_msg = false;
+
+                while (!is_sentinel)
+                {
+                    msg.pos = original_pos + qos_size;
+
+                    uint16_t pid = fastdds::helpers::cdr_parse_u16(
+                        (char*)&msg.buffer[msg.pos]);
+                    msg.pos += 2;
+                    uint16_t plength = fastdds::helpers::cdr_parse_u16(
+                        (char*)&msg.buffer[msg.pos]);
+                    msg.pos += 2;
+                    bool valid = true;
+
+                    if (pid == eprosima::fastdds::dds::PID_RELATED_SAMPLE_IDENTITY)
+                    {
+                        inline_qos_msg = true;
+                    }
+                    else if (pid == eprosima::fastdds::dds::PID_SENTINEL)
+                    {
+                        // PID_SENTINEL is always considered of length 0
+                        plength = 0;
+                        if (!inline_qos_msg)
+                        {
+                            // If the PID is not inline qos, then we need to set the sentinel
+                            // to true, as it is the last PID
+                            is_sentinel = true;
+                        }
+                    }
+
+                    qos_size += (4 + plength);
+
+                    // Align to 4 byte boundary and prepare for next iteration
+                    qos_size = (qos_size + 3) & ~3;
+
+                    if (!valid || ((msg.pos + plength) > msg.length))
+                    {
+                        return false;
+                    }
+                    else if (!is_sentinel)
+                    {
+                        if (pid == eprosima::fastdds::dds::PID_ENDPOINT_GUID)
+                        {
+                            std::cout << "Data (r/w) sent by the server" << std::endl;
+                            num_data_r_w.fetch_add(1u, std::memory_order_seq_cst);
+                            break;
+                        }
+                        else if (pid == eprosima::fastdds::dds::PID_VENDORID)
+                        {
+                            // Vendor ID is present in both Data(p) and Data(r/w) messages
+                            inline_qos_msg = false;
+                        }
+                    }
+                }
+
+                // Do not drop the packet in any case
+                return false;
+            };
+
+    // Declare a test transport that will count the number of Data(r/w) messages sent
+    std::atomic<size_t> num_data_r_w_sends_s1{ 0 };
+    std::atomic<size_t> num_data_r_w_sends_s2{ 0 };
+    auto test_transport_s1 = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport_s1->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
+            {
+                return builtin_msg_is_data_r_w(msg, num_data_r_w_sends_s1);
+            };
+
+    auto test_transport_s2 = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport_s2->drop_builtin_data_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
+            {
+                return builtin_msg_is_data_r_w(msg, num_data_r_w_sends_s2);
+            };
+
+    // Create server 1
+    auto server_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server_1;  // UDPv4 locator by default
+    IPLocator::setIPv4(locator_server_1, 127, 0, 0, 1);
+    IPLocator::setPhysicalPort(locator_server_1, global_port);
+
+    WireProtocolConfigQos server_wp_qos_1;
+    server_wp_qos_1.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
+    std::istringstream("44.53.01.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos_1.prefix;
+    server_wp_qos_1.builtin.metatrafficUnicastLocatorList.push_back(locator_server_1);
+
+    server_wp_qos_1.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
+    server_wp_qos_1.builtin.discovery_config.leaseDuration_announcementperiod = fastrtps::c_TimeInfinite;
+    server_wp_qos_1.builtin.discovery_config.initial_announcements.count = 0;
+
+    // The main participant will use the test transport and a specific announcements configuration
+    server_1->disable_builtin_transport().add_user_transport_to_pparams(test_transport_s1)
+            .wire_protocol(server_wp_qos_1);
+
+    // Start the main participant
+    ASSERT_TRUE(server_1->init_participant());
+
+    // Create server 2
+    auto server_2 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server_2 = locator_server_1;  // UDPv4 locator by default
+    IPLocator::setPhysicalPort(locator_server_2, global_port + 1);
+
+    WireProtocolConfigQos server_wp_qos_2 = server_wp_qos_1;
+    std::istringstream("44.53.02.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos_2.prefix;
+    server_wp_qos_2.builtin.metatrafficUnicastLocatorList.clear();
+    server_wp_qos_2.builtin.metatrafficUnicastLocatorList.push_back(locator_server_2);
+    // Configure 1 initial announcement as this Server will connect to the first one
+    server_wp_qos_2.builtin.discovery_config.initial_announcements.count = 1;
+    RemoteServerAttributes remote_server_att_1;
+    remote_server_att_1.ReadguidPrefix("44.53.01.5f.45.50.52.4f.53.49.4d.41");
+    remote_server_att_1.metatrafficUnicastLocatorList.push_back(locator_server_1);
+    server_wp_qos_2.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_1);
+
+    // The main participant will use the test transport and a specific announcements configuration
+    server_2->disable_builtin_transport().add_user_transport_to_pparams(test_transport_s2)
+            .wire_protocol(server_wp_qos_2);
+
+    // Start the main participant
+    ASSERT_TRUE(server_2->init_participant());
+
+    // Both servers match
+    server_1->wait_discovery(std::chrono::seconds(5), 1, true);
+    server_2->wait_discovery(std::chrono::seconds(5), 1, true);
+    // Let some time for the server to run the internal routine and match virtual endpoints
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    // Create a client that connects to their corresponding server
+    PubSubWriter<HelloWorldPubSubType> client_1(TEST_TOPIC_NAME);
+    PubSubReader<HelloWorldPubSubType> client_2(TEST_TOPIC_NAME);
+    // Set participant as client
+    WireProtocolConfigQos client_qos;
+    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_1);
+    client_qos.builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
+    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 15, 0 };
+    client_qos.builtin.discovery_config.initial_announcements.count = 0;
+
+    // Init client 1
+    client_1.set_wire_protocol_qos(client_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .init();
+
+    // Init client 2
+    client_qos.builtin.discovery_config.m_DiscoveryServers.clear();
+    RemoteServerAttributes remote_server_att_2;
+    remote_server_att_2.ReadguidPrefix("44.53.02.5f.45.50.52.4f.53.49.4d.41");
+    remote_server_att_2.metatrafficUnicastLocatorList.push_back(locator_server_2);
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att_2);
+    client_2.set_wire_protocol_qos(client_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .init();
+
+    ASSERT_TRUE(client_1.isInitialized());
+    ASSERT_TRUE(client_2.isInitialized());
+
+    // Wait the lease announcement period to discover endpoints
+    server_1->wait_discovery(std::chrono::seconds(5), 2, true);
+    server_2->wait_discovery(std::chrono::seconds(5), 2, true);
+
+    // Ensure that no additional Data(r/w) messages are sent by DS routine
+    std::this_thread::sleep_for(std::chrono::seconds(15));
+
+    EXPECT_EQ(num_data_r_w_sends_s1.load(std::memory_order::memory_order_seq_cst), 2u);
+    EXPECT_EQ(num_data_r_w_sends_s2.load(std::memory_order::memory_order_seq_cst), 2u);
+}
+
+// This is a regression test for Redmine #23088, which corrects the following data race in the discovery server:
+// a) When a participant is being removed (either because it is being deleted or because its lease duration has expired),
+//    it is not deleted from participants_ map until the server has received all ACKs from clients of the Data(Up).
+// b) If the same participant is re-discovered (Data(p) received) while the server is waiting for the Data(Up) ACKs,
+//    it will not be updated in the participants_ map as ALIVE.
+// c) If the Data(Up) ACKs and the Data(r/w) of the rediscovered participant are received at the same time,
+//    the server will delete the participant and try to process the Data(r/w) messages in the same routine.
+//    The server will try to register a reader/writer from a deleted participant, which will result in the error:
+//    "Matching unexisting participant from reader/writer".
+// This test checks that this does not happen after fixing point b) and updating the participant to ALIVE.
+TEST(Discovery, discovery_server_rediscover_participant_being_removed)
+{
+    using namespace eprosima;
+    using namespace eprosima::fastdds::dds;
+    using namespace eprosima::fastrtps::rtps;
+
+    // One discovery server will be created, with two direct clients connected to it.
+    // Client 1 will be removed and then relaunched, while the Client 2 will be kept alive.
+    // Client 2 ACKs will be blocked to simulate a slow discovery process.
+
+    std::atomic<bool> filter_activated { false };
+    auto block_data_up_acks = [&filter_activated](fastrtps::rtps::CDRMessage_t& msg)
+            {
+                // Filter Data(Up) ACKs messages
+                if (filter_activated.load(std::memory_order::memory_order_seq_cst))
+                {
+                    // Go back to submsgkind
+                    auto submsgkind_pos = msg.pos - 4;
+                    auto acknack_submsg = eprosima::fastdds::helpers::cdr_parse_acknack_submsg(
+                        (char*)&msg.buffer[submsgkind_pos],
+                        msg.length - submsgkind_pos);
+
+                    assert(acknack_submsg.submsgHeader().submessageId() == ACKNACK);
+
+                    if (eprosima::fastrtps::rtps::c_EntityId_SPDPWriter ==
+                            *reinterpret_cast<EntityId_t*>(&acknack_submsg.writerId()) ||
+                            eprosima::fastrtps::rtps::c_EntityId_SEDPPubWriter ==
+                            *reinterpret_cast<EntityId_t*>(&acknack_submsg.writerId()))
+                    {
+                        std::cout << "Blocking Data(Up) ACKs" << std::endl;
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+    // Declare a test transport that will count the number of Data(p) messages sent
+    auto default_udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+    auto test_transport = std::make_shared<fastdds::rtps::test_UDPv4TransportDescriptor>();
+    test_transport->drop_ack_nack_messages_filter_ = [&](fastrtps::rtps::CDRMessage_t& msg)
+            {
+                return block_data_up_acks(msg);
+            };
+
+    // Create the main participant
+    auto server = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0, 0, 0, 0);
+
+    Locator_t locator_server;  // UDPv4 locator by default
+    IPLocator::setIPv4(locator_server, 127, 0, 0, 1);
+    IPLocator::setPhysicalPort(locator_server, global_port);
+
+    WireProtocolConfigQos server_wp_qos;
+    server_wp_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SERVER;
+    std::istringstream("44.53.00.5f.45.50.52.4f.53.49.4d.41") >> server_wp_qos.prefix;
+    server_wp_qos.builtin.metatrafficUnicastLocatorList.push_back(locator_server);
+    // Raise the routine period to control the discovery process
+    server_wp_qos.builtin.discovery_config.discoveryServer_client_syncperiod = { 5, 0 };
+    server_wp_qos.builtin.discovery_config.leaseDuration = { 60, 0 };
+    server_wp_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 59, 0 };
+    server_wp_qos.builtin.discovery_config.initial_announcements.count = 1;
+
+    // The main participant will use the test transport and a specific announcements configuration
+    server->disable_builtin_transport()
+            .add_user_transport_to_pparams(default_udp_transport)
+            .wire_protocol(server_wp_qos);
+
+    // Start the main participant
+    ASSERT_TRUE(server->init_participant());
+
+    // Create clients
+    std::shared_ptr<PubSubParticipant<HelloWorldPubSubType>> client_1 =
+            std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(1u, 0u, 0u, 1u);
+    std::shared_ptr<PubSubParticipant<HelloWorldPubSubType>> client_2 =
+            std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(0u, 1u, 1u, 0u);
+    // Set participant as client
+    WireProtocolConfigQos client_qos;
+    client_qos.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::CLIENT;
+    RemoteServerAttributes remote_server_att;
+    remote_server_att.ReadguidPrefix("44.53.00.5f.45.50.52.4f.53.49.4d.41");
+    remote_server_att.metatrafficUnicastLocatorList.push_back(locator_server);
+    client_qos.builtin.discovery_config.m_DiscoveryServers.push_back(remote_server_att);
+    client_qos.builtin.discovery_config.leaseDuration = { 60, 0 };
+    client_qos.builtin.discovery_config.leaseDuration_announcementperiod = { 59, 0 };
+    client_qos.builtin.discovery_config.initial_announcements.count = 1;
+    std::istringstream("64.61.74.61.5f.72.61.63.65.5f.64.73") >> client_qos.prefix;
+
+    // Init client 1
+    client_1->wire_protocol(client_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .pub_topic_name(TEST_TOPIC_NAME);
+    ASSERT_TRUE(client_1->init_participant());
+    ASSERT_TRUE(client_1->init_publisher(0u));
+
+    // Init client 2
+    WireProtocolConfigQos client2_qos = client_qos;
+    std::istringstream("73.61.74.61.5f.72.61.63.65.5f.64.73") >> client2_qos.prefix;
+    client_2->wire_protocol(client2_qos)
+            .disable_builtin_transport()
+            .add_user_transport_to_pparams(test_transport)
+            .sub_topic_name(TEST_TOPIC_NAME);
+    ASSERT_TRUE(client_2->init_participant());
+    ASSERT_TRUE(client_2->init_subscriber(0u));
+
+    // Wait at least the servers routine period to discover endpoints
+    ASSERT_TRUE(server->wait_discovery(std::chrono::seconds(6), 2, true));
+    client_2->sub_wait_discovery(1);
+    client_1->pub_wait_discovery(1);
+
+    // Server discovered both clients, activate filter to block Data(Up) ACKs
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << "Blocking Data(Up) ACKs activated" << std::endl;
+    filter_activated.store(true, std::memory_order::memory_order_seq_cst);
+
+    // Remove client 1
+    client_1.reset();
+    ASSERT_TRUE(client_1 == nullptr);
+    // Ensure client 2 has unmatched the client 1
+    client_2->sub_wait_discovery(0);
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // Relaunch client 1 and deactivate the filter
+    client_1 = std::make_shared<PubSubParticipant<HelloWorldPubSubType>>(1u, 0u, 0u, 1u);
+    client_1->wire_protocol(client_qos)
+            .setup_transports(eprosima::fastdds::rtps::BuiltinTransports::UDPv4)
+            .pub_topic_name(TEST_TOPIC_NAME);
+    // Init only the participant, publisher will be initialized later
+    ASSERT_TRUE(client_1->init_participant());
+    std::cout << "Blocking Data(Up) ACKs deactivated" << std::endl;
+    filter_activated.store(false, std::memory_order::memory_order_seq_cst);
+
+    // Give time to receive Data(Up) ACK, process the Data(p) and update the participant,
+    // but do it before a whole period of the server's routine.
+    // In this way new Data(w) and Data(Up) ACK are processed in the same routine
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    ASSERT_TRUE(client_1->init_publisher(0u));
+
+    // Client 2 should discover client 1 again and log error "Writer has no associated participant." should not appear
+    client_2->sub_wait_discovery(1);
 }

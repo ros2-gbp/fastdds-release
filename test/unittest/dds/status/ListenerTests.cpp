@@ -37,10 +37,13 @@
 #include <fastdds/rtps/writer/RTPSWriter.h>
 #include <fastdds/rtps/participant/RTPSParticipant.h>
 
+#include <rtps/participant/RTPSParticipantImpl.h>
+
 
 using ::testing::StrictMock;
 using ::testing::NiceMock;
 using ::testing::Mock;
+using ::testing::_;
 
 using eprosima::fastrtps::rtps::RTPSDomain;
 
@@ -111,9 +114,7 @@ class RTPSWriterMock : public eprosima::fastrtps::rtps::RTPSWriter
 {
 public:
 
-    RTPSWriterMock()
-    {
-    }
+    RTPSWriterMock() = default;
 
     virtual ~RTPSWriterMock() = default;
 
@@ -510,7 +511,10 @@ public:
     std::function<uint32_t()> getSerializedSizeProvider(
             void* /*data*/) override
     {
-        return std::function<uint32_t()>();
+        return []()->uint32_t
+               {
+                   return 0;
+               };
     }
 
     void* createData() override
@@ -531,6 +535,10 @@ public:
         return true;
     }
 
+private:
+
+    using TopicDataType::getSerializedSizeProvider;
+    using TopicDataType::serialize;
 };
 
 class UserListeners : public ::testing::Test
@@ -544,6 +552,10 @@ protected:
         RTPSDomain::participant_ = &participant_mock_;
         RTPSDomain::writer_ = &writer_mock_;
         RTPSDomain::reader_ = &reader_mock_;
+
+        // BaseWriter::get_participant_impl() must return non-null; some code
+        // paths (e.g. get_publication_builtin_topic_data) assert on it.
+        writer_mock_.mp_RTPSParticipant = &participant_impl_mock_;
 
         // Create the DDS entities with the user listeners
         participant_ =
@@ -595,6 +607,7 @@ protected:
     NiceMock<RTPSParticipantMock> participant_mock_;
     NiceMock<RTPSWriterMock> writer_mock_;
     NiceMock<RTPSReaderMock> reader_mock_;
+    eprosima::fastrtps::rtps::RTPSParticipantImpl participant_impl_mock_;
 
     // User listeners are strick, we want to track unexpected calls
     StrictMock<CustomParticipantListener> participant_listener_;
@@ -1328,10 +1341,18 @@ void verify_expectations_on_data_available (
 {
     fastrtps::rtps::CacheChange_t change;
 
-    RTPSDomain::reader_->listener_->onNewCacheChangeAdded(nullptr, &change);
+    auto seq = change.sequenceNumber;
+    bool notify_individual = false;
+
+    EXPECT_CALL(*RTPSDomain::reader_->history_, get_change(_, _, _))
+            .WillRepeatedly(testing::DoAll(testing::SetArgPointee<2>(&change), testing::Return(true)));
+
+    RTPSDomain::reader_->listener_->on_data_available(nullptr, change.writerGUID, seq, seq, notify_individual);
+
     Mock::VerifyAndClearExpectations(&datareader_listener_);
     Mock::VerifyAndClearExpectations(&subscriber_listener_);
     Mock::VerifyAndClearExpectations(&participant_listener_);
+    Mock::VerifyAndClearExpectations(RTPSDomain::reader_->history_);
 }
 
 TEST_F(UserListeners, data_available)

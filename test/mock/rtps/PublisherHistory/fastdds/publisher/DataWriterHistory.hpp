@@ -34,6 +34,8 @@
 
 #include <fastdds/publisher/history/DataWriterInstance.hpp>
 
+#include <rtps/history/HistoryAttributesExtension.hpp>
+
 namespace eprosima {
 namespace fastdds {
 namespace dds {
@@ -52,13 +54,21 @@ static HistoryAttributes to_history_attributes(
 
     if (topic_att.historyQos.kind != KEEP_ALL_HISTORY_QOS)
     {
-        max_samples = topic_att.historyQos.depth;
+        max_samples = get_min_max_samples(topic_att.historyQos.depth,
+                        topic_att.resourceLimitsQos.max_samples_per_instance);
         if (topic_att.getTopicKind() != NO_KEY)
         {
-            max_samples *= topic_att.resourceLimitsQos.max_instances;
+            if (0 < topic_att.resourceLimitsQos.max_instances)
+            {
+                max_samples *= topic_att.resourceLimitsQos.max_instances;
+            }
+            else
+            {
+                max_samples = LENGTH_UNLIMITED;
+            }
         }
 
-        initial_samples = std::min(initial_samples, max_samples);
+        initial_samples = get_min_max_samples(initial_samples, max_samples);
     }
 
     return HistoryAttributes(mempolicy, payloadMaxSize, initial_samples, max_samples, extra_samples);
@@ -71,20 +81,27 @@ public:
     DataWriterHistory(
             const TopicAttributes& topic_att,
             uint32_t payloadMaxSize,
-            MemoryManagementPolicy_t mempolicy)
+            MemoryManagementPolicy_t mempolicy,
+            std::function<void (const fastrtps::rtps::InstanceHandle_t&)> unack_sample_remove_functor)
         : WriterHistory(to_history_attributes(topic_att, payloadMaxSize, mempolicy))
         , history_qos_(topic_att.historyQos)
         , resource_limited_qos_(topic_att.resourceLimitsQos)
         , topic_att_(topic_att)
+        , unacknowledged_sample_removed_functor_(unack_sample_remove_functor)
     {
-        if (resource_limited_qos_.max_instances == 0)
+        if (resource_limited_qos_.max_samples <= 0)
         {
-            resource_limited_qos_.max_instances = std::numeric_limits<int32_t>::max();
+            resource_limited_qos_.max_samples = -1;
         }
 
-        if (resource_limited_qos_.max_samples_per_instance == 0)
+        if (resource_limited_qos_.max_instances <= 0)
         {
-            resource_limited_qos_.max_samples_per_instance = std::numeric_limits<int32_t>::max();
+            resource_limited_qos_.max_instances = -1;
+        }
+
+        if (resource_limited_qos_.max_samples_per_instance <= 0)
+        {
+            resource_limited_qos_.max_samples_per_instance = -1;
         }
     }
 
@@ -133,7 +150,7 @@ public:
     {
         if (mp_writer == nullptr || mp_mutex == nullptr)
         {
-            logError(RTPS_HISTORY, "You need to create a Writer with this History before using it");
+            EPROSIMA_LOG_ERROR(RTPS_HISTORY, "You need to create a Writer with this History before using it");
             return false;
         }
         std::lock_guard<RecursiveTimedMutex> guard(*this->mp_mutex);
@@ -296,6 +313,9 @@ private:
     ResourceLimitsQosPolicy resource_limited_qos_;
     //!Topic Attributes
     TopicAttributes topic_att_;
+
+    //! Unacknowledged sample removed functor
+    std::function<void (const fastrtps::rtps::InstanceHandle_t&)> unacknowledged_sample_removed_functor_;
 
     bool find_or_add_key(
             const InstanceHandle_t& instance_handle,

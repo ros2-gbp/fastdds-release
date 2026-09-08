@@ -1,7 +1,7 @@
 names:
     fastcdr:
         cmake-args:
-            - "-DEPROSIMA_BUILD_TESTS=ON"
+            - "-DBUILD_TESTING=ON"
     googletest-distribution:
         cmake-args:
             - "-Dgtest_force_shared_crt=ON"

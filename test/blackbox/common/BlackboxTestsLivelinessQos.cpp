@@ -32,12 +32,14 @@
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
 
+namespace {
 enum communication_type
 {
     TRANSPORT,
     INTRAPROCESS,
     DATASHARING
 };
+}  // namespace
 
 class LivelinessQos : public testing::TestWithParam<communication_type>
 {
@@ -2056,7 +2058,7 @@ static void test_liveliness_qos_independent_topics(
 {
     const auto lease_dutation_time = std::chrono::seconds(1);
     const eprosima::fastrtps::Duration_t lease_duration(1, 0);
-    const eprosima::fastrtps::Duration_t announcement_period(0, 250000000);
+    const eprosima::fastrtps::Duration_t announcement_period(0, 500000000);
 
     PubSubReader<HelloWorldPubSubType> reader1(topic_name + "1");
     PubSubReader<HelloWorldPubSubType> reader2(topic_name + "2");

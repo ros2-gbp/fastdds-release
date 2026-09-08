@@ -254,8 +254,8 @@ inline void iHandle2GUID(
 }
 
 /**
- * Convert GUID to InstanceHandle_t
- * @param ihandle InstanceHandle_t to store the results
+ * Convert InstanceHandle_t to GUID
+ * @param ihandle InstanceHandle_t to copy
  * @return GUID_t
  */
 inline GUID_t iHandle2GUID(
@@ -293,13 +293,14 @@ inline std::ostream& operator <<(
         std::ostream& output,
         const InstanceHandle_t& iHandle)
 {
-    output << std::hex;
+    std::stringstream ss;
+    ss << std::hex;
     for (uint8_t i = 0; i < 15; ++i)
     {
-        output << (int)iHandle.value[i] << ".";
+        ss << (int)iHandle.value[i] << ".";
     }
-    output << (int)iHandle.value[15u] << std::dec;
-    return output;
+    ss << (int)iHandle.value[15u] << std::dec;
+    return output << ss.str();
 }
 
 /**

@@ -30,11 +30,13 @@
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
 
+namespace {
 enum communication_type
 {
     TRANSPORT,
     INTRAPROCESS
 };
+}  // namespace
 
 class Persistence : public ::testing::TestWithParam<communication_type>
 {
@@ -134,9 +136,9 @@ protected:
         std::ostringstream ss;
         std::string test_case_name(info->test_case_name());
         std::string test_name(info->name());
-        ss <<
-            test_case_name.replace(test_case_name.find_first_of('/'), 1, "_") << "_" <<
-            test_name.replace(test_name.find_first_of('/'), 1, "_")  << "_" << GET_PID() << ".db";
+        ss
+            << test_case_name.replace(test_case_name.find_first_of('/'), 1, "_") << "_"
+            << test_name.replace(test_name.find_first_of('/'), 1, "_")  << "_" << GET_PID() << ".db";
         db_file_name_ = ss.str();
 
         // Fill guid prefix
@@ -145,7 +147,7 @@ protected:
         const int32_t pid = GET_PID();
         memcpy(guid_prefix_.value + 4, &pid, sizeof(pid));
         guid_prefix_.value[8] = HAVE_SECURITY;
-        guid_prefix_.value[9] = 3; //PREALLOCATED_MEMORY_MODE
+        guid_prefix_.value[9] = 3;
         LocatorList_t loc;
         IPFinder::getIP4Address(&loc);
         if (loc.size() > 0)

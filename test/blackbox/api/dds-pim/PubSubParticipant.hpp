@@ -242,12 +242,13 @@ public:
             datawriter_qos_.properties().properties().emplace_back("fastdds.push_mode", "false");
         }
 
-#if defined(PREALLOCATED_WITH_REALLOC_MEMORY_MODE_TEST)
-        datawriter_qos_.historyMemoryPolicy = rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+#if defined(PREALLOCATED_MEMORY_MODE_TEST)
+        datawriter_qos_.historyMemoryPolicy = rtps::PREALLOCATED_MEMORY_MODE;
 #elif defined(DYNAMIC_RESERVE_MEMORY_MODE_TEST)
         datawriter_qos_.historyMemoryPolicy = rtps::DYNAMIC_RESERVE_MEMORY_MODE;
 #else
-        datawriter_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
+        datawriter_qos_.endpoint().history_memory_policy =
+                eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 #endif // if defined(PREALLOCATED_WITH_REALLOC_MEMORY_MODE_TEST)
 
         // By default, heartbeat period and nack response delay are 100 milliseconds.
@@ -647,6 +648,13 @@ public:
         return *this;
     }
 
+    PubSubParticipant& setup_transports(
+            eprosima::fastdds::rtps::BuiltinTransports transports)
+    {
+        participant_qos_.setup_transports(transports);
+        return *this;
+    }
+
     PubSubParticipant& user_data(
             const std::vector<eprosima::fastrtps::rtps::octet>& user_data)
     {
@@ -657,6 +665,8 @@ public:
     bool update_user_data(
             const std::vector<eprosima::fastrtps::rtps::octet>& user_data)
     {
+        // Update QoS before updating user data as statistics properties might have changed internally
+        participant_qos_ = participant_->get_qos();
         participant_qos_.user_data().data_vec(user_data);
         return ReturnCode_t::RETCODE_OK == participant_->set_qos(participant_qos_);
     }
@@ -665,6 +675,13 @@ public:
             const eprosima::fastdds::dds::WireProtocolConfigQos& wire_protocol)
     {
         participant_qos_.wire_protocol() = wire_protocol;
+        return *this;
+    }
+
+    PubSubParticipant& wire_protocol_builtin(
+            const eprosima::fastrtps::rtps::BuiltinAttributes& wire_protocol_builtin)
+    {
+        participant_qos_.wire_protocol().builtin = wire_protocol_builtin;
         return *this;
     }
 
@@ -679,6 +696,13 @@ public:
             return true;
         }
         return false;
+    }
+
+    PubSubParticipant& initial_peers(
+            const eprosima::fastrtps::rtps::LocatorList_t& initial_peers)
+    {
+        participant_qos_.wire_protocol().builtin.initialPeersList = initial_peers;
+        return *this;
     }
 
     PubSubParticipant& pub_property_policy(

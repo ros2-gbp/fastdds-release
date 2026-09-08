@@ -143,7 +143,7 @@ public:
             FragmentNumber_t& next_unsent_frag,
             SequenceNumber_t& gap_seq,
             const SequenceNumber_t& min_seq,
-            bool& need_reactivate_periodic_heartbeat) const;
+            bool& need_reactivate_periodic_heartbeat);
 
     /**
      * Mark all changes up to the one indicated by seq_num as Acknowledged.
@@ -294,7 +294,7 @@ public:
      * Get the local reader on the same process (if any).
      * @return The local reader on the same process.
      */
-    inline RTPSReader* local_reader()
+    inline LocalReaderPointer::Instance local_reader()
     {
         return locator_info_.local_reader();
     }
@@ -345,9 +345,36 @@ public:
      * Get the highest fully acknowledged sequence number.
      * @return the highest fully acknowledged sequence number.
      */
-    SequenceNumber_t changes_low_mark() const
+    inline SequenceNumber_t changes_low_mark() const
     {
         return changes_low_mark_;
+    }
+
+    /*!
+     * Get the first sequence number not relevant that was removed without reader being informed.
+     * @return First sequence number.
+     */
+    inline SequenceNumber_t first_irrelevant_removed() const
+    {
+        return first_irrelevant_removed_;
+    }
+
+    /*!
+     * Get the last sequence number not relevant that was removed without reader being informed.
+     * @return last sequence number.
+     */
+    inline SequenceNumber_t last_irrelevant_removed() const
+    {
+        return last_irrelevant_removed_;
+    }
+
+    /*!
+     * Reset the interval of sequence numbers not relevant that were removed without reader being informed.
+     */
+    inline void reset_irrelevant_removed()
+    {
+        first_irrelevant_removed_ = SequenceNumber_t::unknown();
+        last_irrelevant_removed_ = SequenceNumber_t::unknown();
     }
 
     /**
@@ -357,9 +384,14 @@ public:
     void update_nack_supression_interval(
             const Duration_t& interval);
 
-    LocatorSelectorEntry* locator_selector_entry()
+    LocatorSelectorEntry* general_locator_selector_entry()
     {
-        return locator_info_.locator_selector_entry();
+        return locator_info_.general_locator_selector_entry();
+    }
+
+    LocatorSelectorEntry* async_locator_selector_entry()
+    {
+        return locator_info_.async_locator_selector_entry();
     }
 
     RTPSMessageSenderInterface* message_sender()
@@ -403,6 +435,20 @@ public:
         active_ = active;
     }
 
+    /**
+     * @brief Check if the sequence number given has been delivered at least once to the transport layer.
+     *
+     * @param seq_number Sequence number of the change to check.
+     * @param found The sequence number has been found in the list of changes pending to be sent/ack.
+     *              This flag allows to differentiate the case when the change is not found from the one that is found
+     *              but it has not been delivered yet.
+     * @return true if the change has been delivered.
+     * @return false otherwise.
+     */
+    bool has_been_delivered(
+            const SequenceNumber_t& seq_number,
+            bool& found) const;
+
 private:
 
     //!Is this proxy active? I.e. does it have a remote reader associated?
@@ -431,7 +477,13 @@ private:
     //! Last  NACKFRAG count.
     uint32_t last_nackfrag_count_;
 
+    //! Sequence number of the lowest change not fully acknowledged.
     SequenceNumber_t changes_low_mark_;
+
+    //! First sequence number not relevant that was removed without reader being informed.
+    SequenceNumber_t first_irrelevant_removed_ {SequenceNumber_t::unknown()};
+    //! Last sequence number not relevant that was removed without reader being informed.
+    SequenceNumber_t last_irrelevant_removed_ {SequenceNumber_t::unknown()};
 
     bool active_ = false;
 

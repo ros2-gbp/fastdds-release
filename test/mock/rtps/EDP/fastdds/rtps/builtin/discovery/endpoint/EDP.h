@@ -32,10 +32,74 @@ namespace eprosima {
 namespace fastrtps {
 namespace rtps {
 
-
 class EDP
 {
 public:
+
+    virtual ~EDP()
+    {
+
+    }
+
+    virtual bool initEDP(
+            eprosima::fastrtps::rtps::BuiltinAttributes&)
+    {
+        return true;
+    }
+
+    virtual void removeRemoteEndpoints(
+            eprosima::fastrtps::rtps::ParticipantProxyData*)
+    {
+
+    }
+
+    virtual bool areRemoteEndpointsMatched(
+            const eprosima::fastrtps::rtps::ParticipantProxyData*)
+    {
+        return true;
+    }
+
+    virtual bool removeLocalReader(
+            eprosima::fastrtps::rtps::RTPSReader*)
+    {
+        return true;
+    }
+
+    virtual bool removeLocalWriter(
+            eprosima::fastrtps::rtps::RTPSWriter*)
+    {
+        return true;
+    }
+
+    virtual void assignRemoteEndpoints(
+            const eprosima::fastrtps::rtps::ParticipantProxyData&,
+            bool)
+    {
+
+    }
+
+    virtual bool processLocalReaderProxyData(
+            eprosima::fastrtps::rtps::RTPSReader*,
+            eprosima::fastrtps::rtps::ReaderProxyData*)
+    {
+        return true;
+    }
+
+    virtual bool processLocalWriterProxyData(
+            eprosima::fastrtps::rtps::RTPSWriter*,
+            eprosima::fastrtps::rtps::WriterProxyData*)
+    {
+        return true;
+    }
+
+    MOCK_METHOD3(unpairWriterProxy, bool(
+                const GUID_t& participant_guid,
+                const GUID_t& writer_guid,
+                bool removed_by_lease));
+
+    MOCK_METHOD2(unpairReaderProxy, bool(
+                const GUID_t& participant_guid,
+                const GUID_t& reader_guid));
 
     virtual bool pairing_reader_proxy_with_any_local_writer(
             const GUID_t&,
@@ -51,26 +115,6 @@ public:
         return true;
     }
 
-    bool unpairWriterProxy(
-            const GUID_t& participant_guid,
-            const GUID_t& writer_guid,
-            bool removed_by_lease)
-    {
-        (void)participant_guid;
-        (void)writer_guid;
-        (void)removed_by_lease;
-        return true;
-    }
-
-    bool unpairReaderProxy(
-            const GUID_t& participant_guid,
-            const GUID_t& reader_guid)
-    {
-        (void)participant_guid;
-        (void)reader_guid;
-        return true;
-    }
-
 #if HAVE_SECURITY
     MOCK_METHOD3(pairing_reader_proxy_with_local_writer, bool(const GUID_t& local_writer,
             const GUID_t& remote_participant_guid, ReaderProxyData & rdata));
@@ -83,6 +127,21 @@ public:
 
     MOCK_METHOD2(pairing_remote_writer_with_local_reader_after_security, bool(const GUID_t& local_reader,
             const WriterProxyData& remote_writer_data));
+
+    virtual bool pairing_remote_writer_with_local_builtin_reader_after_security(
+            const eprosima::fastrtps::rtps::GUID_t&,
+            const eprosima::fastrtps::rtps::WriterProxyData&)
+    {
+        return true;
+    }
+
+    virtual bool pairing_remote_reader_with_local_builtin_writer_after_security(
+            const eprosima::fastrtps::rtps::GUID_t&,
+            const eprosima::fastrtps::rtps::ReaderProxyData&)
+    {
+        return true;
+    }
+
 #endif // if HAVE_SECURITY
 };
 
