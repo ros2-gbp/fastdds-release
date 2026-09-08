@@ -581,7 +581,8 @@ bool TCPTransportInterface::init(
     {
         auto ioContextTimersFunction = [&]()
                 {
-                    asio::executor_work_guard<asio::io_context::executor_type> work = make_work_guard(io_context_timers_.
+                    asio::executor_work_guard<asio::io_context::executor_type> work =
+                            make_work_guard(io_context_timers_.
                                             get_executor());
                     io_context_timers_.run();
                 };
@@ -1064,8 +1065,8 @@ bool TCPTransportInterface::OpenInputChannel(
             }
 
             EPROSIMA_LOG_INFO(RTCP, " OpenInputChannel (physical: " << IPLocator::getPhysicalPort(
-                        locator) << "; logical: " << \
-                    IPLocator::getLogicalPort(locator) << ")");
+                        locator) << "; logical: " \
+                                                                    << IPLocator::getLogicalPort(locator) << ")");
         }
     }
     return success;
@@ -1217,6 +1218,55 @@ void TCPTransportInterface::perform_listen_operation(
     }
 
     EPROSIMA_LOG_INFO(RTCP, "End PerformListenOperation " << channel->locator());
+
+    // If we get here, the channel has been disconnected. We might need to clean it up if
+    // the remote endpoint is the one that initiated the disconnection.
+    // We only delete acceptor channels, as connect channels need to be kept in channel_resources_ to restart the connection
+    if (channel && channel->tcp_connection_type() == TCPChannelResource::TCPConnectionType::TCP_ACCEPT_TYPE)
+    {
+        // Defer the erase to io_context_ so the TCPChannelResource destructor runs off the listener thread that is about to exit.
+        // Weak_ptr is used to avoid keeping the channel alive if it has already been removed from the maps by another thread.
+        asio::post(io_context_, [this, channel_weak]()
+                {
+                    auto ch = channel_weak.lock();
+                    if (!ch)
+                    {
+                        return;
+                    }
+                    {
+                        // Channel resources map case
+                        std::unique_lock<std::mutex> scoped_lock(sockets_map_mutex_);
+                        bool erased = false;
+                        // There might be multiple entries with the same channel. Delete them all
+                        for (auto it = channel_resources_.begin(); it != channel_resources_.end(); )
+                        {
+                            if (it->second == ch)
+                            {
+                                it = channel_resources_.erase(it);
+                                erased = true;
+                            }
+                            else
+                            {
+                                ++it;
+                            }
+                        }
+                        if (erased)
+                        {
+                            return;
+                        }
+                    }
+                    // Unbound channel resources map case
+                    std::unique_lock<std::mutex> unbound_lock(unbound_map_mutex_);
+                    auto it = std::find(unbound_channel_resources_.begin(),
+                    unbound_channel_resources_.end(), ch);
+                    if (it != unbound_channel_resources_.end())
+                    {
+                        unbound_channel_resources_.erase(it);
+                    }
+                });
+        // Drop the listener's reference so the destructor cannot run on this thread
+        channel.reset();
+    }
 }
 
 bool TCPTransportInterface::read_body(
@@ -1366,7 +1416,18 @@ bool TCPTransportInterface::Receive(
         {
             tcp_header.valid_endianness(msg_endian);
 
-            size_t body_size = tcp_header.length - static_cast<uint32_t>(TCPHeader::size());
+            // Validate header length and calculate body size
+            size_t body_size = 0;
+            if (tcp_header.length >= TCPHeader::size())
+            {
+                body_size = tcp_header.length - static_cast<uint32_t>(TCPHeader::size());
+            }
+            else
+            {
+                EPROSIMA_LOG_ERROR(RTCP_MSG_IN, "Invalid TCP header length: " << tcp_header.length);
+                close_tcp_socket(channel);
+                success = false;
+            }
 
             if (body_size > receive_buffer_capacity)
             {
@@ -1377,16 +1438,19 @@ bool TCPTransportInterface::Receive(
                 // Drop the message
                 size_t to_read = body_size;
                 size_t read_block = receive_buffer_capacity;
-                uint32_t readed;
-                while (read_block > 0)
+                while ((read_block > 0) && !channel->disconnected())
                 {
-                    read_body(receive_buffer, receive_buffer_capacity, &readed, channel,
-                            read_block);
-                    to_read -= readed;
+                    uint32_t num_read;
+                    if (!read_body(receive_buffer, receive_buffer_capacity, &num_read, channel, read_block))
+                    {
+                        // Error message already shown by read_body method.
+                        break;
+                    }
+                    to_read -= num_read;
                     read_block = (to_read >= receive_buffer_capacity) ? receive_buffer_capacity : to_read;
                 }
             }
-            else
+            else if (success)
             {
                 EPROSIMA_LOG_INFO(RTCP_MSG_IN, "Received RTCP MSG. Logical Port " << tcp_header.logical_port);
                 success = read_body(receive_buffer, receive_buffer_capacity, &receive_buffer_size,
@@ -1566,7 +1630,8 @@ bool TCPTransportInterface::send(
                 // Logical port might be under negotiation. Wait a little and check again. This prevents from
                 // losing first messages.
                 scoped_lock.unlock();
-                bool logical_port_opened = channel->wait_logical_port_under_negotiation(logical_port, std::chrono::milliseconds(
+                bool logical_port_opened = channel->wait_logical_port_under_negotiation(logical_port,
+                                std::chrono::milliseconds(
                                     configuration()->tcp_negotiation_timeout));
                 if (!logical_port_opened)
                 {
@@ -1588,8 +1653,9 @@ bool TCPTransportInterface::send(
 
                 if (sent != static_cast<uint32_t>(TCPHeader::size() + send_buffer_size) || ec)
                 {
-                    EPROSIMA_LOG_WARNING(DEBUG, "Failed to send RTCP message (" << sent << " of " <<
-                            TCPHeader::size() + send_buffer_size << " b): " << ec.message());
+                    EPROSIMA_LOG_WARNING(DEBUG, "Failed to send RTCP message (" << sent << " of "
+                                                                                << TCPHeader::size() +
+                            send_buffer_size << " b): " << ec.message());
                     success = false;
                 }
                 else
