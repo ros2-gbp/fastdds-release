@@ -299,6 +299,13 @@ public:
         return qos_;
     }
 
+    ReturnCode_t get_qos(
+            DataWriterQos& qos) const
+    {
+        qos = qos_;
+        return ReturnCode_t::RETCODE_OK;
+    }
+
     Topic* get_topic() const
     {
         return topic_;
@@ -442,8 +449,8 @@ public:
     LivelinessLostStatus liveliness_lost_status_;
     OfferedIncompatibleQosStatus offered_incompatible_qos_status_;
     std::chrono::duration<double, std::ratio<1, 1000000>> lifespan_duration_us_;
-    DataWriterHistory history_;
     fastrtps::TopicAttributes atts_;
+    DataWriterHistory history_;
 
 };
 

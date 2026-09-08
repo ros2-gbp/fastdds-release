@@ -41,9 +41,21 @@ public:
         return channel_resources_;
     }
 
+    size_t get_channel_resources_size() const
+    {
+        std::lock_guard<std::mutex> lock(sockets_map_mutex_);
+        return channel_resources_.size();
+    }
+
     const std::vector<std::shared_ptr<TCPChannelResource>> get_unbound_channel_resources() const
     {
         return unbound_channel_resources_;
+    }
+
+    size_t get_unbound_channel_resources_size() const
+    {
+        std::lock_guard<std::mutex> lock(unbound_map_mutex_);
+        return unbound_channel_resources_.size();
     }
 
     const std::vector<asio::ip::address_v4>& get_interface_whitelist() const
@@ -68,6 +80,12 @@ public:
     const std::map<Locator_t, std::set<uint16_t>>& get_channel_pending_logical_ports() const
     {
         return channel_pending_logical_ports_;
+    }
+
+    void register_channel_as_unbound(
+            const std::shared_ptr<TCPChannelResource>& channel)
+    {
+        unbound_channel_resources_.push_back(channel);
     }
 
 };
