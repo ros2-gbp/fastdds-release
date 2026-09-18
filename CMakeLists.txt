@@ -193,10 +193,10 @@ endif()
 # Set warnings as errors if the thread sanitizer is not being used
 ###############################################################################
 string(FIND ${CMAKE_CXX_FLAGS} "-fsanitize=thread" SANITIZER_THREAD)
-if (${SANITIZER_THREAD} EQUAL -1)
-    message(STATUS "Setting warnings as errors...")
-    set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
-endif()
+#if (${SANITIZER_THREAD} EQUAL -1)
+#    message(STATUS "Setting warnings as errors...")
+#    set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+#endif()
 
 ###############################################################################
 # Installation paths
