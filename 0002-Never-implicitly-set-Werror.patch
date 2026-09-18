@@ -1,0 +1,31 @@
+From a8849192cccd8a9587d8f1f08a2d84f031025eca Mon Sep 17 00:00:00 2001
+From: Scott K Logan <logans@cottsay.net>
+Date: Fri, 18 Sep 2026 12:54:52 -0500
+Subject: [PATCH 2/2] Never implicitly set -Werror
+
+---
+ CMakeLists.txt | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7366e5718c1d..7108ee728609 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -193,10 +193,10 @@ endif()
+ # Set warnings as errors if the thread sanitizer is not being used
+ ###############################################################################
+ string(FIND ${CMAKE_CXX_FLAGS} "-fsanitize=thread" SANITIZER_THREAD)
+-if (${SANITIZER_THREAD} EQUAL -1)
+-    message(STATUS "Setting warnings as errors...")
+-    set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+-endif()
++#if (${SANITIZER_THREAD} EQUAL -1)
++#    message(STATUS "Setting warnings as errors...")
++#    set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
++#endif()
+ 
+ ###############################################################################
+ # Installation paths
+-- 
+2.55.0
+
