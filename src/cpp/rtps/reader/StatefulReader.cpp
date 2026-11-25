@@ -575,7 +575,7 @@ bool StatefulReader::process_data_msg(
     std::unique_lock<RecursiveTimedMutex> lock(mp_mutex);
     if (!is_alive_)
     {
-        return false;
+        return true;
     }
 
     if (acceptMsgFrom(change->writerGUID, &pWP))
@@ -605,7 +605,8 @@ bool StatefulReader::process_data_msg(
                     NotifyChanges(pWP);
                     send_ack_if_datasharing(this, history_, pWP, change->sequenceNumber);
                 }
-                return false;
+                // Could process later when `will_never_be_accepted` is false
+                return will_never_be_accepted;
             }
 
             if (!fastdds::rtps::change_is_relevant_for_filter(*change, m_guid, data_filter_))
@@ -628,6 +629,7 @@ bool StatefulReader::process_data_msg(
                         IDSTRING
                         "Reached the maximum number of samples allowed by this reader's QoS. Rejecting change for reader: "
                         << m_guid );
+                // Could process later when a cache is available
                 return false;
             }
 
@@ -647,9 +649,16 @@ bool StatefulReader::process_data_msg(
                     EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Problem copying DataSharing CacheChange from writer "
                             << change->writerGUID);
                     change_pool_->release_cache(change_to_add);
-                    return false;
+                    // Matched in datasharing_listener_, but no datasharing pool available, irrecoverable error.
+                    return true;
                 }
-                datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add);
+                if (!datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add))
+                {
+                    EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding change with invalid DataSharing payload "
+                            "from writer " << change->writerGUID);
+                    change_pool_->release_cache(change_to_add);  // Drop the change permanently
+                    return true;
+                }
             }
             else if (change->serializedPayload.length == 0 && change->kind != ChangeKind_t::ALIVE &&
                     change->instanceHandle.isDefined())
@@ -675,11 +684,12 @@ bool StatefulReader::process_data_msg(
                         << m_guid << " is "
                         << (fixed_payload_size_ > 0 ? fixed_payload_size_ : (std::numeric_limits<uint32_t>::max)()));
                 change_pool_->release_cache(change_to_add);
+                // Could process later when a payload is available
                 return false;
             }
 
             // Perform reception of cache change
-            if (!change_received(change_to_add, pWP, unknown_missing_changes_up_to))
+            if (!change_received(change_to_add, pWP, unknown_missing_changes_up_to, will_never_be_accepted))
             {
                 EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                         IDSTRING "Change " << change_to_add->sequenceNumber << " not added to history");
@@ -688,13 +698,16 @@ bool StatefulReader::process_data_msg(
                     change_to_add->serializedPayload.payload_owner->release_payload(change_to_add->serializedPayload);
                 }
                 change_pool_->release_cache(change_to_add);
-                return false;
+                // Could process later when `will_never_be_accepted` is false
+                return will_never_be_accepted;
             }
         }
 
         return true;
     }
 
+    // The writer is not matched (yet). Report the change as not processed, so that an intraprocess
+    // writer keeps it unacknowledged and resends it once the matching completes.
     return false;
 }
 
@@ -717,6 +730,14 @@ bool StatefulReader::process_data_frag_msg(
     // TODO: see if we need manage framework fragmented DATA message
     if (acceptMsgFrom(incomingChange->writerGUID, &pWP) && pWP)
     {
+        // Datasharing communication will never send fragments, so the message is spoofed
+        if (pWP->is_datasharing_writer())
+        {
+            EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding DATA_FRAG from DataSharing writer "
+                    << incomingChange->writerGUID);
+            return true;
+        }
+
         // Always assert liveliness on scope exit
         auto assert_liveliness_lambda = [&lock, this, incomingChange](void*)
                 {
@@ -786,7 +807,7 @@ bool StatefulReader::process_data_frag_msg(
             // If this is the first time we have received fragments for this change, add it to history
             if (change_created != nullptr)
             {
-                if (!change_received(change_created, pWP, changes_up_to))
+                if (!change_received(change_created, pWP, changes_up_to, will_never_be_accepted))
                 {
                     EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                             IDSTRING "MessageReceiver not add change " << change_created->sequenceNumber.to64long());
@@ -957,23 +978,60 @@ bool StatefulReader::process_gap_msg(
 
     if (acceptMsgFrom(writerGUID, &pWP) && pWP)
     {
-        History::const_iterator history_iterator = history_->changesBegin();
-        auto remove_fn = [this, &writerGUID, &history_iterator](const SequenceNumber_t& seq)
+        SequenceNumber_t firstSN = gapStart;
+        SequenceNumberSet_t gapSet = gapList;
+        if (pWP->process_gap(gapStart, gapList, firstSN, gapSet))
+        {
+            // Traverse the history and remove any fragmented changes present in the received gap.
+            // We only remove fragmented changes because fully assembled changes are already considered as received.
+            History::const_iterator history_iterator = history_->changesBegin();
+            while (history_iterator != history_->changesEnd())
+            {
+                CacheChange_t* change = *history_iterator;
+                if (change->writerGUID != writerGUID)
                 {
-                    CacheChange_t* to_remove = nullptr;
-                    auto ret_iterator = find_cache_in_fragmented_process(seq, writerGUID, to_remove, history_iterator);
-                    if (to_remove != nullptr)
-                    {
-                        // we call the History version to avoid callbacks
-                        history_iterator = history_->History::remove_change_nts(ret_iterator);
-                    }
-                    else if (ret_iterator != history_->changesEnd())
-                    {
-                        history_iterator = ret_iterator;
-                    }
-                };
+                    // Not the same writer, skip to next change
+                    ++history_iterator;
+                    continue;
+                }
 
-        pWP->process_gap(gapStart, gapList, remove_fn);
+                SequenceNumber_t seq = change->sequenceNumber;
+
+                if (seq < firstSN)
+                {
+                    // Not yet at the beginning of the gap, skip to next change
+                    ++history_iterator;
+                    continue;
+                }
+
+                if (seq >= gapSet.base())
+                {
+                    if (gapSet.empty() || (seq > gapSet.max()))
+                    {
+                        // Past the end of the gap, no more changes to remove
+                        break;
+                    }
+
+                    if (!gapSet.is_set(seq))
+                    {
+                        // Not in the gap, skip to next change
+                        ++history_iterator;
+                        continue;
+                    }
+                }
+
+                if (change->is_fully_assembled())
+                {
+                    // We only remove fragmented changes, so skip to next change
+                    ++history_iterator;
+                    continue;
+                }
+
+                // Fragmented change present in the gap, so remove it.
+                // We call the History overload to avoid callbacks
+                history_iterator = history_->History::remove_change_nts(history_iterator);
+            }
+        }
 
         // Maybe now we have to notify user from new CacheChanges.
         NotifyChanges(pWP);
@@ -1086,8 +1144,11 @@ bool StatefulReader::change_removed_by_history(
 bool StatefulReader::change_received(
         CacheChange_t* a_change,
         WriterProxy* prox,
-        size_t unknown_missing_changes_up_to)
+        size_t unknown_missing_changes_up_to,
+        bool& will_never_be_accepted)
 {
+    will_never_be_accepted = true;
+
     //First look for WriterProxy in case is not provided
     if (prox == nullptr)
     {
@@ -1133,6 +1194,7 @@ bool StatefulReader::change_received(
                             }
                         }
 
+                        will_never_be_accepted = false;
                         return true;
                     }
                 }
@@ -1163,11 +1225,11 @@ bool StatefulReader::change_received(
 
     // NOTE: Depending on QoS settings, one change can be removed from history
     // inside the call to history_->received_change
+    will_never_be_accepted = false;
     fastdds::dds::SampleRejectedStatusKind rejection_reason;
     if (history_->received_change(a_change, unknown_missing_changes_up_to, rejection_reason))
     {
         auto payload_length = a_change->serializedPayload.length;
-
         bool ret = true;
 
         if (a_change->is_fully_assembled())
@@ -1183,8 +1245,8 @@ bool StatefulReader::change_received(
             {
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 send_ack_if_datasharing(this, history_, prox, a_change->sequenceNumber);
+                will_never_be_accepted = true;
                 ret = false;
-
             }
         }
 
@@ -1213,6 +1275,7 @@ bool StatefulReader::change_received(
             {
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 NotifyChanges(prox);
+                will_never_be_accepted = true;
             }
 
             /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
@@ -1227,6 +1290,7 @@ bool StatefulReader::change_received(
                         " ignored. Could not compute key in keyed topic.");
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 NotifyChanges(prox);
+                will_never_be_accepted = true;
             }
         }
     }
@@ -1264,11 +1328,8 @@ void StatefulReader::NotifyChanges(
         on_data_notify(statistics_source_guid, aux_ch->sourceTimestamp);
 
         ++it;
-        do
-        {
-            next_seq = prox->next_cache_change_to_be_notified();
-        }
-        while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
+        prox->consider_all_notified_up_to(aux_ch->sequenceNumber);
+        next_seq = prox->next_cache_change_to_be_notified();
     }
     // Ensure correct state of proxy when max_seq is not present in history
     prox->consider_all_notified();
