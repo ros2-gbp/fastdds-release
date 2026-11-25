@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include <fastdds/dds/core/detail/DDSReturnCode.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -41,10 +42,7 @@
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/rtps/common/Time_t.h>
-#include <fastrtps/attributes/LibrarySettingsAttributes.h>
-#include <fastrtps/types/TypesBase.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/rtps/common/Time_t.hpp>
 
 #include "./ros2/Context.hpp"
 #include "./ros2/DataReaderHolder.hpp"
@@ -55,7 +53,7 @@
 #include "./ros2/TopicHolder.hpp"
 
 #include "BlackboxTests.hpp"
-#include "../types/HelloWorldPubSubTypes.h"
+#include "../types/HelloWorldPubSubTypes.hpp"
 
 namespace eprosima {
 namespace fastdds {
@@ -71,24 +69,22 @@ namespace ros2 = eprosima::testing::ros2;
  */
 TEST(DDS_ROS2, test_automatic_liveliness_changed)
 {
-    using namespace eprosima::fastrtps;
-
     // Force intraprocess
-    LibrarySettingsAttributes old_library_settings;
-    old_library_settings = xmlparser::XMLProfileManager::library_settings();
-
+    auto factory = DomainParticipantFactory::get_shared_instance();
+    LibrarySettings old_library_settings;
+    factory->get_library_settings(old_library_settings);
     {
-        LibrarySettingsAttributes library_settings;
+        LibrarySettings library_settings;
         library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-        xmlparser::XMLProfileManager::library_settings(library_settings);
+        factory->set_library_settings(library_settings);
     }
 
     {
         auto context = std::make_shared<ros2::Context>();
 
         auto topic_name = TEST_TOPIC_NAME;
-        const Duration_t liveliness_duration = { 1, 0 };
-        const Duration_t liveliness_announcement_period = { 0, 333333333 };
+        const dds::Duration_t liveliness_duration = { 1, 0 };
+        const dds::Duration_t liveliness_announcement_period = { 0, 333333333 };
         LivelinessQosPolicy liveliness;
         liveliness.kind = LivelinessQosPolicyKind::AUTOMATIC_LIVELINESS_QOS;
         liveliness.lease_duration = liveliness_duration;
@@ -163,7 +159,7 @@ TEST(DDS_ROS2, test_automatic_liveliness_changed)
         sub->stop();
     }
 
-    xmlparser::XMLProfileManager::library_settings(old_library_settings);
+    factory->set_library_settings(old_library_settings);
 }
 
 } // namespace dds

@@ -19,14 +19,15 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include <fastrtps/rtps/history/ReaderHistory.h>
-#include <fastrtps/rtps/reader/StatefulReader.h>
-#include <fastrtps/utils/TimedMutex.hpp>
-
+#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/utils/TimedMutex.hpp>
 #include <rtps/common/ChangeComparison.hpp>
+#include <mock/rtps/reader/BaseReaderMock.hpp>
+#include <mock/rtps/reader/StatefulReaderMock.hpp>
+#include <rtps/reader/StatefulReader.hpp>
 
 
-using namespace eprosima::fastrtps;
+using namespace eprosima::fastdds;
 using namespace ::rtps;
 using namespace ::testing;
 using namespace std;
@@ -37,8 +38,7 @@ protected:
 
     HistoryAttributes history_attr;
     ReaderHistory* history;
-    StatefulReader* readerMock;
-    RecursiveTimedMutex mutex;
+    TestStatefulReader* readerMock;
 
     uint32_t num_writers = 2;
     uint32_t num_sequence_numbers = 2;
@@ -61,7 +61,7 @@ protected:
         history_attr.maximumReservedCaches = 20;
 
         history = new ReaderHistory(history_attr);
-        readerMock = new StatefulReader(history, &mutex);
+        readerMock = new TestStatefulReader(history);
 
         //Create changes list
         uint32_t t = 0;
@@ -98,9 +98,9 @@ protected:
 
 TEST_F(ReaderHistoryTests, add_and_remove_changes)
 {
-    EXPECT_CALL(*readerMock, change_removed_by_history(_)).Times(num_changes).
+    EXPECT_CALL(mock::mock_of(readerMock), change_removed_by_history(_)).Times(num_changes).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*readerMock, releaseCache(_)).Times(num_changes);
+    EXPECT_CALL(mock::mock_of<BaseReader>(readerMock), release_cache(_)).Times(num_changes);
 
     for (uint32_t i = 0; i < num_changes; i++)
     {
@@ -117,8 +117,8 @@ TEST_F(ReaderHistoryTests, add_and_remove_changes)
 
 TEST_F(ReaderHistoryTests, remove_empty_history)
 {
-    EXPECT_CALL(*readerMock, change_removed_by_history(_)).Times(0);
-    EXPECT_CALL(*readerMock, releaseCache(_)).Times(0);
+    EXPECT_CALL(mock::mock_of(readerMock), change_removed_by_history(_)).Times(0);
+    EXPECT_CALL(mock::mock_of<BaseReader>(readerMock), release_cache(_)).Times(0);
 
     CacheChange_t* ch = new CacheChange_t();
     ch->writerGUID = GUID_t(GuidPrefix_t::unknown(), 1U);
@@ -130,8 +130,8 @@ TEST_F(ReaderHistoryTests, remove_empty_history)
 
 TEST_F(ReaderHistoryTests, remove_null_cache_change)
 {
-    EXPECT_CALL(*readerMock, change_removed_by_history(_)).Times(0);
-    EXPECT_CALL(*readerMock, releaseCache(_)).Times(0);
+    EXPECT_CALL(mock::mock_of(readerMock), change_removed_by_history(_)).Times(0);
+    EXPECT_CALL(mock::mock_of<BaseReader>(readerMock), release_cache(_)).Times(0);
 
     CacheChange_t* ch = nullptr;
     ASSERT_FALSE(history->remove_change(ch));
@@ -203,8 +203,9 @@ TEST_F(ReaderHistoryTests, change_order)
     size_t total_changes = changes.size();
     ASSERT_EQ(total_changes, n_writers * changes_per_writer);
     int num_removes = static_cast<int>(total_changes * total_changes);
-    EXPECT_CALL(*readerMock, change_removed_by_history(_)).Times(num_removes).WillRepeatedly(Return(true));
-    EXPECT_CALL(*readerMock, releaseCache(_)).Times(num_removes);
+    EXPECT_CALL(mock::mock_of(readerMock),
+            change_removed_by_history(_)).Times(num_removes).WillRepeatedly(Return(true));
+    EXPECT_CALL(mock::mock_of<BaseReader>(readerMock), release_cache(_)).Times(num_removes);
 
     auto rng = std::default_random_engine{};
     for (size_t n = 0; n < changes.size(); ++n)
@@ -230,7 +231,7 @@ TEST_F(ReaderHistoryTests, change_order)
 
         // Prepare for next iteration
         history->remove_all_changes();
-        ASSERT_EQ(history->getHistorySize(), 0);
+        ASSERT_EQ(history->getHistorySize(), 0u);
     }
 
     // Clean-up
@@ -276,9 +277,9 @@ TEST_F(ReaderHistoryTests, remove_changes_with_guid)
         history->add_change(changes_list[i]);
     }
 
-    EXPECT_CALL(*readerMock, change_removed_by_history(_)).Times(2).
+    EXPECT_CALL(mock::mock_of(readerMock), change_removed_by_history(_)).Times(2).
             WillRepeatedly(Return(true));
-    EXPECT_CALL(*readerMock, releaseCache(_)).Times(2);
+    EXPECT_CALL(mock::mock_of<BaseReader>(readerMock), release_cache(_)).Times(2);
 
     ASSERT_EQ(history->getHistorySize(), num_changes);
     GUID_t w1 = GUID_t(GuidPrefix_t::unknown(), 1U);

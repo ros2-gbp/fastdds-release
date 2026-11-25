@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_UDPV4_TRANSPORT_H
 #define _FASTDDS_UDPV4_TRANSPORT_H
 
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
 #include <rtps/transport/UDPTransportInterface.h>
 
 namespace eprosima {
@@ -43,7 +43,7 @@ class UDPv4Transport : public UDPTransportInterface
 {
 public:
 
-    RTPS_DllAPI UDPv4Transport(
+    FASTDDS_EXPORTED_API UDPv4Transport(
             const UDPv4TransportDescriptor&);
 
     ~UDPv4Transport() override;
@@ -80,6 +80,10 @@ public:
     bool getDefaultMetatrafficUnicastLocators(
             LocatorList& locators,
             uint32_t metatraffic_unicast_port) const override;
+
+    bool getDefaultMulticastLocators(
+            LocatorList& locators,
+            uint32_t multicast_port) const override;
 
     bool getDefaultUnicastLocators(
             LocatorList& locators,
@@ -124,7 +128,7 @@ protected:
             uint16_t port) override;
     asio::ip::udp generate_protocol() const override;
     bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
     const std::string& localhost_name() override;
@@ -147,6 +151,10 @@ protected:
     bool is_locator_allowed(
             const Locator&) const override;
 
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
+
     //! Checks if the given interface is allowed by the white list.
     bool is_interface_allowed(
             const asio::ip::address_v4& ip) const;
@@ -165,6 +173,9 @@ protected:
 };
 
 const char* const DEFAULT_METATRAFFIC_MULTICAST_ADDRESS = "239.255.0.1";
+// Metatraffic multicast address is the same as default multicast address,
+// but we keep this definition in case we want to differentiate them in the future
+const char* const DEFAULT_MULTICAST_ADDRESS = DEFAULT_METATRAFFIC_MULTICAST_ADDRESS;
 
 } // namespace rtps
 } // namespace fastdds

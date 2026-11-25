@@ -31,10 +31,10 @@ static const char* DomainIdRange_str = "id_range";
 static const char* Min_str = "min";
 static const char* Max_str = "max";
 
-using namespace eprosima::fastrtps;
+using namespace eprosima::fastdds;
 using namespace ::rtps::security;
 
-bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
+bool eprosima::fastdds::rtps::security::parse_domain_id_set(
         tinyxml2::XMLElement* root,
         Domains& domains)
 {
@@ -59,8 +59,8 @@ bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid value of " << DomainId_str <<
-                            " tag. Line " << PRINTLINE(node));
+                    EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid value of " << DomainId_str
+                                                                      << " tag. Line " << PRINTLINE(node));
                     returned_value = false;
                 }
             }
@@ -76,8 +76,9 @@ bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
                     {
                         if (tinyxml2::XMLError::XML_SUCCESS != subnode->QueryUnsignedText(&min_domain_id))
                         {
-                            EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid min value of " << DomainId_str <<
-                                    " tag. Line " << PRINTLINE(subnode));
+                            EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid min value of " << DomainId_str
+                                                                                  << " tag. Line "
+                                                                                  << PRINTLINE(subnode));
                             returned_value = false;
                         }
                         else
@@ -91,8 +92,9 @@ bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
                                 {
                                     if (tinyxml2::XMLError::XML_SUCCESS != subnode->QueryUnsignedText(&max_domain_id))
                                     {
-                                        EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid max value of " << DomainId_str <<
-                                                " tag. Line " << PRINTLINE(subnode));
+                                        EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid max value of " << DomainId_str
+                                                                                              << " tag. Line "
+                                                                                              << PRINTLINE(subnode));
                                         returned_value = false;
                                     }
                                 }
@@ -113,29 +115,30 @@ bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
                         }
                         else
                         {
-                            EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid max value of " << DomainId_str <<
-                                    " tag. Line " << PRINTLINE(subnode));
+                            EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid max value of " << DomainId_str
+                                                                                  << " tag. Line "
+                                                                                  << PRINTLINE(subnode));
                             returned_value = false;
                         }
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Min_str << " or " << Max_str << " tag. Line " <<
-                                PRINTLINE(subnode));
+                        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Min_str << " or " << Max_str << " tag. Line "
+                                                                  << PRINTLINE(subnode));
                         returned_value = false;
                     }
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Min_str << " and " << Max_str << " tags. Line " <<
-                            PRINTLINEPLUSONE(node));
+                    EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Min_str << " and " << Max_str << " tags. Line "
+                                                              << PRINTLINEPLUSONE(node));
                     returned_value = false;
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Not valid tag. Expected " << DomainId_str << " or " << DomainIdRange_str <<
-                        " tag. Line " << PRINTLINE(
+                EPROSIMA_LOG_ERROR(XMLPARSER, "Not valid tag. Expected " << DomainId_str << " or " << DomainIdRange_str
+                                                                         << " tag. Line " << PRINTLINE(
                             node));
                 returned_value = false;
             }
@@ -144,8 +147,8 @@ bool eprosima::fastrtps::rtps::security::parse_domain_id_set(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Minimum one " << DomainId_str << " or " << DomainIdRange_str << " tag. Line " <<
-                PRINTLINEPLUSONE(root));
+        EPROSIMA_LOG_ERROR(XMLPARSER, "Minimum one " << DomainId_str << " or " << DomainIdRange_str << " tag. Line "
+                                                     << PRINTLINEPLUSONE(root));
     }
 
     return returned_value;

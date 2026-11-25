@@ -124515,14 +124515,16 @@ SQLITE_PRIVATE void sqlite3MarkAllShadowTablesOf(sqlite3 *db, Table *pTab){
 ** zName is temporarily modified while this routine is running, but is
 ** restored to its original value prior to this routine returning.
 */
-SQLITE_PRIVATE int sqlite3ShadowTableName(sqlite3 *db, const char *zName){
-  char *zTail;                  /* Pointer to the last "_" in zName */
+int sqlite3ShadowTableName(sqlite3 *db, const char *zName){
+  const char *zTail;            /* Pointer to the last "_" in zName */
   Table *pTab;                  /* Table that zName is a shadow of */
+  char *zCopy;
   zTail = strrchr(zName, '_');
   if( zTail==0 ) return 0;
-  *zTail = 0;
-  pTab = sqlite3FindTable(db, zName, 0);
-  *zTail = '_';
+  zCopy = sqlite3DbStrNDup(db, zName, (int)(zTail-zName));
+  pTab = zCopy ? sqlite3FindTable(db, zCopy, 0) : 0;
+
+  sqlite3DbFree(db, zCopy);
   if( pTab==0 ) return 0;
   if( !IsVirtual(pTab) ) return 0;
   return sqlite3IsShadowTableOf(db, pTab, zName);

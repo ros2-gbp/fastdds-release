@@ -32,6 +32,7 @@ set(${PROJECT_NAME}_source_files
     exceptions/Exception.cpp
     exceptions/LockedExternalAccessException.cpp
     exceptions/NotEnoughMemoryException.cpp
+    helpers/memory_helpers.cpp
     FastCdr.rc
     )
 
@@ -57,6 +58,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE
     ${PROJECT_NAME_UPPER}_SOURCE
+    $<$<BOOL:${STRICT_BOOL}>:${PROJECT_NAME_UPPER}_STRICT_BOOL>
     INTERFACE
     $<$<BOOL:${WIN32}>:${PROJECT_NAME_UPPER}_NO_LIB>
     PUBLIC
@@ -150,10 +152,13 @@ if(MSVC OR MSVC_IDE)
         set(PDB_FILE "${PDB_DIR}/${PDB_FILE}.pdb")
     else()
         # fallback to static lib symbols
-        get_target_property(PDB_FILE ${PROJECT_NAME} COMPILE_PDB_NAME_DEBUG)
-        if(PDB_FILE)
-            get_target_property(PDB_DIR ${PROJECT_NAME} COMPILE_PDB_OUTPUT_DIRECTORY_DEBUG)
-            set(PDB_FILE "${PDB_DIR}/${PDB_FILE}.pdb")
+        get_target_property(MSVC_DEBUG_INFORMATION_FORMAT ${PROJECT_NAME} MSVC_DEBUG_INFORMATION_FORMAT)
+        if(NOT MSVC_DEBUG_INFORMATION_FORMAT MATCHES ".*Embedded.*")
+            get_target_property(PDB_FILE ${PROJECT_NAME} COMPILE_PDB_NAME_DEBUG)
+            if(PDB_FILE)
+                get_target_property(PDB_DIR ${PROJECT_NAME} COMPILE_PDB_OUTPUT_DIRECTORY_DEBUG)
+                set(PDB_FILE "${PDB_DIR}/${PDB_FILE}.pdb")
+            endif()
         endif()
     endif()
 

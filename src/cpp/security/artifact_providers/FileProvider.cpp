@@ -32,7 +32,7 @@
 
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -77,7 +77,7 @@ X509_STORE* FileProvider::load_ca(
                             // Retrieve subject name for future use.
                             if (ca_sn.empty())
                             {
-                                X509_NAME* ca_subject_name = X509_get_subject_name(itmp->x509);
+                                const X509_NAME* ca_subject_name = X509_get_subject_name(itmp->x509);
                                 assert(ca_subject_name != nullptr);
                                 char* ca_subject_name_str = X509_NAME_oneline(ca_subject_name, 0, 0);
                                 assert(ca_subject_name_str != nullptr);
@@ -294,6 +294,6 @@ X509_CRL* FileProvider::load_crl(
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 

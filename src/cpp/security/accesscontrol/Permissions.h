@@ -19,12 +19,17 @@
 #ifndef _SECURITY_ACCESSCONTROL_PERMISSIONS_H_
 #define _SECURITY_ACCESSCONTROL_PERMISSIONS_H_
 
-#include <fastdds/rtps/security/accesscontrol/AccessControl.h>
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
-#include <fastdds/rtps/common/Token.h>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <vector>
+
+#include <fastdds/rtps/common/Token.hpp>
+#include <rtps/security/accesscontrol/AccessControl.h>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 
@@ -131,11 +136,34 @@ public:
             const std::vector<std::string>& partitions,
             EndpointSecurityAttributes& attributes,
             SecurityException& exception) override;
+
+    bool set_listener(
+            AccessControlListener* listener,
+            SecurityException& exception) override;
+
+    void set_event_resource(
+            eprosima::fastdds::rtps::ResourceEvent& service) override;
+
+    void arm_permissions_expiry(
+            PermissionsHandle& permissions_handle) override;
+
+private:
+
+    void drain_expired_timers();
+
+    AccessControlListener* listener_ = nullptr;
+    std::mutex listener_mtx_;
+
+    eprosima::fastdds::rtps::ResourceEvent* event_resource_ = nullptr;
+
+    // Timers that fired are kept here, as they can't be deleted from their own callback
+    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> expired_timers_;
+    std::mutex expired_timers_mtx_;
 };
 
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif // _SECURITY_ACCESSCONTROL_PERMISSIONS_H_

@@ -16,19 +16,20 @@
  * @file LocatorSelector.hpp
  */
 
-#ifndef _FASTDDS_RTPS_COMMON_LOCATORSELECTOR_HPP_
-#define _FASTDDS_RTPS_COMMON_LOCATORSELECTOR_HPP_
+#ifndef FASTDDS_RTPS_COMMON__LOCATORSELECTOR_HPP
+#define FASTDDS_RTPS_COMMON__LOCATORSELECTOR_HPP
 
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
-#include <fastdds/rtps/common/Guid.h>
-#include <fastdds/rtps/common/Locator.h>
-#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Locator.hpp>
+#include <fastdds/rtps/common/LocatorsIterator.hpp>
+#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
 #include <algorithm>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 /**
@@ -65,6 +66,8 @@ public:
         , selections_(entries_allocation)
         , last_state_(entries_allocation)
     {
+        static_cast<void>(initial_allow_to_send_);
+        static_cast<void>(force_reset_);
     }
 
     /**
@@ -469,10 +472,16 @@ private:
     ResourceLimitedVector<size_t> selections_;
     //! Enabling state when reset was called.
     ResourceLimitedVector<int> last_state_;
+
+    //! Whether it is the initial state of all allow_to_send flags.
+    bool initial_allow_to_send_ {true};
+
+    //! Whether a reset is forced due to changes in the entries.
+    bool force_reset_ {false};
 };
 
-} /* namespace rtps */
-} /* namespace fastrtps */
-} /* namespace eprosima */
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima
 
-#endif /* _FASTDDS_RTPS_COMMON_LOCATORSELECTOR_H_ */
+#endif // FASTDDS_RTPS_COMMON__LOCATORSELECTOR_HPP

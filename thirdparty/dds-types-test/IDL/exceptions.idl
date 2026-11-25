@@ -1,0 +1,188 @@
+#include "structures.idl"
+
+exception ExceptionShort
+{
+    short var_short;
+};
+
+exception ExceptionUnsignedShort
+{
+    unsigned short var_ushort;
+};
+
+exception ExceptionLong
+{
+    long var_long;
+};
+
+exception ExceptionUnsignedLong
+{
+    unsigned long var_ulong;
+};
+
+exception ExceptionLongLong
+{
+    long long var_longlong;
+};
+
+exception ExceptionUnsignedLongLong
+{
+    unsigned long long var_ulonglong;
+};
+
+exception ExceptionFloat
+{
+    float var_float;
+};
+
+exception ExceptionDouble
+{
+    double var_double;
+};
+
+exception ExceptionLongDouble
+{
+    long double var_longdouble;
+};
+
+exception ExceptionBoolean
+{
+    boolean var_boolean;
+};
+
+exception ExceptionOctet
+{
+    octet var_octet;
+};
+
+exception ExceptionChar8
+{
+    char var_char8;
+};
+
+exception ExceptionChar16
+{
+    wchar var_char16;
+};
+
+exception ExceptionString
+{
+    string var_string;
+};
+
+exception ExceptionWString
+{
+    wstring var_wstring;
+};
+
+exception ExceptionBoundedString
+{
+    Inner_alias_bounded_string_helper var_bounded_string;
+};
+
+exception ExceptionBoundedWString
+{
+    Inner_alias_bounded_wstring_helper var_bounded_wstring;
+};
+
+exception ExceptionEnum
+{
+    InnerEnumHelper var_enum;
+};
+
+exception ExceptionBitMask
+{
+    InnerBitMaskHelper var_bitmask;
+};
+
+exception ExceptionAlias
+{
+    InnerAliasHelper var_alias;
+};
+
+exception ExceptionShortArray
+{
+    short var_array_short[10];
+};
+
+exception ExceptionSequence
+{
+    sequence<long> var_sequence;
+};
+
+exception ExceptionMap
+{
+    map<long, long> var_map;
+};
+
+exception ExceptionUnion
+{
+    InnerUnionHelper var_union;
+};
+
+exception ExceptionStructure
+{
+    InnerStructureHelper var_structure;
+};
+
+exception ExceptionBitset
+{
+    InnerBitsetHelper var_bitset;
+};
+
+exception ExceptionEmpty
+{
+};
+
+exception ExceptionStructures
+{
+    StructShort var_StructShort;
+    StructUnsignedShort var_StructUnsignedShort;
+    StructLong var_StructLong;
+    StructUnsignedLong var_StructUnsignedLong;
+    StructLongLong var_StructLongLong;
+    StructUnsignedLongLong var_StructUnsignedLongLong;
+    StructFloat var_StructFloat;
+    StructDouble var_StructDouble;
+    StructLongDouble var_StructLongDouble;
+    StructBoolean var_StructBoolean;
+    StructOctet var_StructOctet;
+    StructChar8 var_StructChar8;
+    StructChar16 var_StructChar16;
+    StructString var_StructString;
+    StructWString var_StructWString;
+    StructBoundedString var_StructBoundedString;
+    StructBoundedWString var_StructBoundedWString;
+    StructEnum var_StructEnum;
+    StructBitMask var_StructBitMask;
+    StructAlias var_StructAlias;
+    StructShortArray var_StructShortArray;
+    StructSequence var_StructSequence;
+    StructMap var_StructMap;
+    StructUnion var_StructUnion;
+    StructStructure var_StructStructure;
+    StructBitset var_StructBitset;
+    StructEmpty var_StructEmpty;
+};
+
+module testing_1
+{
+    exception ExceptionFoo
+    {
+        long a;
+        long b;
+    };
+};
+
+module testing_2
+{
+    exception ExceptionFoo
+    {
+        boolean d;
+    };
+};
+
+struct StructForExceptionTest
+{
+};
+

@@ -15,8 +15,8 @@
 #ifndef _FASTDDS_TCP_ACCEPTOR_BASE_
 #define _FASTDDS_TCP_ACCEPTOR_BASE_
 
-#include <asio.hpp>
-#include <fastdds/rtps/common/Locator.h>
+#include "../network/asio.hpp"
+#include <fastdds/rtps/common/Locator.hpp>
 
 namespace eprosima {
 namespace fastdds {

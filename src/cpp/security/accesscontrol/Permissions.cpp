@@ -16,21 +16,10 @@
  * @file Permissions.cpp
  */
 
-#include <security/accesscontrol/Permissions.h>
-#include <security/accesscontrol/AccessPermissionsHandle.h>
-#include <security/accesscontrol/GovernanceParser.h>
-#include <security/accesscontrol/PermissionsParser.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/logging/LogTopic.h>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastdds/rtps/security/exceptions/SecurityException.h>
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
-#include <fastrtps/utils/StringMatching.h>
-#include <fastdds/rtps/builtin/data/WriterProxyData.h>
-#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <cassert>
+#include <fstream>
 
 #include <openssl/opensslv.h>
-
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
 #define OPENSSL_CONST const
@@ -43,20 +32,34 @@
 #include <openssl/err.h>
 #include <openssl/obj_mac.h>
 
-#include <security/artifact_providers/FileProvider.hpp>
-#include <security/accesscontrol/DistinguishedName.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
 
-#include <cassert>
-#include <fstream>
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/security/authentication/Authentication.h>
+#include <rtps/security/exceptions/SecurityException.h>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
+#include <security/accesscontrol/DistinguishedName.h>
+#include <security/accesscontrol/GovernanceParser.h>
+#include <security/accesscontrol/Permissions.h>
+#include <security/accesscontrol/PermissionsParser.h>
+#include <security/artifact_providers/FileProvider.hpp>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/logging/LogTopic.h>
+#include <utils/StringMatching.hpp>
 
 #define S1(x) #x
 #define S2(x) S1(x)
 #define LOCATION " (" __FILE__ ":" S2(__LINE__) ")"
 #define _SecurityException_(str) SecurityException(std::string(str) + LOCATION)
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using namespace security;
 
 /**
  * @brief Convert a signature algortihm before adding it to a PermissionsToken.
@@ -630,9 +633,6 @@ static bool check_subject_name(
             {
                 if (rfc2253_string_compare(grant.subject_name, lih->cert_sn_rfc2253_))
                 {
-                    ah->grant = std::move(grant);
-                    returned_value = true;
-
                     // Remove rules not apply to my domain
                     auto iterator = grant.rules.begin();
                     while (iterator != grant.rules.end())
@@ -646,6 +646,10 @@ static bool check_subject_name(
                             ++iterator;
                         }
                     }
+
+                    // Store the grant only once it holds this domain's rules alone
+                    ah->grant = std::move(grant);
+                    returned_value = true;
 
                     break;
                 }
@@ -788,14 +792,17 @@ static bool generate_credentials_token(
     {
         try
         {
-            std::ifstream ifs(file.substr(7).c_str());
             Property property;
             property.name("dds.perm.cert");
-            property.value().assign((std::istreambuf_iterator<char>(ifs)),
-                    (std::istreambuf_iterator<char>()));
             property.propagate(true);
+
+            std::ifstream ifs(file.substr(7), std::ios::binary);
+            std::ostringstream oss;
+            oss << ifs.rdbuf();
+            property.value() = oss.str();
+            returned_value = static_cast<bool>(ifs);
+
             token.properties().push_back(std::move(property));
-            returned_value = true;
         }
         catch (std::exception&)
         {
@@ -811,12 +818,14 @@ static bool generate_credentials_token(
 }
 
 PermissionsHandle* Permissions::validate_local_permissions(
-        Authentication&,
+        Authentication& auth_plugin,
         const IdentityHandle& identity,
         const uint32_t domain_id,
         const PropertyPolicy& part_props,
         SecurityException& exception)
 {
+    drain_expired_timers();
+
     PropertyPolicy access_properties = PropertyPolicyHelper::get_properties_with_prefix(part_props,
                     "dds.sec.access.builtin.Access-Permissions.");
 
@@ -880,6 +889,7 @@ PermissionsHandle* Permissions::validate_local_permissions(
                     {
                         if (generate_credentials_token(*ah, *permissions, exception))
                         {
+                            (*ah)->identity_expiration_ = auth_plugin.get_identity_expiration(identity);
                             return ah;
                         }
                     }
@@ -973,7 +983,7 @@ bool Permissions::return_permissions_handle(
 }
 
 PermissionsHandle* Permissions::validate_remote_permissions(
-        Authentication&,
+        Authentication& auth_plugin,
         const IdentityHandle& local_identity_handle,
         const PermissionsHandle& local_permissions_handle,
         const IdentityHandle& remote_identity_handle,
@@ -981,6 +991,8 @@ PermissionsHandle* Permissions::validate_remote_permissions(
         const PermissionsCredentialToken& remote_credential_token,
         SecurityException& exception)
 {
+    drain_expired_timers();
+
     const PKIIdentityHandle& lih = PKIIdentityHandle::narrow(local_identity_handle);
     const AccessPermissionsHandle& lph = AccessPermissionsHandle::narrow(local_permissions_handle);
     const PKIIdentityHandle& rih = PKIIdentityHandle::narrow(remote_identity_handle);
@@ -1060,6 +1072,8 @@ PermissionsHandle* Permissions::validate_remote_permissions(
     (*handle)->grant = std::move(remote_grant);
     (*handle)->governance_rule_ = lph->governance_rule_;
     (*handle)->governance_topic_rules_ = lph->governance_topic_rules_;
+
+    (*handle)->identity_expiration_ = auth_plugin.get_identity_expiration(remote_identity_handle);
 
     return handle;
 }
@@ -1174,6 +1188,13 @@ bool Permissions::check_create_datawriter(
         return false;
     }
 
+    if (!is_validation_in_time(lah->grant.validity))
+    {
+        exception = _SecurityException_("Grant is not valid at this time");
+        EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
+        return false;
+    }
+
     // Search topic
     for (auto rule : lah->grant.rules)
     {
@@ -1229,6 +1250,13 @@ bool Permissions::check_create_datareader(
         return false;
     }
 
+    if (!is_validation_in_time(lah->grant.validity))
+    {
+        exception = _SecurityException_("Grant is not valid at this time");
+        EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
+        return false;
+    }
+
     for (auto rule : lah->grant.rules)
     {
         if (is_topic_in_criterias(topic_name.c_str(), rule.subscribes))
@@ -1258,7 +1286,7 @@ bool Permissions::check_remote_datawriter(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = publication_data.topicName().c_str();
+    const char* topic_name = publication_data.topic_name.c_str();
 
     if (rah.nil())
     {
@@ -1280,7 +1308,7 @@ bool Permissions::check_remote_datawriter(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + publication_data.topicName().to_string());
+            "Not found topic access rule for topic " + publication_data.topic_name.to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1291,7 +1319,7 @@ bool Permissions::check_remote_datawriter(
         {
             if (is_topic_in_criterias(topic_name, rule.publishes))
             {
-                returned_value = check_rule(topic_name, rule, publication_data.m_qos.m_partition.getNames(),
+                returned_value = check_rule(topic_name, rule, publication_data.partition.getNames(),
                                 rule.publishes, exception);
                 break;
             }
@@ -1319,7 +1347,7 @@ bool Permissions::check_remote_datareader(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = subscription_data.topicName().c_str();
+    const char* topic_name = subscription_data.topic_name.c_str();
 
     relay_only = false;
 
@@ -1343,7 +1371,7 @@ bool Permissions::check_remote_datareader(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + subscription_data.topicName().to_string());
+            "Not found topic access rule for topic " + subscription_data.topic_name.to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1352,7 +1380,7 @@ bool Permissions::check_remote_datareader(
     {
         if (is_domain_in_set(domain_id, rule.domains))
         {
-            const std::vector<std::string>& partitions = subscription_data.m_qos.m_partition.getNames();
+            const std::vector<std::string>& partitions = subscription_data.partition.getNames();
             if (is_topic_in_criterias(topic_name, rule.subscribes))
             {
                 returned_value = check_rule(topic_name, rule, partitions, rule.subscribes, exception);
@@ -1451,3 +1479,78 @@ bool Permissions::get_datareader_sec_attributes(
 
     return false;
 }
+
+bool Permissions::set_listener(
+        AccessControlListener* listener,
+        SecurityException& /*exception*/)
+{
+    std::lock_guard<std::mutex> lock(listener_mtx_);
+    listener_ = listener;
+    return true;
+}
+
+void Permissions::set_event_resource(
+        eprosima::fastdds::rtps::ResourceEvent& service)
+{
+    event_resource_ = &service;
+}
+
+void Permissions::drain_expired_timers()
+{
+    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> reaped;
+    {
+        std::lock_guard<std::mutex> lock(expired_timers_mtx_);
+        reaped.swap(expired_timers_);
+    }
+}
+
+void Permissions::arm_permissions_expiry(
+        PermissionsHandle& permissions_handle)
+{
+    AccessPermissionsHandle& handle = AccessPermissionsHandle::narrow(permissions_handle);
+
+    if (event_resource_ == nullptr || handle.nil())
+    {
+        return;
+    }
+
+    const auto expiry = std::chrono::system_clock::from_time_t(handle->grant.validity.not_after);
+    const auto& identity_expiration = handle->identity_expiration_;
+    if (identity_expiration != std::chrono::system_clock::time_point{} && identity_expiration <= expiry)
+    {
+        return;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(expiry - now).count();
+    const double interval_ms = (ms <= 0) ? 1.0 : static_cast<double>(ms);
+
+    AccessPermissionsHandle* phandle = &handle;
+    handle->expiry_event_.reset(new eprosima::fastdds::rtps::TimedEvent(
+                *event_resource_,
+                [this, phandle]() -> bool
+                {
+                    // Revocation deletes the handle, keep this timer alive until it returns
+                    {
+                        std::lock_guard<std::mutex> g(expired_timers_mtx_);
+                        if ((*phandle)->expiry_event_)
+                        {
+                            expired_timers_.push_back(std::move((*phandle)->expiry_event_));
+                        }
+                    }
+
+                    std::lock_guard<std::mutex> l(listener_mtx_);
+                    if (listener_ != nullptr)
+                    {
+                        SecurityException ex;
+                        listener_->on_revoke_permissions(*this, *phandle, ex);
+                    }
+                    return false;
+                },
+                interval_ms));
+    handle->expiry_event_->restart_timer();
+}
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

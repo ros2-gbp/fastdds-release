@@ -16,13 +16,17 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../profiles/test_xml_profile.xml
     ${CMAKE_CURRENT_BINARY_DIR}/test_xml_profile.xml
     COPYONLY)
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../profiles/test_xml_service_easy_mode.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_xml_service_easy_mode.xml
+    COPYONLY)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../profiles/test_xml_easy_mode_config.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_xml_easy_mode_config.xml
+    COPYONLY)
+
 set(PARTICIPANTTESTS_SOURCE
         ParticipantTests.cpp
     )
-
-if(WIN32)
-    add_definitions(-D_WIN32_WINNT=0x0601)
-endif()
 
 if(ANDROID)
     if (ANDROID_NATIVE_API_LEVEL LESS 24)
@@ -34,15 +38,12 @@ endif()
 
 
 add_executable(ParticipantTests ${PARTICIPANTTESTS_SOURCE})
-target_compile_definitions(ParticipantTests PRIVATE
-    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
-    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
-    )
 target_include_directories(ParticipantTests PRIVATE
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
+    ${PROJECT_SOURCE_DIR}/test/utils
     )
-target_link_libraries(ParticipantTests fastrtps fastcdr foonathan_memory
+target_link_libraries(ParticipantTests fastdds fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
 

@@ -20,20 +20,21 @@
 #include <gtest/gtest.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
 #include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastrtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/utils/Semaphore.h>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/NetworkBuffer.hpp>
+#include <fastdds/utils/IPLocator.hpp>
 
-#include <MockReceiverResource.h>
-#include "mock/MockTCPv6Transport.h"
-#include <rtps/network/NetworkFactory.h>
+#include <rtps/network/NetworkFactory.hpp>
 #include <rtps/transport/TCPv6Transport.h>
+#include <utils/Semaphore.hpp>
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps;
-using TCPv6Transport = eprosima::fastdds::rtps::TCPv6Transport;
+#include "mock/MockTCPv6Transport.h"
+#include <MockReceiverResource.h>
+
+using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastdds;
 
 #if defined(_WIN32)
 #define GET_PID _getpid
@@ -245,6 +246,9 @@ TEST_F(TCPv6Tests, opening_and_closing_input_channel)
     ASSERT_TRUE  (transportUnderTest.CloseInputChannel(multicastFilterLocator));
     ASSERT_FALSE (transportUnderTest.IsInputChannelOpen(multicastFilterLocator));
     ASSERT_FALSE (transportUnderTest.CloseInputChannel(multicastFilterLocator));
+
+    // Closes the input channel of the factory transport, as the participant does before destroying its receivers.
+    receiver->disable();
 }
 
 // This test verifies that the autofill port feature correctly sets an automatic port when
@@ -430,10 +434,13 @@ TEST_F(TCPv6Tests, non_blocking_send)
     std::vector<octet> message(msg_size, 0);
     const octet* data = message.data();
     size_t size = message.size();
+    NetworkBuffer buffers(data, size);
+    std::vector<NetworkBuffer> buffer_list;
+    buffer_list.push_back(buffers);
 
     // Send the message with no header. Since TCP actually allocates about twice the size of the buffer requested, and
     // since the threshold to discard (sendBufferSize) is set to msg_size, it should be able to send a message of msg_size.
-    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    size_t bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, size);
 
     // Now wait until the receive buffer is flushed (send buffer will be empty too)
@@ -446,7 +453,9 @@ TEST_F(TCPv6Tests, non_blocking_send)
     message.resize(msg_size + 1);
     data = message.data();
     size = message.size();
-    bytes_sent = sender_channel_resource->send(nullptr, 0, data, size, ec);
+    buffer_list.clear();
+    buffer_list.emplace_back(data, size);
+    bytes_sent = sender_channel_resource->send(nullptr, 0, buffer_list, size, ec);
     ASSERT_EQ(bytes_sent, 0u);
 
     socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);

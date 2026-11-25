@@ -24,7 +24,6 @@
 #include <vector>
 
 #include <fastdds/rtps/attributes/ExternalLocators.hpp>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
 #include <fastdds/rtps/transport/network/AllowedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>

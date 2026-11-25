@@ -15,7 +15,7 @@
 #ifndef _FASTDDS_UDPV6_TRANSPORT_H_
 #define _FASTDDS_UDPV6_TRANSPORT_H_
 
-#include <fastdds/rtps/transport/UDPv6TransportDescriptor.h>
+#include <fastdds/rtps/transport/UDPv6TransportDescriptor.hpp>
 #include <rtps/transport/UDPTransportInterface.h>
 
 namespace eprosima {
@@ -43,7 +43,7 @@ class UDPv6Transport : public UDPTransportInterface
 {
 public:
 
-    RTPS_DllAPI UDPv6Transport(
+    FASTDDS_EXPORTED_API UDPv6Transport(
             const UDPv6TransportDescriptor&);
 
     ~UDPv6Transport() override;
@@ -77,6 +77,10 @@ public:
     bool getDefaultMetatrafficUnicastLocators(
             LocatorList& locators,
             uint32_t metatraffic_unicast_port) const override;
+
+    bool getDefaultMulticastLocators(
+            LocatorList& locators,
+            uint32_t multicast_port) const override;
 
     bool getDefaultUnicastLocators(
             LocatorList& locators,
@@ -121,7 +125,7 @@ protected:
             uint16_t port) override;
     asio::ip::udp generate_protocol() const override;
     bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const override;
     const std::string& localhost_name() override;
@@ -133,6 +137,10 @@ protected:
     //! Checks for whether locator is allowed.
     bool is_locator_allowed(
             const Locator&) const override;
+
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
 
     /**
      * Method to get a list of interfaces to bind the socket associated to the given locator.
@@ -161,6 +169,9 @@ protected:
             const std::string& ip1,
             const std::string& ip2);
 };
+
+const char* const DEFAULT_METATRAFFIC_MULTICAST_ADDRESS_v6 = "ff1e::ffff:efff:1";
+const char* const DEFAULT_MULTICAST_ADDRESS_v6 = DEFAULT_METATRAFFIC_MULTICAST_ADDRESS_v6;
 
 } // namespace rtps
 } // namespace fastdds

@@ -15,10 +15,16 @@
 #ifndef _FASTDDS_TCP_CHANNEL_RESOURCE_SECURE_
 #define _FASTDDS_TCP_CHANNEL_RESOURCE_SECURE_
 
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
-#include <asio.hpp>
-#include <asio/ssl.hpp>
+#include <memory>
+
+#include "../network/asio.hpp"
+#include <asio/ssl/context.hpp>
+#include <asio/ssl/stream.hpp>
 #include <asio/strand.hpp>
 #include <rtps/transport/TCPChannelResource.h>
 
@@ -54,15 +60,15 @@ public:
     void disconnect() override;
 
     uint32_t read(
-            fastrtps::rtps::octet* buffer,
+            octet* buffer,
             std::size_t size,
             asio::error_code& ec) override;
 
     size_t send(
-            const fastrtps::rtps::octet* header,
+            const octet* header,
             size_t header_size,
-            const fastrtps::rtps::octet* data,
-            size_t size,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
             asio::error_code& ec) override;
 
     // Throwing asio calls
@@ -78,9 +84,6 @@ public:
     void set_options(
             const TCPTransportDescriptor* options) override;
 
-    void set_tls_verify_mode(
-            const TCPTransportDescriptor* options);
-
     void set_tls_sni(
             const TCPTransportDescriptor* options);
 
@@ -91,7 +94,7 @@ public:
 
     inline std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> secure_socket()
     {
-        return secure_socket_;
+        return std::atomic_load(&secure_socket_);
     }
 
 private:
@@ -105,6 +108,7 @@ private:
     asio::ssl::context& ssl_context_;
     asio::strand<asio::io_context::executor_type> strand_read_;
     asio::strand<asio::io_context::executor_type> strand_write_;
+    // Must be accessed with std::atomic_load/std::atomic_store, as connect() replaces it concurrently with senders
     std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> secure_socket_;
 };
 

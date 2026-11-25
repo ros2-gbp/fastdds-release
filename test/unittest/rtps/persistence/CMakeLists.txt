@@ -12,62 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if(SANITIZER STREQUAL "UNDEFINED")
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/cpp/rtps/persistence/sqlite3.c
-        PROPERTIES COMPILE_OPTIONS
-        "-fno-sanitize=bounds-strict")
-endif()
-
 if(SQLITE3_SUPPORT)
-    # this test includes C sources
-    enable_language(C)
-
-    set(PERSISTENCETESTS_SOURCE
-        PersistenceTests.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/history/CacheChangePool.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/network.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/persistence/PersistenceFactory.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/persistence/sqlite3.c
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/persistence/SQLite3PersistenceService.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
-        )
+    set(PERSISTENCETESTS_SOURCE PersistenceTests.cpp)
 
     add_executable(PersistenceTests ${PERSISTENCETESTS_SOURCE})
-    target_compile_definitions(PersistenceTests PRIVATE
-        BOOST_ASIO_STANDALONE
-        ASIO_STANDALONE
-        $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
-        $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
-        )
     target_include_directories(PersistenceTests PRIVATE
         ${Asio_INCLUDE_DIR}
-        ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterHistory
         ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
         ${PROJECT_SOURCE_DIR}/src/cpp
         )
+    target_link_units(PersistenceTests UNITS rtps::history rtps::persistence MOCKS WriterHistory)
     target_link_libraries(PersistenceTests
+        fastcdr
         foonathan_memory
-            GTest::gmock
+        GTest::gmock
+        $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
         ${CMAKE_DL_LIBS}
         )
-    if(MSVC OR MSVC_IDE)
-        target_link_libraries(PersistenceTests ${PRIVACY}
-            iphlpapi Shlwapi
-            )
-    endif()
     gtest_discover_tests(PersistenceTests)
 
 endif(SQLITE3_SUPPORT)

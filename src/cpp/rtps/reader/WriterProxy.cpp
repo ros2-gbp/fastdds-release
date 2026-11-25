@@ -20,21 +20,20 @@
 #include <rtps/reader/WriterProxy.h>
 
 #include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.hpp>
 
-#include <fastdds/rtps/builtin/data/WriterProxyData.h>
-#include <fastdds/rtps/messages/RTPSMessageCreator.h>
-#include <fastdds/rtps/reader/StatefulReader.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-
-#include <fastrtps/utils/TimeConversion.h>
-
-#include <rtps/network/utils/external_locators.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
-
-#include "rtps/RTPSDomainImpl.hpp"
+#include "rtps/domain/RTPSDomainImpl.hpp"
 #include "utils/collections/node_size_helpers.hpp"
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/messages/RTPSMessageCreator.hpp>
+#include <rtps/network/utils/external_locators.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/reader/StatefulReader.hpp>
+#include <rtps/writer/BaseWriter.hpp>
 
-#if !defined(NDEBUG) && !defined(ANDROID) && defined(FASTRTPS_SOURCE) && defined(__unix__)
+#if !defined(NDEBUG) && !defined(ANDROID) && defined(FASTDDS_SOURCE) && defined(__unix__)
 #define SHOULD_DEBUG_LINUX
 #endif // SHOULD_DEBUG_LINUX
 
@@ -47,7 +46,7 @@
 #endif // SHOULD_DEBUG_LINUX
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 WriterProxy::~WriterProxy()
@@ -55,7 +54,7 @@ WriterProxy::~WriterProxy()
     if (is_alive_ && is_on_same_process_)
     {
         EPROSIMA_LOG_WARNING(RTPS_READER, "Automatically unmatching on ~WriterProxy");
-        RTPSWriter* writer = RTPSDomainImpl::find_local_writer(guid());
+        BaseWriter* writer = RTPSDomainImpl::get_instance()->find_writer(guid());
         if (writer)
         {
             writer->matched_reader_remove(reader_->getGuid());
@@ -86,7 +85,7 @@ WriterProxy::WriterProxy(
     , guid_prefix_as_vector_(ResourceLimitedContainerConfig::fixed_size_configuration(1u))
     , is_on_same_process_(false)
     , ownership_strength_(0)
-    , liveliness_kind_(AUTOMATIC_LIVELINESS_QOS)
+    , liveliness_kind_(dds::AUTOMATIC_LIVELINESS_QOS)
     , locators_entry_(loc_alloc.max_unicast_locators, loc_alloc.max_multicast_locators)
     , is_datasharing_writer_(false)
     , received_at_least_one_heartbeat_(false)
@@ -123,25 +122,25 @@ void WriterProxy::start(
         const SequenceNumber_t& initial_sequence,
         bool is_datasharing)
 {
-    using fastdds::rtps::network::external_locators::filter_remote_locators;
+    using network::external_locators::filter_remote_locators;
 
 #ifdef SHOULD_DEBUG_LINUX
     assert(get_mutex_owner() == get_thread_id());
 #endif // SHOULD_DEBUG_LINUX
 
-    heartbeat_response_->update_interval(reader_->getTimes().heartbeatResponseDelay);
-    initial_acknack_->update_interval(reader_->getTimes().initialAcknackDelay);
+    heartbeat_response_->update_interval(reader_->getTimes().heartbeat_response_delay);
+    initial_acknack_->update_interval(reader_->getTimes().initial_acknack_delay);
 
-    locators_entry_.remote_guid = attributes.guid();
-    guid_as_vector_.push_back(attributes.guid());
-    guid_prefix_as_vector_.push_back(attributes.guid().guidPrefix);
-    persistence_guid_ = attributes.persistence_guid();
+    locators_entry_.remote_guid = attributes.guid;
+    guid_as_vector_.push_back(attributes.guid);
+    guid_prefix_as_vector_.push_back(attributes.guid.guidPrefix);
+    persistence_guid_ = attributes.persistence_guid;
     is_alive_ = true;
-    is_on_same_process_ = RTPSDomainImpl::should_intraprocess_between(reader_->getGuid(), attributes.guid());
-    ownership_strength_ = attributes.m_qos.m_ownershipStrength.value;
-    liveliness_kind_ = attributes.m_qos.m_liveliness.kind;
-    locators_entry_.unicast = attributes.remote_locators().unicast;
-    locators_entry_.multicast = attributes.remote_locators().multicast;
+    is_on_same_process_ = RTPSDomainImpl::should_intraprocess_between(reader_->getGuid(), attributes.guid);
+    ownership_strength_ = attributes.ownership_strength.value;
+    liveliness_kind_ = attributes.liveliness.kind;
+    locators_entry_.unicast = attributes.remote_locators.unicast;
+    locators_entry_.multicast = attributes.remote_locators.multicast;
     filter_remote_locators(locators_entry_,
             reader_->getAttributes().external_unicast_locators, reader_->getAttributes().ignore_non_matching_locators);
     is_datasharing_writer_ = is_datasharing;
@@ -154,16 +153,16 @@ void WriterProxy::start(
 void WriterProxy::update(
         const WriterProxyData& attributes)
 {
-    using fastdds::rtps::network::external_locators::filter_remote_locators;
+    using network::external_locators::filter_remote_locators;
 
 #ifdef SHOULD_DEBUG_LINUX
     assert(get_mutex_owner() == get_thread_id());
 #endif // SHOULD_DEBUG_LINUX
 
     assert(is_alive_);
-    ownership_strength_ = attributes.m_qos.m_ownershipStrength.value;
-    locators_entry_.unicast = attributes.remote_locators().unicast;
-    locators_entry_.multicast = attributes.remote_locators().multicast;
+    ownership_strength_ = attributes.ownership_strength.value;
+    locators_entry_.unicast = attributes.remote_locators.unicast;
+    locators_entry_.multicast = attributes.remote_locators.multicast;
     filter_remote_locators(locators_entry_,
             reader_->getAttributes().external_unicast_locators, reader_->getAttributes().ignore_non_matching_locators);
 }
@@ -310,6 +309,7 @@ bool WriterProxy::received_change_set(
         if (seq_num == changes_from_writer_low_mark_ + 1)
         {
             changes_from_writer_low_mark_ = seq_num;
+            cleanup();
         }
         else
         {
@@ -498,6 +498,19 @@ void WriterProxy::consider_all_notified()
     }
 }
 
+void WriterProxy::consider_all_notified_up_to(
+        const SequenceNumber_t& seq_num)
+{
+#ifdef SHOULD_DEBUG_LINUX
+    assert(get_mutex_owner() == get_thread_id());
+#endif // SHOULD_DEBUG_LINUX
+
+    if (seq_num > last_notified_ && seq_num <= changes_from_writer_low_mark_)
+    {
+        last_notified_ = seq_num;
+    }
+}
+
 bool WriterProxy::perform_initial_ack_nack()
 {
     bool ret_value = false;
@@ -515,7 +528,7 @@ bool WriterProxy::perform_initial_ack_nack()
         SequenceNumberSet_t sns(SequenceNumber_t(0, 0));
         if (is_on_same_process_)
         {
-            RTPSWriter* writer = RTPSDomainImpl::find_local_writer(guid());
+            BaseWriter* writer = RTPSDomainImpl::get_instance()->find_writer(guid());
             if (writer)
             {
                 bool tmp;
@@ -627,15 +640,110 @@ bool WriterProxy::process_heartbeat(
     return false;
 }
 
+bool WriterProxy::process_gap(
+        const SequenceNumber_t& gap_start,
+        const SequenceNumberSet_t& gap_list,
+        SequenceNumber_t& validated_start,
+        SequenceNumberSet_t& validated_gap_list)
+{
+    // First sequence number that can be considered for GAP processing
+    SequenceNumber_t first_allowed_gap = changes_from_writer_low_mark_ + 1u;
+
+    // Cap start sequence number
+    SequenceNumber_t initial_seq = std::max(gap_start, first_allowed_gap);
+
+    // Cap the GAP to the maximum sequence number the writer has announced through a
+    // Heartbeat, which is is guaranteed to precede every GAP.
+    // If no Heartbeat has been processed yet, max_sequence_number_ equals
+    // changes_from_writer_low_mark_, so initial_seq >= max_allowed_gap and nothing is
+    // processed (the GAP is ignored until a Heartbeat sets the range).
+    SequenceNumber_t max_allowed_gap = max_sequence_number_ + 1u;
+
+    if (initial_seq == first_allowed_gap)
+    {
+        // Special case for datasharing where no GAP is emitted from the writer's side,
+        // but created locally by the reader for initial positioning
+        max_allowed_gap = std::max(max_allowed_gap, gap_list.base());
+    }
+
+    // Early exit if initial_seq is beyond the allowed range
+    if (initial_seq > max_allowed_gap)
+    {
+        return false;
+    }
+
+    // Maximum sequence number to be considered for contiguous GAP processing
+    SequenceNumber_t finalSN = std::min(gap_list.base(), max_allowed_gap);
+    validated_start = initial_seq;
+    validated_gap_list.base(finalSN);
+
+    if ((initial_seq == first_allowed_gap) && (finalSN > initial_seq))
+    {
+        // Special case when receiving a GAP starting at the next expected sequence number,
+        // which means that all changes below the first sequence number in the gap_list are irrelevant.
+        // We know that irrelevant_change_set would just increment the low mark, so we can just advance
+        // it directly and remove all irrelevant changes in one go.
+
+        // Advance low mark to the last contiguous sequence number before the first sequence number in the gap_list.
+        changes_from_writer_low_mark_ = finalSN - 1u;
+
+        // Update max_sequence_number_ if needed, as irrelevant_change_set would do.
+        if (changes_from_writer_low_mark_ > max_sequence_number_)
+        {
+            max_sequence_number_ = changes_from_writer_low_mark_;
+        }
+
+        // Remove every already received change up to the first sequence number in the gap_list.
+        ChangeIterator first_relevant = std::lower_bound(
+            changes_received_.begin(),
+            changes_received_.end(),
+            finalSN);
+        changes_received_.erase(changes_received_.begin(), first_relevant);
+
+        cleanup();
+    }
+    else
+    {
+        // Cap the final sequence number to avoid CPU denial-of-service attacks by sending a GAP with a huge range.
+        max_allowed_gap = std::min(max_allowed_gap, initial_seq + 512u);
+        finalSN = std::min(finalSN, max_allowed_gap);
+        // Iterate through all sequence numbers in [initial_seq, final_seq)
+        SequenceNumber_t auxSN;
+        for (auxSN = initial_seq; auxSN < finalSN; auxSN++)
+        {
+            irrelevant_change_set(auxSN);
+        }
+    }
+
+    // Early exit if the entire gap_list is beyond the announced range
+    if (gap_list.base() > max_allowed_gap)
+    {
+        return true;
+    }
+
+    // Iterate through all sequence numbers in the gap_list
+    gap_list.for_each(
+        [&](SequenceNumber_t it)
+        {
+            if ((it < max_allowed_gap) && irrelevant_change_set(it))
+            {
+                validated_gap_list.add(it);
+            }
+        });
+
+    return true;
+}
+
 void WriterProxy::update_heartbeat_response_interval(
-        const Duration_t& interval)
+        const dds::Duration_t& interval)
 {
     heartbeat_response_->update_interval(interval);
 }
 
 bool WriterProxy::send(
-        CDRMessage_t* message,
-        std::chrono::steady_clock::time_point max_blocking_time_point) const
+        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+        const uint32_t& total_bytes,
+        std::chrono::steady_clock::time_point max_blocking_time_point)
 {
     if (is_on_same_process_)
     {
@@ -644,7 +752,8 @@ bool WriterProxy::send(
 
     const ResourceLimitedVector<Locator_t>& remote_locators = remote_locators_shrinked();
 
-    return reader_->send_sync_nts(message,
+    return reader_->send_sync_nts(buffers,
+                   total_bytes,
                    Locators(remote_locators.begin()),
                    Locators(remote_locators.end()),
                    max_blocking_time_point);
@@ -665,5 +774,5 @@ int WriterProxy::get_thread_id() const
 #endif // SHOULD_DEBUG_LINUX
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

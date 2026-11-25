@@ -17,33 +17,41 @@
  *
  */
 
+#include <rtps/reader/StatefulReader.hpp>
+
 #include <cassert>
 #include <mutex>
 #include <thread>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/builtin/BuiltinProtocols.h>
-#include <fastdds/rtps/builtin/liveliness/WLP.h>
+#include <fastdds/rtps/builtin/data/PublicationBuiltinTopicData.hpp>
 #include <fastdds/rtps/common/VendorId_t.hpp>
-#include <fastdds/rtps/history/ReaderHistory.h>
-#include <fastdds/rtps/messages/RTPSMessageCreator.h>
-#include <fastdds/rtps/reader/ReaderListener.h>
-#include <fastdds/rtps/reader/StatefulReader.h>
-#include <fastdds/rtps/writer/LivelinessManager.h>
-#include <fastrtps/utils/TimeConversion.h>
+#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/reader/ReaderListener.hpp>
+#include <fastdds/rtps/writer/WriterDiscoveryStatus.hpp>
 
 #include "reader_utils.hpp"
+#include "rtps/domain/RTPSDomainImpl.hpp"
+#include <rtps/builtin/BuiltinProtocols.h>
+#include <rtps/builtin/liveliness/WLP.hpp>
 #include <rtps/DataSharing/DataSharingListener.hpp>
 #include <rtps/DataSharing/ReaderPool.hpp>
 #include <rtps/history/HistoryAttributesExtension.hpp>
-#include <rtps/participant/RTPSParticipantImpl.h>
+#include <rtps/messages/RTPSMessageGroup.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
 #include <rtps/reader/WriterProxy.h>
-
-#include "rtps/RTPSDomainImpl.hpp"
+#include <rtps/writer/LivelinessManager.hpp>
+#ifdef FASTDDS_STATISTICS
+#include <statistics/types/monitorservice_types.hpp>
+#endif // FASTDDS_STATISTICS
 
 #define IDSTRING "(ID:" << std::this_thread::get_id() << ") " <<
 
-using namespace eprosima::fastrtps::rtps;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using BaseReader = eprosima::fastdds::rtps::BaseReader;
 
 static void send_datasharing_ack(
         StatefulReader* reader,
@@ -124,7 +132,7 @@ StatefulReader::StatefulReader(
         const ReaderAttributes& att,
         ReaderHistory* hist,
         ReaderListener* listen)
-    : RTPSReader(pimpl, guid, att, hist, listen)
+    : BaseReader(pimpl, guid, att, hist, listen)
     , acknack_count_(0)
     , nackfrag_count_(0)
     , times_(att.times)
@@ -144,7 +152,7 @@ StatefulReader::StatefulReader(
         const std::shared_ptr<IPayloadPool>& payload_pool,
         ReaderHistory* hist,
         ReaderListener* listen)
-    : RTPSReader(pimpl, guid, att, payload_pool, hist, listen)
+    : BaseReader(pimpl, guid, att, payload_pool, hist, listen)
     , acknack_count_(0)
     , nackfrag_count_(0)
     , times_(att.times)
@@ -165,7 +173,7 @@ StatefulReader::StatefulReader(
         const std::shared_ptr<IChangePool>& change_pool,
         ReaderHistory* hist,
         ReaderListener* listen)
-    : RTPSReader(pimpl, guid, att, payload_pool, change_pool, hist, listen)
+    : BaseReader(pimpl, guid, att, payload_pool, change_pool, hist, listen)
     , acknack_count_(0)
     , nackfrag_count_(0)
     , times_(att.times)
@@ -189,10 +197,10 @@ void StatefulReader::init(
     }
 }
 
-bool StatefulReader::matched_writer_add(
+bool StatefulReader::matched_writer_add_edp(
         const WriterProxyData& wdata)
 {
-    assert(wdata.guid() != c_Guid_Unknown);
+    assert(wdata.guid != c_Guid_Unknown);
     ReaderListener* listener = nullptr;
 
     {
@@ -203,21 +211,21 @@ bool StatefulReader::matched_writer_add(
             return false;
         }
 
-        listener = mp_listener;
-        bool is_same_process = RTPSDomainImpl::should_intraprocess_between(m_guid, wdata.guid());
+        listener = listener_;
+        bool is_same_process = RTPSDomainImpl::should_intraprocess_between(m_guid, wdata.guid);
         bool is_datasharing = is_datasharing_compatible_with(wdata);
 
         for (WriterProxy* it : matched_writers_)
         {
-            if (it->guid() == wdata.guid())
+            if (it->guid() == wdata.guid)
             {
                 EPROSIMA_LOG_INFO(RTPS_READER, "Attempting to add existing writer, updating information");
                 // If Ownership strength changes then update all history instances.
-                if (EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind &&
-                        it->ownership_strength() != wdata.m_qos.m_ownershipStrength.value)
+                if (dds::EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind &&
+                        it->ownership_strength() != wdata.ownership_strength.value)
                 {
-                    mp_history->writer_update_its_ownership_strength_nts(
-                        it->guid(), wdata.m_qos.m_ownershipStrength.value);
+                    history_->writer_update_its_ownership_strength_nts(
+                        it->guid(), wdata.ownership_strength.value);
                 }
                 it->update(wdata);
                 if (!is_same_process)
@@ -232,7 +240,8 @@ bool StatefulReader::matched_writer_add(
                 {
                     // call the listener without the lock taken
                     guard.unlock();
-                    listener->on_writer_discovery(this, WriterDiscoveryInfo::CHANGED_QOS_WRITER, wdata.guid(), &wdata);
+                    listener->on_writer_discovery(
+                        this, WriterDiscoveryStatus::CHANGED_QOS_WRITER, wdata.guid, &wdata);
                 }
 
 #ifdef FASTDDS_STATISTICS
@@ -273,8 +282,8 @@ bool StatefulReader::matched_writer_add(
         }
 
         SequenceNumber_t initial_sequence;
-        add_persistence_guid(wdata.guid(), wdata.persistence_guid());
-        initial_sequence = get_last_notified(wdata.guid());
+        add_persistence_guid(wdata.guid, wdata.persistence_guid);
+        initial_sequence = get_last_notified(wdata.guid);
 
         wp->start(wdata, initial_sequence, is_datasharing);
 
@@ -288,17 +297,17 @@ bool StatefulReader::matched_writer_add(
 
         if (is_datasharing)
         {
-            if (datasharing_listener_->add_datasharing_writer(wdata.guid(),
+            if (datasharing_listener_->add_datasharing_writer(wdata.guid,
                     m_att.durabilityKind == VOLATILE,
-                    mp_history->m_att.maximumReservedCaches))
+                    history_->m_att.maximumReservedCaches))
             {
                 matched_writers_.push_back(wp);
-                EPROSIMA_LOG_INFO(RTPS_READER, "Writer Proxy " << wdata.guid() << " added to " << this->m_guid.entityId
+                EPROSIMA_LOG_INFO(RTPS_READER, "Writer Proxy " << wdata.guid << " added to " << this->m_guid.entityId
                                                                << " with data sharing");
             }
             else
             {
-                EPROSIMA_LOG_ERROR(RTPS_READER, "Failed to add Writer Proxy " << wdata.guid()
+                EPROSIMA_LOG_ERROR(RTPS_READER, "Failed to add Writer Proxy " << wdata.guid
                                                                               << " to " << this->m_guid.entityId
                                                                               << " with data sharing.");
                 {
@@ -336,13 +345,13 @@ bool StatefulReader::matched_writer_add(
             EPROSIMA_LOG_INFO(RTPS_READER, "Writer Proxy " << wp->guid() << " added to " << m_guid.entityId);
         }
     }
-    if (liveliness_lease_duration_ < c_TimeInfinite)
+    if (liveliness_lease_duration_ < dds::c_TimeInfinite)
     {
         auto wlp = this->mp_RTPSParticipant->wlp();
         if ( wlp != nullptr)
         {
             wlp->sub_liveliness_manager_->add_writer(
-                wdata.guid(),
+                wdata.guid,
                 liveliness_kind_,
                 liveliness_lease_duration_);
         }
@@ -355,7 +364,7 @@ bool StatefulReader::matched_writer_add(
 
     if (nullptr != listener)
     {
-        listener->on_writer_discovery(this, WriterDiscoveryInfo::DISCOVERED_WRITER, wdata.guid(), &wdata);
+        listener->on_writer_discovery(this, WriterDiscoveryStatus::DISCOVERED_WRITER, wdata.guid, &wdata);
     }
 
 #ifdef FASTDDS_STATISTICS
@@ -380,7 +389,7 @@ bool StatefulReader::matched_writer_remove(
         std::unique_lock<RecursiveTimedMutex> lock(mp_mutex);
 
         //Remove cachechanges belonging to the unmatched writer
-        mp_history->writer_unmatched(writer_guid, get_last_notified(writer_guid));
+        history_->writer_unmatched(writer_guid, get_last_notified(writer_guid));
 
         for (ResourceLimitedVector<WriterProxy*>::iterator it = matched_writers_.begin();
                 it != matched_writers_.end();
@@ -415,12 +424,12 @@ bool StatefulReader::matched_writer_remove(
                 lock.lock();
             }
             matched_writers_pool_.push_back(wproxy);
-            if (nullptr != mp_listener)
+            if (nullptr != listener_)
             {
                 // call the listener without the lock taken
-                ReaderListener* listener = mp_listener;
+                ReaderListener* listener = listener_;
                 lock.unlock();
-                listener->on_writer_discovery(this, WriterDiscoveryInfo::REMOVED_WRITER, writer_guid, nullptr);
+                listener->on_writer_discovery(this, WriterDiscoveryStatus::REMOVED_WRITER, writer_guid, nullptr);
             }
 
 #ifdef FASTDDS_STATISTICS
@@ -441,7 +450,7 @@ bool StatefulReader::matched_writer_remove(
     }
 
     bool ret_val = (wproxy != nullptr);
-    if (ret_val && liveliness_lease_duration_ < c_TimeInfinite)
+    if (ret_val && liveliness_lease_duration_ < dds::c_TimeInfinite)
     {
         auto wlp = this->mp_RTPSParticipant->wlp();
         if ( wlp != nullptr)
@@ -455,12 +464,13 @@ bool StatefulReader::matched_writer_remove(
 
             if (writer_liveliness_status == LivelinessData::WriterStatus::ALIVE)
             {
-                wlp->update_liveliness_changed_status(writer_guid, this, -1, 0);
+                update_liveliness_changed_status(writer_guid, -1, 0);
             }
             else if (writer_liveliness_status == LivelinessData::WriterStatus::NOT_ALIVE)
             {
-                wlp->update_liveliness_changed_status(writer_guid, this, 0, -1);
+                update_liveliness_changed_status(writer_guid, 0, -1);
             }
+
         }
         else
         {
@@ -538,7 +548,7 @@ bool StatefulReader::findWriterProxy(
 void StatefulReader::assert_writer_liveliness(
         const GUID_t& writer)
 {
-    if (liveliness_lease_duration_ < c_TimeInfinite)
+    if (liveliness_lease_duration_ < dds::c_TimeInfinite)
     {
         auto wlp = this->mp_RTPSParticipant->wlp();
         if (wlp != nullptr)
@@ -555,7 +565,7 @@ void StatefulReader::assert_writer_liveliness(
     }
 }
 
-bool StatefulReader::processDataMsg(
+bool StatefulReader::process_data_msg(
         CacheChange_t* change)
 {
     WriterProxy* pWP = nullptr;
@@ -586,14 +596,14 @@ bool StatefulReader::processDataMsg(
 
             size_t unknown_missing_changes_up_to = pWP ? pWP->unknown_missing_changes_up_to(change->sequenceNumber) : 0;
             bool will_never_be_accepted = false;
-            if (!mp_history->can_change_be_added_nts(change->writerGUID, change->serializedPayload.length,
+            if (!history_->can_change_be_added_nts(change->writerGUID, change->serializedPayload.length,
                     unknown_missing_changes_up_to, will_never_be_accepted))
             {
                 if (will_never_be_accepted && pWP)
                 {
                     pWP->irrelevant_change_set(change->sequenceNumber);
                     NotifyChanges(pWP);
-                    send_ack_if_datasharing(this, mp_history, pWP, change->sequenceNumber);
+                    send_ack_if_datasharing(this, history_, pWP, change->sequenceNumber);
                 }
                 // Could process later when `will_never_be_accepted` is false
                 return will_never_be_accepted;
@@ -605,7 +615,7 @@ bool StatefulReader::processDataMsg(
                 {
                     pWP->irrelevant_change_set(change->sequenceNumber);
                     NotifyChanges(pWP);
-                    send_ack_if_datasharing(this, mp_history, pWP, change->sequenceNumber);
+                    send_ack_if_datasharing(this, history_, pWP, change->sequenceNumber);
                 }
                 // Change was filtered out, so there isn't anything else to do
                 return true;
@@ -626,13 +636,10 @@ bool StatefulReader::processDataMsg(
             // Copy metadata to reserved change
             change_to_add->copy_not_memcpy(change);
 
-            // Ask payload pool to copy the payload
-            IPayloadPool* payload_owner = change->payload_owner();
-
             if (is_datasharing_compatible_ && datasharing_listener_->writer_is_matched(change->writerGUID))
             {
                 // We may receive the change from the listener (with owner a ReaderPool) or intraprocess (with owner a WriterPool)
-                ReaderPool* datasharing_pool = dynamic_cast<ReaderPool*>(payload_owner);
+                ReaderPool* datasharing_pool = dynamic_cast<ReaderPool*>(change->serializedPayload.payload_owner);
                 if (!datasharing_pool)
                 {
                     datasharing_pool = datasharing_listener_->get_pool_for_writer(change->writerGUID).get();
@@ -645,7 +652,13 @@ bool StatefulReader::processDataMsg(
                     // Matched in datasharing_listener_, but no datasharing pool available, irrecoverable error.
                     return true;
                 }
-                datasharing_pool->get_payload(change->serializedPayload, payload_owner, *change_to_add);
+                if (!datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add))
+                {
+                    EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding change with invalid DataSharing payload "
+                            "from writer " << change->writerGUID);
+                    change_pool_->release_cache(change_to_add);  // Drop the change permanently
+                    return true;
+                }
             }
             else if (change->serializedPayload.length == 0 && change->kind != ChangeKind_t::ALIVE &&
                     change->instanceHandle.isDefined())
@@ -657,9 +670,12 @@ bool StatefulReader::processDataMsg(
                 // here
                 change_to_add->serializedPayload.length = 0;
             }
-            else if (payload_pool_->get_payload(change->serializedPayload, payload_owner, *change_to_add))
+            else if (payload_pool_->get_payload(change->serializedPayload, change_to_add->serializedPayload))
             {
-                change->payload_owner(payload_owner);
+                if (change->serializedPayload.payload_owner == nullptr)
+                {
+                    payload_pool_->get_payload(change_to_add->serializedPayload, change->serializedPayload);
+                }
             }
             else
             {
@@ -677,9 +693,9 @@ bool StatefulReader::processDataMsg(
             {
                 EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                         IDSTRING "Change " << change_to_add->sequenceNumber << " not added to history");
-                if (change_to_add->payload_owner())
+                if (change_to_add->serializedPayload.payload_owner)
                 {
-                    change_to_add->payload_owner()->release_payload(*change_to_add);
+                    change_to_add->serializedPayload.payload_owner->release_payload(change_to_add->serializedPayload);
                 }
                 change_pool_->release_cache(change_to_add);
                 // Could process later when `will_never_be_accepted` is false
@@ -690,10 +706,12 @@ bool StatefulReader::processDataMsg(
         return true;
     }
 
-    return true;
+    // The writer is not matched (yet). Report the change as not processed, so that an intraprocess
+    // writer keeps it unacknowledged and resends it once the matching completes.
+    return false;
 }
 
-bool StatefulReader::processDataFragMsg(
+bool StatefulReader::process_data_frag_msg(
         CacheChange_t* incomingChange,
         uint32_t sampleSize,
         uint32_t fragmentStartingNum,
@@ -712,6 +730,14 @@ bool StatefulReader::processDataFragMsg(
     // TODO: see if we need manage framework fragmented DATA message
     if (acceptMsgFrom(incomingChange->writerGUID, &pWP) && pWP)
     {
+        // Datasharing communication will never send fragments, so the message is spoofed
+        if (pWP->is_datasharing_writer())
+        {
+            EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding DATA_FRAG from DataSharing writer "
+                    << incomingChange->writerGUID);
+            return true;
+        }
+
         // Always assert liveliness on scope exit
         auto assert_liveliness_lambda = [&lock, this, incomingChange](void*)
                 {
@@ -729,14 +755,14 @@ bool StatefulReader::processDataFragMsg(
 
             size_t changes_up_to = pWP->unknown_missing_changes_up_to(incomingChange->sequenceNumber);
             bool will_never_be_accepted = false;
-            if (!mp_history->can_change_be_added_nts(incomingChange->writerGUID, sampleSize, changes_up_to,
+            if (!history_->can_change_be_added_nts(incomingChange->writerGUID, sampleSize, changes_up_to,
                     will_never_be_accepted))
             {
                 if (will_never_be_accepted)
                 {
                     pWP->irrelevant_change_set(incomingChange->sequenceNumber);
                     NotifyChanges(pWP);
-                    send_ack_if_datasharing(this, mp_history, pWP, incomingChange->sequenceNumber);
+                    send_ack_if_datasharing(this, history_, pWP, incomingChange->sequenceNumber);
                 }
                 return false;
             }
@@ -745,14 +771,14 @@ bool StatefulReader::processDataFragMsg(
 
             CacheChange_t* change_created = nullptr;
             CacheChange_t* work_change = nullptr;
-            if (!mp_history->get_change(change_to_add->sequenceNumber, change_to_add->writerGUID, &work_change))
+            if (!history_->get_change(change_to_add->sequenceNumber, change_to_add->writerGUID, &work_change))
             {
                 // A new change should be reserved
                 if (reserve_cache(sampleSize, change_to_add->getFragmentSize(), work_change))
                 {
                     if (work_change->serializedPayload.max_size < sampleSize)
                     {
-                        releaseCache(work_change);
+                        release_cache(work_change);
                         work_change = nullptr;
                     }
                     else
@@ -786,7 +812,7 @@ bool StatefulReader::processDataFragMsg(
                     EPROSIMA_LOG_INFO(RTPS_MSG_IN,
                             IDSTRING "MessageReceiver not add change " << change_created->sequenceNumber.to64long());
 
-                    releaseCache(change_created);
+                    release_cache(change_created);
                     work_change = nullptr;
                 }
             }
@@ -795,19 +821,19 @@ bool StatefulReader::processDataFragMsg(
             if (work_change != nullptr && work_change->is_fully_assembled())
             {
                 fastdds::dds::SampleRejectedStatusKind rejection_reason;
-                if (mp_history->completed_change(work_change, changes_up_to, rejection_reason))
+                if (history_->completed_change(work_change, changes_up_to, rejection_reason))
                 {
                     pWP->received_change_set(work_change->sequenceNumber);
 
                     // Temporarilly assign the inline qos while evaluating the data filter
-                    work_change->inline_qos = incomingChange->inline_qos;
+                    work_change->inline_qos = std::move(incomingChange->inline_qos);
                     bool filtered_out =
                             !fastdds::rtps::change_is_relevant_for_filter(*work_change, m_guid, data_filter_);
-                    work_change->inline_qos = SerializedPayload_t();
+                    incomingChange->inline_qos = std::move(work_change->inline_qos);
 
                     if (filtered_out)
                     {
-                        mp_history->remove_change(work_change);
+                        history_->remove_change(work_change);
                     }
 
                     NotifyChanges(pWP);
@@ -817,9 +843,9 @@ bool StatefulReader::processDataFragMsg(
                     bool has_to_notify = false;
                     if (fastdds::dds::NOT_REJECTED != rejection_reason)
                     {
-                        if (getListener())
+                        if (get_listener())
                         {
-                            getListener()->on_sample_rejected((RTPSReader*)this, rejection_reason, work_change);
+                            get_listener()->on_sample_rejected(this, rejection_reason, work_change);
                         }
 
                         /* Special case: rejected by REJECTED_BY_INSTANCES_LIMIT should never be received again.
@@ -829,12 +855,25 @@ bool StatefulReader::processDataFragMsg(
                             pWP->irrelevant_change_set(work_change->sequenceNumber);
                             has_to_notify = true;
                         }
+
+                        /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+                         * Because the instance will still be unknown
+                         */
+                        if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+                        {
+                            EPROSIMA_LOG_ERROR(RTPS_READER,
+                                    "Change received from " << work_change->writerGUID << " with sequence number: "
+                                                            << work_change->sequenceNumber
+                                                            << " ignored. Could not compute key in keyed topic.");
+                            pWP->irrelevant_change_set(work_change->sequenceNumber);
+                            has_to_notify = true;
+                        }
                     }
 
-                    History::const_iterator chit = mp_history->find_change_nts(work_change);
-                    if (chit != mp_history->changesEnd())
+                    History::const_iterator chit = history_->find_change_nts(work_change);
+                    if (chit != history_->changesEnd())
                     {
-                        mp_history->remove_change_nts(chit);
+                        history_->remove_change_nts(chit);
                     }
                     else
                     {
@@ -853,7 +892,7 @@ bool StatefulReader::processDataFragMsg(
     return true;
 }
 
-bool StatefulReader::processHeartbeatMsg(
+bool StatefulReader::process_heartbeat_msg(
         const GUID_t& writerGUID,
         uint32_t hbCount,
         const SequenceNumber_t& firstSN,
@@ -878,13 +917,13 @@ bool StatefulReader::processHeartbeatMsg(
                     hbCount, firstSN, lastSN, finalFlag, livelinessFlag, disable_positive_acks_, assert_liveliness,
                     current_sample_lost))
         {
-            mp_history->remove_fragmented_changes_until(firstSN, writerGUID);
+            history_->remove_fragmented_changes_until(firstSN, writerGUID);
 
             if (0 < current_sample_lost)
             {
-                if (getListener() != nullptr)
+                if (get_listener() != nullptr)
                 {
-                    getListener()->on_sample_lost((RTPSReader*)this, current_sample_lost);
+                    get_listener()->on_sample_lost(this, current_sample_lost);
                 }
             }
 
@@ -894,10 +933,10 @@ bool StatefulReader::processHeartbeatMsg(
             // Try to assert liveliness if requested by proxy's logic
             if (assert_liveliness)
             {
-                if (liveliness_lease_duration_ < c_TimeInfinite)
+                if (liveliness_lease_duration_ < dds::c_TimeInfinite)
                 {
-                    if (liveliness_kind_ == MANUAL_BY_TOPIC_LIVELINESS_QOS ||
-                            writer->liveliness_kind() == MANUAL_BY_TOPIC_LIVELINESS_QOS)
+                    if (liveliness_kind_ == dds::MANUAL_BY_TOPIC_LIVELINESS_QOS ||
+                            writer->liveliness_kind() == dds::MANUAL_BY_TOPIC_LIVELINESS_QOS)
                     {
                         auto wlp = this->mp_RTPSParticipant->wlp();
                         if ( wlp != nullptr)
@@ -923,7 +962,7 @@ bool StatefulReader::processHeartbeatMsg(
     return false;
 }
 
-bool StatefulReader::processGapMsg(
+bool StatefulReader::process_gap_msg(
         const GUID_t& writerGUID,
         const SequenceNumber_t& gapStart,
         const SequenceNumberSet_t& gapList,
@@ -939,23 +978,60 @@ bool StatefulReader::processGapMsg(
 
     if (acceptMsgFrom(writerGUID, &pWP) && pWP)
     {
-        History::const_iterator history_iterator = mp_history->changesBegin();
-        auto remove_fn = [this, &writerGUID, &history_iterator](const SequenceNumber_t& seq)
+        SequenceNumber_t firstSN = gapStart;
+        SequenceNumberSet_t gapSet = gapList;
+        if (pWP->process_gap(gapStart, gapList, firstSN, gapSet))
+        {
+            // Traverse the history and remove any fragmented changes present in the received gap.
+            // We only remove fragmented changes because fully assembled changes are already considered as received.
+            History::const_iterator history_iterator = history_->changesBegin();
+            while (history_iterator != history_->changesEnd())
+            {
+                CacheChange_t* change = *history_iterator;
+                if (change->writerGUID != writerGUID)
                 {
-                    CacheChange_t* to_remove = nullptr;
-                    auto ret_iterator = findCacheInFragmentedProcess(seq, writerGUID, &to_remove, history_iterator);
-                    if (to_remove != nullptr)
-                    {
-                        // we call the History version to avoid callbacks
-                        history_iterator = mp_history->History::remove_change_nts(ret_iterator);
-                    }
-                    else if (ret_iterator != mp_history->changesEnd())
-                    {
-                        history_iterator = ret_iterator;
-                    }
-                };
+                    // Not the same writer, skip to next change
+                    ++history_iterator;
+                    continue;
+                }
 
-        pWP->process_gap(gapStart, gapList, remove_fn);
+                SequenceNumber_t seq = change->sequenceNumber;
+
+                if (seq < firstSN)
+                {
+                    // Not yet at the beginning of the gap, skip to next change
+                    ++history_iterator;
+                    continue;
+                }
+
+                if (seq >= gapSet.base())
+                {
+                    if (gapSet.empty() || (seq > gapSet.max()))
+                    {
+                        // Past the end of the gap, no more changes to remove
+                        break;
+                    }
+
+                    if (!gapSet.is_set(seq))
+                    {
+                        // Not in the gap, skip to next change
+                        ++history_iterator;
+                        continue;
+                    }
+                }
+
+                if (change->is_fully_assembled())
+                {
+                    // We only remove fragmented changes, so skip to next change
+                    ++history_iterator;
+                    continue;
+                }
+
+                // Fragmented change present in the gap, so remove it.
+                // We call the History overload to avoid callbacks
+                history_iterator = history_->History::remove_change_nts(history_iterator);
+            }
+        }
 
         // Maybe now we have to notify user from new CacheChanges.
         NotifyChanges(pWP);
@@ -981,10 +1057,10 @@ bool StatefulReader::acceptMsgFrom(
         }
     }
 
-    // Check if it's a framework's one. In this case, m_acceptMessagesFromUnkownWriters
+    // Check if it's a framework's one. In this case, accept_messages_from_unkown_writers_
     // is an enabler for the trusted entity comparison
-    if (m_acceptMessagesFromUnkownWriters
-            && (writerId.entityId == m_trustedWriterEntityId))
+    if (accept_messages_from_unkown_writers_
+            && (writerId.entityId == trusted_writer_entity_id_))
     {
         *wp = nullptr;
         return true;
@@ -993,9 +1069,24 @@ bool StatefulReader::acceptMsgFrom(
     return false;
 }
 
+History::const_iterator StatefulReader::find_cache_in_fragmented_process(
+        const SequenceNumber_t& sequence_number,
+        const GUID_t& writer_guid,
+        CacheChange_t*& change,
+        History::const_iterator hint) const
+{
+    auto ret_val = history_->get_change_nts(sequence_number, writer_guid, &change, hint);
+
+    if (nullptr != change && change->is_fully_assembled())
+    {
+        change = nullptr;
+    }
+
+    return ret_val;
+}
+
 bool StatefulReader::change_removed_by_history(
-        CacheChange_t* a_change,
-        WriterProxy* wp)
+        CacheChange_t* a_change)
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
 
@@ -1012,19 +1103,15 @@ bool StatefulReader::change_removed_by_history(
                 }
             }
 
-            WriterProxy* proxy = wp;
-
-            if (nullptr == proxy)
+            WriterProxy* proxy = nullptr;
+            if (!findWriterProxy(a_change->writerGUID, &proxy))
             {
-                if (!findWriterProxy(a_change->writerGUID, &proxy))
-                {
-                    return false;
-                }
+                return false;
             }
 
             if (nullptr != proxy)
             {
-                send_ack_if_datasharing(this, mp_history, proxy, a_change->sequenceNumber);
+                send_ack_if_datasharing(this, history_, proxy, a_change->sequenceNumber);
             }
         }
         else
@@ -1032,19 +1119,14 @@ bool StatefulReader::change_removed_by_history(
             /* A not fully assembled fragmented sample may be removed when receiving a newer sample and KEEP_LAST
              * policy. The WriterProxy should consider it as irrelevant to avoid an infinite loop asking for it.
              */
-            WriterProxy* proxy = wp;
-
-            if (nullptr == proxy)
+            WriterProxy* proxy = nullptr;
+            if (!findWriterProxy(a_change->writerGUID, &proxy))
             {
-                if (!findWriterProxy(a_change->writerGUID, &proxy))
-                {
-                    return false;
-                }
-
-                proxy->irrelevant_change_set(a_change->sequenceNumber);
-                send_ack_if_datasharing(this, mp_history, proxy, a_change->sequenceNumber);
+                return false;
             }
 
+            proxy->irrelevant_change_set(a_change->sequenceNumber);
+            send_ack_if_datasharing(this, history_, proxy, a_change->sequenceNumber);
         }
 
         return true;
@@ -1073,13 +1155,13 @@ bool StatefulReader::change_received(
         if (!findWriterProxy(a_change->writerGUID, &prox))
         {
             // discard non framework messages from unknown writer
-            if (a_change->writerGUID.entityId != m_trustedWriterEntityId)
+            if (a_change->writerGUID.entityId != trusted_writer_entity_id_)
             {
                 EPROSIMA_LOG_INFO(RTPS_READER,
                         "Writer Proxy " << a_change->writerGUID << " not matched to this Reader " << m_guid.entityId);
                 return false;
             }
-            else if (a_change->kind != eprosima::fastrtps::rtps::ChangeKind_t::ALIVE)
+            else if (a_change->kind != eprosima::fastdds::rtps::ChangeKind_t::ALIVE)
             {
                 EPROSIMA_LOG_INFO(RTPS_READER, "Not alive change " << a_change->writerGUID << " has not WriterProxy");
                 return false;
@@ -1090,7 +1172,7 @@ bool StatefulReader::change_received(
                 // Only make visible the change if there is not other with bigger sequence number.
                 if (get_last_notified(a_change->writerGUID) < a_change->sequenceNumber)
                 {
-                    if (mp_history->received_change(a_change, 0))
+                    if (history_->received_change(a_change, 0))
                     {
                         Time_t::now(a_change->reader_info.receptionTimestamp);
 
@@ -1099,7 +1181,7 @@ bool StatefulReader::change_received(
                         // initialized using this SequenceNumber_t. Note that on a SERVER the own DATA(p) may be in any
                         // position within the WriterHistory preventing effective data exchange.
                         update_last_notified(a_change->writerGUID, SequenceNumber_t(0, 1));
-                        auto listener = getListener();
+                        auto listener = get_listener();
                         if (listener != nullptr)
                         {
                             bool notify_single = false;
@@ -1108,7 +1190,7 @@ bool StatefulReader::change_received(
                             listener->on_data_available(this, guid, seq, seq, notify_single);
                             if (notify_single)
                             {
-                                listener->onNewCacheChangeAdded(this, a_change);
+                                listener->on_new_cache_change_added(this, a_change);
                             }
                         }
 
@@ -1120,7 +1202,8 @@ bool StatefulReader::change_received(
                 EPROSIMA_LOG_INFO(RTPS_READER,
                         "Change received from " << a_change->writerGUID << " with sequence number: "
                                                 << a_change->sequenceNumber
-                                                << " skipped. Higher sequence numbers have been received.");
+                                                <<
+                        " skipped. Higher sequence numbers have been received.");
                 return false;
             }
         }
@@ -1131,7 +1214,7 @@ bool StatefulReader::change_received(
     }
 
     // Update Ownership strength.
-    if (EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind)
+    if (dds::EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind)
     {
         a_change->reader_info.writer_ownership_strength = prox->ownership_strength();
     }
@@ -1141,10 +1224,10 @@ bool StatefulReader::change_received(
     }
 
     // NOTE: Depending on QoS settings, one change can be removed from history
-    // inside the call to mp_history->received_change
+    // inside the call to history_->received_change
     will_never_be_accepted = false;
     fastdds::dds::SampleRejectedStatusKind rejection_reason;
-    if (mp_history->received_change(a_change, unknown_missing_changes_up_to, rejection_reason))
+    if (history_->received_change(a_change, unknown_missing_changes_up_to, rejection_reason))
     {
         auto payload_length = a_change->serializedPayload.length;
         bool ret = true;
@@ -1158,10 +1241,10 @@ bool StatefulReader::change_received(
             /* Search if the first fragment was stored, because it may have been discarded due to being older and KEEP_LAST
              * policy. In this case this samples should be set as irrelevant.
              */
-            if (mp_history->changesEnd() == mp_history->find_change(a_change))
+            if (history_->changesEnd() == history_->find_change(a_change))
             {
                 prox->irrelevant_change_set(a_change->sequenceNumber);
-                send_ack_if_datasharing(this, mp_history, prox, a_change->sequenceNumber);
+                send_ack_if_datasharing(this, history_, prox, a_change->sequenceNumber);
                 will_never_be_accepted = true;
                 ret = false;
             }
@@ -1181,15 +1264,30 @@ bool StatefulReader::change_received(
     {
         if (fastdds::dds::NOT_REJECTED != rejection_reason)
         {
-            if (getListener() && (a_change->is_fully_assembled() || (a_change->contains_first_fragment())))
+            if (get_listener() && (a_change->is_fully_assembled() || (a_change->contains_first_fragment())))
             {
-                getListener()->on_sample_rejected((RTPSReader*)this, rejection_reason, a_change);
+                get_listener()->on_sample_rejected(this, rejection_reason, a_change);
             }
 
             /* Special case: rejected by REJECTED_BY_INSTANCES_LIMIT should never be received again.
              */
             if (fastdds::dds::REJECTED_BY_INSTANCES_LIMIT == rejection_reason)
             {
+                prox->irrelevant_change_set(a_change->sequenceNumber);
+                NotifyChanges(prox);
+                will_never_be_accepted = true;
+            }
+
+            /* Special case: rejected by REJECTED_BY_UNKNOWN_INSTANCE should never be received again.
+             * Because the instance will still be unknown
+             */
+            if (fastdds::dds::REJECTED_BY_UNKNOWN_INSTANCE == rejection_reason)
+            {
+                EPROSIMA_LOG_ERROR(RTPS_READER,
+                        "Change received from " << a_change->writerGUID << " with sequence number: "
+                                                << a_change->sequenceNumber
+                                                <<
+                        " ignored. Could not compute key in keyed topic.");
                 prox->irrelevant_change_set(a_change->sequenceNumber);
                 NotifyChanges(prox);
                 will_never_be_accepted = true;
@@ -1212,30 +1310,32 @@ void StatefulReader::NotifyChanges(
 
     // Update state before notifying
     update_last_notified(proxGUID, max_seq);
-    History::const_iterator it = mp_history->changesBegin();
+    History::const_iterator it = history_->changesBegin();
     SequenceNumber_t next_seq = first_seq;
     while (next_seq != c_SequenceNumber_Unknown &&
-            mp_history->changesEnd() != (it = mp_history->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
+            history_->changesEnd() != (it = history_->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
             (*it)->sequenceNumber <= max_seq)
     {
         aux_ch = *it;
         assert(false == aux_ch->isRead);
         new_data_available = true;
         ++total_unread_;
-        on_data_notify(proxGUID, aux_ch->sourceTimestamp);
+
+        // Statistics callback is called with the original writer GUID if it is set
+        auto statistics_source_guid = aux_ch->write_params.original_writer_info() != OriginalWriterInfo::unknown() ?
+                aux_ch->write_params.original_writer_info().original_writer_guid() : proxGUID;
+
+        on_data_notify(statistics_source_guid, aux_ch->sourceTimestamp);
 
         ++it;
-        do
-        {
-            next_seq = prox->next_cache_change_to_be_notified();
-        }
-        while (next_seq != c_SequenceNumber_Unknown && next_seq <= aux_ch->sequenceNumber);
+        prox->consider_all_notified_up_to(aux_ch->sequenceNumber);
+        next_seq = prox->next_cache_change_to_be_notified();
     }
     // Ensure correct state of proxy when max_seq is not present in history
     prox->consider_all_notified();
 
     // Notify listener if new data is available
-    auto listener = getListener();
+    auto listener = get_listener();
     if (new_data_available && (nullptr != listener))
     {
         bool notify_individual = false;
@@ -1243,18 +1343,18 @@ void StatefulReader::NotifyChanges(
 
         if (notify_individual)
         {
-            it = mp_history->changesBegin();
+            it = history_->changesBegin();
             next_seq = first_seq;
             while (next_seq <= max_seq &&
-                    mp_history->changesEnd() != (it = mp_history->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
+                    history_->changesEnd() != (it = history_->get_change_nts(next_seq, proxGUID, &aux_ch, it)) &&
                     (*it)->sequenceNumber <= max_seq)
             {
                 aux_ch = *it;
                 next_seq = aux_ch->sequenceNumber + 1;
-                listener->onNewCacheChangeAdded(this, aux_ch);
+                listener->on_new_cache_change_added(this, aux_ch);
 
                 // Reset the iterator to the beginning, since it may be invalidated inside the callback
-                it = mp_history->changesBegin();
+                it = history_->changesBegin();
             }
         }
     }
@@ -1272,8 +1372,8 @@ void StatefulReader::remove_changes_from(
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
     std::vector<CacheChange_t*> toremove;
-    for (std::vector<CacheChange_t*>::iterator it = mp_history->changesBegin();
-            it != mp_history->changesEnd(); ++it)
+    for (std::vector<CacheChange_t*>::iterator it = history_->changesBegin();
+            it != history_->changesEnd(); ++it)
     {
         if ((*it)->writerGUID == writerGUID)
         {
@@ -1289,9 +1389,9 @@ void StatefulReader::remove_changes_from(
         if (is_payload_pool_lost)
         {
             (*it)->serializedPayload.data = nullptr;
-            (*it)->payload_owner(nullptr);
+            (*it)->serializedPayload.payload_owner = nullptr;
         }
-        mp_history->remove_change(*it);
+        history_->remove_change(*it);
     }
 }
 
@@ -1300,20 +1400,18 @@ ResourceEvent& StatefulReader::getEventResource() const
     return mp_RTPSParticipant->getEventResource();
 }
 
-bool StatefulReader::nextUntakenCache(
-        CacheChange_t** change,
-        WriterProxy** wpout)
+CacheChange_t* StatefulReader::next_untaken_cache()
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
     if (!is_alive_)
     {
-        return false;
+        return nullptr;
     }
 
     bool takeok = false;
     WriterProxy* wp;
-    std::vector<CacheChange_t*>::iterator it = mp_history->changesBegin();
-    while (it != mp_history->changesEnd())
+    std::vector<CacheChange_t*>::iterator it = history_->changesBegin();
+    while (it != history_->changesEnd())
     {
         if (this->matched_writer_lookup((*it)->writerGUID, &wp))
         {
@@ -1332,42 +1430,32 @@ bool StatefulReader::nextUntakenCache(
             EPROSIMA_LOG_WARNING(RTPS_READER,
                     "Removing change " << (*it)->sequenceNumber << " from " << (*it)->writerGUID
                                        << " because is no longer paired");
-            it = mp_history->remove_change(it);
+            it = history_->remove_change(it);
         }
 
         if (takeok)
         {
-
-            *change = *it;
-
-            if (wpout != nullptr)
-            {
-                *wpout = wp;
-            }
-
-            break;
+            return *it;
         }
     }
 
-    return takeok;
+    return nullptr;
 }
 
 // TODO Porque elimina aqui y no cuando hay unpairing
-bool StatefulReader::nextUnreadCache(
-        CacheChange_t** change,
-        WriterProxy** wpout)
+CacheChange_t* StatefulReader::next_unread_cache()
 {
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
     if (!is_alive_)
     {
-        return false;
+        return nullptr;
     }
 
     std::vector<CacheChange_t*> toremove;
     bool readok = false;
     WriterProxy* wp = nullptr;
-    std::vector<CacheChange_t*>::iterator it = mp_history->changesBegin();
-    while (it != mp_history->changesEnd())
+    std::vector<CacheChange_t*>::iterator it = history_->changesBegin();
+    while (it != history_->changesEnd())
     {
         if ((*it)->isRead)
         {
@@ -1391,25 +1479,17 @@ bool StatefulReader::nextUnreadCache(
             EPROSIMA_LOG_WARNING(RTPS_READER,
                     "Removing change " << (*it)->sequenceNumber << " from " << (*it)->writerGUID
                                        << " because is no longer paired");
-            it = mp_history->remove_change(it);
+            it = history_->remove_change(it);
             continue;
         }
 
         if (readok)
         {
-
-            *change = *it;
-
-            if (wpout != nullptr)
-            {
-                *wpout = wp;
-            }
-
-            break;
+            return *it;
         }
     }
 
-    return readok;
+    return nullptr;
 }
 
 bool StatefulReader::updateTimes(
@@ -1418,19 +1498,19 @@ bool StatefulReader::updateTimes(
     std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
     if (is_alive_)
     {
-        if (times_.heartbeatResponseDelay != ti.heartbeatResponseDelay)
+        if (times_.heartbeat_response_delay != ti.heartbeat_response_delay)
         {
             times_ = ti;
             for (WriterProxy* writer : matched_writers_)
             {
-                writer->update_heartbeat_response_interval(times_.heartbeatResponseDelay);
+                writer->update_heartbeat_response_interval(times_.heartbeat_response_delay);
             }
         }
     }
     return true;
 }
 
-bool StatefulReader::isInCleanState()
+bool StatefulReader::is_in_clean_state()
 {
     std::unique_lock<RecursiveTimedMutex> lock(mp_mutex);
 
@@ -1450,16 +1530,16 @@ bool StatefulReader::isInCleanState()
 
 bool StatefulReader::begin_sample_access_nts(
         CacheChange_t* change,
-        WriterProxy*& wp,
+        WriterProxy*& writer,
         bool& is_future_change)
 {
     const GUID_t& writer_guid = change->writerGUID;
     is_future_change = false;
 
-    if (matched_writer_lookup(writer_guid, &wp))
+    if (matched_writer_lookup(writer_guid, &writer))
     {
         SequenceNumber_t seq;
-        seq = wp->available_changes_max();
+        seq = writer->available_changes_max();
         if (seq < change->sequenceNumber)
         {
             is_future_change = true;
@@ -1471,16 +1551,7 @@ bool StatefulReader::begin_sample_access_nts(
 
 void StatefulReader::end_sample_access_nts(
         CacheChange_t* change,
-        WriterProxy*& wp,
-        bool mark_as_read,
-        bool should_send_ack)
-{
-    change_read_by_user(change, wp, mark_as_read, should_send_ack);
-}
-
-void StatefulReader::change_read_by_user(
-        CacheChange_t* change,
-        WriterProxy* writer,
+        WriterProxy*& writer,
         bool mark_as_read,
         bool should_send_ack)
 {
@@ -1498,8 +1569,21 @@ void StatefulReader::change_read_by_user(
 
     if (should_send_ack && mark_as_read)
     {
-        send_ack_if_datasharing(this, mp_history, writer, change->sequenceNumber);
+        send_ack_if_datasharing(this, history_, writer, change->sequenceNumber);
     }
+}
+
+bool StatefulReader::matched_writers_guids(
+        std::vector<GUID_t>& guids) const
+{
+    std::lock_guard<RecursiveTimedMutex> guard(mp_mutex);
+    guids.clear();
+    guids.reserve(matched_writers_.size());
+    for (WriterProxy* writer : matched_writers_)
+    {
+        guids.emplace_back(writer->guid());
+    }
+    return true;
 }
 
 #ifdef FASTDDS_STATISTICS
@@ -1519,15 +1603,15 @@ bool StatefulReader::get_connections(
 
         if (writer->is_datasharing_writer())
         {
-            mode = fastdds::statistics::DATA_SHARING;
+            mode = fastdds::statistics::ConnectionMode::DATA_SHARING;
         }
         else if (RTPSDomainImpl::should_intraprocess_between(m_guid, writer->guid()))
         {
-            mode = fastdds::statistics::INTRAPROCESS;
+            mode = fastdds::statistics::ConnectionMode::INTRAPROCESS;
         }
         else
         {
-            mode = fastdds::statistics::TRANSPORT;
+            mode = fastdds::statistics::ConnectionMode::TRANSPORT;
 
             //! Announced locators is, for the moment,
             //! equal to the used_locators
@@ -1593,7 +1677,7 @@ void StatefulReader::send_acknack(
     }
 
     // ACKNACK for datasharing writers is done for changes with status READ, not on reception
-    // This is handled in change_read_by_user
+    // This is handled in end_sample_access_nts
     if (writer->is_datasharing_writer())
     {
         return;
@@ -1608,19 +1692,20 @@ void StatefulReader::send_acknack(
         {
             GUID_t guid = sender->remote_guids().at(0);
             SequenceNumberSet_t sns(writer->available_changes_max() + 1);
-            History::const_iterator history_iterator = mp_history->changesBegin();
+            History::const_iterator history_iterator = history_->changesBegin();
 
             missing_changes.for_each(
                 [&](const SequenceNumber_t& seq)
                 {
                     // Check if the CacheChange_t is uncompleted.
-                    CacheChange_t* uncomplete_change = nullptr;
-                    auto ret_iterator = findCacheInFragmentedProcess(seq, guid, &uncomplete_change, history_iterator);
-                    if (ret_iterator != mp_history->changesEnd())
+                    CacheChange_t* incomplete_change = nullptr;
+                    auto ret_iterator = find_cache_in_fragmented_process(
+                        seq, guid, incomplete_change, history_iterator);
+                    if (ret_iterator != history_->changesEnd())
                     {
                         history_iterator = ret_iterator;
                     }
-                    if (uncomplete_change == nullptr)
+                    if (incomplete_change == nullptr)
                     {
                         if (!sns.add(seq))
                         {
@@ -1633,7 +1718,7 @@ void StatefulReader::send_acknack(
                     else
                     {
                         FragmentNumberSet_t frag_sns;
-                        uncomplete_change->get_missing_fragments(frag_sns);
+                        incomplete_change->get_missing_fragments(frag_sns);
                         ++nackfrag_count_;
                         EPROSIMA_LOG_INFO(RTPS_READER, "Sending NACKFRAG for sample" << seq << ": " << frag_sns; );
 
@@ -1656,10 +1741,16 @@ void StatefulReader::send_acknack(
 }
 
 bool StatefulReader::send_sync_nts(
-        CDRMessage_t* message,
+        const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
+        const uint32_t& total_bytes,
         const Locators& locators_begin,
         const Locators& locators_end,
         std::chrono::steady_clock::time_point& max_blocking_time_point)
 {
-    return mp_RTPSParticipant->sendSync(message, m_guid, locators_begin, locators_end, max_blocking_time_point);
+    return mp_RTPSParticipant->sendSync(buffers, total_bytes, m_guid, locators_begin, locators_end,
+                   max_blocking_time_point, 0);
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

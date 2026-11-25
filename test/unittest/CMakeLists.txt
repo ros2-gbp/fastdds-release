@@ -12,38 +12,76 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_compile_definitions(FASTRTPS_NO_LIB)
-
-add_subdirectory(rtps/attributes)
-add_subdirectory(rtps/common)
-add_subdirectory(rtps/DataSharing)
-add_subdirectory(rtps/builtin)
-add_subdirectory(rtps/reader)
-add_subdirectory(rtps/writer)
-add_subdirectory(rtps/history)
-add_subdirectory(rtps/resources/timedevent)
-add_subdirectory(rtps/network)
-if(NOT QNX)
-    add_subdirectory(rtps/flowcontrol)
+# Workaround for GCC 13 false positive with GoogleTest EXPECT_CALL matchers
+# GCC 13 incorrectly reports uninitialized variables in GoogleTest's EXPECT_CALL
+# when using matchers like _. This is fixed in GCC 14.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+   CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0 AND
+   CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0)
+    add_compile_options(-Wno-error=uninitialized)
+    add_compile_options(-Wno-error=maybe-uninitialized)
+    message(STATUS "Applied GCC 13 workaround to all unit tests")
 endif()
-add_subdirectory(rtps/persistence)
-add_subdirectory(rtps/discovery)
+
+# Unit tests link the objects of the library units (see fastdds_add_unit()) and of the mocks (see add_mock_library()),
+# so every unit test target uses the compile definitions of the fastdds target, the ones those objects are built with.
+# FASTDDS_DYN_LINK is excluded because those objects are linked into the test, not imported from the library.
+# FASTDDS_SOURCE is excluded because it enables debug checks that do not hold with mocks, so only the tests that need
+# it set it on their own.
+# Only definitions a test really needs on its own belong in its CMakeLists.
+get_target_property(FASTDDS_UNITTEST_COMPILE_DEFINITIONS fastdds COMPILE_DEFINITIONS)
+list(FILTER FASTDDS_UNITTEST_COMPILE_DEFINITIONS EXCLUDE REGEX "DYN_LINK")
+# On Windows, FASTDDS_SOURCE also turns FASTDDS_EXPORTED_API into dllexport, which breaks the tests linking the
+# fastdds library: they need dllimport.
+list(FILTER FASTDDS_UNITTEST_COMPILE_DEFINITIONS EXCLUDE REGEX "^FASTDDS_SOURCE$")
+add_compile_definitions(
+    ${FASTDDS_UNITTEST_COMPILE_DEFINITIONS}
+    FASTDDS_NO_LIB # Only an INTERFACE definition of fastdds
+    $<$<BOOL:${WIN32}>:_CRT_SECURE_NO_WARNINGS>
+    )
+
+# The statistics::types unit, only created with FASTDDS_STATISTICS, for the unit tests whose code uses the statistics
+# types when the statistics module is enabled.
+set(STATISTICS_TYPES_UNIT)
+if(FASTDDS_STATISTICS)
+    set(STATISTICS_TYPES_UNIT statistics::types)
+endif()
+
+add_subdirectory(cmake)
 add_subdirectory(dds/collections)
 add_subdirectory(dds/core)
 add_subdirectory(dds/participant)
 add_subdirectory(dds/publisher)
+add_subdirectory(dds/status)
 add_subdirectory(dds/subscriber)
 add_subdirectory(dds/topic)
 add_subdirectory(dds/topic/DDSSQLFilter)
-add_subdirectory(dds/status)
-add_subdirectory(dynamic_types)
-add_subdirectory(transport)
+add_subdirectory(dds/xtypes/serializers)
+add_subdirectory(dds/xtypes/type_lookup_service)
+add_subdirectory(dds/xtypes/type_representation)
+add_subdirectory(fastdds/utils)
 add_subdirectory(logging)
+add_subdirectory(rtps/attributes)
+add_subdirectory(rtps/builtin)
+add_subdirectory(rtps/common)
+add_subdirectory(rtps/DataSharing)
+add_subdirectory(rtps/discovery)
+add_subdirectory(rtps/domain)
+if(NOT QNX)
+    add_subdirectory(rtps/flowcontrol)
+endif()
+add_subdirectory(rtps/history)
+add_subdirectory(rtps/messages)
+add_subdirectory(rtps/network)
+add_subdirectory(rtps/participant)
+add_subdirectory(rtps/persistence)
+add_subdirectory(rtps/reader)
+add_subdirectory(rtps/resources/timedevent)
+add_subdirectory(rtps/writer)
+add_subdirectory(statistics/dds)
+add_subdirectory(transport)
 add_subdirectory(utils)
 add_subdirectory(xmlparser)
-add_subdirectory(xtypes)
-add_subdirectory(statistics/dds)
-add_subdirectory(cmake)
 
 if(SECURITY)
     add_subdirectory(security/authentication)

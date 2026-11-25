@@ -1,0 +1,31 @@
+module basic_calculator
+{
+    // This exception will be thrown when an operation result cannot be represented in a long
+    exception OverflowException
+    {
+    };
+
+    @nested
+    interface Adder
+    {
+        // Returns the result of value1 + value2
+        long addition(in long value1, in long value2) raises (OverflowException);
+    };
+
+    @nested
+    interface Subtractor
+    {
+        // Returns the result of value1 + value2
+        long subtraction(in long value1, in long value2) raises (OverflowException);
+    };
+
+    interface Calculator : Adder, Subtractor
+    {
+        // Returns the minimum and maximum representable values
+        void representation_limits(out long min_value, out long max_value);
+    };
+};
+
+struct StructForInterfacesTest
+{
+};

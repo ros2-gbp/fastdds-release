@@ -13,15 +13,15 @@
 // limitations under the License.
 
 
-#ifndef _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
-#define _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
+#ifndef _FASTDDS_UTILS_CONCURRENT_QUEUE_H_
+#define _FASTDDS_UTILS_CONCURRENT_QUEUE_H_
 
 #include <queue>
 #include <mutex>
 #include <condition_variable>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 /**
  * @brief ConcurrentQueue. A thread-safe shared queue.
@@ -65,7 +65,7 @@ public:
      * @brief push Move an object to the queue.
      * @param item The object to push to the queue.
      */
-    template <typename O>
+    template<typename O>
     void push(
             O&& item)
     {
@@ -151,7 +151,7 @@ protected:
     Queue queue_;
 };
 
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
+#endif // _FASTDDS_UTILS_CONCURRENT_QUEUE_H_

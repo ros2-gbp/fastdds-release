@@ -24,8 +24,8 @@
 #include "RTPSWithRegistrationReader.hpp"
 #include "RTPSWithRegistrationWriter.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 TEST(RTPSAck, EnableUpdatabilityOfPositiveAcksPeriodRTPSLayer)
 {
@@ -36,14 +36,14 @@ TEST(RTPSAck, EnableUpdatabilityOfPositiveAcksPeriodRTPSLayer)
     RTPSAsSocketWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string ip("239.255.1.4");
 
-    reader.reliability(eprosima::fastrtps::rtps::ReliabilityKind_t::RELIABLE).
+    reader.reliability(eprosima::fastdds::rtps::ReliabilityKind_t::RELIABLE).
             add_to_multicast_locator_list(ip, global_port).
             disable_positive_acks(true).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
-    writer.reliability(eprosima::fastrtps::rtps::ReliabilityKind_t::RELIABLE).
-            durability(eprosima::fastrtps::rtps::DurabilityKind_t::VOLATILE).
+    writer.reliability(eprosima::fastdds::rtps::ReliabilityKind_t::RELIABLE).
+            durability(eprosima::fastdds::rtps::DurabilityKind_t::VOLATILE).
             add_to_multicast_locator_list(ip, global_port).
             auto_remove_on_volatile().
             disable_positive_acks_seconds(true, 1).init();
@@ -70,9 +70,9 @@ TEST(RTPSAck, EnableUpdatabilityOfPositiveAcksPeriodRTPSLayer)
     // Update attributes at RTPS layer
     WriterAttributes w_att;
     w_att.disable_positive_acks = true;
-    w_att.keep_duration = eprosima::fastrtps::Duration_t(2, 0);
+    w_att.keep_duration = eprosima::fastdds::dds::Duration_t(2, 0);
 
-    writer.updateAttributes(w_att);
+    writer.update_attributes(w_att);
 
     data = default_helloworld_data_generator();
 
@@ -97,7 +97,7 @@ TEST(RTPSAck, EnableUpdatabilityOfPositiveAcksPeriodRTPSLayer)
     // Update attributes at RTPS layer
     w_att.disable_positive_acks = false;
 
-    writer.updateAttributes(w_att);
+    writer.update_attributes(w_att);
 
     // Check that positive_acks feature is not changed at runtime
     EXPECT_TRUE(writer.get_disable_positive_acks());

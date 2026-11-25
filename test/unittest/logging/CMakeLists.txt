@@ -14,25 +14,7 @@
 
 add_subdirectory(log_macros)
 
-if(WIN32)
-    add_definitions(-D_WIN32_WINNT=0x0601)
-endif()
-
 set(LOG_COMMON_SOURCE
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/network.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterface.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetworkInterfaceWithFilter.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPFinder.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
     )
 
 # LOG TEST
@@ -46,10 +28,6 @@ include_directories(mock/)
 
 add_executable(LogTests ${LOGTESTS_SOURCE})
 target_compile_definitions(LogTests PRIVATE
-    BOOST_ASIO_STANDALONE
-    ASIO_STANDALONE
-    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
-    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
     HAVE_LOG_NO_INFO=0 FASTDDS_ENFORCE_LOG_INFO # logInfo is used in some tests
     )
 
@@ -57,7 +35,11 @@ target_include_directories(LogTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
-target_link_libraries(LogTests GTest::gtest ${MOCKS}
+target_link_units(LogTests UNITS time log)
+target_link_libraries(LogTests
+    fastcdr
+    GTest::gtest
+    ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     )
 gtest_discover_tests(LogTests)
@@ -67,15 +49,8 @@ set(LOGFILETESTS_TEST_SOURCE LogFileTests.cpp)
 
 set(LOGFILETESTS_SOURCE
     ${LOG_COMMON_SOURCE}
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/FileConsumer.cpp
-    ${LOGFILETESTS_TEST_SOURCE})
-
-# External sources
-if(TINYXML2_SOURCE_DIR)
-    list(APPEND LOGFILETESTS_SOURCE
-        ${TINYXML2_SOURCE_DIR}/tinyxml2.cpp
-        )
-endif()
+    ${LOGFILETESTS_TEST_SOURCE}
+    )
 
 # Only include tinyxml2 headers manually if the associated config predates the use of CMake targets
 if(TINYXML2_INCLUDE_DIR)
@@ -83,16 +58,11 @@ if(TINYXML2_INCLUDE_DIR)
 endif(TINYXML2_INCLUDE_DIR)
 
 add_executable(LogFileTests ${LOGFILETESTS_SOURCE})
-target_compile_definitions(LogFileTests PRIVATE
-    BOOST_ASIO_STANDALONE
-    ASIO_STANDALONE
-    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
-    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
-    )
 target_include_directories(LogFileTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp)
+target_link_units(LogFileTests UNITS time log xmlparser::common)
 target_link_libraries(LogFileTests GTest::gtest ${MOCKS}
     $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
     ${TINYXML2_LIBRARY}

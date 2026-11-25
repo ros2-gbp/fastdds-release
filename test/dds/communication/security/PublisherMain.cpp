@@ -18,7 +18,6 @@
 #include "PublisherModule.hpp"
 
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastrtps/Domain.h>
 
 using namespace eprosima::fastdds::dds;
 
@@ -41,7 +40,6 @@ int main(
 {
     int arg_count = 1;
     bool exit_on_lost_liveliness = false;
-    bool exit_on_disposal_received = false;
     bool fixed_type = false;
     bool zero_copy = false;
     uint32_t seed = 7800;
@@ -57,10 +55,6 @@ int main(
         if (strcmp(argv[arg_count], "--exit_on_lost_liveliness") == 0)
         {
             exit_on_lost_liveliness = true;
-        }
-        else if (strcmp(argv[arg_count], "--exit_on_disposal_received") == 0)
-        {
-            exit_on_disposal_received = true;
         }
         else if (strcmp(argv[arg_count], "--fixed_type") == 0)
         {
@@ -154,7 +148,7 @@ int main(
         DomainParticipantFactory::get_instance()->load_XML_profiles_file(xml_file);
     }
 
-    PublisherModule publisher(exit_on_lost_liveliness, exit_on_disposal_received, fixed_type, zero_copy);
+    PublisherModule publisher(exit_on_lost_liveliness, fixed_type, zero_copy);
 
     if (publisher.init(seed, magic))
     {

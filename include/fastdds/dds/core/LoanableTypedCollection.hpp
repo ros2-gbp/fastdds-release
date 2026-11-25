@@ -16,8 +16,8 @@
  * @file LoanableTypedCollection.hpp
  */
 
-#ifndef _FASTDDS_DDS_CORE_LOANABLETYPEDCOLLECTION_HPP_
-#define _FASTDDS_DDS_CORE_LOANABLETYPEDCOLLECTION_HPP_
+#ifndef FASTDDS_DDS_CORE__LOANABLETYPEDCOLLECTION_HPP
+#define FASTDDS_DDS_CORE__LOANABLETYPEDCOLLECTION_HPP
 
 #include <cassert>
 #include <cstdint>
@@ -55,7 +55,7 @@ public:
      *
      * @return a reference to the element at position @c n
      */
-    template <typename Enabler = _NonConstEnabler>
+    template<typename Enabler = _NonConstEnabler>
     typename std::enable_if<Enabler::value, T>::type& operator [](
             size_type n)
     {
@@ -98,4 +98,4 @@ public:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTDDS_DDS_CORE_LOANABLETYPEDCOLLECTION_HPP_
+#endif // FASTDDS_DDS_CORE__LOANABLETYPEDCOLLECTION_HPP

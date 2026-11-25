@@ -14,18 +14,17 @@
 
 #include <thread>
 
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/LibrarySettings.hpp>
 
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
-#include <rtps/transport/test_UDPv4Transport.h>
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using test_UDPv4Transport = eprosima::fastdds::rtps::test_UDPv4Transport;
-using test_UDPv4TransportDescriptor = eprosima::fastdds::rtps::test_UDPv4TransportDescriptor;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 namespace {
 enum communication_type
@@ -44,12 +43,13 @@ public:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (std::get<0>(GetParam()))
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = true;
@@ -64,12 +64,13 @@ public:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (std::get<0>(GetParam()))
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case DATASHARING:
                 enable_datasharing = false;
@@ -100,11 +101,11 @@ protected:
                 .socket_buffer_size(1048576) // accomodate large and fast fragments
                 .history_depth(static_cast<int32_t>(data.size()))
                 .reliability(reliable ?
-                eprosima::fastrtps::RELIABLE_RELIABILITY_QOS :
-                eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS)
+                eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS :
+                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
                 .durability_kind(volatile_reader ?
-                eprosima::fastrtps::VOLATILE_DURABILITY_QOS :
-                eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
+                eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS :
+                eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
                 .init();
 
         ASSERT_TRUE(reader.isInitialized());
@@ -122,7 +123,7 @@ protected:
             if (0 < loss_rate)
             {
                 testTransport->drop_data_frag_messages_filter_ =
-                        [&fragment_count, loss_rate](eprosima::fastrtps::rtps::CDRMessage_t& msg)->bool
+                        [&fragment_count, loss_rate](eprosima::fastdds::rtps::CDRMessage_t& msg)->bool
                         {
                             static_cast<void>(msg);
 
@@ -142,18 +143,18 @@ protected:
 
         if (asynchronous)
         {
-            writer.asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).
-                    add_throughput_controller_descriptor_to_pparams(scheduler_policy_, 0, 0);
+            writer.asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).
+                    add_flow_controller_descriptor_to_pparams(scheduler_policy_, 0, 0);
         }
 
         writer
                 .history_depth(static_cast<int32_t>(data.size()))
                 .reliability(reliable ?
-                eprosima::fastrtps::RELIABLE_RELIABILITY_QOS :
-                eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS)
+                eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS :
+                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
                 .durability_kind(volatile_writer ?
-                eprosima::fastrtps::VOLATILE_DURABILITY_QOS :
-                eprosima::fastrtps::TRANSIENT_LOCAL_DURABILITY_QOS)
+                eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS :
+                eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
                 .init();
 
         ASSERT_TRUE(writer.isInitialized());
@@ -371,9 +372,9 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsNonReliableData300kbWithFlowControl)
     uint32_t periodInMs = 50;
 
     writer.history_depth(10).
-            reliability(eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).
-            add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs).init();
+            reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).
+            add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -399,7 +400,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbWithFlowControl)
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(5).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -409,8 +410,8 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbWithFlowControl)
     uint32_t periodInMs = 50;
 
     writer.history_depth(5).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).
-            add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs).init();
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).
+            add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -437,7 +438,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditions)
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(5).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -445,7 +446,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditions)
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 300000;
     uint32_t periodInMs = 200;
-    writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
+    writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
 
     // To simulate lossy conditions, we are going to remove the default
     // bultin transport, and instead use a lossy shim layer variant.
@@ -459,7 +460,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditions)
     writer.add_user_transport_to_pparams(testTransport);
 
     writer.history_depth(5).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -481,7 +482,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditions)
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -491,7 +492,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(5).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -499,7 +500,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 300000;
     uint32_t periodInMs = 200;
-    writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
+    writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
 
     // To simulate lossy conditions, we are going to remove the default
     // bultin transport, and instead use a lossy shim layer variant.
@@ -513,8 +514,8 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     writer.add_user_transport_to_pparams(testTransport);
 
     writer.history_depth(5).
-            durability_kind(eprosima::fastrtps::VOLATILE_DURABILITY_QOS).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS).
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -536,7 +537,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -546,7 +547,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditionsSm
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(5).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -554,7 +555,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditionsSm
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 300000;
     uint32_t periodInMs = 200;
-    writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
+    writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
 
     // To simulate lossy conditions, we are going to remove the default
     // bultin transport, and instead use a lossy shim layer variant.
@@ -570,7 +571,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditionsSm
     writer.add_user_transport_to_pparams(testTransport);
 
     writer.history_depth(5).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -592,7 +593,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableData300kbInLossyConditionsSm
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -602,7 +603,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableKeyedData300kbKeepLast1InLos
     PubSubWriter<KeyedData1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(2)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -621,11 +622,11 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableKeyedData300kbKeepLast1InLos
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 153601;
     uint32_t periodInMs = 100;
-    writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs)
+    writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs)
             .heartbeat_period_seconds(0)
             .heartbeat_period_nanosec(1000000)
             .history_depth(1)
-            .asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            .asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -647,7 +648,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableKeyedData300kbKeepLast1InLos
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -661,7 +662,7 @@ TEST(PubSubFragmentsLimited,
 
     reader.history_depth(2)
             .expect_inline_qos(true)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -680,12 +681,12 @@ TEST(PubSubFragmentsLimited,
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 153601;
     uint32_t periodInMs = 100;
-    writer.add_throughput_controller_descriptor_to_pparams(
+    writer.add_flow_controller_descriptor_to_pparams(
         eprosima::fastdds::rtps::FlowControllerSchedulerPolicy::HIGH_PRIORITY, bytesPerPeriod, periodInMs)
             .heartbeat_period_seconds(0)
             .heartbeat_period_nanosec(1000000)
             .history_depth(1)
-            .asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            .asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -707,7 +708,7 @@ TEST(PubSubFragmentsLimited,
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -717,7 +718,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
 
     reader.history_depth(5).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -725,7 +726,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     // flow control not to overrun the receive buffer.
     uint32_t bytesPerPeriod = 300000;
     uint32_t periodInMs = 200;
-    writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
+    writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, bytesPerPeriod, periodInMs);
 
     // To simulate lossy conditions, we are going to remove the default
     // bultin transport, and instead use a lossy shim layer variant.
@@ -741,8 +742,8 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
     writer.add_user_transport_to_pparams(testTransport);
 
     writer.history_depth(5).
-            durability_kind(eprosima::fastrtps::VOLATILE_DURABILITY_QOS).
-            asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+            durability_kind(eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS).
+            asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -764,7 +765,7 @@ TEST_P(PubSubFragmentsLimited, AsyncPubSubAsReliableVolatileData300kbInLossyCond
 
     // Sanity check. Make sure we have dropped a few packets
     ASSERT_EQ(
-        test_UDPv4Transport::test_UDPv4Transport_DropLog.size(),
+        testTransport->test_transport_options->test_UDPv4Transport_DropLog.size(),
         testTransport->dropLogLength);
 }
 
@@ -776,7 +777,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         PubSubWriter<Data64kbPubSubType> writer(TEST_TOPIC_NAME);
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
         ASSERT_TRUE(reader.isInitialized());
 
@@ -784,7 +785,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         // flow control not to overrun the receive buffer.
         uint32_t size = 32536;
         uint32_t periodInMs = 500;
-        writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, size, periodInMs);
+        writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, size, periodInMs);
 
         auto testTransport = std::make_shared<UDPv4TransportDescriptor>();
         testTransport->maxMessageSize = 32000;
@@ -792,7 +793,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         testTransport->receiveBufferSize = 65536;
         writer.disable_builtin_transport();
         writer.add_user_transport_to_pparams(testTransport);
-        writer.history_depth(10).asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+        writer.history_depth(10).asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
         ASSERT_TRUE(writer.isInitialized());
 
@@ -822,7 +823,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         PubSubWriter<Data64kbPubSubType> writer(TEST_TOPIC_NAME);
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
         ASSERT_TRUE(reader.isInitialized());
 
@@ -830,7 +831,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         // flow control not to overrun the receive buffer.
         uint32_t size = 32000;
         uint32_t periodInMs = 500;
-        writer.add_throughput_controller_descriptor_to_pparams(scheduler_policy_, size, periodInMs);
+        writer.add_flow_controller_descriptor_to_pparams(scheduler_policy_, size, periodInMs);
 
         auto testTransport = std::make_shared<UDPv4TransportDescriptor>();
         testTransport->maxMessageSize = 32536;
@@ -839,7 +840,7 @@ TEST_P(PubSubFragmentsLimited, AsyncFragmentSizeTest)
         writer.disable_builtin_transport();
         writer.add_user_transport_to_pparams(testTransport);
         writer.history_depth(10).
-                asynchronously(eprosima::fastrtps::ASYNCHRONOUS_PUBLISH_MODE).init();
+                asynchronously(eprosima::fastdds::dds::ASYNCHRONOUS_PUBLISH_MODE).init();
 
         ASSERT_TRUE(writer.isInitialized());
 

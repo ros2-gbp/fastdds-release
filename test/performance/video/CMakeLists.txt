@@ -108,7 +108,7 @@ if(GST_FOUND)
     if (WIN32)
         target_link_libraries(
             VideoTest
-            fastrtps
+            fastdds
             fastcdr
             foonathan_memory
             fastdds::optionparser
@@ -125,7 +125,7 @@ if(GST_FOUND)
     else()
         target_link_libraries(
             VideoTest
-            fastrtps
+            fastdds
             fastcdr
             foonathan_memory
             fastdds::optionparser
@@ -236,3 +236,6 @@ if(GST_FOUND)
 else()
     message(STATUS "GStreamer libraries not found. Could not compile VideoTests")
 endif()
+
+# Trace each TSan report. No-op if TSan is not enabled
+tsan_name_reports()

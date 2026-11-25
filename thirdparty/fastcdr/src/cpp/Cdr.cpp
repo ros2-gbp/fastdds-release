@@ -16,6 +16,7 @@
 #include <limits>
 
 #include <fastcdr/Cdr.h>
+#include "helpers/memory_helpers.hpp"
 
 namespace eprosima {
 namespace fastcdr {
@@ -822,14 +823,7 @@ Cdr& Cdr::serialize(
         // Save last datasize.
         last_data_size_ = sizeof(uint8_t);
 
-        if (bool_t)
-        {
-            offset_++ << static_cast<uint8_t>(1);
-        }
-        else
-        {
-            offset_++ << static_cast<uint8_t>(0);
-        }
+        serialize_bool(bool_t);
 
         return *this;
     }
@@ -930,13 +924,7 @@ Cdr& Cdr::serialize_array(
 
         for (size_t count = 0; count < num_elements; ++count)
         {
-            uint8_t value = 0;
-
-            if (bool_t[count])
-            {
-                value = 1;
-            }
-            offset_++ << value;
+            serialize_bool(bool_t[count]);
         }
 
         return *this;
@@ -2161,10 +2149,39 @@ Cdr& Cdr::end_serialize_type(
     return (this->*end_serialize_type_)(current_state);
 }
 
+namespace {
+
+// Maximum nesting of deserialize_type() calls on one thread. Real types stay far below this;
+// it only stops remote input from nesting types until the stack overflows.
+constexpr uint32_t max_deserialization_depth = 100;
+
+thread_local uint32_t deserialization_depth = 0;
+
+struct DeserializationDepthGuard
+{
+    DeserializationDepthGuard()
+    {
+        if (deserialization_depth >= max_deserialization_depth)
+        {
+            throw eprosima::fastcdr::exception::BadParamException("Maximum deserialization depth exceeded");
+        }
+        deserialization_depth++;
+    }
+
+    ~DeserializationDepthGuard()
+    {
+        deserialization_depth--;
+    }
+
+};
+
+} // namespace
+
 Cdr& Cdr::deserialize_type(
         EncodingAlgorithmFlag type_encoding,
         std::function<bool (Cdr&, const MemberId&)> functor)
 {
+    DeserializationDepthGuard guard;
     return (this->*deserialize_type_)(type_encoding, functor);
 }
 
@@ -2178,6 +2195,16 @@ Cdr& Cdr::operator <<(
 
     next_member_id_ = member_id;
     return *this;
+}
+
+inline void Cdr::serialize_bool(
+        bool bool_t)
+{
+#if FASTCDR_STRICT_BOOL
+    offset_++ <<  static_cast<uint8_t>(normalize_bool(bool_t));
+#else
+    offset_++ << (bool_t ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0));
+#endif // if FASTCDR_STRICT_BOOL
 }
 
 Cdr& Cdr::serialize_bool_array(
@@ -2194,14 +2221,7 @@ Cdr& Cdr::serialize_bool_array(
 
         for (size_t count = 0; count < vector_t.size(); ++count)
         {
-            uint8_t value = 0;
-            std::vector<bool>::const_reference ref = vector_t[count];
-
-            if (ref)
-            {
-                value = 1;
-            }
-            offset_++ << value;
+            serialize_bool(vector_t[count]);
         }
     }
     else
@@ -2229,14 +2249,7 @@ Cdr& Cdr::serialize_bool_sequence(
 
         for (size_t count = 0; count < vector_t.size(); ++count)
         {
-            uint8_t value = 0;
-            std::vector<bool>::const_reference ref = vector_t[count];
-
-            if (ref)
-            {
-                value = 1;
-            }
-            offset_++ << value;
+            serialize_bool(vector_t[count]);
         }
     }
     else
@@ -3241,11 +3254,16 @@ Cdr& Cdr::xcdr1_deserialize_type(
                 }
             }
 
-            if (current_state.member_size_ != offset_ - prev_offset)
+            size_t member_size {current_state.member_size_};
+            size_t diff {offset_ - prev_offset};
+            if (member_size < diff)
             {
-                throw BadParamException(
-                          "Member size provided by member header is not equal to the real decoded member size");
+                throw exception::BadParamException(
+                          "Member size provided by member header is lower than real decoded member size");
             }
+
+            // Skip unused bytes
+            offset_ += (member_size - diff);
         }
     }
     else

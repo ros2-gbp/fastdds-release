@@ -16,11 +16,7 @@ set(THREAD_SETTINGS_TESTS_EXEC ThreadSettingsTests)
 
 set(THREAD_SETTINGS_TESTS_SOURCE
     ThreadSettingsTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/ThreadSettings.cpp)
-
-if(WIN32)
-    add_definitions(-D_WIN32_WINNT=0x0601)
-endif()
+    )
 
 add_executable(${THREAD_SETTINGS_TESTS_EXEC} ${THREAD_SETTINGS_TESTS_SOURCE})
 
@@ -30,9 +26,47 @@ target_include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_BINARY_DIR}/include)
 
-target_link_libraries(
-    ${THREAD_SETTINGS_TESTS_EXEC}
+target_link_units(${THREAD_SETTINGS_TESTS_EXEC} UNITS rtps::basic)
+target_link_libraries(${THREAD_SETTINGS_TESTS_EXEC}
     GTest::gtest
     ${CMAKE_DL_LIBS})
 
 gtest_discover_tests(${THREAD_SETTINGS_TESTS_EXEC})
+
+if(EPROSIMA_TEST_DNS_NOT_SET_UP)
+    set(dns_filter "*ServerClientEnvironmentSetUpDNS*")
+endif()
+
+string(JOIN ":" SERVER_ATTRIBUTES_IGNORED_TESTS ${pkcs_filter} ${dns_filter})
+if(NOT SERVER_ATTRIBUTES_IGNORED_TESTS STREQUAL "")
+	message(STATUS "Ignoring tests '${SERVER_ATTRIBUTES_IGNORED_TESTS}'")
+    string(PREPEND SERVER_ATTRIBUTES_IGNORED_TESTS "-")
+endif()
+message(STATUS "SERVER_ATTRIBUTES_IGNORED_TESTS set to '${SERVER_ATTRIBUTES_IGNORED_TESTS}'")
+
+set(SERVER_ATTRIBUTES_TESTS_EXEC ServerAttributesTests)
+
+set(SERVER_ATTRIBUTES_TESTS_SOURCE ServerAttributesTests.cpp)
+
+add_executable(${SERVER_ATTRIBUTES_TESTS_EXEC} ${SERVER_ATTRIBUTES_TESTS_SOURCE})
+target_include_directories( ${SERVER_ATTRIBUTES_TESTS_EXEC} PRIVATE
+    ${Asio_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_BINARY_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src/cpp
+    )
+
+target_link_units(${SERVER_ATTRIBUTES_TESTS_EXEC} UNITS rtps::common rtps::server-attributes)
+target_link_libraries(${SERVER_ATTRIBUTES_TESTS_EXEC}
+    fastcdr
+    GTest::gtest
+    $<$<BOOL:${WIN32}>:iphlpapi$<SEMICOLON>Shlwapi>
+    $<$<BOOL:${WIN32}>:ws2_32>
+    ${CMAKE_DL_LIBS})
+
+gtest_discover_tests(${SERVER_ATTRIBUTES_TESTS_EXEC}
+    TEST_PREFIX "ServerAttributesTests."
+    TEST_FILTER ${SERVER_ATTRIBUTES_IGNORED_TESTS}
+    )
+
+unset(dns_filter)

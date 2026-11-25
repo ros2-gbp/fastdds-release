@@ -16,17 +16,20 @@
 #define _FASTDDS_SHAREDMEM_GLOBAL_H_
 
 #include <algorithm>
-#include <vector>
-#include <mutex>
 #include <memory>
+#include <mutex>
 #include <thread>
+#include <vector>
 
-#include <utils/shared_memory/SharedMemSegment.hpp>
-#include <utils/shared_memory/RobustExclusiveLock.hpp>
-#include <utils/shared_memory/RobustSharedLock.hpp>
-#include <utils/shared_memory/SharedMemWatchdog.hpp>
+#include <fastdds/config.hpp>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/common/Locator.hpp>
 
 #include <rtps/transport/shared_mem/MultiProducerConsumerRingBuffer.hpp>
+#include <utils/shared_memory/RobustExclusiveLock.hpp>
+#include <utils/shared_memory/RobustSharedLock.hpp>
+#include <utils/shared_memory/SharedMemSegment.hpp>
+#include <utils/shared_memory/SharedMemWatchdog.hpp>
 
 #define THREADID "(ID:" << std::this_thread::get_id() << ") "
 
@@ -92,6 +95,8 @@ public:
     typedef MultiProducerConsumerRingBuffer<BufferDescriptor>::Cell PortCell;
 
     static const uint32_t CURRENT_ABI_VERSION = 5;
+    static_assert(CURRENT_ABI_VERSION == (2 + FASTDDS_VERSION_MAJOR), "ABI is not correct");
+    static_assert(LOCATOR_KIND_SHM == (16 + FASTDDS_VERSION_MAJOR), "LOCATOR_KIND_SHM is not correct");
 
     struct PortNode
     {
@@ -514,8 +519,8 @@ public:
         /**
          * Try to enqueue a buffer descriptor in the port.
          * If the port queue is full returns inmediatelly with false value.
-         * @param[in] buffer_descriptor buffer descriptor to be enqueued
-         * @param[out] listeners_active false if no active listeners => buffer not enqueued
+         * @param [in] buffer_descriptor buffer descriptor to be enqueued
+         * @param [out] listeners_active false if no active listeners => buffer not enqueued
          * @return false in overflow case, true otherwise.
          */
         bool try_push(
@@ -563,9 +568,9 @@ public:
 
         /**
          * Waits while the port is empty and listener is not closed
-         * @param[in] listener reference to the listener that will wait for an incoming buffer descriptor.
-         * @param[in] is_listener_closed this reference can become true in the middle of the waiting process,
-         * @param[in] listener_index to update the port's listener_status,
+         * @param [in] listener reference to the listener that will wait for an incoming buffer descriptor.
+         * @param [in] is_listener_closed this reference can become true in the middle of the waiting process,
+         * @param [in] listener_index to update the port's listener_status,
          * if that happens wait is aborted.
          */
         void wait_pop(
@@ -590,25 +595,35 @@ public:
 
                 do
                 {
+                    // Keep the fast path: a buffer that is already available must not
+                    // wait for a notification.
+                    if (is_listener_closed.load() || listener.head() != nullptr)
+                    {
+                        break; // Condition met, Break the while
+                    }
+
                     boost::system_time const timeout =
                             boost::get_system_time() + boost::posix_time::milliseconds(node_->port_wait_timeout_ms);
 
-                    if (node_->empty_cv.timed_wait(lock, timeout, [&]
-                            {
-                                return is_listener_closed.load() || listener.head() != nullptr;
-                            }))
-                    {
-                        break; // Codition met, Break the while
-                    }
-                    else // Timeout
-                    {
-                        if (!node_->is_port_ok)
-                        {
-                            throw std::runtime_error("port marked as not ok");
-                        }
+                    // Wait without a predicate. A notification that does not carry a buffer,
+                    // as the heartbeat requested by healthy_check(), must wake this listener
+                    // too, so that it can refresh its counter and prove that it is still
+                    // alive.
+                    node_->empty_cv.timed_wait(lock, timeout);
 
-                        status.counter = status.last_verified_counter + 1;
+                    if (is_listener_closed.load() || listener.head() != nullptr)
+                    {
+                        break; // Condition met, Break the while
                     }
+
+                    // Timeout, or a notification without data: refresh the counter so that
+                    // the health checks know that this listener is still running.
+                    if (!node_->is_port_ok)
+                    {
+                        throw std::runtime_error("port marked as not ok");
+                    }
+
+                    status.counter = status.last_verified_counter + 1;
                 }
                 while (1);
 
@@ -785,7 +800,7 @@ public:
          *
          * \pre Current port is zombie, as reported by is_zombie()
          *
-         * @param[OUT] buffer_descriptor Descriptor of the buffer that was being processed by the first processing listener
+         * @param [OUT] buffer_descriptor Descriptor of the buffer that was being processed by the first processing listener
          * @return True if there was at least one processing listener. False if not.
          */
         bool get_and_remove_blocked_processing(
@@ -887,7 +902,12 @@ public:
 
                 if (!is_check_ok)
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(node_->port_wait_timeout_ms));
+                    // A waiting listener is only known to be alive once its counter moves,
+                    // and it only moves the counter when it wakes up. Ask for a heartbeat
+                    // instead of waiting for its next timeout, which would cost
+                    // port_wait_timeout_ms.
+                    node_->empty_cv.notify_all();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
             }
 
@@ -1135,8 +1155,8 @@ private:
                     {
                         std::stringstream ss;
 
-                        ss << port_node->port_id << " (" << port_node->uuid.to_string() <<
-                            ") because it was already locked";
+                        ss << port_node->port_id << " (" << port_node->uuid.to_string()
+                           << ") because it was already locked";
 
                         err_reason = ss.str();
                         port.reset();
@@ -1152,8 +1172,8 @@ private:
                     {
                         std::stringstream ss;
 
-                        ss << port_node->port_id << " (" << port_node->uuid.to_string() <<
-                            ") because it had a ReadExclusive lock";
+                        ss << port_node->port_id << " (" << port_node->uuid.to_string()
+                           << ") because it had a ReadExclusive lock";
 
                         err_reason = ss.str();
                         port.reset();
@@ -1168,8 +1188,10 @@ private:
                     port_node->is_opened_for_reading |= (open_mode != Port::OpenMode::Write);
 
                     EPROSIMA_LOG_INFO(RTPS_TRANSPORT_SHM, THREADID << "Port "
-                                                                   << port_node->port_id << " (" << port_node->uuid.to_string() <<
-                            ") Opened" << Port::open_mode_to_string(open_mode));
+                                                                   << port_node->port_id << " ("
+                                                                   << port_node->uuid.to_string()
+                                                                   << ") Opened"
+                                                                   << Port::open_mode_to_string(open_mode));
                 }
             }
             catch (std::exception&)

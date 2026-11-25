@@ -265,8 +265,8 @@ public:
         catch (const std::exception& e)
         {
             EPROSIMA_LOG_ERROR(RTPS_TRANSPORT_SHM, "Failed to create Shared Memory Manager for domain " << domain_name
-                                                                                                        << ": " <<
-                    e.what());
+                                                                                                        << ": "
+                                                                                                        << e.what());
             return std::shared_ptr<SharedMemManager>();
         }
 
@@ -870,8 +870,8 @@ public:
 
         /**
          * Try to enqueue a buffer in the port.
-         * @param[in, out] buffer reference to the SHM buffer to push to
-         * @param[out] is_port_ok true if the port is ok
+         * @param [in, out] buffer reference to the SHM buffer to push to
+         * @param [out] is_port_ok true if the port is ok
          * @returns false If the port's queue is full so buffer couldn't be enqueued.
          */
         bool try_push(

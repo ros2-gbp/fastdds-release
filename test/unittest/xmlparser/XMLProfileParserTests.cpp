@@ -28,48 +28,29 @@
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/dds/log/OStreamConsumer.hpp>
 #include <fastdds/dds/log/StdoutErrConsumer.hpp>
+#include <fastdds/dds/xtypes/dynamic_types/DynamicType.hpp>
+#include <fastdds/LibrarySettings.hpp>
 #include <fastdds/rtps/transport/network/AllowedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/BlockedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
-#include <fastrtps/transport/TCPTransportDescriptor.h>
-#include <fastrtps/transport/UDPTransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/UDPTransportDescriptor.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
+#include <mock/fastdds/dds/log/LogMock.hpp>
+#include <xmlparser/XMLProfileManager.h>
 
 #include "../common/env_var_utils.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 using namespace eprosima::testing;
 using namespace ::testing;
 
-using eprosima::fastdds::dds::Log;
 using eprosima::fastdds::dds::LogMock;
-using eprosima::fastdds::dds::LogConsumer;
 
 LogMock* log_mock = nullptr;
-
-// Initialize Log mock
-void TestRegisterConsumerFunc(
-        std::unique_ptr<LogConsumer>&& c)
-{
-    log_mock->RegisterConsumer(std::move(c));
-}
-
-void TestClearConsumersFunc()
-{
-    log_mock->ClearConsumers();
-}
-
-void TestSetThreadConfigFunc()
-{
-    log_mock->SetThreadConfig();
-}
-
-std::function<void(std::unique_ptr<LogConsumer>&&)> Log::RegisterConsumerFunc = TestRegisterConsumerFunc;
-std::function<void()> Log::ClearConsumersFunc = TestClearConsumersFunc;
-std::function<void()> Log::SetThreadConfigFunc = TestSetThreadConfigFunc;
 
 class XMLProfileParserBasicTests : public ::testing::Test
 {
@@ -133,7 +114,7 @@ protected:
 
     std::string xml_filename_ = "test_xml_profile.xml";
 
-    const std::pair<std::string, std::string> c_environment_values_[167]
+    const std::pair<std::string, std::string> c_environment_values_[172]
     {
         {"XML_PROFILES_ENV_VAR_1",   "123"},
         {"XML_PROFILES_ENV_VAR_2",   "4"},
@@ -301,7 +282,12 @@ protected:
         {"XML_PROFILES_ENV_VAR_164", "HIGH_PRIORITY"},
         {"XML_PROFILES_ENV_VAR_165", "2048"},
         {"XML_PROFILES_ENV_VAR_166",  "45"},
-        {"XML_PROFILES_ENV_VAR_167",  "test_flow_controller"}
+        {"XML_PROFILES_ENV_VAR_167",  "test_flow_controller"},
+        {"XML_PROFILES_ENV_VAR_168",  "251"},
+        {"XML_PROFILES_ENV_VAR_169",  "127.0.0.1"},
+        {"XML_PROFILES_ENV_VAR_170",  "XCDR2"},
+        {"XML_PROFILES_ENV_VAR_171",  "XCDR2"},
+        {"XML_PROFILES_ENV_VAR_172",  "XCDR"}
     };
 
 };
@@ -336,8 +322,9 @@ TEST_F(XMLProfileParserBasicTests, XMLParserRootLibrarySettings)
     ASSERT_EQ(xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_root_library_settings_profile.xml"));
 
-    const LibrarySettingsAttributes& library_settings = xmlparser::XMLProfileManager::library_settings();
-    EXPECT_EQ(library_settings.intraprocess_delivery, IntraprocessDeliveryType::INTRAPROCESS_USER_DATA_ONLY);
+    const eprosima::fastdds::LibrarySettings& library_settings = xmlparser::XMLProfileManager::library_settings();
+    EXPECT_EQ(library_settings.intraprocess_delivery,
+            eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_USER_DATA_ONLY);
 }
 
 TEST_F(XMLProfileParserBasicTests, XMLoadProfiles)
@@ -349,7 +336,7 @@ TEST_F(XMLProfileParserBasicTests, XMLoadProfiles)
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_ERROR,
             xmlparser::XMLProfileManager::loadXMLFile("missing_file.xml"));
 
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillParticipantAttributes("test_participant_profile", participant_atts));
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_ERROR,
@@ -462,8 +449,8 @@ TEST_P(XMLProfileParserTests, XMLParserLibrarySettings)
     ASSERT_EQ(xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
 
-    const LibrarySettingsAttributes& library_settings = xmlparser::XMLProfileManager::library_settings();
-    EXPECT_EQ(library_settings.intraprocess_delivery, IntraprocessDeliveryType::INTRAPROCESS_FULL);
+    const eprosima::fastdds::LibrarySettings& library_settings = xmlparser::XMLProfileManager::library_settings();
+    EXPECT_EQ(library_settings.intraprocess_delivery, eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL);
 }
 
 /*
@@ -472,7 +459,7 @@ TEST_P(XMLProfileParserTests, XMLParserLibrarySettings)
 TEST_P(XMLProfileParserTests, XMLParserParticipant)
 {
     std::string participant_profile = std::string("test_participant_profile");
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
@@ -499,6 +486,9 @@ TEST_P(XMLProfileParserTests, XMLParserParticipant)
     EXPECT_EQ(rtps_atts.allocation.writers.increment, 2u);
     EXPECT_EQ(rtps_atts.allocation.send_buffers.preallocated_number, 127u);
     EXPECT_EQ(rtps_atts.allocation.send_buffers.dynamic, true);
+    EXPECT_EQ(rtps_atts.allocation.send_buffers.network_buffers_config.initial, 10u);
+    EXPECT_EQ(rtps_atts.allocation.send_buffers.network_buffers_config.maximum, 127u);
+    EXPECT_EQ(rtps_atts.allocation.send_buffers.network_buffers_config.increment, 10u);
 
     IPLocator::setIPv4(locator, 192, 168, 1, 2);
     locator.port = 2019;
@@ -512,14 +502,14 @@ TEST_P(XMLProfileParserTests, XMLParserParticipant)
     EXPECT_TRUE(rtps_atts.ignore_non_matching_locators);
     EXPECT_EQ(rtps_atts.sendSocketBufferSize, 32u);
     EXPECT_EQ(rtps_atts.listenSocketBufferSize, 1000u);
-    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastrtps::rtps::DiscoveryProtocol::SIMPLE);
+    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastdds::rtps::DiscoveryProtocol::SIMPLE);
     EXPECT_EQ(builtin.discovery_config.ignoreParticipantFlags,
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_SAME_PROCESS |
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_HOST);
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_SAME_PROCESS |
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST);
     EXPECT_EQ(builtin.use_WriterLivelinessProtocol, false);
     EXPECT_EQ(builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol, true);
     EXPECT_EQ(builtin.discovery_config.use_STATIC_EndpointDiscoveryProtocol, false);
-    EXPECT_EQ(builtin.discovery_config.leaseDuration, c_TimeInfinite);
+    EXPECT_EQ(builtin.discovery_config.leaseDuration, dds::c_TimeInfinite);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.seconds, 10);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.nanosec, 333u);
     EXPECT_EQ(builtin.discovery_config.initial_announcements.count, 2u);
@@ -551,8 +541,6 @@ TEST_P(XMLProfileParserTests, XMLParserParticipant)
     EXPECT_EQ(builtin.readerPayloadSize, 1000u);
     EXPECT_EQ(builtin.writerPayloadSize, 2000u);
     EXPECT_EQ(builtin.mutation_tries, 55u);
-    EXPECT_TRUE(builtin.typelookup_config.use_client);
-    EXPECT_TRUE(builtin.typelookup_config.use_server);
     EXPECT_EQ(port.portBase, 12);
     EXPECT_EQ(port.domainIDGain, 34);
     EXPECT_EQ(port.participantIDGain, 56);
@@ -560,9 +548,9 @@ TEST_P(XMLProfileParserTests, XMLParserParticipant)
     EXPECT_EQ(port.offsetd1, 90);
     EXPECT_EQ(port.offsetd2, 123);
     EXPECT_EQ(port.offsetd3, 456);
+    EXPECT_EQ(port.offsetd4, 251);
     EXPECT_EQ(rtps_atts.participantID, 9898);
-    //EXPECT_EQ(rtps_atts.throughputController.bytesPerPeriod, 2048u);
-    //EXPECT_EQ(rtps_atts.throughputController.periodMillisecs, 45u);
+    EXPECT_EQ(rtps_atts.easy_mode_ip, "127.0.0.1");
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->max_bytes_per_period, 2048);
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->period_ms, 45u);
     EXPECT_EQ(rtps_atts.useBuiltinTransports, true);
@@ -576,11 +564,11 @@ TEST_P(XMLProfileParserTests, XMLParserParticipant)
 TEST_F(XMLProfileParserBasicTests, XMLParserParticipantDeprecated)
 {
     std::string participant_profile = std::string("test_participant_profile");
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
 
-    ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
+    ASSERT_EQ(xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
-    EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
+    EXPECT_EQ(xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillParticipantAttributes(participant_profile, participant_atts));
 
     EXPECT_EQ(participant_atts.domainId, 2019102u);
@@ -616,14 +604,14 @@ TEST_F(XMLProfileParserBasicTests, XMLParserParticipantDeprecated)
     EXPECT_TRUE(rtps_atts.ignore_non_matching_locators);
     EXPECT_EQ(rtps_atts.sendSocketBufferSize, 32u);
     EXPECT_EQ(rtps_atts.listenSocketBufferSize, 1000u);
-    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastrtps::rtps::DiscoveryProtocol::SIMPLE);
+    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastdds::rtps::DiscoveryProtocol::SIMPLE);
     EXPECT_EQ(builtin.discovery_config.ignoreParticipantFlags,
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_SAME_PROCESS |
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_HOST);
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_SAME_PROCESS |
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST);
     EXPECT_EQ(builtin.use_WriterLivelinessProtocol, false);
     EXPECT_EQ(builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol, true);
     EXPECT_EQ(builtin.discovery_config.use_STATIC_EndpointDiscoveryProtocol, false);
-    EXPECT_EQ(builtin.discovery_config.leaseDuration, c_TimeInfinite);
+    EXPECT_EQ(builtin.discovery_config.leaseDuration, dds::c_TimeInfinite);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.seconds, 10);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.nanosec, 333u);
     EXPECT_EQ(builtin.discovery_config.initial_announcements.count, 2u);
@@ -655,8 +643,6 @@ TEST_F(XMLProfileParserBasicTests, XMLParserParticipantDeprecated)
     EXPECT_EQ(builtin.readerPayloadSize, 1000u);
     EXPECT_EQ(builtin.writerPayloadSize, 2000u);
     EXPECT_EQ(builtin.mutation_tries, 55u);
-    EXPECT_TRUE(builtin.typelookup_config.use_client);
-    EXPECT_TRUE(builtin.typelookup_config.use_server);
     EXPECT_EQ(port.portBase, 12);
     EXPECT_EQ(port.domainIDGain, 34);
     EXPECT_EQ(port.participantIDGain, 56);
@@ -664,9 +650,9 @@ TEST_F(XMLProfileParserBasicTests, XMLParserParticipantDeprecated)
     EXPECT_EQ(port.offsetd1, 90);
     EXPECT_EQ(port.offsetd2, 123);
     EXPECT_EQ(port.offsetd3, 456);
+    EXPECT_EQ(port.offsetd4, 251);
     EXPECT_EQ(rtps_atts.participantID, 9898);
-    EXPECT_EQ(rtps_atts.throughputController.bytesPerPeriod, 2048u);
-    EXPECT_EQ(rtps_atts.throughputController.periodMillisecs, 45u);
+    EXPECT_EQ(rtps_atts.easy_mode_ip, "127.0.0.1");
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->max_bytes_per_period, 2048);
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->period_ms, 45u);
     EXPECT_EQ(rtps_atts.useBuiltinTransports, true);
@@ -678,7 +664,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserParticipantDeprecated)
  */
 TEST_P(XMLProfileParserTests, XMLParserDefaultParticipantProfile)
 {
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
@@ -703,14 +689,14 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultParticipantProfile)
     EXPECT_TRUE(rtps_atts.ignore_non_matching_locators);
     EXPECT_EQ(rtps_atts.sendSocketBufferSize, 32u);
     EXPECT_EQ(rtps_atts.listenSocketBufferSize, 1000u);
-    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastrtps::rtps::DiscoveryProtocol::SIMPLE);
+    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastdds::rtps::DiscoveryProtocol::SIMPLE);
     EXPECT_EQ(builtin.discovery_config.ignoreParticipantFlags,
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_SAME_PROCESS |
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_HOST);
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_SAME_PROCESS |
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST);
     EXPECT_EQ(builtin.use_WriterLivelinessProtocol, false);
     EXPECT_EQ(builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol, true);
     EXPECT_EQ(builtin.discovery_config.use_STATIC_EndpointDiscoveryProtocol, false);
-    EXPECT_EQ(builtin.discovery_config.leaseDuration, c_TimeInfinite);
+    EXPECT_EQ(builtin.discovery_config.leaseDuration, dds::c_TimeInfinite);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.seconds, 10);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.nanosec, 333u);
     EXPECT_EQ(builtin.discovery_config.initial_announcements.count, 2u);
@@ -742,8 +728,6 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultParticipantProfile)
     EXPECT_EQ(builtin.readerPayloadSize, 1000u);
     EXPECT_EQ(builtin.writerPayloadSize, 2000u);
     EXPECT_EQ(builtin.mutation_tries, 55u);
-    EXPECT_TRUE(builtin.typelookup_config.use_client);
-    EXPECT_TRUE(builtin.typelookup_config.use_server);
     EXPECT_EQ(port.portBase, 12);
     EXPECT_EQ(port.domainIDGain, 34);
     EXPECT_EQ(port.participantIDGain, 56);
@@ -751,9 +735,9 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultParticipantProfile)
     EXPECT_EQ(port.offsetd1, 90);
     EXPECT_EQ(port.offsetd2, 123);
     EXPECT_EQ(port.offsetd3, 456);
+    EXPECT_EQ(port.offsetd4, 251);
     EXPECT_EQ(rtps_atts.participantID, 9898);
-    //EXPECT_EQ(rtps_atts.throughputController.bytesPerPeriod, 2048u);
-    //EXPECT_EQ(rtps_atts.throughputController.periodMillisecs, 45u);
+    EXPECT_EQ(rtps_atts.easy_mode_ip, "127.0.0.1");
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->max_bytes_per_period, 2048);
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->period_ms, 45u);
     EXPECT_EQ(rtps_atts.useBuiltinTransports, true);
@@ -765,7 +749,7 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultParticipantProfile)
  */
 TEST_F(XMLProfileParserBasicTests, XMLParserDefaultParticipantProfileDeprecated)
 {
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
@@ -790,14 +774,14 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultParticipantProfileDeprecated)
     EXPECT_TRUE(rtps_atts.ignore_non_matching_locators);
     EXPECT_EQ(rtps_atts.sendSocketBufferSize, 32u);
     EXPECT_EQ(rtps_atts.listenSocketBufferSize, 1000u);
-    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastrtps::rtps::DiscoveryProtocol::SIMPLE);
+    EXPECT_EQ(builtin.discovery_config.discoveryProtocol, eprosima::fastdds::rtps::DiscoveryProtocol::SIMPLE);
     EXPECT_EQ(builtin.discovery_config.ignoreParticipantFlags,
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_SAME_PROCESS |
-            eprosima::fastrtps::rtps::ParticipantFilteringFlags_t::FILTER_DIFFERENT_HOST);
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_SAME_PROCESS |
+            eprosima::fastdds::rtps::ParticipantFilteringFlags::FILTER_DIFFERENT_HOST);
     EXPECT_EQ(builtin.use_WriterLivelinessProtocol, false);
     EXPECT_EQ(builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol, true);
     EXPECT_EQ(builtin.discovery_config.use_STATIC_EndpointDiscoveryProtocol, false);
-    EXPECT_EQ(builtin.discovery_config.leaseDuration, c_TimeInfinite);
+    EXPECT_EQ(builtin.discovery_config.leaseDuration, dds::c_TimeInfinite);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.seconds, 10);
     EXPECT_EQ(builtin.discovery_config.leaseDuration_announcementperiod.nanosec, 333u);
     EXPECT_EQ(builtin.discovery_config.initial_announcements.count, 2u);
@@ -829,8 +813,6 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultParticipantProfileDeprecated)
     EXPECT_EQ(builtin.readerPayloadSize, 1000u);
     EXPECT_EQ(builtin.writerPayloadSize, 2000u);
     EXPECT_EQ(builtin.mutation_tries, 55u);
-    EXPECT_TRUE(builtin.typelookup_config.use_client);
-    EXPECT_TRUE(builtin.typelookup_config.use_server);
     EXPECT_EQ(port.portBase, 12);
     EXPECT_EQ(port.domainIDGain, 34);
     EXPECT_EQ(port.participantIDGain, 56);
@@ -838,9 +820,9 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultParticipantProfileDeprecated)
     EXPECT_EQ(port.offsetd1, 90);
     EXPECT_EQ(port.offsetd2, 123);
     EXPECT_EQ(port.offsetd3, 456);
+    EXPECT_EQ(port.offsetd4, 251);
     EXPECT_EQ(rtps_atts.participantID, 9898);
-    EXPECT_EQ(rtps_atts.throughputController.bytesPerPeriod, 2048u);
-    EXPECT_EQ(rtps_atts.throughputController.periodMillisecs, 45u);
+    EXPECT_EQ(rtps_atts.easy_mode_ip, "127.0.0.1");
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->max_bytes_per_period, 2048);
     EXPECT_EQ(rtps_atts.flow_controllers.at(0)->period_ms, 45u);
     EXPECT_EQ(rtps_atts.useBuiltinTransports, true);
@@ -853,15 +835,15 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultParticipantProfileDeprecated)
 TEST_P(XMLProfileParserTests, XMLParserPublisher)
 {
     std::string publisher_profile = std::string("test_publisher_profile");
-    PublisherAttributes publisher_atts;
+    xmlparser::PublisherAttributes publisher_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
     EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillPublisherAttributes(publisher_profile, publisher_atts));
 
-    TopicAttributes& pub_topic = publisher_atts.topic;
-    WriterQos& pub_qos = publisher_atts.qos;
+    xmlparser::TopicAttributes& pub_topic = publisher_atts.topic;
+    dds::WriterQos& pub_qos = publisher_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     WriterTimes& pub_times = publisher_atts.times;
@@ -869,29 +851,31 @@ TEST_P(XMLProfileParserTests, XMLParserPublisher)
     //EXPECT_EQ(pub_topic.topicKind, NO_KEY);
     //EXPECT_EQ(pub_topic.topicName, "samplePubSubTopic");
     //EXPECT_EQ(pub_topic.topicDataType, "samplePubSubTopicType");
-    EXPECT_EQ(pub_topic.historyQos.kind, KEEP_LAST_HISTORY_QOS);
+    EXPECT_EQ(pub_topic.historyQos.kind, dds::KEEP_LAST_HISTORY_QOS);
     EXPECT_EQ(pub_topic.historyQos.depth, 50);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples, 432);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_instances, 1);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples_per_instance, 100);
     EXPECT_EQ(pub_topic.resourceLimitsQos.allocated_samples, 123);
-    EXPECT_EQ(pub_qos.m_durability.kind, TRANSIENT_LOCAL_DURABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_liveliness.kind, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
+    EXPECT_EQ(pub_qos.m_durability.kind, dds::TRANSIENT_LOCAL_DURABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_liveliness.kind, dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.seconds, 1);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.nanosec, 2u);
-    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, c_TimeInfinite);
-    EXPECT_EQ(pub_qos.m_reliability.kind, BEST_EFFORT_RELIABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, c_TimeZero);
+    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, dds::c_TimeInfinite);
+    EXPECT_EQ(pub_qos.m_reliability.kind, dds::BEST_EFFORT_RELIABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, dds::c_TimeZero);
     EXPECT_EQ(pub_qos.m_partition.names()[0], "partition_name_a");
     EXPECT_EQ(pub_qos.m_partition.names()[1], "partition_name_b");
-    EXPECT_EQ(pub_qos.m_publishMode.kind, ASYNCHRONOUS_PUBLISH_MODE);
-    EXPECT_EQ(0, strcmp(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller"));
-    EXPECT_EQ(pub_times.initialHeartbeatDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.heartbeatPeriod.seconds, 11);
-    EXPECT_EQ(pub_times.heartbeatPeriod.nanosec, 32u);
-    EXPECT_EQ(pub_times.nackResponseDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.nackSupressionDuration.seconds, 121);
-    EXPECT_EQ(pub_times.nackSupressionDuration.nanosec, 332u);
+    ASSERT_EQ(pub_qos.representation.m_value.size(), 1u);
+    EXPECT_EQ(pub_qos.representation.m_value[0], dds::XCDR2_DATA_REPRESENTATION);
+    EXPECT_EQ(pub_qos.m_publishMode.kind, dds::ASYNCHRONOUS_PUBLISH_MODE);
+    EXPECT_EQ(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller");
+    EXPECT_EQ(pub_times.initial_heartbeat_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.heartbeat_period.seconds, 11);
+    EXPECT_EQ(pub_times.heartbeat_period.nanosec, 32u);
+    EXPECT_EQ(pub_times.nack_response_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.nack_supression_duration.seconds, 121);
+    EXPECT_EQ(pub_times.nack_supression_duration.nanosec, 332u);
     EXPECT_TRUE(publisher_atts.ignore_non_matching_locators);
     check_external_locator(publisher_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 3);
@@ -914,8 +898,6 @@ TEST_P(XMLProfileParserTests, XMLParserPublisher)
     //locator.port = 2021;
     //EXPECT_EQ(*(loc_list_it = publisher_atts.outLocatorList.begin()), locator);
     //EXPECT_EQ(loc_list_it->get_port(), 2021);
-    //EXPECT_EQ(publisher_atts.throughputController.bytesPerPeriod, 9236u);
-    //EXPECT_EQ(publisher_atts.throughputController.periodMillisecs, 234u);
     EXPECT_EQ(publisher_atts.historyMemoryPolicy, DYNAMIC_RESERVE_MEMORY_MODE);
     EXPECT_EQ(publisher_atts.getUserDefinedID(), 67);
     EXPECT_EQ(publisher_atts.getEntityID(), 87);
@@ -929,15 +911,15 @@ TEST_P(XMLProfileParserTests, XMLParserPublisher)
 TEST_F(XMLProfileParserBasicTests, XMLParserPublisherDeprecated)
 {
     std::string publisher_profile = std::string("test_publisher_profile");
-    PublisherAttributes publisher_atts;
+    xmlparser::PublisherAttributes publisher_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
     EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillPublisherAttributes(publisher_profile, publisher_atts));
 
-    TopicAttributes& pub_topic = publisher_atts.topic;
-    WriterQos& pub_qos = publisher_atts.qos;
+    xmlparser::TopicAttributes& pub_topic = publisher_atts.topic;
+    dds::WriterQos& pub_qos = publisher_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     WriterTimes& pub_times = publisher_atts.times;
@@ -945,29 +927,29 @@ TEST_F(XMLProfileParserBasicTests, XMLParserPublisherDeprecated)
     EXPECT_EQ(pub_topic.topicKind, NO_KEY);
     EXPECT_EQ(pub_topic.topicName, "samplePubSubTopic");
     EXPECT_EQ(pub_topic.topicDataType, "samplePubSubTopicType");
-    EXPECT_EQ(pub_topic.historyQos.kind, KEEP_LAST_HISTORY_QOS);
+    EXPECT_EQ(pub_topic.historyQos.kind, dds::KEEP_LAST_HISTORY_QOS);
     EXPECT_EQ(pub_topic.historyQos.depth, 50);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples, 432);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_instances, 1);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples_per_instance, 100);
     EXPECT_EQ(pub_topic.resourceLimitsQos.allocated_samples, 123);
-    EXPECT_EQ(pub_qos.m_durability.kind, TRANSIENT_LOCAL_DURABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_liveliness.kind, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
+    EXPECT_EQ(pub_qos.m_durability.kind, dds::TRANSIENT_LOCAL_DURABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_liveliness.kind, dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.seconds, 1);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.nanosec, 2u);
-    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, c_TimeInfinite);
-    EXPECT_EQ(pub_qos.m_reliability.kind, BEST_EFFORT_RELIABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, c_TimeZero);
+    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, dds::c_TimeInfinite);
+    EXPECT_EQ(pub_qos.m_reliability.kind, dds::BEST_EFFORT_RELIABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, dds::c_TimeZero);
     EXPECT_EQ(pub_qos.m_partition.names()[0], "partition_name_a");
     EXPECT_EQ(pub_qos.m_partition.names()[1], "partition_name_b");
-    EXPECT_EQ(pub_qos.m_publishMode.kind, ASYNCHRONOUS_PUBLISH_MODE);
-    EXPECT_EQ(0, strcmp(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller"));
-    EXPECT_EQ(pub_times.initialHeartbeatDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.heartbeatPeriod.seconds, 11);
-    EXPECT_EQ(pub_times.heartbeatPeriod.nanosec, 32u);
-    EXPECT_EQ(pub_times.nackResponseDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.nackSupressionDuration.seconds, 121);
-    EXPECT_EQ(pub_times.nackSupressionDuration.nanosec, 332u);
+    EXPECT_EQ(pub_qos.m_publishMode.kind, dds::ASYNCHRONOUS_PUBLISH_MODE);
+    EXPECT_EQ(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller");
+    EXPECT_EQ(pub_times.initial_heartbeat_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.heartbeat_period.seconds, 11);
+    EXPECT_EQ(pub_times.heartbeat_period.nanosec, 32u);
+    EXPECT_EQ(pub_times.nack_response_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.nack_supression_duration.seconds, 121);
+    EXPECT_EQ(pub_times.nack_supression_duration.nanosec, 332u);
     EXPECT_TRUE(publisher_atts.ignore_non_matching_locators);
     check_external_locator(publisher_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 3);
@@ -990,8 +972,6 @@ TEST_F(XMLProfileParserBasicTests, XMLParserPublisherDeprecated)
     //locator.port = 2021;
     //EXPECT_EQ(*(loc_list_it = publisher_atts.outLocatorList.begin()), locator);
     //EXPECT_EQ(loc_list_it->get_port(), 2021);
-    EXPECT_EQ(publisher_atts.throughputController.bytesPerPeriod, 9236u);
-    EXPECT_EQ(publisher_atts.throughputController.periodMillisecs, 234u);
     EXPECT_EQ(publisher_atts.historyMemoryPolicy, DYNAMIC_RESERVE_MEMORY_MODE);
     EXPECT_EQ(publisher_atts.getUserDefinedID(), 67);
     EXPECT_EQ(publisher_atts.getEntityID(), 87);
@@ -1004,14 +984,14 @@ TEST_F(XMLProfileParserBasicTests, XMLParserPublisherDeprecated)
  */
 TEST_P(XMLProfileParserTests, XMLParserDefaultPublisherProfile)
 {
-    PublisherAttributes publisher_atts;
+    xmlparser::PublisherAttributes publisher_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
     xmlparser::XMLProfileManager::getDefaultPublisherAttributes(publisher_atts);
 
-    TopicAttributes& pub_topic = publisher_atts.topic;
-    WriterQos& pub_qos = publisher_atts.qos;
+    xmlparser::TopicAttributes& pub_topic = publisher_atts.topic;
+    dds::WriterQos& pub_qos = publisher_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     WriterTimes& pub_times = publisher_atts.times;
@@ -1019,29 +999,29 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultPublisherProfile)
     //EXPECT_EQ(pub_topic.topicKind, NO_KEY);
     //EXPECT_EQ(pub_topic.topicName, "samplePubSubTopic");
     //EXPECT_EQ(pub_topic.topicDataType, "samplePubSubTopicType");
-    EXPECT_EQ(pub_topic.historyQos.kind, KEEP_LAST_HISTORY_QOS);
+    EXPECT_EQ(pub_topic.historyQos.kind, dds::KEEP_LAST_HISTORY_QOS);
     EXPECT_EQ(pub_topic.historyQos.depth, 50);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples, 432);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_instances, 1);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples_per_instance, 100);
     EXPECT_EQ(pub_topic.resourceLimitsQos.allocated_samples, 123);
-    EXPECT_EQ(pub_qos.m_durability.kind, TRANSIENT_LOCAL_DURABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_liveliness.kind, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
+    EXPECT_EQ(pub_qos.m_durability.kind, dds::TRANSIENT_LOCAL_DURABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_liveliness.kind, dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.seconds, 1);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.nanosec, 2u);
-    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, c_TimeInfinite);
-    EXPECT_EQ(pub_qos.m_reliability.kind, BEST_EFFORT_RELIABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, c_TimeZero);
+    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, dds::c_TimeInfinite);
+    EXPECT_EQ(pub_qos.m_reliability.kind, dds::BEST_EFFORT_RELIABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, dds::c_TimeZero);
     EXPECT_EQ(pub_qos.m_partition.names()[0], "partition_name_a");
     EXPECT_EQ(pub_qos.m_partition.names()[1], "partition_name_b");
-    EXPECT_EQ(pub_qos.m_publishMode.kind, ASYNCHRONOUS_PUBLISH_MODE);
-    EXPECT_EQ(0, strcmp(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller"));
-    EXPECT_EQ(pub_times.initialHeartbeatDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.heartbeatPeriod.seconds, 11);
-    EXPECT_EQ(pub_times.heartbeatPeriod.nanosec, 32u);
-    EXPECT_EQ(pub_times.nackResponseDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.nackSupressionDuration.seconds, 121);
-    EXPECT_EQ(pub_times.nackSupressionDuration.nanosec, 332u);
+    EXPECT_EQ(pub_qos.m_publishMode.kind, dds::ASYNCHRONOUS_PUBLISH_MODE);
+    EXPECT_EQ(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller");
+    EXPECT_EQ(pub_times.initial_heartbeat_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.heartbeat_period.seconds, 11);
+    EXPECT_EQ(pub_times.heartbeat_period.nanosec, 32u);
+    EXPECT_EQ(pub_times.nack_response_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.nack_supression_duration.seconds, 121);
+    EXPECT_EQ(pub_times.nack_supression_duration.nanosec, 332u);
     EXPECT_TRUE(publisher_atts.ignore_non_matching_locators);
     check_external_locator(publisher_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 3);
@@ -1064,8 +1044,6 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultPublisherProfile)
     //locator.port = 2021;
     //EXPECT_EQ(*(loc_list_it = publisher_atts.outLocatorList.begin()), locator);
     //EXPECT_EQ(loc_list_it->get_port(), 2021);
-    //EXPECT_EQ(publisher_atts.throughputController.bytesPerPeriod, 9236u);
-    //EXPECT_EQ(publisher_atts.throughputController.periodMillisecs, 234u);
     EXPECT_EQ(publisher_atts.historyMemoryPolicy, DYNAMIC_RESERVE_MEMORY_MODE);
     EXPECT_EQ(publisher_atts.getUserDefinedID(), 67);
     EXPECT_EQ(publisher_atts.getEntityID(), 87);
@@ -1078,14 +1056,14 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultPublisherProfile)
  */
 TEST_F(XMLProfileParserBasicTests, XMLParserDefaultPublisherProfileDeprecated)
 {
-    PublisherAttributes publisher_atts;
+    xmlparser::PublisherAttributes publisher_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
     xmlparser::XMLProfileManager::getDefaultPublisherAttributes(publisher_atts);
 
-    TopicAttributes& pub_topic = publisher_atts.topic;
-    WriterQos& pub_qos = publisher_atts.qos;
+    xmlparser::TopicAttributes& pub_topic = publisher_atts.topic;
+    dds::WriterQos& pub_qos = publisher_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     WriterTimes& pub_times = publisher_atts.times;
@@ -1093,29 +1071,29 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultPublisherProfileDeprecated)
     EXPECT_EQ(pub_topic.topicKind, NO_KEY);
     EXPECT_EQ(pub_topic.topicName, "samplePubSubTopic");
     EXPECT_EQ(pub_topic.topicDataType, "samplePubSubTopicType");
-    EXPECT_EQ(pub_topic.historyQos.kind, KEEP_LAST_HISTORY_QOS);
+    EXPECT_EQ(pub_topic.historyQos.kind, dds::KEEP_LAST_HISTORY_QOS);
     EXPECT_EQ(pub_topic.historyQos.depth, 50);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples, 432);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_instances, 1);
     EXPECT_EQ(pub_topic.resourceLimitsQos.max_samples_per_instance, 100);
     EXPECT_EQ(pub_topic.resourceLimitsQos.allocated_samples, 123);
-    EXPECT_EQ(pub_qos.m_durability.kind, TRANSIENT_LOCAL_DURABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_liveliness.kind, MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
+    EXPECT_EQ(pub_qos.m_durability.kind, dds::TRANSIENT_LOCAL_DURABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_liveliness.kind, dds::MANUAL_BY_PARTICIPANT_LIVELINESS_QOS);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.seconds, 1);
     EXPECT_EQ(pub_qos.m_liveliness.lease_duration.nanosec, 2u);
-    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, c_TimeInfinite);
-    EXPECT_EQ(pub_qos.m_reliability.kind, BEST_EFFORT_RELIABILITY_QOS);
-    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, c_TimeZero);
+    EXPECT_EQ(pub_qos.m_liveliness.announcement_period, dds::c_TimeInfinite);
+    EXPECT_EQ(pub_qos.m_reliability.kind, dds::BEST_EFFORT_RELIABILITY_QOS);
+    EXPECT_EQ(pub_qos.m_reliability.max_blocking_time, dds::c_TimeZero);
     EXPECT_EQ(pub_qos.m_partition.names()[0], "partition_name_a");
     EXPECT_EQ(pub_qos.m_partition.names()[1], "partition_name_b");
-    EXPECT_EQ(pub_qos.m_publishMode.kind, ASYNCHRONOUS_PUBLISH_MODE);
-    EXPECT_EQ(0, strcmp(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller"));
-    EXPECT_EQ(pub_times.initialHeartbeatDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.heartbeatPeriod.seconds, 11);
-    EXPECT_EQ(pub_times.heartbeatPeriod.nanosec, 32u);
-    EXPECT_EQ(pub_times.nackResponseDelay, c_TimeZero);
-    EXPECT_EQ(pub_times.nackSupressionDuration.seconds, 121);
-    EXPECT_EQ(pub_times.nackSupressionDuration.nanosec, 332u);
+    EXPECT_EQ(pub_qos.m_publishMode.kind, dds::ASYNCHRONOUS_PUBLISH_MODE);
+    EXPECT_EQ(pub_qos.m_publishMode.flow_controller_name, "test_flow_controller");
+    EXPECT_EQ(pub_times.initial_heartbeat_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.heartbeat_period.seconds, 11);
+    EXPECT_EQ(pub_times.heartbeat_period.nanosec, 32u);
+    EXPECT_EQ(pub_times.nack_response_delay, dds::c_TimeZero);
+    EXPECT_EQ(pub_times.nack_supression_duration.seconds, 121);
+    EXPECT_EQ(pub_times.nack_supression_duration.nanosec, 332u);
     EXPECT_TRUE(publisher_atts.ignore_non_matching_locators);
     check_external_locator(publisher_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 3);
@@ -1138,8 +1116,6 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultPublisherProfileDeprecated)
     //locator.port = 2021;
     //EXPECT_EQ(*(loc_list_it = publisher_atts.outLocatorList.begin()), locator);
     //EXPECT_EQ(loc_list_it->get_port(), 2021);
-    EXPECT_EQ(publisher_atts.throughputController.bytesPerPeriod, 9236u);
-    EXPECT_EQ(publisher_atts.throughputController.periodMillisecs, 234u);
     EXPECT_EQ(publisher_atts.historyMemoryPolicy, DYNAMIC_RESERVE_MEMORY_MODE);
     EXPECT_EQ(publisher_atts.getUserDefinedID(), 67);
     EXPECT_EQ(publisher_atts.getEntityID(), 87);
@@ -1153,15 +1129,15 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultPublisherProfileDeprecated)
 TEST_P(XMLProfileParserTests, XMLParserSubscriber)
 {
     std::string subscriber_profile = std::string("test_subscriber_profile");
-    SubscriberAttributes subscriber_atts;
+    xmlparser::SubscriberAttributes subscriber_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
     EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillSubscriberAttributes(subscriber_profile, subscriber_atts));
 
-    TopicAttributes& sub_topic = subscriber_atts.topic;
-    ReaderQos& sub_qos = subscriber_atts.qos;
+    xmlparser::TopicAttributes& sub_topic = subscriber_atts.topic;
+    dds::ReaderQos& sub_qos = subscriber_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     ReaderTimes& sub_times = subscriber_atts.times;
@@ -1169,26 +1145,29 @@ TEST_P(XMLProfileParserTests, XMLParserSubscriber)
     //EXPECT_EQ(sub_topic.topicKind, WITH_KEY);
     //EXPECT_EQ(sub_topic.topicName, "otherSamplePubSubTopic");
     //EXPECT_EQ(sub_topic.topicDataType, "otherSamplePubSubTopicType");
-    EXPECT_EQ(sub_topic.historyQos.kind, KEEP_ALL_HISTORY_QOS);
+    EXPECT_EQ(sub_topic.historyQos.kind, dds::KEEP_ALL_HISTORY_QOS);
     EXPECT_EQ(sub_topic.historyQos.depth, 1001);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples, 52);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_instances, 25);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples_per_instance, 32);
     EXPECT_EQ(sub_topic.resourceLimitsQos.allocated_samples, 37);
-    EXPECT_EQ(sub_qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(sub_qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.seconds, 11);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.nanosec, 22u);
-    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, c_TimeZero);
-    EXPECT_EQ(sub_qos.m_reliability.kind, RELIABLE_RELIABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, c_TimeInfinite);
+    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, dds::c_TimeZero);
+    EXPECT_EQ(sub_qos.m_reliability.kind, dds::RELIABLE_RELIABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, dds::c_TimeInfinite);
     EXPECT_EQ(sub_qos.m_partition.names()[0], "partition_name_c");
     EXPECT_EQ(sub_qos.m_partition.names()[1], "partition_name_d");
     EXPECT_EQ(sub_qos.m_partition.names()[2], "partition_name_e");
     EXPECT_EQ(sub_qos.m_partition.names()[3], "partition_name_f");
-    EXPECT_EQ(sub_times.initialAcknackDelay, c_TimeZero);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.seconds, 18);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.nanosec, 81u);
+    ASSERT_EQ(sub_qos.representation.m_value.size(), 2u);
+    EXPECT_EQ(sub_qos.representation.m_value[0], dds::XCDR2_DATA_REPRESENTATION);
+    EXPECT_EQ(sub_qos.representation.m_value[1], dds::XCDR_DATA_REPRESENTATION);
+    EXPECT_EQ(sub_times.initial_acknack_delay, dds::c_TimeZero);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.seconds, 18);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.nanosec, 81u);
     EXPECT_TRUE(subscriber_atts.ignore_non_matching_locators);
     check_external_locator(subscriber_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 10);
@@ -1225,15 +1204,15 @@ TEST_P(XMLProfileParserTests, XMLParserSubscriber)
 TEST_F(XMLProfileParserBasicTests, XMLParserSubscriberDeprecated)
 {
     std::string subscriber_profile = std::string("test_subscriber_profile");
-    SubscriberAttributes subscriber_atts;
+    xmlparser::SubscriberAttributes subscriber_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
     EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillSubscriberAttributes(subscriber_profile, subscriber_atts));
 
-    TopicAttributes& sub_topic = subscriber_atts.topic;
-    ReaderQos& sub_qos = subscriber_atts.qos;
+    xmlparser::TopicAttributes& sub_topic = subscriber_atts.topic;
+    dds::ReaderQos& sub_qos = subscriber_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     ReaderTimes& sub_times = subscriber_atts.times;
@@ -1241,26 +1220,26 @@ TEST_F(XMLProfileParserBasicTests, XMLParserSubscriberDeprecated)
     EXPECT_EQ(sub_topic.topicKind, WITH_KEY);
     EXPECT_EQ(sub_topic.topicName, "otherSamplePubSubTopic");
     EXPECT_EQ(sub_topic.topicDataType, "otherSamplePubSubTopicType");
-    EXPECT_EQ(sub_topic.historyQos.kind, KEEP_ALL_HISTORY_QOS);
+    EXPECT_EQ(sub_topic.historyQos.kind, dds::KEEP_ALL_HISTORY_QOS);
     EXPECT_EQ(sub_topic.historyQos.depth, 1001);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples, 52);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_instances, 25);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples_per_instance, 32);
     EXPECT_EQ(sub_topic.resourceLimitsQos.allocated_samples, 37);
-    EXPECT_EQ(sub_qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(sub_qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.seconds, 11);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.nanosec, 22u);
-    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, c_TimeZero);
-    EXPECT_EQ(sub_qos.m_reliability.kind, RELIABLE_RELIABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, c_TimeInfinite);
+    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, dds::c_TimeZero);
+    EXPECT_EQ(sub_qos.m_reliability.kind, dds::RELIABLE_RELIABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, dds::c_TimeInfinite);
     EXPECT_EQ(sub_qos.m_partition.names()[0], "partition_name_c");
     EXPECT_EQ(sub_qos.m_partition.names()[1], "partition_name_d");
     EXPECT_EQ(sub_qos.m_partition.names()[2], "partition_name_e");
     EXPECT_EQ(sub_qos.m_partition.names()[3], "partition_name_f");
-    EXPECT_EQ(sub_times.initialAcknackDelay, c_TimeZero);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.seconds, 18);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.nanosec, 81u);
+    EXPECT_EQ(sub_times.initial_acknack_delay, dds::c_TimeZero);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.seconds, 18);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.nanosec, 81u);
     EXPECT_TRUE(subscriber_atts.ignore_non_matching_locators);
     check_external_locator(subscriber_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 10);
@@ -1296,14 +1275,14 @@ TEST_F(XMLProfileParserBasicTests, XMLParserSubscriberDeprecated)
  */
 TEST_P(XMLProfileParserTests, XMLParserDefaultSubscriberProfile)
 {
-    SubscriberAttributes subscriber_atts;
+    xmlparser::SubscriberAttributes subscriber_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile(xml_filename_));
     xmlparser::XMLProfileManager::getDefaultSubscriberAttributes(subscriber_atts);
 
-    TopicAttributes& sub_topic = subscriber_atts.topic;
-    ReaderQos& sub_qos = subscriber_atts.qos;
+    xmlparser::TopicAttributes& sub_topic = subscriber_atts.topic;
+    dds::ReaderQos& sub_qos = subscriber_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     ReaderTimes& sub_times = subscriber_atts.times;
@@ -1311,26 +1290,26 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultSubscriberProfile)
     //EXPECT_EQ(sub_topic.topicKind, WITH_KEY);
     //EXPECT_EQ(sub_topic.topicName, "otherSamplePubSubTopic");
     //EXPECT_EQ(sub_topic.topicDataType, "otherSamplePubSubTopicType");
-    EXPECT_EQ(sub_topic.historyQos.kind, KEEP_ALL_HISTORY_QOS);
+    EXPECT_EQ(sub_topic.historyQos.kind, dds::KEEP_ALL_HISTORY_QOS);
     EXPECT_EQ(sub_topic.historyQos.depth, 1001);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples, 52);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_instances, 25);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples_per_instance, 32);
     EXPECT_EQ(sub_topic.resourceLimitsQos.allocated_samples, 37);
-    EXPECT_EQ(sub_qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(sub_qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.seconds, 11);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.nanosec, 22u);
-    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, c_TimeZero);
-    EXPECT_EQ(sub_qos.m_reliability.kind, RELIABLE_RELIABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, c_TimeInfinite);
+    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, dds::c_TimeZero);
+    EXPECT_EQ(sub_qos.m_reliability.kind, dds::RELIABLE_RELIABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, dds::c_TimeInfinite);
     EXPECT_EQ(sub_qos.m_partition.names()[0], "partition_name_c");
     EXPECT_EQ(sub_qos.m_partition.names()[1], "partition_name_d");
     EXPECT_EQ(sub_qos.m_partition.names()[2], "partition_name_e");
     EXPECT_EQ(sub_qos.m_partition.names()[3], "partition_name_f");
-    EXPECT_EQ(sub_times.initialAcknackDelay, c_TimeZero);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.seconds, 18);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.nanosec, 81u);
+    EXPECT_EQ(sub_times.initial_acknack_delay, dds::c_TimeZero);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.seconds, 18);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.nanosec, 81u);
     EXPECT_TRUE(subscriber_atts.ignore_non_matching_locators);
     check_external_locator(subscriber_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 10);
@@ -1366,14 +1345,14 @@ TEST_P(XMLProfileParserTests, XMLParserDefaultSubscriberProfile)
  */
 TEST_F(XMLProfileParserBasicTests, XMLParserDefaultSubscriberProfileDeprecated)
 {
-    SubscriberAttributes subscriber_atts;
+    xmlparser::SubscriberAttributes subscriber_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_deprecated.xml"));
     xmlparser::XMLProfileManager::getDefaultSubscriberAttributes(subscriber_atts);
 
-    TopicAttributes& sub_topic = subscriber_atts.topic;
-    ReaderQos& sub_qos = subscriber_atts.qos;
+    xmlparser::TopicAttributes& sub_topic = subscriber_atts.topic;
+    dds::ReaderQos& sub_qos = subscriber_atts.qos;
     Locator_t locator;
     LocatorListIterator loc_list_it;
     ReaderTimes& sub_times = subscriber_atts.times;
@@ -1381,26 +1360,26 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultSubscriberProfileDeprecated)
     EXPECT_EQ(sub_topic.topicKind, WITH_KEY);
     EXPECT_EQ(sub_topic.topicName, "otherSamplePubSubTopic");
     EXPECT_EQ(sub_topic.topicDataType, "otherSamplePubSubTopicType");
-    EXPECT_EQ(sub_topic.historyQos.kind, KEEP_ALL_HISTORY_QOS);
+    EXPECT_EQ(sub_topic.historyQos.kind, dds::KEEP_ALL_HISTORY_QOS);
     EXPECT_EQ(sub_topic.historyQos.depth, 1001);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples, 52);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_instances, 25);
     EXPECT_EQ(sub_topic.resourceLimitsQos.max_samples_per_instance, 32);
     EXPECT_EQ(sub_topic.resourceLimitsQos.allocated_samples, 37);
-    EXPECT_EQ(sub_qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(sub_qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.seconds, 11);
     EXPECT_EQ(sub_qos.m_liveliness.lease_duration.nanosec, 22u);
-    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, c_TimeZero);
-    EXPECT_EQ(sub_qos.m_reliability.kind, RELIABLE_RELIABILITY_QOS);
-    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, c_TimeInfinite);
+    EXPECT_EQ(sub_qos.m_liveliness.announcement_period, dds::c_TimeZero);
+    EXPECT_EQ(sub_qos.m_reliability.kind, dds::RELIABLE_RELIABILITY_QOS);
+    EXPECT_EQ(sub_qos.m_reliability.max_blocking_time, dds::c_TimeInfinite);
     EXPECT_EQ(sub_qos.m_partition.names()[0], "partition_name_c");
     EXPECT_EQ(sub_qos.m_partition.names()[1], "partition_name_d");
     EXPECT_EQ(sub_qos.m_partition.names()[2], "partition_name_e");
     EXPECT_EQ(sub_qos.m_partition.names()[3], "partition_name_f");
-    EXPECT_EQ(sub_times.initialAcknackDelay, c_TimeZero);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.seconds, 18);
-    EXPECT_EQ(sub_times.heartbeatResponseDelay.nanosec, 81u);
+    EXPECT_EQ(sub_times.initial_acknack_delay, dds::c_TimeZero);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.seconds, 18);
+    EXPECT_EQ(sub_times.heartbeat_response_delay.nanosec, 81u);
     EXPECT_TRUE(subscriber_atts.ignore_non_matching_locators);
     check_external_locator(subscriber_atts.external_unicast_locators, 100, 200, 10, "10.10.10.10", 2001);
     IPLocator::setIPv4(locator, 192, 168, 1, 10);
@@ -1439,7 +1418,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserDefaultSubscriberProfileDeprecated)
 TEST_F(XMLProfileParserBasicTests, XMLParserRequesterProfile)
 {
     std::string requester_profile = std::string("test_requester_profile");
-    RequesterAttributes requester_atts;
+    xmlparser::RequesterAttributes requester_atts;
 
     ASSERT_EQ(
         xmlparser::XMLP_ret::XML_OK,
@@ -1449,16 +1428,16 @@ TEST_F(XMLProfileParserBasicTests, XMLParserRequesterProfile)
         xmlparser::XMLP_ret::XML_OK,
         xmlparser::XMLProfileManager::fillRequesterAttributes(requester_profile, requester_atts));
 
-    PublisherAttributes& publisher_atts = requester_atts.publisher;
-    SubscriberAttributes& subscriber_atts = requester_atts.subscriber;
+    xmlparser::PublisherAttributes& publisher_atts = requester_atts.publisher;
+    xmlparser::SubscriberAttributes& subscriber_atts = requester_atts.subscriber;
 
     EXPECT_EQ(publisher_atts.topic.topicDataType, "request_type");
     EXPECT_EQ(publisher_atts.topic.topicName, "service_name_Request");
-    EXPECT_EQ(publisher_atts.qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(publisher_atts.qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
 
     EXPECT_EQ(subscriber_atts.topic.topicDataType, "reply_type");
     EXPECT_EQ(subscriber_atts.topic.topicName, "service_name_Reply");
-    EXPECT_EQ(subscriber_atts.qos.m_durability.kind, PERSISTENT_DURABILITY_QOS);
+    EXPECT_EQ(subscriber_atts.qos.m_durability.kind, dds::PERSISTENT_DURABILITY_QOS);
 
     // Wrong profile name
     std::string missing_profile = std::string("missing_profile");
@@ -1476,7 +1455,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserRequesterProfile)
 TEST_F(XMLProfileParserBasicTests, XMLParserReplierProfile)
 {
     std::string replier_profile = std::string("test_replier_profile");
-    ReplierAttributes replier_atts;
+    xmlparser::ReplierAttributes replier_atts;
 
     ASSERT_EQ(
         xmlparser::XMLP_ret::XML_OK,
@@ -1486,16 +1465,16 @@ TEST_F(XMLProfileParserBasicTests, XMLParserReplierProfile)
         xmlparser::XMLP_ret::XML_OK,
         xmlparser::XMLProfileManager::fillReplierAttributes(replier_profile, replier_atts));
 
-    PublisherAttributes& publisher_atts = replier_atts.publisher;
-    SubscriberAttributes& subscriber_atts = replier_atts.subscriber;
+    xmlparser::PublisherAttributes& publisher_atts = replier_atts.publisher;
+    xmlparser::SubscriberAttributes& subscriber_atts = replier_atts.subscriber;
 
     EXPECT_EQ(publisher_atts.topic.topicDataType, "reply_type");
     EXPECT_EQ(publisher_atts.topic.topicName, "reply_topic_name");
-    EXPECT_EQ(publisher_atts.qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(publisher_atts.qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
 
     EXPECT_EQ(subscriber_atts.topic.topicDataType, "request_type");
     EXPECT_EQ(subscriber_atts.topic.topicName, "request_topic_name");
-    EXPECT_EQ(subscriber_atts.qos.m_liveliness.kind, MANUAL_BY_TOPIC_LIVELINESS_QOS);
+    EXPECT_EQ(subscriber_atts.qos.m_liveliness.kind, dds::MANUAL_BY_TOPIC_LIVELINESS_QOS);
 
     // Wrong profile name
     std::string missing_profile = std::string("missing_profile");
@@ -1510,7 +1489,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserReplierProfile)
 TEST_F(XMLProfileParserBasicTests, XMLParserSecurity)
 {
     std::string participant_profile = std::string("test_participant_security_profile");
-    ParticipantAttributes participant_atts;
+    xmlparser::ParticipantAttributes participant_atts;
 
     ASSERT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::loadXMLFile("test_xml_security_profile.xml"));
@@ -1533,7 +1512,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserSecurity)
 
 
     std::string publisher_profile = std::string("test_publisher_security_profile");
-    PublisherAttributes publisher_atts;
+    xmlparser::PublisherAttributes publisher_atts;
     EXPECT_EQ(  xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillPublisherAttributes(publisher_profile, publisher_atts));
 
@@ -1553,7 +1532,7 @@ TEST_F(XMLProfileParserBasicTests, XMLParserSecurity)
 
 
     std::string subscriber_profile = std::string("test_subscriber_security_profile");
-    SubscriberAttributes subscriber_atts;
+    xmlparser::SubscriberAttributes subscriber_atts;
 
     EXPECT_EQ(xmlparser::XMLP_ret::XML_OK,
             xmlparser::XMLProfileManager::fillSubscriberAttributes(subscriber_profile, subscriber_atts));
@@ -1603,9 +1582,9 @@ TEST_F(XMLProfileParserBasicTests, log_register_stdouterr)
 
     EXPECT_CALL(*log_mock, ClearConsumers()).Times(1);
     EXPECT_CALL(*log_mock, RegisterConsumer(IsStdoutErrConsumer())).Times(1);
-    eprosima::fastrtps::xmlparser::XMLP_ret ret =
+    eprosima::fastdds::xmlparser::XMLP_ret ret =
             xmlparser::XMLProfileManager::loadXMLFile("log_stdouterr_profile.xml");
-    ASSERT_EQ(eprosima::fastrtps::xmlparser::XMLP_ret::XML_OK, ret);
+    ASSERT_EQ(eprosima::fastdds::xmlparser::XMLP_ret::XML_OK, ret);
 }
 
 /*
@@ -1622,9 +1601,9 @@ TEST_F(XMLProfileParserBasicTests, log_register_stdouterr_wrong_property_name)
 
     EXPECT_CALL(*log_mock, ClearConsumers()).Times(1);
     EXPECT_CALL(*log_mock, RegisterConsumer(IsStdoutErrConsumer())).Times(1);
-    eprosima::fastrtps::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
+    eprosima::fastdds::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
         "log_stdouterr_wrong_property_name_profile_invalid.xml");
-    ASSERT_EQ(eprosima::fastrtps::xmlparser::XMLP_ret::XML_ERROR, ret);
+    ASSERT_EQ(eprosima::fastdds::xmlparser::XMLP_ret::XML_ERROR, ret);
 }
 
 /*
@@ -1641,9 +1620,9 @@ TEST_F(XMLProfileParserBasicTests, log_register_stdouterr_wrong_property_value)
 
     EXPECT_CALL(*log_mock, ClearConsumers()).Times(1);
     EXPECT_CALL(*log_mock, RegisterConsumer(IsStdoutErrConsumer())).Times(1);
-    eprosima::fastrtps::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
+    eprosima::fastdds::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
         "log_stdouterr_wrong_property_value_profile_invalid.xml");
-    ASSERT_EQ(eprosima::fastrtps::xmlparser::XMLP_ret::XML_ERROR, ret);
+    ASSERT_EQ(eprosima::fastdds::xmlparser::XMLP_ret::XML_ERROR, ret);
 }
 
 /*
@@ -1663,9 +1642,9 @@ TEST_F(XMLProfileParserBasicTests, log_register_stdouterr_two_thresholds)
 
     EXPECT_CALL(*log_mock, ClearConsumers()).Times(1);
     EXPECT_CALL(*log_mock, RegisterConsumer(IsStdoutErrConsumer())).Times(1);
-    eprosima::fastrtps::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
+    eprosima::fastdds::xmlparser::XMLP_ret ret = xmlparser::XMLProfileManager::loadXMLFile(
         "log_stdouterr_two_thresholds_profile.xml");
-    ASSERT_EQ(eprosima::fastrtps::xmlparser::XMLP_ret::XML_ERROR, ret);
+    ASSERT_EQ(eprosima::fastdds::xmlparser::XMLP_ret::XML_ERROR, ret);
 }
 
 TEST_F(XMLProfileParserBasicTests, file_and_default)
@@ -1684,8 +1663,8 @@ TEST_F(XMLProfileParserBasicTests, tls_config)
 
     xmlparser::sp_transport_t transport = xmlparser::XMLProfileManager::getTransportById("Test");
 
-    using TCPDescriptor = std::shared_ptr<TCPTransportDescriptor>;
-    TCPDescriptor descriptor = std::dynamic_pointer_cast<TCPTransportDescriptor>(transport);
+    using TCPDescriptor = std::shared_ptr<eprosima::fastdds::rtps::TCPTransportDescriptor>;
+    TCPDescriptor descriptor = std::dynamic_pointer_cast<eprosima::fastdds::rtps::TCPTransportDescriptor>(transport);
 
     /*
        <tls>
@@ -1709,16 +1688,26 @@ TEST_F(XMLProfileParserBasicTests, tls_config)
     EXPECT_EQ("DH.pem", descriptor->tls_config.tmp_dh_file);
     EXPECT_EQ("verify.pem", descriptor->tls_config.verify_file);
     EXPECT_EQ("my_server.com", descriptor->tls_config.server_name);
-    EXPECT_EQ(TCPTransportDescriptor::TLSConfig::TLSVerifyMode::VERIFY_PEER, descriptor->tls_config.verify_mode);
-    EXPECT_TRUE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_TLSV1));
-    EXPECT_TRUE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_TLSV1_1));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_SSLV2));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_SSLV3));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_TLSV1_2));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_TLSV1_3));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::DEFAULT_WORKAROUNDS));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::NO_COMPRESSION));
-    EXPECT_FALSE(descriptor->tls_config.get_option(TCPTransportDescriptor::TLSConfig::TLSOptions::SINGLE_DH_USE));
+    EXPECT_EQ(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSVerifyMode::VERIFY_PEER,
+            descriptor->tls_config.verify_mode);
+    EXPECT_TRUE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSOptions
+                    ::NO_TLSV1));
+    EXPECT_TRUE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSOptions
+                    ::NO_TLSV1_1));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::NO_SSLV2));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::NO_SSLV3));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::NO_TLSV1_2));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::NO_TLSV1_3));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::DEFAULT_WORKAROUNDS));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::NO_COMPRESSION));
+    EXPECT_FALSE(descriptor->tls_config.get_option(eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::
+                    TLSOptions::SINGLE_DH_USE));
 
     EXPECT_EQ(descriptor->tls_config.verify_paths.size(), static_cast<size_t>(3));
     EXPECT_EQ(descriptor->tls_config.verify_paths[0], "Path1");
@@ -1727,7 +1716,8 @@ TEST_F(XMLProfileParserBasicTests, tls_config)
     EXPECT_EQ(descriptor->tls_config.verify_depth, static_cast<int32_t>(55));
     EXPECT_TRUE(descriptor->tls_config.default_verify_path);
 
-    EXPECT_EQ(descriptor->tls_config.handshake_role, TCPTransportDescriptor::TLSConfig::TLSHandShakeRole::SERVER);
+    EXPECT_EQ(descriptor->tls_config.handshake_role,
+            eprosima::fastdds::rtps::TCPTransportDescriptor::TLSConfig::TLSHandShakeRole::SERVER);
 }
 
 TEST_F(XMLProfileParserBasicTests, UDP_transport_descriptors_config)
@@ -1739,8 +1729,8 @@ TEST_F(XMLProfileParserBasicTests, UDP_transport_descriptors_config)
 
     xmlparser::sp_transport_t transport = xmlparser::XMLProfileManager::getTransportById("Test");
 
-    using UDPDescriptor = std::shared_ptr<UDPTransportDescriptor>;
-    UDPDescriptor descriptor = std::dynamic_pointer_cast<UDPTransportDescriptor>(transport);
+    using UDPDescriptor = std::shared_ptr<eprosima::fastdds::rtps::UDPTransportDescriptor>;
+    UDPDescriptor descriptor = std::dynamic_pointer_cast<eprosima::fastdds::rtps::UDPTransportDescriptor>(transport);
 
     ASSERT_NE(descriptor, nullptr);
     EXPECT_EQ(descriptor->sendBufferSize, 8192u);
@@ -1790,19 +1780,14 @@ TEST_F(XMLProfileParserBasicTests, insertTransportByIdNegativeClauses)
 }
 
 /*
- * Test return code of the getDynamicTypeByName method when trying to retrieve a type which has not been parsed
+ * Test return code of the getDynamicTypeBuilderByName method when trying to retrieve a type which has not been parsed
  */
-TEST_F(XMLProfileParserBasicTests, getDynamicTypeByNameNegativeClausesNegativeClauses)
+TEST_F(XMLProfileParserBasicTests, getDynamicTypeBuilderByNameNegativeClausesNegativeClauses)
 {
-    EXPECT_EQ(nullptr, xmlparser::XMLProfileManager::getDynamicTypeByName("wrong_type"));
-}
-
-/*
- * Test return code of the CreateDynamicPubSubType method when trying to retrieve a type which has not been parsed
- */
-TEST_F(XMLProfileParserBasicTests, CreateDynamicPubSubType)
-{
-    EXPECT_EQ(nullptr, xmlparser::XMLProfileManager::CreateDynamicPubSubType("wrong_type"));
+    eprosima::fastdds::dds::traits<eprosima::fastdds::dds::DynamicTypeBuilder>::ref_type type_builder;
+    EXPECT_EQ(xmlparser::XMLP_ret::XML_ERROR,
+            xmlparser::XMLProfileManager::getDynamicTypeBuilderByName(type_builder, "wrong_type"));
+    ASSERT_FALSE(type_builder);
 }
 
 /*
@@ -2091,14 +2076,14 @@ TEST_F(XMLProfileParserBasicTests, skip_default_xml)
     ";
     tinyxml2::XMLDocument xml_doc;
     xml_doc.Parse(xml);
-    xml_doc.SaveFile("DEFAULT_FASTRTPS_PROFILES.xml");
+    xml_doc.SaveFile("DEFAULT_FASTDDS_PROFILES.xml");
 
 #ifdef _WIN32
     _putenv_s("SKIP_DEFAULT_XML_FILE", "1");
 #else
     setenv("SKIP_DEFAULT_XML_FILE", "1", 1);
 #endif // ifdef _WIN32
-    ParticipantAttributes participant_atts_none;
+    xmlparser::ParticipantAttributes participant_atts_none;
     xmlparser::XMLProfileManager::loadDefaultXMLFile();
     xmlparser::XMLProfileManager::getDefaultParticipantAttributes(participant_atts_none);
 
@@ -2107,17 +2092,17 @@ TEST_F(XMLProfileParserBasicTests, skip_default_xml)
 #else
     unsetenv("SKIP_DEFAULT_XML_FILE");
 #endif // ifdef _WIN32
-    ParticipantAttributes participant_atts_default;
+    xmlparser::ParticipantAttributes participant_atts_default;
     xmlparser::XMLProfileManager::loadDefaultXMLFile();
     xmlparser::XMLProfileManager::getDefaultParticipantAttributes(participant_atts_default);
 
-    remove("DEFAULT_FASTRTPS_PROFILES.xml");
+    remove("DEFAULT_FASTDDS_PROFILES.xml");
 
     EXPECT_NE(participant_atts_none.domainId, participant_atts_default.domainId);
 }
 
 /*
- * Tests whether the FASTRTPS_DEFAULT_PROFILES_FILE environment file correctly loads the selected file as default.
+ * Tests whether the FASTDDS_DEFAULT_PROFILES_FILE environment file correctly loads the selected file as default.
  * - participant_atts_default contains the attributes in the default file in this folder.
  * - participant_atts_file contains the attributes in the default file created by the test.
  */
@@ -2134,21 +2119,21 @@ TEST_F(XMLProfileParserBasicTests, default_env_variable)
     ";
     tinyxml2::XMLDocument xml_doc;
     xml_doc.Parse(xml);
-    xml_doc.SaveFile("FASTRTPS_PROFILES.xml");
+    xml_doc.SaveFile("FASTDDS_PROFILES.xml");
 
-    ParticipantAttributes participant_atts_default;
+    xmlparser::ParticipantAttributes participant_atts_default;
     xmlparser::XMLProfileManager::loadDefaultXMLFile();
     xmlparser::XMLProfileManager::getDefaultParticipantAttributes(participant_atts_default);
 
 #ifdef _WIN32
-    _putenv_s("FASTRTPS_DEFAULT_PROFILES_FILE", "FASTRTPS_PROFILES.xml");
+    _putenv_s("FASTDDS_DEFAULT_PROFILES_FILE", "FASTDDS_PROFILES.xml");
 #else
-    setenv("FASTRTPS_DEFAULT_PROFILES_FILE", "FASTRTPS_PROFILES.xml", 1);
+    setenv("FASTDDS_DEFAULT_PROFILES_FILE", "FASTDDS_PROFILES.xml", 1);
 #endif // ifdef _WIN32
-    ParticipantAttributes participant_atts_file;
+    xmlparser::ParticipantAttributes participant_atts_file;
     xmlparser::XMLProfileManager::loadDefaultXMLFile();
     xmlparser::XMLProfileManager::getDefaultParticipantAttributes(participant_atts_file);
-    remove("FASTRTPS_PROFILES.xml");
+    remove("FASTDDS_PROFILES.xml");
 
     EXPECT_NE(participant_atts_file.domainId, participant_atts_default.domainId);
 }
@@ -3224,8 +3209,8 @@ TEST_F(XMLProfileParserBasicTests, external_locators_feature)
 
     for (const TestCase& test : test_cases)
     {
-        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length())) <<
-            " test_case = [" << test.title << "]";
+        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length()))
+            << " test_case = [" << test.title << "]";
         xmlparser::XMLProfileManager::DeleteInstance();
     }
 }
@@ -3249,7 +3234,7 @@ TEST_F(XMLProfileParserBasicTests, log_thread_settings_qos)
             "log_thread_settings_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <log>
                         <thread_settings>
                             <scheduling_policy>-1</scheduling_policy>
@@ -3265,7 +3250,7 @@ TEST_F(XMLProfileParserBasicTests, log_thread_settings_qos)
             "log_thread_settings_duplicate",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <log>
                         <thread_settings>
                             <scheduling_policy>-1</scheduling_policy>
@@ -3287,7 +3272,7 @@ TEST_F(XMLProfileParserBasicTests, log_thread_settings_qos)
             "log_thread_settings_wrong",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <log>
                         <thread_settings>
                             <scheduling_policy>-1</scheduling_policy>
@@ -3305,8 +3290,8 @@ TEST_F(XMLProfileParserBasicTests, log_thread_settings_qos)
     EXPECT_CALL(*log_mock, SetThreadConfig()).Times(1);
     for (const TestCase& test : test_cases)
     {
-        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length())) <<
-            " test_case = [" << test.title << "]";
+        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length()))
+            << " test_case = [" << test.title << "]";
         xmlparser::XMLProfileManager::DeleteInstance();
     }
 }
@@ -3342,7 +3327,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "entity_factory_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3362,7 +3347,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "shm_watchdog_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3385,7 +3370,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "file_watch_threads_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3408,7 +3393,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "all_present_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3440,7 +3425,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "qos_duplicated",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3465,7 +3450,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "entity_factory_wrong_tag",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3485,7 +3470,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "entity_factory_duplicated_autoenable_created_entities_tag",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3506,7 +3491,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "entity_factory_duplicated_autoenable_created_entities_and_wrong_tag",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3527,7 +3512,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "entity_factory_duplicated",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3562,7 +3547,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "shm_watchdog_thread_duplicated",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3600,7 +3585,7 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
             "file_watch_threads_duplicated",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <domainparticipant_factory profile_name="factory" is_default_profile="true">
                         <qos>
@@ -3638,8 +3623,8 @@ TEST_F(XMLProfileParserBasicTests, domainparticipantfactory)
 
     for (const TestCase& test : test_cases)
     {
-        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length())) <<
-            " test_case = [" << test.title << "]";
+        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length()))
+            << " test_case = [" << test.title << "]";
         if (test.result == xmlparser::XMLP_ret::XML_OK)
         {
             using namespace eprosima::fastdds::dds;
@@ -3694,7 +3679,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "builtin_controllers_sender_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3721,7 +3706,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "builtin_controllers_sender_thread_nok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3748,7 +3733,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "timed_events_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3775,7 +3760,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "timed_events_thread_nok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3802,7 +3787,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "discovery_server_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3829,7 +3814,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "discovery_server_thread_nok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3856,7 +3841,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "builtin_transports_reception_threads_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3883,7 +3868,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "builtin_transports_reception_threads_nok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3911,7 +3896,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "security_log_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3936,7 +3921,7 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
             "security_log_thread_nok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <participant profile_name="participant" is_default_profile="true">
                         <rtps>
@@ -3962,17 +3947,17 @@ TEST_F(XMLProfileParserBasicTests, participant_thread_settings)
 
     for (const TestCase& test : test_cases)
     {
-        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length())) <<
-            " test_case = [" << test.title << "]";
+        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length()))
+            << " test_case = [" << test.title << "]";
         if (test.result == xmlparser::XMLP_ret::XML_OK)
         {
             using namespace eprosima::fastdds::dds;
 
-            ParticipantAttributes profile_attr;
+            xmlparser::ParticipantAttributes profile_attr;
             ASSERT_EQ(xmlparser::XMLP_ret::XML_OK,
                     xmlparser::XMLProfileManager::fillParticipantAttributes("participant", profile_attr));
 
-            ParticipantAttributes default_attr;
+            xmlparser::ParticipantAttributes default_attr;
             xmlparser::XMLProfileManager::getDefaultParticipantAttributes(default_attr);
 
             ASSERT_EQ(profile_attr, default_attr);
@@ -4017,7 +4002,7 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
             "data_sharing_listener_thread_ok",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <data_reader profile_name="datareader" is_default_profile="true">
                             <qos>
@@ -4041,7 +4026,7 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
             "data_sharing_listener_thread_empty",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <data_reader profile_name="datareader" is_default_profile="true">
                             <qos>
@@ -4061,7 +4046,7 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
             "no_data_sharing_listener_thread",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <data_reader profile_name="datareader" is_default_profile="true">
                             <qos>
@@ -4079,7 +4064,7 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
             "data_sharing_listener_thread_wrong_value",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <data_reader profile_name="datareader" is_default_profile="true">
                             <qos>
@@ -4103,7 +4088,7 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
             "data_sharing_listener_thread_wrong_tag",
             R"(
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+                <dds xmlns="http://www.eprosima.com">
                     <profiles>
                         <data_reader profile_name="datareader" is_default_profile="true">
                             <qos>
@@ -4127,15 +4112,15 @@ TEST_F(XMLProfileParserBasicTests, datareader_thread_settings)
 
     for (const TestCase& test : test_cases)
     {
-        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length())) <<
-            " test_case = [" << test.title << "]";
+        EXPECT_EQ(test.result, xmlparser::XMLProfileManager::loadXMLString(test.xml.c_str(), test.xml.length()))
+            << " test_case = [" << test.title << "]";
         if (test.result == xmlparser::XMLP_ret::XML_OK)
         {
-            SubscriberAttributes profile_attr;
+            xmlparser::SubscriberAttributes profile_attr;
             ASSERT_EQ(xmlparser::XMLP_ret::XML_OK,
                     xmlparser::XMLProfileManager::fillSubscriberAttributes("datareader", profile_attr));
 
-            SubscriberAttributes default_attr;
+            xmlparser::SubscriberAttributes default_attr;
             xmlparser::XMLProfileManager::getDefaultSubscriberAttributes(default_attr);
 
             ASSERT_EQ(profile_attr, default_attr);

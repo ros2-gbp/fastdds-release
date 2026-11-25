@@ -15,29 +15,36 @@
 #ifndef _FASTDDS_TCP_TRANSPORT_INTERFACE_H_
 #define _FASTDDS_TCP_TRANSPORT_INTERFACE_H_
 
+#if TLS_FOUND
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
+#define OPENSSL_API_COMPAT 10101
+#endif // if TLS_FOUND
+
 #include <vector>
 #include <map>
 #include <memory>
 #include <mutex>
 
-#include <asio.hpp>
+#include "../network/asio.hpp"
 #include <asio/steady_timer.hpp>
 
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
 #include <fastdds/rtps/transport/network/AllowedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
-#include <fastdds/rtps/transport/TCPTransportDescriptor.h>
-#include <fastdds/rtps/transport/TransportInterface.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/TCPTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 #include <rtps/transport/tcp/RTCPHeader.h>
 #include <rtps/transport/TCPAcceptorBasic.h>
 #include <rtps/transport/TCPChannelResourceBasic.h>
 
 #if TLS_FOUND
-#define OPENSSL_API_COMPAT 10101
 #include <rtps/transport/TCPAcceptorSecure.h>
-#include <asio/ssl.hpp>
+#include <asio/ssl/context.hpp>
+#include <asio/ssl/stream.hpp>
 #endif // if TLS_FOUND
 
 #include <statistics/rtps/messages/OutputTrafficManager.hpp>
@@ -90,7 +97,6 @@ protected:
     asio::ssl::context ssl_context_;
 #endif // if TLS_FOUND
     eprosima::thread io_context_thread_;
-    eprosima::thread io_context_timers_thread_;
     std::shared_ptr<RTCPMessageManager> rtcp_message_manager_;
     std::mutex rtcp_message_manager_mutex_;
     std::condition_variable rtcp_message_manager_cv_;
@@ -98,6 +104,8 @@ protected:
     mutable std::mutex sockets_map_mutex_;
     // Mutex to control access to unbound_channel_resources_
     mutable std::mutex unbound_map_mutex_;
+    // Mutex to control access to receiver_resources_ and their ReceiverInUseCV
+    mutable std::mutex receiver_resources_mutex_;
 
     std::map<Locator, std::shared_ptr<TCPChannelResource>> channel_resources_; // The key is the "Physical locator"
     std::vector<std::shared_ptr<TCPChannelResource>> unbound_channel_resources_;
@@ -106,9 +114,11 @@ protected:
 
     std::vector<std::pair<TCPChannelResource*, uint64_t>> sockets_timestamp_;
 
-    asio::steady_timer keep_alive_event_;
-
     std::map<Locator, std::shared_ptr<TCPAcceptor>> acceptors_;
+
+    // Whether socket buffer sizes are left to OS autotuning (no size configured by the user)
+    bool autotune_send_buffer_ = false;
+    bool autotune_receive_buffer_ = false;
 
     eprosima::fastdds::statistics::rtps::OutputTrafficManager statistics_info_;
 
@@ -138,18 +148,17 @@ protected:
     //! Methods to manage the TCP headers and their CRC values.
     bool check_crc(
             const TCPHeader& header,
-            const fastrtps::rtps::octet* data,
+            const octet* data,
             uint32_t size) const;
 
     void calculate_crc(
             TCPHeader& header,
-            const fastrtps::rtps::octet* data,
-            uint32_t size) const;
+            const std::vector<NetworkBuffer>& buffers) const;
 
     void fill_rtcp_header(
             TCPHeader& header,
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
             uint16_t logical_port) const;
 
     //! Closes the given p_channel_resource and unbind it from every resource.
@@ -161,7 +170,7 @@ protected:
             const Locator& locator);
 
     virtual bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& loc_names,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& loc_names,
             bool return_loopback,
             bool force_lookup) const = 0;
 
@@ -174,7 +183,7 @@ protected:
             std::weak_ptr<RTCPMessageManager> rtcp_manager);
 
     bool read_body(
-            fastrtps::rtps::octet* receive_buffer,
+            octet* receive_buffer,
             uint32_t receive_buffer_capacity,
             uint32_t* bytes_received,
             std::shared_ptr<TCPChannelResource>& channel,
@@ -209,7 +218,9 @@ protected:
     void shutdown() override;
 
     /**
-     * Applies TLS configuration to ssl_context
+     * Applies TLS configuration to ssl_context.
+     * The verification mode is set on the context, so every secure stream created from it (accepted or connected)
+     * inherits it before its handshake starts.
      *
      * @return true if everything worked fine, false otherwise.
      */
@@ -225,9 +236,9 @@ protected:
      * There must exist a channel bound to the locator, otherwise the send will be skipped.
      */
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            const eprosima::fastrtps::rtps::Locator_t& locator,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            const eprosima::fastdds::rtps::Locator_t& locator,
             const Locator& remote_locator);
 
     void create_listening_thread(
@@ -249,7 +260,7 @@ public:
 
     //! Resets the locator bound to the sender resource.
     void SenderResourceHasBeenClosed(
-            fastrtps::rtps::Locator_t& locator);
+            Locator_t& locator);
 
     //! Reports whether Locators correspond to the same port.
     bool DoInputLocatorsMatch(
@@ -278,7 +289,7 @@ public:
     virtual uint16_t GetMaxLogicalPort() const = 0;
 
     bool init(
-            const fastrtps::rtps::PropertyPolicy* properties = nullptr,
+            const PropertyPolicy* properties = nullptr,
             const uint32_t& max_msg_size_no_frag = 0) override;
 
     //! Checks whether there are open and bound sockets for the given port.
@@ -331,7 +342,7 @@ public:
      */
     bool OpenOutputChannels(
             SendResourceList& sender_resource_list,
-            const fastrtps::rtps::LocatorSelectorEntry& locator_selector_entry) override;
+            const LocatorSelectorEntry& locator_selector_entry) override;
 
     /**
      * Acts like OpenOutputChannel but ensures that a new CONNECT channel is created for the given locator
@@ -376,35 +387,37 @@ public:
      * @param receive_buffer vector with enough capacity (not size) to accomodate a full receive buffer. That
      * capacity must not be less than the receive_buffer_size supplied to this class during construction.
      * @param receive_buffer_capacity maximum size of the buffer.
-     * @param[out] receive_buffer_size Size of the packet received.
-     * @param[out] remote_locator associated remote locator.
+     * @param [out] receive_buffer_size Size of the packet received.
+     * @param [out] remote_locator associated remote locator.
      */
     bool Receive(
             std::weak_ptr<RTCPMessageManager>& rtcp_manager,
             std::shared_ptr<TCPChannelResource>& channel,
-            fastrtps::rtps::octet* receive_buffer,
+            octet* receive_buffer,
             uint32_t receive_buffer_capacity,
             uint32_t& receive_buffer_size,
-            fastrtps::rtps::Endianness_t msg_endian,
+            Endianness_t msg_endian,
             Locator& remote_locator);
 
     /**
-     * Blocking Send through the channel inside channel_resources_ matching the locator provided.
-     * @param send_buffer Slice into the raw data to send.
-     * @param send_buffer_size Size of the raw data. It will be used as a bounds check for the previous argument.
+     * Blocking Send through the specified channel.
+     * @param buffers Vector of buffers to send.
+     * @param total_bytes Total amount of bytes to send. It will be used as a bounds check for the previous argument.
      * It must not exceed the send_buffer_size fed to this class during construction.
      * @param locator Physical locator we're sending to.
      * @param destination_locators_begin pointer to destination locators iterator begin, the iterator can be advanced inside this fuction
      * so should not be reuse.
      * @param destination_locators_end pointer to destination locators iterator end, the iterator can be advanced inside this fuction
      * so should not be reuse.
+     * @param transport_priority Transport priority to use for this send.
      */
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            const fastrtps::rtps::Locator_t& locator,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end);
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            const Locator_t& locator,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end,
+            const int32_t transport_priority);
 
     /**
      * Performs the locator selection algorithm for this transport.
@@ -421,7 +434,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            fastrtps::rtps::LocatorSelector& selector) const override;
+            LocatorSelector& selector) const override;
 
     //! Callback called each time that an incoming connection is accepted.
     void SocketAccepted(
@@ -430,10 +443,32 @@ public:
             const asio::error_code& error);
 
 #if TLS_FOUND
-    //! Callback called each time that an incoming connection is accepted (secure).
+    /**
+     * Callback called each time that a secure acceptor finishes an accept operation, before the TLS handshake.
+     *
+     * The TLS handshake of an accepted connection is started by the acceptor and its result is reported
+     * through @ref SecureSocketHandshakeCompleted. This method only re-arms the acceptor, so new connections
+     * are accepted while previous handshakes are still in progress.
+     *
+     * @param [in] locator Locator of the acceptor that finished the accept operation.
+     * @param [in] error Result of the accept operation. On error, it waits a little before re-arming.
+     *                   The acceptor is not re-armed if the operation was aborted.
+     */
     void SecureSocketAccepted(
-            std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket,
             const Locator& locator,
+            const asio::error_code& error);
+
+    /**
+     * Callback called each time that the TLS handshake of an accepted connection finishes.
+     *
+     * On success, a new unbound secure channel is created for the socket and its listening thread is started.
+     * On failure (including a handshake timeout), the connection is discarded and no channel is created.
+     *
+     * @param [in] socket Secure stream of the accepted connection.
+     * @param [in] error Result of the TLS handshake.
+     */
+    void SecureSocketHandshakeCompleted(
+            std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket,
             const asio::error_code& error);
 #endif // if TLS_FOUND
 
@@ -448,6 +483,10 @@ public:
      */
     virtual std::vector<std::string> get_binding_interfaces_list() = 0;
 
+    /**
+     * This method should never be called because TCP interfaces do not support
+     * multicast locators. It always returns false
+     */
     bool getDefaultMetatrafficMulticastLocators(
             LocatorList& locators,
             uint32_t metatraffic_multicast_port) const override;
@@ -460,6 +499,10 @@ public:
             LocatorList& locators,
             uint32_t unicast_port) const override;
 
+    /**
+     * This method should never be called because TCP interfaces do not support
+     * multicast locators. It always returns false
+     */
     bool fillMetatrafficMulticastLocator(
             Locator& locator,
             uint32_t metatraffic_multicast_port) const override;
@@ -470,7 +513,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator& locator,
-            const fastrtps::rtps::PortParameters& port_params,
+            const PortParameters& port_params,
             uint32_t domainId,
             LocatorList& list) const override;
 
@@ -490,7 +533,17 @@ public:
 
     virtual TCPTransportDescriptor* configuration() = 0;
 
-    void keep_alive();
+    //! Whether the send buffer size of channel sockets is left to OS autotuning
+    bool autotune_send_buffer() const
+    {
+        return autotune_send_buffer_;
+    }
+
+    //! Whether the receive buffer size of channel sockets is left to OS autotuning
+    bool autotune_receive_buffer() const
+    {
+        return autotune_receive_buffer_;
+    }
 
     void update_network_interfaces() override;
 
@@ -511,12 +564,13 @@ public:
      *
      * @param send_resource_list List of send resources associated to the local participant.
      * @param remote_participant_locators Set of locators associated to the remote participant.
-     * @param participant_initial_peers List of locators associated to the initial peers of the local participant.
+     * @param participant_initial_peers_and_ds List of locators associated to the initial peers and direct servers
+     * of the local participant.
      */
     void cleanup_sender_resources(
             SendResourceList& send_resource_list,
             const LocatorList& remote_participant_locators,
-            const LocatorList& participant_initial_peers) const;
+            const LocatorList& participant_initial_peers_and_ds) const;
 
     /**
      * Method to add the logical ports associated to a channel that was not available
@@ -534,7 +588,7 @@ public:
      */
     void is_own_interface(
             const Locator& locator,
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames) const;
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames) const;
 };
 
 } // namespace rtps

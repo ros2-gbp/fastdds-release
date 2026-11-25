@@ -19,22 +19,23 @@
 #include <sstream>
 #include <thread>
 
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
 #include <gtest/gtest.h>
-
-#include <fastrtps/log/Log.h>
-#include <fastrtps/transport/test_UDPv4TransportDescriptor.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "BlackboxTests.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
+#include "UDPMessageSender.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 bool check_shared_file (
         const char* shared_dir,
-        const eprosima::fastrtps::rtps::GUID_t& guid)
+        const eprosima::fastdds::rtps::GUID_t& guid)
 {
     bool result;
     std::stringstream file_name;
@@ -58,9 +59,9 @@ public:
     {
         if (GetParam())
         {
-            LibrarySettingsAttributes library_settings;
-            library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-            xmlparser::XMLProfileManager::library_settings(library_settings);
+            eprosima::fastdds::LibrarySettings library_settings;
+            library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+            eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
         }
     }
 
@@ -68,9 +69,9 @@ public:
     {
         if (GetParam())
         {
-            LibrarySettingsAttributes library_settings;
-            library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-            xmlparser::XMLProfileManager::library_settings(library_settings);
+            eprosima::fastdds::LibrarySettings library_settings;
+            library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+            eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(library_settings);
         }
     }
 
@@ -82,14 +83,14 @@ TEST_P(DDSDataSharing, BasicCommunication)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     reader.history_depth(100)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".").loan_sample_validation()
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -97,7 +98,7 @@ TEST_P(DDSDataSharing, BasicCommunication)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -136,7 +137,7 @@ TEST(DDSDataSharing, TransientReader)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     constexpr int writer_history_depth = 2;
@@ -146,7 +147,7 @@ TEST(DDSDataSharing, TransientReader)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -168,8 +169,8 @@ TEST(DDSDataSharing, TransientReader)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(BEST_EFFORT_RELIABILITY_QOS)
-            .durability_kind(TRANSIENT_LOCAL_DURABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
+            .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -201,7 +202,7 @@ TEST_P(DDSDataSharing, BestEffortDirtyPayloads)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     constexpr int writer_history_depth = 2;
@@ -211,7 +212,7 @@ TEST_P(DDSDataSharing, BestEffortDirtyPayloads)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(BEST_EFFORT_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS)
             .resource_limits_extra_samples(1).init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -220,7 +221,7 @@ TEST_P(DDSDataSharing, BestEffortDirtyPayloads)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(read_reader.isInitialized());
 
@@ -263,7 +264,7 @@ TEST_P(DDSDataSharing, ReliableDirtyPayloads)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     constexpr int writer_history_depth = 2;
@@ -273,7 +274,7 @@ TEST_P(DDSDataSharing, ReliableDirtyPayloads)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .resource_limits_extra_samples(1).init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -282,7 +283,7 @@ TEST_P(DDSDataSharing, ReliableDirtyPayloads)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(read_reader.isInitialized());
 
@@ -324,7 +325,7 @@ TEST(DDSDataSharing, DataSharingWriter_DifferentDomainReaders)
     PubSubReader<FixedSizedPubSubType> non_datasharing_reader(TEST_TOPIC_NAME);
     PubSubReader<FixedSizedPubSubType> auto_reader(TEST_TOPIC_NAME);
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     std::vector<uint16_t> reader_ids;
@@ -397,7 +398,7 @@ TEST(DDSDataSharing, DataSharingWriter_CommonDomainReaders)
     PubSubReader<FixedSizedPubSubType> non_datasharing_reader(TEST_TOPIC_NAME);
     PubSubReader<FixedSizedPubSubType> auto_reader(TEST_TOPIC_NAME);
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     std::vector<uint16_t> reader_ids;
@@ -472,7 +473,7 @@ TEST(DDSDataSharing, DataSharingReader_DifferentDomainWriters)
     PubSubWriter<FixedSizedPubSubType> auto_writer(TEST_TOPIC_NAME);
     PubSubReader<FixedSizedPubSubType> reader(TEST_TOPIC_NAME);
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     std::vector<uint16_t> reader_ids;
@@ -555,7 +556,7 @@ TEST(DDSDataSharing, DataSharingReader_CommonDomainWriters)
     PubSubWriter<FixedSizedPubSubType> auto_writer(TEST_TOPIC_NAME);
     PubSubReader<FixedSizedPubSubType> reader(TEST_TOPIC_NAME);
 
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     std::vector<uint16_t> reader_ids;
@@ -641,20 +642,20 @@ TEST_P(DDSDataSharing, DataSharingPoolError)
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
 
     writer_datasharing.resource_limits_max_samples(100000)
-            .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .datasharing_on(".").init();
     ASSERT_FALSE(writer_datasharing.isInitialized());
 
     writer_auto.resource_limits_max_samples(100000)
-            .history_kind(eprosima::fastrtps::KEEP_ALL_HISTORY_QOS)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS)
+            .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .datasharing_auto(".").init();
     ASSERT_TRUE(writer_auto.isInitialized());
 
     reader.datasharing_on(".")
             .history_depth(10)
-            .reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
     ASSERT_TRUE(reader.isInitialized());
 
     // Check that the shared files are created on the correct directory
@@ -693,14 +694,14 @@ TEST_P(DDSDataSharing, DataSharingDefaultDirectory)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     reader.history_depth(100)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_auto()
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(reader.isInitialized());
 
@@ -708,7 +709,7 @@ TEST_P(DDSDataSharing, DataSharingDefaultDirectory)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_auto()
-            .reliability(BEST_EFFORT_RELIABILITY_QOS).init();
+            .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(writer.isInitialized());
 
@@ -737,14 +738,14 @@ TEST(DDSDataSharing, acknack_reception_when_change_removed_by_history)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     writer.history_depth(100)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .lifespan_period({5, 0})
             .init();
 
@@ -754,8 +755,8 @@ TEST(DDSDataSharing, acknack_reception_when_change_removed_by_history)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS)
-            .durability_kind(TRANSIENT_LOCAL_DURABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
             .lifespan_period({0, 10})
             .init();
 
@@ -799,14 +800,14 @@ TEST(DDSDataSharing, acknack_reception_when_get_unread_count_and_change_removed_
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     writer.history_depth(100)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -816,8 +817,8 @@ TEST(DDSDataSharing, acknack_reception_when_get_unread_count_and_change_removed_
             .disable_builtin_transport()
             .datasharing_on(".")
             .loan_sample_validation()
-            .reliability(RELIABLE_RELIABILITY_QOS)
-            .durability_kind(TRANSIENT_LOCAL_DURABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -873,14 +874,14 @@ TEST(DDSDataSharing, acknack_reception_when_get_unread_count)
     PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disable transports to ensure we are using datasharing
-    auto testTransport = std::make_shared<test_UDPv4TransportDescriptor>();
+    auto testTransport = std::make_shared<eprosima::fastdds::rtps::test_UDPv4TransportDescriptor>();
     testTransport->dropDataMessagesPercentage = 100;
 
     writer.history_depth(100)
             .add_user_transport_to_pparams(testTransport)
             .disable_builtin_transport()
             .datasharing_on(".")
-            .reliability(RELIABLE_RELIABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
             .init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -890,8 +891,8 @@ TEST(DDSDataSharing, acknack_reception_when_get_unread_count)
             .disable_builtin_transport()
             .datasharing_on(".")
             .loan_sample_validation()
-            .reliability(RELIABLE_RELIABILITY_QOS)
-            .durability_kind(TRANSIENT_LOCAL_DURABILITY_QOS)
+            .reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+            .durability_kind(eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS)
             .init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -1021,6 +1022,184 @@ TEST(DDSDataSharing, ReaderDeletionWithRejectedSampleDoesNotHang)
 
     destroy_thread.join();
     writer.destroy();
+}
+
+namespace {
+
+// Serialized FixedSized sample: encapsulation header + FixedSized::index = 0x1337
+struct SpoofedSerializedData
+{
+    uint8_t encapsulation[2] = {0x00, CDR_LE};
+    uint8_t encapsulation_opts[2] = {0x00, 0x00};
+    uint8_t data[4] = {0x37, 0x13, 0x00, 0x00};
+};
+
+struct SpoofedDataSubMsg
+{
+    struct Header
+    {
+        uint8_t submessage_id = 0x15;
+#if FASTDDS_IS_BIG_ENDIAN_TARGET
+        uint8_t flags = 0x04;        // Data present, big endian
+#else
+        uint8_t flags = 0x05;        // Data present, little endian
+#endif  // FASTDDS_IS_BIG_ENDIAN_TARGET
+        uint16_t octets_to_next_header = 28;
+        uint16_t extra_flags = 0;
+        uint16_t octets_to_inline_qos = 16;
+        EntityId_t reader_id{};
+        EntityId_t writer_id{};
+        SequenceNumber_t sn{ 1 };
+    };
+
+    Header header;
+    SpoofedSerializedData payload;
+};
+
+struct SpoofedDataFragSubMsg
+{
+    struct Header
+    {
+        uint8_t submessage_id = 0x16;
+#if FASTDDS_IS_BIG_ENDIAN_TARGET
+        uint8_t flags = 0x00;        // big endian, no key
+#else
+        uint8_t flags = 0x01;        // little endian, no key
+#endif  // FASTDDS_IS_BIG_ENDIAN_TARGET
+        uint16_t octets_to_next_header = 40;
+        uint16_t extra_flags = 0;
+        uint16_t octets_to_inline_qos = 28;
+        EntityId_t reader_id{};
+        EntityId_t writer_id{};
+        SequenceNumber_t sn{ 1 };
+        // Whole sample delivered as two fragments in a single submessage
+        uint32_t fragment_starting_num = 1;
+        uint16_t fragments_in_submessage = 2;
+        uint16_t fragment_size = 4;
+        uint32_t sample_size = 8;
+    };
+
+    Header header;
+    SpoofedSerializedData payload;
+};
+
+template<typename SubMsg>
+struct SpoofedPacket
+{
+    std::array<char, 4> rtps_id{ {'R', 'T', 'P', 'S'} };
+    std::array<uint8_t, 2> protocol_version{ {2, 3} };
+    std::array<uint8_t, 2> vendor_id{ {0x01, 0x0F} };
+    GuidPrefix_t sender_prefix{};
+    SubMsg data;
+};
+
+/**
+ * Matches a DataSharing reader and writer, sends a spoofed network packet carrying
+ * the writer GUID and checks it is rejected while regular samples still arrive.
+ */
+template<typename SubMsg>
+void check_spoofed_network_data_is_not_treated_as_datasharing(
+        eprosima::fastdds::dds::ReliabilityQosPolicyKind reliability)
+{
+    SCOPED_TRACE(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS == reliability ? "RELIABLE" : "BEST_EFFORT");
+
+    PubSubReader<FixedSizedPubSubType> reader(TEST_TOPIC_NAME);
+    PubSubWriter<FixedSizedPubSubType> writer(TEST_TOPIC_NAME);
+
+    // Force a UDP transport and a known reader locator so the spoofed datagram
+    // reaches the reader's receiver through the production RTPS path.
+    auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+
+    Locator_t reader_locator;
+    ASSERT_TRUE(IPLocator::setIPv4(reader_locator, "127.0.0.1"));
+    reader_locator.port = 7400;
+
+    reader.disable_builtin_transport()
+            .add_user_transport_to_pparams(udp_transport)
+            .add_to_unicast_locator_list("127.0.0.1", 7400)
+            .datasharing_auto(".")
+            .reliability(reliability)
+            .init();
+    ASSERT_TRUE(reader.isInitialized());
+
+    writer.disable_builtin_transport()
+            .add_user_transport_to_pparams(udp_transport)
+            .datasharing_auto(".")
+            .reliability(reliability)
+            .init();
+    ASSERT_TRUE(writer.isInitialized());
+
+    writer.wait_discovery();
+    reader.wait_discovery();
+
+    // The reader must have matched the writer through DataSharing
+    ASSERT_TRUE(check_shared_file(".", writer.datawriter_guid()));
+
+    // Expect to receive nothing: the forged sample must be rejected.
+    reader.startReception(1);
+
+    UDPMessageSender fake_msg_sender;
+    {
+        auto writer_guid = writer.datawriter_guid();
+
+        SpoofedPacket<SubMsg> packet{};
+        packet.sender_prefix = writer_guid.guidPrefix;
+        packet.data.header.writer_id = writer_guid.entityId;
+        packet.data.header.reader_id = reader.datareader_guid().entityId;
+
+        CDRMessage_t msg(0);
+        uint32_t msg_len = static_cast<uint32_t>(sizeof(packet));
+        msg.init(reinterpret_cast<octet*>(&packet), msg_len);
+        msg.length = msg_len;
+        msg.pos = msg_len;
+        fake_msg_sender.send(msg, reader_locator);
+    }
+
+    // Give the reception thread time to process the datagram
+    EXPECT_FALSE(reader.wait_for_all_received(std::chrono::seconds(2), 1));
+
+    auto data = default_fixed_sized_data_generator(1);
+    writer.send(data);
+    ASSERT_TRUE(data.empty());
+    EXPECT_TRUE(reader.wait_for_all_received(std::chrono::seconds(2), 1));
+
+    reader.destroy();
+    writer.destroy();
+}
+
+} // namespace
+
+#if defined(__SANITIZE_ADDRESS__)
+/**
+ * @test Regression for a DataSharing payload-provenance spoofing issue.
+ *
+ * A reader that is matched with a DataSharing writer classifies an incoming
+ * sample as DataSharing solely from the writer GUID. An attacker could use a
+ * fake message with the same GUID to cause an OOB by treating as a DataSharing
+ * payload a non-compatible payload.
+ * Run this test under AddressSanitizer to detect the resulting invalid memory access.
+ */
+TEST(DDSDataSharing, SpoofedNetworkDataIsNotTreatedAsDataSharing)
+{
+    ASSERT_NO_FATAL_FAILURE(check_spoofed_network_data_is_not_treated_as_datasharing<SpoofedDataSubMsg>(
+                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS));
+    ASSERT_NO_FATAL_FAILURE(check_spoofed_network_data_is_not_treated_as_datasharing<SpoofedDataSubMsg>(
+                eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS));
+}
+#endif // if defined(__SANITIZE_ADDRESS__)
+
+/**
+ * @test Same as SpoofedNetworkDataIsNotTreatedAsDataSharing, but the spoofed sample is sent
+ * as a DATA_FRAG submessage. DataSharing writers never send fragments, so the forged sample
+ * must not be delivered nor consume the sequence number of the real one.
+ * Covers both the StatelessReader (best effort) and StatefulReader (reliable).
+ */
+TEST(DDSDataSharing, SpoofedNetworkDataFragIsNotTreatedAsDataSharing)
+{
+    ASSERT_NO_FATAL_FAILURE(check_spoofed_network_data_is_not_treated_as_datasharing<SpoofedDataFragSubMsg>(
+                eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS));
+    ASSERT_NO_FATAL_FAILURE(check_spoofed_network_data_is_not_treated_as_datasharing<SpoofedDataFragSubMsg>(
+                eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS));
 }
 
 #ifdef INSTANTIATE_TEST_SUITE_P

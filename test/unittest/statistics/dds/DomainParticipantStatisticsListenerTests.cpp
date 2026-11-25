@@ -18,9 +18,10 @@
 #include <gmock/gmock.h>
 
 #include <fastdds/dds/publisher/DataWriter.hpp>
+#include <mock/fastdds/dds/publisher/DataWriterMock.hpp>
 
 #include <statistics/fastdds/domain/DomainParticipantStatisticsListener.hpp>
-#include <statistics/types/types.h>
+#include <statistics/types/types.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -31,7 +32,7 @@ class DomainParticipantStatisticsListenerTests : public ::testing::Test
 {
 protected:
 
-    using DataWriter = eprosima::fastdds::dds::DataWriter;
+    using TestDataWriter = eprosima::fastdds::dds::TestDataWriter;
 
     void SetUp() override
     {
@@ -97,7 +98,7 @@ protected:
     {
         for (size_t i = 0; i < writers_.size(); i++)
         {
-            EXPECT_CALL(writers_[i], write(data_to_check_[i])).Times(num_times);
+            EXPECT_CALL(mock::mock_of(&writers_[i]), write(data_to_check_[i])).Times(num_times);
         }
     }
 
@@ -105,7 +106,7 @@ protected:
     {
         for (auto& writer : writers_)
         {
-            EXPECT_CALL(writer, write).Times(0);
+            EXPECT_CALL(mock::mock_of(&writer), write(testing::_)).Times(0);
         }
     }
 
@@ -116,11 +117,11 @@ protected:
         {
             if (i == n)
             {
-                EXPECT_CALL(writers_[i], write(data_to_check_[i])).Times(1);
+                EXPECT_CALL(mock::mock_of(&writers_[i]), write(data_to_check_[i])).Times(1);
             }
             else
             {
-                EXPECT_CALL(writers_[i], write).Times(0);
+                EXPECT_CALL(mock::mock_of(&writers_[i]), write(testing::_)).Times(0);
             }
         }
     }
@@ -134,7 +135,7 @@ protected:
     }
 
     void write_all_data_except(
-            EventKind kind)
+            uint32_t kind)
     {
         for (const Data& data : data_)
         {
@@ -149,32 +150,32 @@ protected:
     {
         for (auto& writer : writers_)
         {
-            testing::Mock::VerifyAndClearExpectations(&writer);
+            testing::Mock::VerifyAndClearExpectations(&mock::mock_of(&writer));
         }
     }
 
-    std::array<testing::StrictMock<DataWriter>, 17> writers_;
+    std::array<TestDataWriter, 17> writers_;
     std::array<void*, 17> data_to_check_;
     std::array<Data, 17> data_;
-    std::array<EventKind, 17> kinds_ =
+    std::array<uint32_t, 17> kinds_ =
     {
-        EventKindBits::HISTORY2HISTORY_LATENCY,
-        EventKindBits::NETWORK_LATENCY,
-        EventKindBits::PUBLICATION_THROUGHPUT,
-        EventKindBits::SUBSCRIPTION_THROUGHPUT,
-        EventKindBits::RTPS_SENT,
-        EventKindBits::RTPS_LOST,
-        EventKindBits::RESENT_DATAS,
-        EventKindBits::HEARTBEAT_COUNT,
-        EventKindBits::ACKNACK_COUNT,
-        EventKindBits::NACKFRAG_COUNT,
-        EventKindBits::GAP_COUNT,
-        EventKindBits::DATA_COUNT,
-        EventKindBits::PDP_PACKETS,
-        EventKindBits::EDP_PACKETS,
-        EventKindBits::DISCOVERED_ENTITY,
-        EventKindBits::SAMPLE_DATAS,
-        EventKindBits::PHYSICAL_DATA
+        EventKind::HISTORY2HISTORY_LATENCY,
+        EventKind::NETWORK_LATENCY,
+        EventKind::PUBLICATION_THROUGHPUT,
+        EventKind::SUBSCRIPTION_THROUGHPUT,
+        EventKind::RTPS_SENT,
+        EventKind::RTPS_LOST,
+        EventKind::RESENT_DATAS,
+        EventKind::HEARTBEAT_COUNT,
+        EventKind::ACKNACK_COUNT,
+        EventKind::NACKFRAG_COUNT,
+        EventKind::GAP_COUNT,
+        EventKind::DATA_COUNT,
+        EventKind::PDP_PACKETS,
+        EventKind::EDP_PACKETS,
+        EventKind::DISCOVERED_ENTITY,
+        EventKind::SAMPLE_DATAS,
+        EventKind::PHYSICAL_DATA
     };
 
     DomainParticipantStatisticsListener listener_;

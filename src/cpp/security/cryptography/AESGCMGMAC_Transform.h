@@ -19,15 +19,15 @@
 #ifndef _SECURITY_AUTHENTICATION_AESGCMGMAC_TRANSFORM_H_
 #define _SECURITY_AUTHENTICATION_AESGCMGMAC_TRANSFORM_H_
 
-#include <fastdds/rtps/security/cryptography/CryptoTransform.h>
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
 #include <fastcdr/Cdr.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <rtps/security/cryptography/CryptoTransform.h>
 
 #include <map>
 #include <security/cryptography/AESGCMGMAC_Types.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 
@@ -175,6 +175,7 @@ public:
             eprosima::fastcdr::Cdr::state& body_state,
             SecureDataTag& tag,
             uint32_t body_length,
+            uint32_t input_buffer_size,
             const std::array<uint8_t, 4>& transformation_kind,
             const std::array<uint8_t, 32>& session_key,
             const std::array<uint8_t, 12>& initialization_vector,
@@ -219,7 +220,7 @@ private:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_AESGCMGMAC_TRANSFORM_H_
