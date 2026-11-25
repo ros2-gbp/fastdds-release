@@ -1,4 +1,4 @@
-From bd4341755a341b6439800c554f6f7cce5519cb06 Mon Sep 17 00:00:00 2001
+From a591a52ff84ab606bf3e22119d8928e554d7a269 Mon Sep 17 00:00:00 2001
 From: Scott K Logan <logans@cottsay.net>
 Date: Wed, 20 Jan 2021 12:08:26 -0800
 Subject: [PATCH] Set CMake flags for Fast-DDS
@@ -9,7 +9,7 @@ Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
  1 file changed, 3 insertions(+)
 
 diff --git a/rpm/ros-lyrical-fastdds.spec b/rpm/ros-lyrical-fastdds.spec
-index 82544533..3387a063 100644
+index 19f530c0..9ff68678 100644
 --- a/rpm/ros-lyrical-fastdds.spec
 +++ b/rpm/ros-lyrical-fastdds.spec
 @@ -81,6 +81,9 @@ giving the user full access to the protocol internals.
