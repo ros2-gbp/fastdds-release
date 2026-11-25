@@ -43,7 +43,8 @@
 
 #if TLS_FOUND
 #include <rtps/transport/TCPAcceptorSecure.h>
-#include <asio/ssl.hpp>
+#include <asio/ssl/context.hpp>
+#include <asio/ssl/stream.hpp>
 #endif // if TLS_FOUND
 
 #include <statistics/rtps/messages/OutputTrafficManager.hpp>
@@ -103,6 +104,8 @@ protected:
     mutable std::mutex sockets_map_mutex_;
     // Mutex to control access to unbound_channel_resources_
     mutable std::mutex unbound_map_mutex_;
+    // Mutex to control access to receiver_resources_ and their ReceiverInUseCV
+    mutable std::mutex receiver_resources_mutex_;
 
     std::map<Locator, std::shared_ptr<TCPChannelResource>> channel_resources_; // The key is the "Physical locator"
     std::vector<std::shared_ptr<TCPChannelResource>> unbound_channel_resources_;
@@ -112,6 +115,10 @@ protected:
     std::vector<std::pair<TCPChannelResource*, uint64_t>> sockets_timestamp_;
 
     std::map<Locator, std::shared_ptr<TCPAcceptor>> acceptors_;
+
+    // Whether socket buffer sizes are left to OS autotuning (no size configured by the user)
+    bool autotune_send_buffer_ = false;
+    bool autotune_receive_buffer_ = false;
 
     eprosima::fastdds::statistics::rtps::OutputTrafficManager statistics_info_;
 
@@ -211,7 +218,9 @@ protected:
     void shutdown() override;
 
     /**
-     * Applies TLS configuration to ssl_context
+     * Applies TLS configuration to ssl_context.
+     * The verification mode is set on the context, so every secure stream created from it (accepted or connected)
+     * inherits it before its handshake starts.
      *
      * @return true if everything worked fine, false otherwise.
      */
@@ -434,10 +443,32 @@ public:
             const asio::error_code& error);
 
 #if TLS_FOUND
-    //! Callback called each time that an incoming connection is accepted (secure).
+    /**
+     * Callback called each time that a secure acceptor finishes an accept operation, before the TLS handshake.
+     *
+     * The TLS handshake of an accepted connection is started by the acceptor and its result is reported
+     * through @ref SecureSocketHandshakeCompleted. This method only re-arms the acceptor, so new connections
+     * are accepted while previous handshakes are still in progress.
+     *
+     * @param [in] locator Locator of the acceptor that finished the accept operation.
+     * @param [in] error Result of the accept operation. On error, it waits a little before re-arming.
+     *                   The acceptor is not re-armed if the operation was aborted.
+     */
     void SecureSocketAccepted(
-            std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket,
             const Locator& locator,
+            const asio::error_code& error);
+
+    /**
+     * Callback called each time that the TLS handshake of an accepted connection finishes.
+     *
+     * On success, a new unbound secure channel is created for the socket and its listening thread is started.
+     * On failure (including a handshake timeout), the connection is discarded and no channel is created.
+     *
+     * @param [in] socket Secure stream of the accepted connection.
+     * @param [in] error Result of the TLS handshake.
+     */
+    void SecureSocketHandshakeCompleted(
+            std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket,
             const asio::error_code& error);
 #endif // if TLS_FOUND
 
@@ -501,6 +532,18 @@ public:
     virtual const TCPTransportDescriptor* configuration() const = 0;
 
     virtual TCPTransportDescriptor* configuration() = 0;
+
+    //! Whether the send buffer size of channel sockets is left to OS autotuning
+    bool autotune_send_buffer() const
+    {
+        return autotune_send_buffer_;
+    }
+
+    //! Whether the receive buffer size of channel sockets is left to OS autotuning
+    bool autotune_receive_buffer() const
+    {
+        return autotune_receive_buffer_;
+    }
 
     void update_network_interfaces() override;
 
