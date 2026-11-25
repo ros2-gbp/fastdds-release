@@ -15,6 +15,7 @@
 #include <rtps/transport/UDPTransportInterface.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <limits>
@@ -224,7 +225,27 @@ bool UDPTransportInterface::OpenAndBindInputSockets(
         (void)e;
         EPROSIMA_LOG_INFO(TRANSPORT_UDP, "UDPTransport Error binding at port: ("
                 << IPLocator::getPhysicalPort(locator) << ")" << " with msg: " << e.what());
-        mInputSockets.erase(IPLocator::getPhysicalPort(locator));
+
+        // Take ownership of the channels already created for this port, so they can be released
+        std::vector<UDPChannelResource*> channel_resources;
+        auto it = mInputSockets.find(IPLocator::getPhysicalPort(locator));
+        if (it != mInputSockets.end())
+        {
+            channel_resources = std::move(it->second);
+            mInputSockets.erase(it);
+        }
+
+        // Release the lock, as disabling the channels waits for their listening threads to finish
+        scopedLock.unlock();
+
+        for (UDPChannelResource* channel : channel_resources)
+        {
+            channel->disable();
+            channel->release();
+            channel->clear();
+            delete channel;
+        }
+
         return false;
     }
 
@@ -583,10 +604,13 @@ bool UDPTransportInterface::send(
             (void)timeout;
 #ifndef _WIN32
             struct timeval timeStruct;
-            timeStruct.tv_sec = 0;
-            timeStruct.tv_usec = timeout.count() > 0 ? timeout.count() : 0;
-            setsockopt(getSocketPtr(socket)->native_handle(), SOL_SOCKET, SO_SNDTIMEO,
-                    reinterpret_cast<const char*>(&timeStruct), sizeof(timeStruct));
+            asio_helpers::duration_to_timeval(timeout, timeStruct);
+            if (0 != setsockopt(getSocketPtr(socket)->native_handle(), SOL_SOCKET, SO_SNDTIMEO,
+                    reinterpret_cast<const char*>(&timeStruct), sizeof(timeStruct)))
+            {
+                EPROSIMA_LOG_WARNING(TRANSPORT_UDP,
+                        "Failed to set UDP send timeout: " << std::strerror(errno));
+            }
 #endif // ifndef _WIN32
 
             asio::error_code ec;
