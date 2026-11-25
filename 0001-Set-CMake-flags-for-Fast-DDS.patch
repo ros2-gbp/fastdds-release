@@ -9,7 +9,7 @@ Co-authored-by: Shane Loretz <shane.loretz@gmail.com>
  1 file changed, 3 insertions(+)
 
 diff --git a/rpm/ros-rolling-fastdds.spec b/rpm/ros-rolling-fastdds.spec
-index 566b4f3367d7..75beb507e092 100644
+index 566b4f33..75beb507 100644
 --- a/rpm/ros-rolling-fastdds.spec
 +++ b/rpm/ros-rolling-fastdds.spec
 @@ -81,6 +81,9 @@ giving the user full access to the protocol internals.
@@ -23,5 +23,5 @@ index 566b4f3367d7..75beb507e092 100644
  %cmake3_build
  
 -- 
-2.55.0
+2.34.1
 

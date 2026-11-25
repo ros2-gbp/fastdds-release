@@ -8,7 +8,7 @@ Subject: [PATCH 2/2] Never implicitly set -Werror
  1 file changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 7366e5718c1d..7108ee728609 100644
+index 7366e571..7108ee72 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -193,10 +193,10 @@ endif()
@@ -27,5 +27,5 @@ index 7366e5718c1d..7108ee728609 100644
  ###############################################################################
  # Installation paths
 -- 
-2.55.0
+2.34.1
 
