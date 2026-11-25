@@ -258,6 +258,11 @@ ReturnCode_t DataWriterImpl::enable()
     {
         std::lock_guard<std::mutex> qos_guard(qos_mutex_);
 
+        // Set Datawriter's DataRepresentationId taking into account the QoS.
+        data_representation_ = qos_.representation().m_value.empty()
+                || XCDR_DATA_REPRESENTATION == qos_.representation().m_value.at(0)
+                        ? XCDR_DATA_REPRESENTATION : XCDR2_DATA_REPRESENTATION;
+
         auto history_att = DataWriterHistory::to_history_attributes(
             qos_.history(),
             qos_.resource_limits(),
@@ -378,11 +383,6 @@ ReturnCode_t DataWriterImpl::enable()
         {
             reader_filters_alloc = qos_.writer_resource_limits().reader_filters_allocation;
         }
-
-        // Set Datawriter's DataRepresentationId taking into account the QoS.
-        data_representation_ = qos_.representation().m_value.empty()
-                || XCDR_DATA_REPRESENTATION == qos_.representation().m_value.at(0)
-                        ? XCDR_DATA_REPRESENTATION : XCDR2_DATA_REPRESENTATION;
 
         lifespan_duration = qos_.lifespan().duration;
     }
@@ -2369,7 +2369,8 @@ std::shared_ptr<IPayloadPool> DataWriterImpl::get_payload_pool()
         else
         {
             payload_pool_ = TopicPayloadPoolRegistry::get(topic_->get_name(), pool_config_);
-            if (!std::static_pointer_cast<ITopicPayloadPool>(payload_pool_)->reserve_history(pool_config_, false))
+            if (!payload_pool_ ||
+                    !std::static_pointer_cast<ITopicPayloadPool>(payload_pool_)->reserve_history(pool_config_, false))
             {
                 payload_pool_.reset();
             }
