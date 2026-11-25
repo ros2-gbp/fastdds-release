@@ -23,10 +23,7 @@
 #include <chrono>
 
 #include <fastdds/config.hpp>
-#include <fastdds/dds/domain/DomainParticipant.hpp>
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/rtps/builtin/data/BuiltinEndpoints.hpp>
 #include <fastdds/rtps/builtin/data/ParticipantBuiltinTopicData.hpp>
 #include <fastdds/rtps/common/LocatorList.hpp>
@@ -134,12 +131,18 @@ PDP::~PDP()
 {
     delete resend_participant_info_event_;
 
-    builtin_endpoints_->disable_pdp_readers(mp_RTPSParticipant);
+    if (builtin_endpoints_)
+    {
+        builtin_endpoints_->disable_pdp_readers(mp_RTPSParticipant);
+    }
 
     delete mp_EDP;
 
-    builtin_endpoints_->delete_pdp_endpoints(mp_RTPSParticipant);
-    builtin_endpoints_.reset();
+    if (builtin_endpoints_)
+    {
+        builtin_endpoints_->delete_pdp_endpoints(mp_RTPSParticipant);
+        builtin_endpoints_.reset();
+    }
 
     for (ParticipantProxyData* it : participant_proxies_)
     {
