@@ -20,6 +20,7 @@
 #ifndef _TEST_BLACKBOX_PUBSUBWRITER_HPP_
 #define _TEST_BLACKBOX_PUBSUBWRITER_HPP_
 
+#include <atomic>
 #include <condition_variable>
 #include <list>
 #include <map>
@@ -474,7 +475,33 @@ public:
             }
             if (datawriter_ == nullptr)
             {
-                datawriter_ = publisher_->create_datawriter(topic_, datawriter_qos_, &listener_, status_mask_);
+                if (nullptr == context_.get())
+                {
+                    datawriter_ = publisher_->create_datawriter(topic_, datawriter_qos_, &listener_, status_mask_);
+                }
+                else
+                {
+                    // Ensure the datawriter is created disabled so that the context can be set before enabling it.
+                    auto pub_qos = publisher_->get_qos();
+                    bool was_auto_enable = pub_qos.entity_factory().autoenable_created_entities;
+                    if (was_auto_enable)
+                    {
+                        pub_qos.entity_factory().autoenable_created_entities = false;
+                        publisher_->set_qos(pub_qos);
+                    }
+                    // Create the datawriter disabled and set the context.
+                    datawriter_ = publisher_->create_datawriter(topic_, datawriter_qos_, &listener_, status_mask_);
+                    if (datawriter_ != nullptr)
+                    {
+                        datawriter_->set_type_support_context(context_);
+                        if (was_auto_enable)
+                        {
+                            pub_qos.entity_factory().autoenable_created_entities = true;
+                            publisher_->set_qos(pub_qos);
+                            datawriter_->enable();
+                        }
+                    }
+                }
             }
 
             if (datawriter_ != nullptr)
@@ -1794,6 +1821,7 @@ public:
 
     unsigned int get_participants_matched() const
     {
+        std::lock_guard<std::mutex> lock(mutexDiscovery_);
         return participant_matched_;
     }
 
@@ -1935,6 +1963,13 @@ public:
         return *this;
     }
 
+    PubSubWriter& context(
+            const std::shared_ptr<eprosima::fastdds::dds::TopicDataType::Context>& context)
+    {
+        context_ = context;
+        return *this;
+    }
+
     eprosima::fastdds::dds::TypeSupport get_type_support()
     {
         return type_;
@@ -1950,28 +1985,28 @@ protected:
 
     void participant_matched()
     {
-        std::unique_lock<std::mutex> lock(mutexDiscovery_);
+        std::lock_guard<std::mutex> lock(mutexDiscovery_);
         ++participant_matched_;
         cv_.notify_one();
     }
 
     void participant_unmatched()
     {
-        std::unique_lock<std::mutex> lock(mutexDiscovery_);
+        std::lock_guard<std::mutex> lock(mutexDiscovery_);
         --participant_matched_;
         cv_.notify_one();
     }
 
     void matched()
     {
-        std::unique_lock<std::mutex> lock(mutexDiscovery_);
+        std::lock_guard<std::mutex> lock(mutexDiscovery_);
         ++matched_;
         cv_.notify_one();
     }
 
     void unmatched()
     {
-        std::unique_lock<std::mutex> lock(mutexDiscovery_);
+        std::lock_guard<std::mutex> lock(mutexDiscovery_);
         --matched_;
         cv_.notify_one();
     }
@@ -2203,12 +2238,13 @@ protected:
     eprosima::fastdds::dds::DataWriter* datawriter_;
     eprosima::fastdds::dds::DataWriterQos datawriter_qos_;
     eprosima::fastdds::dds::StatusMask status_mask_;
+    std::shared_ptr<eprosima::fastdds::dds::TopicDataType::Context> context_;
     std::string topic_name_;
     eprosima::fastdds::rtps::GUID_t participant_guid_;
     eprosima::fastdds::rtps::GUID_t datawriter_guid_;
     bool initialized_;
     bool use_domain_id_from_profile_;
-    std::mutex mutexDiscovery_;
+    mutable std::mutex mutexDiscovery_;
     std::condition_variable cv_;
     std::atomic<unsigned int> matched_;
     unsigned int participant_matched_;
@@ -2288,7 +2324,7 @@ protected:
             waitset_.attach_condition(writer_.datawriter_->get_statuscondition());
             waitset_.attach_condition(guard_condition_);
 
-            std::unique_lock<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(mutex_);
             if (nullptr == thread_)
             {
                 running_ = true;
@@ -2420,10 +2456,10 @@ protected:
         eprosima::fastdds::dds::GuardCondition guard_condition_;
 
         //! The number of times deadline was missed
-        unsigned int times_deadline_missed_ = 0;
+        std::atomic<unsigned int> times_deadline_missed_ {0};
 
         //! The number of times liveliness was lost
-        unsigned int times_liveliness_lost_ = 0;
+        std::atomic<unsigned int> times_liveliness_lost_ {0};
 
         //! The timeout for the wait operation
         eprosima::fastdds::dds::Duration_t timeout_;
