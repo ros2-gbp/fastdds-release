@@ -68,15 +68,53 @@ bool AESGCMGMAC_KeyExchange::create_local_participant_crypto_tokens(
 
     //Participant2ParticipantKeyMaterial will be come RemoteParticipant2ParticipantKeyMaterial on the other side
     {
-        //Only the KeyMaterial used in conjunction with the remote_participant are tokenized. In this implementation only on Pariticipant2ParticipantKeyMaterial exists per matched Participant
+        {
+            KeyMaterial_AES_GCM_GMAC live;
+            {
+                std::unique_lock<std::mutex> local_lock(const_cast<std::mutex&>(local_participant->mutex_));
+                live = local_participant->ParticipantKeyMaterial;
+            }
+
+            std::unique_lock<std::mutex> remote_lock(remote_participant->mutex_);
+
+            if (!remote_participant->Participant2ParticipantKeyMaterial.empty() &&
+                    remote_participant->Participant2ParticipantKeyMaterial.back().sender_key_id
+                    != live.sender_key_id)
+            {
+                const KeyMaterial_AES_GCM_GMAC& current =
+                        remote_participant->Participant2ParticipantKeyMaterial.back();
+
+                KeyMaterial_AES_GCM_GMAC updated;
+                updated.transformation_kind          = live.transformation_kind;
+                updated.master_salt                  = live.master_salt;
+                updated.master_sender_key            = live.master_sender_key;
+                updated.sender_key_id                = live.sender_key_id;
+                updated.receiver_specific_key_id     = current.receiver_specific_key_id;
+                updated.master_receiver_specific_key = current.master_receiver_specific_key;
+
+                remote_participant->Participant2ParticipantKeyMaterial.push_back(updated);
+
+                while (remote_participant->Participant2ParticipantKeyMaterial.size() > KEY_MATERIAL_RING_SIZE)
+                {
+                    remote_participant->Participant2ParticipantKeyMaterial.erase(
+                        remote_participant->Participant2ParticipantKeyMaterial.begin());
+                }
+            }
+        }
+
+        if (remote_participant->Participant2ParticipantKeyMaterial.empty())
+        {
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "No participant key material to tokenize");
+            return false;
+        }
+
         ParticipantCryptoToken temp;
         temp.class_id() = std::string("DDS:Crypto:AES_GCM_GMAC");
         BinaryProperty prop;
         prop.name() = std::string("dds.cryp.keymat");
         std::vector<uint8_t> plaintext =
-                KeyMaterialCDRSerialize(remote_participant->Participant2ParticipantKeyMaterial.at(
-                            0));
-        prop.value() = plaintext; //  aes_128_gcm_encrypt(plaintext, remote_participant->Participant2ParticipantKxKeyMaterial.at(0).master_sender_key);
+                KeyMaterialCDRSerialize(remote_participant->Participant2ParticipantKeyMaterial.back());
+        prop.value() = plaintext;
         prop.propagate(true);
 
         if (prop.value().size() == 0)
@@ -140,8 +178,19 @@ bool AESGCMGMAC_KeyExchange::set_remote_participant_crypto_tokens(
     }
 
     KeyMaterial_AES_GCM_GMAC keymat;
-    KeyMaterialCDRDeserialize(keymat, &plaintext);
-    remote_participant->RemoteParticipant2ParticipantKeyMaterial.push_back(keymat);
+    if (!KeyMaterialCDRDeserialize(keymat, &plaintext))
+    {
+        exception = SecurityException("Malformed KeyMaterial in CryptoToken");
+        return false;
+    }
+
+    auto& ring = remote_participant->RemoteParticipant2ParticipantKeyMaterial;
+    ring.push_back(keymat);
+
+    while (ring.size() > KEY_MATERIAL_RING_SIZE)
+    {
+        ring.erase(ring.begin());
+    }
 
     return true;
 }
@@ -285,7 +334,11 @@ bool AESGCMGMAC_KeyExchange::set_remote_datareader_crypto_tokens(
         }
 
         KeyMaterial_AES_GCM_GMAC keymat;
-        KeyMaterialCDRDeserialize(keymat, &plaintext);
+        if (!KeyMaterialCDRDeserialize(keymat, &plaintext))
+        {
+            exception = SecurityException("Malformed KeyMaterial in CryptoToken");
+            return false;
+        }
         remote_reader->Entity2RemoteKeyMaterial.push_back(keymat);
 
         remote_reader_lock.unlock();
@@ -353,7 +406,11 @@ bool AESGCMGMAC_KeyExchange::set_remote_datawriter_crypto_tokens(
         }
 
         KeyMaterial_AES_GCM_GMAC keymat;
-        KeyMaterialCDRDeserialize(keymat, &plaintext);
+        if (!KeyMaterialCDRDeserialize(keymat, &plaintext))
+        {
+            exception = SecurityException("Malformed KeyMaterial in CryptoToken");
+            return false;
+        }
 
         remote_writer->Entity2RemoteKeyMaterial.push_back(keymat);
 
@@ -457,7 +514,7 @@ std::vector<uint8_t> AESGCMGMAC_KeyExchange::KeyMaterialCDRSerialize(
     return buffer;
 }
 
-void AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
+bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
         KeyMaterial_AES_GCM_GMAC& buffer,
         std::vector<uint8_t>* CDR)
 {
@@ -469,6 +526,14 @@ void AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
     // transformation kind is always 0 0 0 n
     // TODO: Check 0 values
     const uint8_t* data = CDR->data();
+    const size_t size = CDR->size();
+
+    if (size < 4)
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: message too short");
+        return false;
+    }
+
     uint8_t kind = data[3];
     buffer.transformation_kind[3] = kind;
     if (kind == 0)
@@ -476,57 +541,105 @@ void AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
         // empty key material
         buffer.sender_key_id.fill(0);
         buffer.receiver_specific_key_id.fill(0);
+        return true;
     }
-    else
+
+    // 128 bits for kinds 1 and 2. 256 bits for kinds 3 and 4.
+    // TODO: Check desired length
+    // uint8_t desired_key_len = kind <= 2 ? 16 : 32;
+
+    // Size of the destination key arrays.
+    static constexpr size_t max_key_len = 32;
+
+    // size_t so a large key_len cannot make the offset wrap around.
+    size_t pos;
+    uint8_t key_len;
+
+    // True when [at, at + n) fits inside data.
+    auto has_room = [size](size_t at, size_t n)
+            {
+                return n <= size && at <= size - n;
+            };
+
+    // master_salt : sequence<octet,32>
+    //    seq_len would always be 0 0 0 n
+    //    TODO: check 0 values
+    pos = 4 + 3;  // 4 - transformation_kind. 3 - 0's
+    if (!has_room(pos, 1))
     {
-        // 128 bits for kinds 1 and 2. 256 bits for kinds 3 and 4.
-        // TODO: Check desired length
-        // uint8_t desired_key_len = kind <= 2 ? 16 : 32;
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_salt length");
+        return false;
+    }
+    key_len = data[pos++];
+    if (key_len > max_key_len || !has_room(pos, key_len))
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_salt length");
+        return false;
+    }
+    memcpy(buffer.master_salt.data(), &data[pos], key_len);
+    pos += key_len;
 
-        uint8_t key_len;
-        uint8_t pos;
+    // sender_key_id : octet[4]
+    if (!has_room(pos, 4))
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing sender_key_id");
+        return false;
+    }
+    memcpy(buffer.sender_key_id.data(), &data[pos], 4);
+    pos += 4;
 
-        // master_salt : sequence<octet,32>
-        //    seq_len would always be 0 0 0 n
-        //    TODO: check 0 values
-        pos = 4 + 3;  // 4 - transformation_kind. 3 - 0's
-        key_len = data[pos++];
-        // TODO: check key_len
-        memcpy(buffer.master_salt.data(), &data[pos], key_len);
-        pos += key_len;
+    // master_sender_key : sequence<octet,32>
+    //    seq_len would always be 0 0 0 n
+    //    TODO: check 0 values
+    pos += 3;
+    if (!has_room(pos, 1))
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_sender_key length");
+        return false;
+    }
+    key_len = data[pos++];
+    if (key_len > max_key_len || !has_room(pos, key_len))
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_sender_key length");
+        return false;
+    }
+    memcpy(buffer.master_sender_key.data(), &data[pos], key_len);
+    pos += key_len;
 
-        // sender_key_id : octet[4]
-        memcpy(buffer.sender_key_id.data(), &data[pos], 4);
-        pos += 4;
+    // receiver_specific_key_id : octet[4]
+    if (!has_room(pos, 4))
+    {
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing receiver_specific_key_id");
+        return false;
+    }
+    uint8_t has_specific_key = 0;
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        buffer.receiver_specific_key_id[i] = data[pos++];
+        has_specific_key |= buffer.receiver_specific_key_id[i];
+    }
 
-        // master_sender_key : sequence<octet,32>
+    if (has_specific_key != 0)
+    {
+        // master_receiver_specific_key : sequence<octet,32>
         //    seq_len would always be 0 0 0 n
         //    TODO: check 0 values
         pos += 3;
+        if (!has_room(pos, 1))
+        {
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_receiver_specific_key length");
+            return false;
+        }
         key_len = data[pos++];
-        // TODO: check key_len
-        memcpy(buffer.master_sender_key.data(), &data[pos], key_len);
-        pos += key_len;
-
-        // receiver_specific_key_id : octet[4]
-        uint8_t has_specific_key = 0;
-        for (uint8_t i = 0; i < 4; i++)
+        if (key_len > max_key_len || !has_room(pos, key_len))
         {
-            buffer.receiver_specific_key_id[i] = data[pos++];
-            has_specific_key |= buffer.receiver_specific_key_id[i];
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_receiver_specific_key length");
+            return false;
         }
-
-        if (has_specific_key != 0)
-        {
-            // master_receiver_specific_key : sequence<octet,32>
-            //    seq_len would always be 0 0 0 n
-            //    TODO: check 0 values
-            pos += 3;
-            key_len = data[pos++];
-            // TODO: check key_len
-            memcpy(buffer.master_receiver_specific_key.data(), &data[pos], key_len);
-        }
+        memcpy(buffer.master_receiver_specific_key.data(), &data[pos], key_len);
     }
+
+    return true;
 }
 
 /*
