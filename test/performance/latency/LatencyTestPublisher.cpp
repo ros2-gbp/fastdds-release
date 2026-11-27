@@ -535,6 +535,7 @@ void LatencyTestPublisher::LatencyDataReaderListener::on_data_available(
 
     // Atomic managemente of the sample
     bool notify = false;
+    LatencyType* loaned_data_in = nullptr;
     {
         std::lock_guard<std::mutex> lock(pub->mutex_);
 
@@ -543,24 +544,34 @@ void LatencyTestPublisher::LatencyDataReaderListener::on_data_available(
             // we have requested a single sample
             assert(infos.length() == 1 && data_seq.length() == 1);
             // we have already released the former loan
-            assert(pub->latency_data_in_ == nullptr);
+            assert(loaned_data_in == nullptr);
             // reference the loaned data
-            pub->latency_data_in_ = &data_seq[0];
+            loaned_data_in = &data_seq[0];
             // retrieve the bounce time
-            bounce_time = std::chrono::duration<uint32_t, std::nano>(pub->latency_data_in_->bounce);
+            bounce_time = std::chrono::duration<uint32_t, std::nano>(loaned_data_in->bounce);
         }
 
         // Check if is the expected echo message
-        uint32_t dyn_value_in {0};
-        uint32_t dyn_value_out {0};
+        uint32_t value_in {0};
+        uint32_t value_out {1u};
         if (pub->dynamic_types_)
         {
-            (*pub->dynamic_data_in_)->get_uint32_value(dyn_value_in, 0);
-            (*pub->dynamic_data_out_)->get_uint32_value(dyn_value_out, 0);
+            (*pub->dynamic_data_in_)->get_uint32_value(value_in, 0);
+            (*pub->dynamic_data_out_)->get_uint32_value(value_out, 0);
+        }
+        else if ((nullptr != pub->latency_data_in_) && (nullptr != pub->latency_data_out_))
+        {
+            value_in = pub->latency_data_in_->seqnum;
+            value_out = pub->latency_data_out_->seqnum;
+        }
+        else if (pub->data_loans_ &&
+                (nullptr != loaned_data_in) && (nullptr != pub->latency_data_out_))
+        {
+            value_in = loaned_data_in->seqnum;
+            value_out = pub->latency_data_out_->seqnum;
         }
 
-        if ((pub->dynamic_types_ && dyn_value_in != dyn_value_out)
-                || (!pub->dynamic_types_ && pub->latency_data_in_->seqnum != pub->latency_data_out_->seqnum))
+        if (value_in != value_out)
         {
             EPROSIMA_LOG_INFO(LatencyTest, "Echo message received is not the expected one");
         }
@@ -595,7 +606,7 @@ void LatencyTestPublisher::LatencyDataReaderListener::on_data_available(
 
         if (pub->data_loans_)
         {
-            pub->latency_data_in_ = nullptr;
+            loaned_data_in = nullptr;
         }
 
         ++pub->data_msg_count_;
@@ -786,14 +797,13 @@ bool LatencyTestPublisher::test(
             // loan each sample
             if (data_loans_)
             {
-                latency_data_in_ = nullptr;
+                assert(latency_data_in_ == nullptr);
                 int trials = 10;
                 bool loaned = false;
 
                 while (trials-- != 0 && !loaned)
                 {
-                    loaned = (RETCODE_OK
-                            ==  data_writer_->loan_sample(
+                    loaned = (RETCODE_OK ==  data_writer_->loan_sample(
                                 data,
                                 DataWriter::LoanInitializationKind::NO_LOAN_INITIALIZATION));
 
