@@ -20,14 +20,16 @@ void async_getline(IoExecutor io_ex, std::istream& is, Handler handler)
       execution::outstanding_work.tracked);
 
   // Post a function object to do the work asynchronously.
-  asio::require(io_ex, execution::blocking.never).execute(
+  execution::execute(
+      asio::require(io_ex, execution::blocking.never),
       [&is, work_ex, handler=std::move(handler)]() mutable
       {
         std::string line;
         std::getline(is, line);
 
         // Pass the result to the handler, via the associated executor.
-        asio::prefer(work_ex, execution::blocking.possibly).execute(
+        execution::execute(
+            asio::prefer(work_ex, execution::blocking.possibly),
             [line=std::move(line), handler=std::move(handler)]() mutable
             {
               handler(std::move(line));

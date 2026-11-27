@@ -22,9 +22,8 @@
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/domain/DomainParticipantImpl.hpp>
 
-namespace eprosima {
-namespace fastdds {
-namespace dds {
+using namespace eprosima;
+using namespace eprosima::fastdds::dds;
 
 DomainParticipant::DomainParticipant(
         const StatusMask& mask)
@@ -69,30 +68,15 @@ const DomainParticipantListener* DomainParticipant::get_listener() const
 ReturnCode_t DomainParticipant::set_listener(
         DomainParticipantListener* listener)
 {
-    return set_listener(listener, std::chrono::seconds::max());
-}
-
-ReturnCode_t DomainParticipant::set_listener(
-        DomainParticipantListener* listener,
-        const std::chrono::seconds timeout)
-{
-    return set_listener(listener, StatusMask::all(), timeout);
+    return set_listener(listener, StatusMask::all());
 }
 
 ReturnCode_t DomainParticipant::set_listener(
         DomainParticipantListener* listener,
         const StatusMask& mask)
 {
-    return set_listener(listener, mask, std::chrono::seconds::max());
-}
-
-ReturnCode_t DomainParticipant::set_listener(
-        DomainParticipantListener* listener,
-        const StatusMask& mask,
-        const std::chrono::seconds timeout)
-{
-    ReturnCode_t ret_val = impl_->set_listener(listener, timeout);
-    if (ret_val == RETCODE_OK)
+    ReturnCode_t ret_val = impl_->set_listener(listener);
+    if (ret_val == ReturnCode_t::RETCODE_OK)
     {
         status_mask_ = mask;
     }
@@ -104,22 +88,13 @@ ReturnCode_t DomainParticipant::enable()
 {
     if (enable_)
     {
-        return RETCODE_OK;
+        return ReturnCode_t::RETCODE_OK;
     }
 
     enable_ = true;
     ReturnCode_t ret_code = impl_->enable();
-    enable_ = RETCODE_OK == ret_code;
+    enable_ = !!ret_code;
     return ret_code;
-}
-
-Publisher* DomainParticipant::create_publisher(
-        const PublisherQos& qos,
-        ReturnCode_t& ret_code,
-        PublisherListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_publisher(qos, ret_code, listener, mask);
 }
 
 Publisher* DomainParticipant::create_publisher(
@@ -128,15 +103,6 @@ Publisher* DomainParticipant::create_publisher(
         const StatusMask& mask)
 {
     return impl_->create_publisher(qos, listener, mask);
-}
-
-Publisher* DomainParticipant::create_publisher_with_profile(
-        const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        PublisherListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_publisher_with_profile(profile_name, ret_code, listener, mask);
 }
 
 Publisher* DomainParticipant::create_publisher_with_profile(
@@ -155,28 +121,10 @@ ReturnCode_t DomainParticipant::delete_publisher(
 
 Subscriber* DomainParticipant::create_subscriber(
         const SubscriberQos& qos,
-        ReturnCode_t& ret_code,
-        SubscriberListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_subscriber(qos, ret_code, listener, mask);
-}
-
-Subscriber* DomainParticipant::create_subscriber(
-        const SubscriberQos& qos,
         SubscriberListener* listener,
         const StatusMask& mask)
 {
     return impl_->create_subscriber(qos, listener, mask);
-}
-
-Subscriber* DomainParticipant::create_subscriber_with_profile(
-        const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        SubscriberListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_subscriber_with_profile(profile_name, ret_code, listener, mask);
 }
 
 Subscriber* DomainParticipant::create_subscriber_with_profile(
@@ -197,32 +145,10 @@ Topic* DomainParticipant::create_topic(
         const std::string& topic_name,
         const std::string& type_name,
         const TopicQos& qos,
-        ReturnCode_t& ret_code,
-        TopicListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_topic(topic_name, type_name, qos, ret_code, listener, mask);
-}
-
-Topic* DomainParticipant::create_topic(
-        const std::string& topic_name,
-        const std::string& type_name,
-        const TopicQos& qos,
         TopicListener* listener,
         const StatusMask& mask)
 {
     return impl_->create_topic(topic_name, type_name, qos, listener, mask);
-}
-
-Topic* DomainParticipant::create_topic_with_profile(
-        const std::string& topic_name,
-        const std::string& type_name,
-        const std::string& profile_name,
-        ReturnCode_t& ret_code,
-        TopicListener* listener,
-        const StatusMask& mask)
-{
-    return impl_->create_topic_with_profile(topic_name, type_name, profile_name, ret_code, listener, mask);
 }
 
 Topic* DomainParticipant::create_topic_with_profile(
@@ -245,33 +171,10 @@ ContentFilteredTopic* DomainParticipant::create_contentfilteredtopic(
         const std::string& name,
         Topic* related_topic,
         const std::string& filter_expression,
-        const std::vector<std::string>& expression_parameters,
-        ReturnCode_t& ret_code)
-{
-    return impl_->create_contentfilteredtopic(name, related_topic, filter_expression, expression_parameters,
-                   FASTDDS_SQLFILTER_NAME, ret_code);
-}
-
-ContentFilteredTopic* DomainParticipant::create_contentfilteredtopic(
-        const std::string& name,
-        Topic* related_topic,
-        const std::string& filter_expression,
         const std::vector<std::string>& expression_parameters)
 {
     return impl_->create_contentfilteredtopic(name, related_topic, filter_expression, expression_parameters,
                    FASTDDS_SQLFILTER_NAME);
-}
-
-ContentFilteredTopic* DomainParticipant::create_contentfilteredtopic(
-        const std::string& name,
-        Topic* related_topic,
-        const std::string& filter_expression,
-        const std::vector<std::string>& expression_parameters,
-        const char* filter_class_name,
-        ReturnCode_t& ret_code)
-{
-    return impl_->create_contentfilteredtopic(name, related_topic, filter_expression, expression_parameters,
-                   filter_class_name, ret_code);
 }
 
 ContentFilteredTopic* DomainParticipant::create_contentfilteredtopic(
@@ -295,29 +198,13 @@ MultiTopic* DomainParticipant::create_multitopic(
         const std::string& name,
         const std::string& type_name,
         const std::string& subscription_expression,
-        const std::vector<std::string>& expression_parameters,
-        ReturnCode_t& ret_code)
-{
-    static_cast<void> (name);
-    static_cast<void> (type_name);
-    static_cast<void> (subscription_expression);
-    static_cast<void> (expression_parameters);
-    static_cast<void> (ret_code);
-    EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT, "create_multitopic method not implemented");
-    return nullptr;
-}
-
-MultiTopic* DomainParticipant::create_multitopic(
-        const std::string& name,
-        const std::string& type_name,
-        const std::string& subscription_expression,
         const std::vector<std::string>& expression_parameters)
 {
     static_cast<void> (name);
     static_cast<void> (type_name);
     static_cast<void> (subscription_expression);
     static_cast<void> (expression_parameters);
-    EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT, "create_multitopic method not implemented");
+    logWarning(DOMAIN_PARTICIPANT, "create_multitopic method not implemented");
     return nullptr;
 }
 
@@ -325,7 +212,7 @@ ReturnCode_t DomainParticipant::delete_multitopic(
         const MultiTopic* a_multitopic)
 {
     static_cast<void> (a_multitopic);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::register_content_filter_factory(
@@ -349,84 +236,12 @@ ReturnCode_t DomainParticipant::unregister_content_filter_factory(
 
 Topic* DomainParticipant::find_topic(
         const std::string& topic_name,
-        const fastdds::dds::Duration_t& timeout)
+        const fastrtps::Duration_t& timeout)
 {
-    return impl_->find_topic(topic_name, timeout);
-}
-
-rpc::Service* DomainParticipant::create_service(
-        const std::string& service_name,
-        const std::string& service_type_name,
-        ReturnCode_t& ret_code)
-{
-    return impl_->create_service(service_name, service_type_name, ret_code);
-}
-
-rpc::Service* DomainParticipant::create_service(
-        const std::string& service_name,
-        const std::string& service_type_name)
-{
-    // NOTE: According to the RPC Standard annotation, service_name must be <interface_name>_<Service_name>
-    // Where <Service_name> is "Service" by default.
-    // The Service topics will be service_name + "_Request" and service_name + "_Reply"
-
-    return impl_->create_service(service_name, service_type_name);
-}
-
-rpc::Service* DomainParticipant::find_service(
-        const std::string& service_name) const
-{
-    return impl_->find_service(service_name);
-}
-
-ReturnCode_t DomainParticipant::delete_service(
-        const rpc::Service* service)
-{
-    return impl_->delete_service(service);
-}
-
-rpc::Requester* DomainParticipant::create_service_requester(
-        rpc::Service* service,
-        const RequesterQos& requester_qos,
-        ReturnCode_t& ret_code)
-{
-    return impl_->create_service_requester(service, requester_qos, ret_code);
-}
-
-rpc::Requester* DomainParticipant::create_service_requester(
-        rpc::Service* service,
-        const RequesterQos& requester_qos)
-{
-    return impl_->create_service_requester(service, requester_qos);
-}
-
-ReturnCode_t DomainParticipant::delete_service_requester(
-        const std::string& service_name,
-        rpc::Requester* requester)
-{
-    return impl_->delete_service_requester(service_name, requester);
-}
-
-rpc::Replier* DomainParticipant::create_service_replier(
-        rpc::Service* service,
-        const ReplierQos& replier_qos,
-        ReturnCode_t& ret_code)
-{
-    return impl_->create_service_replier(service, replier_qos, ret_code);
-}
-
-rpc::Replier* DomainParticipant::create_service_replier(
-        rpc::Service* service,
-        const ReplierQos& replier_qos)
-{
-    return impl_->create_service_replier(service, replier_qos);
-}
-
-ReturnCode_t DomainParticipant::delete_service_replier(
-        const std::string& service_name,
-        rpc::Replier* replier)
-{
-    return impl_->delete_service_replier(service_name, replier);
+    static_cast<void> (topic_name);
+    static_cast<void> (timeout);
+    logWarning(DOMAIN_PARTICIPANT, "find_topic method not implemented");
+    return nullptr;
 }
 
 TopicDescription* DomainParticipant::lookup_topicdescription(
@@ -437,35 +252,36 @@ TopicDescription* DomainParticipant::lookup_topicdescription(
 
 const Subscriber* DomainParticipant::get_builtin_subscriber() const
 {
-    EPROSIMA_LOG_WARNING(DOMAIN_PARTICIPANT, "get_builtin_subscriber method not implemented");
+    logWarning(DOMAIN_PARTICIPANT, "get_builtin_subscriber method not implemented");
     return nullptr;
 }
 
 ReturnCode_t DomainParticipant::ignore_participant(
         const InstanceHandle_t& handle)
 {
-    return impl_->ignore_participant(handle);
+    static_cast<void> (handle);
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::ignore_topic(
         const InstanceHandle_t& handle)
 {
     static_cast<void> (handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::ignore_publication(
         const InstanceHandle_t& handle)
 {
     static_cast<void> (handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::ignore_subscription(
         const InstanceHandle_t& handle)
 {
     static_cast<void> (handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 DomainId_t DomainParticipant::get_domain_id() const
@@ -498,7 +314,7 @@ ReturnCode_t DomainParticipant::get_default_publisher_qos(
         PublisherQos& qos) const
 {
     qos = impl_->get_default_publisher_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t DomainParticipant::get_publisher_qos_from_profile(
@@ -506,28 +322,6 @@ ReturnCode_t DomainParticipant::get_publisher_qos_from_profile(
         PublisherQos& qos) const
 {
     return impl_->get_publisher_qos_from_profile(profile_name, qos);
-}
-
-ReturnCode_t DomainParticipant::get_publisher_qos_from_xml(
-        const std::string& xml,
-        PublisherQos& qos) const
-{
-    return impl_->get_publisher_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_publisher_qos_from_xml(
-        const std::string& xml,
-        PublisherQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_publisher_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_default_publisher_qos_from_xml(
-        const std::string& xml,
-        PublisherQos& qos) const
-{
-    return impl_->get_default_publisher_qos_from_xml(xml, qos);
 }
 
 ReturnCode_t DomainParticipant::set_default_subscriber_qos(
@@ -545,7 +339,7 @@ ReturnCode_t DomainParticipant::get_default_subscriber_qos(
         SubscriberQos& qos) const
 {
     qos = impl_->get_default_subscriber_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t DomainParticipant::get_subscriber_qos_from_profile(
@@ -553,28 +347,6 @@ ReturnCode_t DomainParticipant::get_subscriber_qos_from_profile(
         SubscriberQos& qos) const
 {
     return impl_->get_subscriber_qos_from_profile(profile_name, qos);
-}
-
-ReturnCode_t DomainParticipant::get_subscriber_qos_from_xml(
-        const std::string& xml,
-        SubscriberQos& qos) const
-{
-    return impl_->get_subscriber_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_subscriber_qos_from_xml(
-        const std::string& xml,
-        SubscriberQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_subscriber_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_default_subscriber_qos_from_xml(
-        const std::string& xml,
-        SubscriberQos& qos) const
-{
-    return impl_->get_default_subscriber_qos_from_xml(xml, qos);
 }
 
 ReturnCode_t DomainParticipant::set_default_topic_qos(
@@ -592,7 +364,7 @@ ReturnCode_t DomainParticipant::get_default_topic_qos(
         TopicQos& qos) const
 {
     qos = impl_->get_default_topic_qos();
-    return RETCODE_OK;
+    return ReturnCode_t::RETCODE_OK;
 }
 
 ReturnCode_t DomainParticipant::get_topic_qos_from_profile(
@@ -602,144 +374,27 @@ ReturnCode_t DomainParticipant::get_topic_qos_from_profile(
     return impl_->get_topic_qos_from_profile(profile_name, qos);
 }
 
-ReturnCode_t DomainParticipant::get_topic_qos_from_profile(
-        const std::string& profile_name,
-        TopicQos& qos,
-        std::string& topic_name,
-        std::string& topic_data_type) const
-{
-    return impl_->get_topic_qos_from_profile(profile_name, qos, topic_name, topic_data_type);
-}
-
-ReturnCode_t DomainParticipant::get_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos) const
-{
-    return impl_->get_topic_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos,
-        std::string& topic_name,
-        std::string& topic_data_type) const
-{
-    return impl_->get_topic_qos_from_xml(xml, qos, topic_name, topic_data_type);
-}
-
-ReturnCode_t DomainParticipant::get_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_topic_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos,
-        std::string& topic_name,
-        std::string& topic_data_type,
-        const std::string& profile_name) const
-{
-    return impl_->get_topic_qos_from_xml(xml, qos, topic_name, topic_data_type, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_default_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos) const
-{
-    return impl_->get_default_topic_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_default_topic_qos_from_xml(
-        const std::string& xml,
-        TopicQos& qos,
-        std::string& topic_name,
-        std::string& topic_data_type) const
-{
-    return impl_->get_default_topic_qos_from_xml(xml, qos, topic_name, topic_data_type);
-}
-
-ReturnCode_t DomainParticipant::get_requester_qos_from_profile(
-        const std::string& profile_name,
-        RequesterQos& qos) const
-{
-    return impl_->get_requester_qos_from_profile(profile_name, qos);
-}
-
-ReturnCode_t DomainParticipant::get_requester_qos_from_xml(
-        const std::string& xml,
-        RequesterQos& qos) const
-{
-    return impl_->get_requester_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_requester_qos_from_xml(
-        const std::string& xml,
-        RequesterQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_requester_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_default_requester_qos_from_xml(
-        const std::string& xml,
-        RequesterQos& qos) const
-{
-    return impl_->get_default_requester_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_replier_qos_from_profile(
-        const std::string& profile_name,
-        ReplierQos& qos) const
-{
-    return impl_->get_replier_qos_from_profile(profile_name, qos);
-}
-
-ReturnCode_t DomainParticipant::get_replier_qos_from_xml(
-        const std::string& xml,
-        ReplierQos& qos) const
-{
-    return impl_->get_replier_qos_from_xml(xml, qos);
-}
-
-ReturnCode_t DomainParticipant::get_replier_qos_from_xml(
-        const std::string& xml,
-        ReplierQos& qos,
-        const std::string& profile_name) const
-{
-    return impl_->get_replier_qos_from_xml(xml, qos, profile_name);
-}
-
-ReturnCode_t DomainParticipant::get_default_replier_qos_from_xml(
-        const std::string& xml,
-        ReplierQos& qos) const
-{
-    return impl_->get_default_replier_qos_from_xml(xml, qos);
-}
-
 ReturnCode_t DomainParticipant::get_discovered_participants(
         std::vector<InstanceHandle_t>& participant_handles) const
 {
     static_cast<void> (participant_handles);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::get_discovered_participant_data(
-        ParticipantBuiltinTopicData& participant_data,
+        builtin::ParticipantBuiltinTopicData& participant_data,
         const InstanceHandle_t& participant_handle) const
 {
     static_cast<void> (participant_data);
     static_cast<void> (participant_handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::get_discovered_topics(
         std::vector<InstanceHandle_t>& topic_handles) const
 {
     static_cast<void> (topic_handles);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 ReturnCode_t DomainParticipant::get_discovered_topic_data(
@@ -748,7 +403,7 @@ ReturnCode_t DomainParticipant::get_discovered_topic_data(
 {
     static_cast<void> (topic_data);
     static_cast<void> (topic_handle);
-    return RETCODE_UNSUPPORTED;
+    return ReturnCode_t::RETCODE_UNSUPPORTED;
 }
 
 bool DomainParticipant::contains_entity(
@@ -759,7 +414,7 @@ bool DomainParticipant::contains_entity(
 }
 
 ReturnCode_t DomainParticipant::get_current_time(
-        fastdds::dds::Time_t& current_time) const
+        fastrtps::Time_t& current_time) const
 {
     return impl_->get_current_time(current_time);
 }
@@ -789,31 +444,12 @@ TypeSupport DomainParticipant::find_type(
     return impl_->find_type(type_name);
 }
 
-ReturnCode_t DomainParticipant::register_service_type(
-        rpc::ServiceTypeSupport service_type,
-        const std::string& service_type_name)
-{
-    return impl_->register_service_type(service_type, service_type_name);
-}
-
-ReturnCode_t DomainParticipant::unregister_service_type(
-        const std::string& service_name)
-{
-    return impl_->unregister_service_type(service_name);
-}
-
-rpc::ServiceTypeSupport DomainParticipant::find_service_type(
-        const std::string& service_type_name) const
-{
-    return impl_->find_service_type(service_type_name);
-}
-
-InstanceHandle_t DomainParticipant::get_instance_handle() const
+const InstanceHandle_t& DomainParticipant::get_instance_handle() const
 {
     return impl_->get_instance_handle();
 }
 
-const fastdds::rtps::GUID_t& DomainParticipant::guid() const
+const fastrtps::rtps::GUID_t& DomainParticipant::guid() const
 {
     return impl_->guid();
 }
@@ -824,18 +460,39 @@ std::vector<std::string> DomainParticipant::get_participant_names() const
 }
 
 bool DomainParticipant::new_remote_endpoint_discovered(
-        const fastdds::rtps::GUID_t& partguid,
+        const fastrtps::rtps::GUID_t& partguid,
         uint16_t userId,
-        fastdds::rtps::EndpointKind_t kind)
+        fastrtps::rtps::EndpointKind_t kind)
 {
     return impl_->new_remote_endpoint_discovered(partguid, userId, kind);
+}
+
+fastrtps::rtps::ResourceEvent& DomainParticipant::get_resource_event() const
+{
+    return impl_->get_resource_event();
+}
+
+fastrtps::rtps::SampleIdentity DomainParticipant::get_type_dependencies(
+        const fastrtps::types::TypeIdentifierSeq& in) const
+{
+    return impl_->get_type_dependencies(in);
+}
+
+fastrtps::rtps::SampleIdentity DomainParticipant::get_types(
+        const fastrtps::types::TypeIdentifierSeq& in) const
+{
+    return impl_->get_types(in);
+}
+
+ReturnCode_t DomainParticipant::register_remote_type(
+        const fastrtps::types::TypeInformation& type_information,
+        const std::string& type_name,
+        std::function<void(const std::string& name, const fastrtps::types::DynamicType_ptr type)>& callback)
+{
+    return impl_->register_remote_type(type_information, type_name, callback);
 }
 
 bool DomainParticipant::has_active_entities()
 {
     return impl_->has_active_entities();
 }
-
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima

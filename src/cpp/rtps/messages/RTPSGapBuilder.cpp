@@ -20,23 +20,8 @@
 #include "RTPSGapBuilder.hpp"
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
-
-RTPSGapBuilder::RTPSGapBuilder(
-        RTPSMessageGroup& group)
-    : group_(group)
-{
-}
-
-RTPSGapBuilder::RTPSGapBuilder(
-        RTPSMessageGroup& group,
-        const GUID_t& reader_guid)
-    : with_specific_destination_(true)
-    , group_(group)
-    , reader_guid_(reader_guid)
-{
-}
 
 RTPSGapBuilder::~RTPSGapBuilder()
 {
@@ -84,8 +69,8 @@ bool RTPSGapBuilder::flush()
     if (is_gap_pending_)
     {
         bool ok = with_specific_destination_ ?
-                group_.add_gap(initial_sequence_, gap_bitmap_, reader_guid_) :
-                group_.add_gap(initial_sequence_, gap_bitmap_);
+            group_.add_gap(initial_sequence_, gap_bitmap_, reader_guid_) :
+            group_.add_gap(initial_sequence_, gap_bitmap_);
         if (!ok)
         {
             return false;
@@ -97,5 +82,5 @@ bool RTPSGapBuilder::flush()
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

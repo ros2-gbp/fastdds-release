@@ -20,10 +20,9 @@
 #include <asio.hpp>
 #include <rtps/transport/TCPChannelResource.h>
 #include <rtps/transport/TCPTransportInterface.h>
-#include <fastdds/rtps/transport/NetworkBuffer.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class MockTCPChannelResource;
@@ -31,7 +30,6 @@ class MockTCPChannelResource;
 using TCPChannelResource = eprosima::fastdds::rtps::TCPChannelResource;
 using TCPTransportDescriptor = eprosima::fastdds::rtps::TCPTransportDescriptor;
 using TCPTransportInterface = eprosima::fastdds::rtps::TCPTransportInterface;
-using NetworkBuffer = eprosima::fastdds::rtps::NetworkBuffer;
 
 class MockTCPChannelResource : public TCPChannelResource
 {
@@ -55,15 +53,8 @@ public:
     size_t send(
             const octet* header,
             size_t header_size,
-            const octet* data,
-            size_t data_size,
-            asio::error_code& ec);
-
-    size_t send(
-            const octet* header,
-            size_t header_size,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
+            const octet* buffer,
+            size_t size,
             asio::error_code& ec) override;
 
     asio::ip::tcp::endpoint remote_endpoint() const override;
@@ -101,7 +92,7 @@ public:
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif //MOCK_TCP_CHANNEL_RESOURCE_H

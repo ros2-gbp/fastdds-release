@@ -16,21 +16,17 @@
  * @file Token.cpp
  */
 
-#include <fastdds/rtps/common/Token.hpp>
+#include <fastdds/rtps/common/Token.h>
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+using namespace eprosima::fastrtps::rtps;
 
-std::string* DataHolderHelper::find_property_value(
-        DataHolder& data_holder,
-        const std::string& name)
+std::string* DataHolderHelper::find_property_value(DataHolder& data_holder, const std::string& name)
 {
     std::string* returnedValue = nullptr;
 
-    for (auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
+    for(auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &property->value();
             break;
@@ -40,15 +36,13 @@ std::string* DataHolderHelper::find_property_value(
     return returnedValue;
 }
 
-const std::string* DataHolderHelper::find_property_value(
-        const DataHolder& data_holder,
-        const std::string& name)
+const std::string* DataHolderHelper::find_property_value(const DataHolder& data_holder, const std::string& name)
 {
     const std::string* returnedValue = nullptr;
 
-    for (auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
+    for(auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &property->value();
             break;
@@ -58,15 +52,13 @@ const std::string* DataHolderHelper::find_property_value(
     return returnedValue;
 }
 
-Property* DataHolderHelper::find_property(
-        DataHolder& data_holder,
-        const std::string& name)
+Property* DataHolderHelper::find_property(DataHolder& data_holder, const std::string& name)
 {
     Property* returnedValue = nullptr;
 
-    for (auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
+    for(auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &(*property);
             break;
@@ -76,15 +68,13 @@ Property* DataHolderHelper::find_property(
     return returnedValue;
 }
 
-const Property* DataHolderHelper::find_property(
-        const DataHolder& data_holder,
-        const std::string& name)
+const Property* DataHolderHelper::find_property(const DataHolder& data_holder, const std::string& name)
 {
     const Property* returnedValue = nullptr;
 
-    for (auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
+    for(auto property = data_holder.properties().begin(); property != data_holder.properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &(*property);
             break;
@@ -94,16 +84,13 @@ const Property* DataHolderHelper::find_property(
     return returnedValue;
 }
 
-std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(
-        DataHolder& data_holder,
-        const std::string& name)
+std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(DataHolder& data_holder, const std::string& name)
 {
     std::vector<uint8_t>* returnedValue = nullptr;
 
-    for (auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end();
-            ++property)
+    for(auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &property->value();
             break;
@@ -113,16 +100,13 @@ std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(
     return returnedValue;
 }
 
-const std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(
-        const DataHolder& data_holder,
-        const std::string& name)
+const std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(const DataHolder& data_holder, const std::string& name)
 {
     const std::vector<uint8_t>* returnedValue = nullptr;
 
-    for (auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end();
-            ++property)
+    for(auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &property->value();
             break;
@@ -132,16 +116,13 @@ const std::vector<uint8_t>* DataHolderHelper::find_binary_property_value(
     return returnedValue;
 }
 
-BinaryProperty* DataHolderHelper::find_binary_property(
-        DataHolder& data_holder,
-        const std::string& name)
+BinaryProperty* DataHolderHelper::find_binary_property(DataHolder& data_holder, const std::string& name)
 {
     BinaryProperty* returnedValue = nullptr;
 
-    for (auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end();
-            ++property)
+    for(auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &(*property);
             break;
@@ -151,16 +132,13 @@ BinaryProperty* DataHolderHelper::find_binary_property(
     return returnedValue;
 }
 
-const BinaryProperty* DataHolderHelper::find_binary_property(
-        const DataHolder& data_holder,
-        const std::string& name)
+const BinaryProperty* DataHolderHelper::find_binary_property(const DataHolder& data_holder, const std::string& name)
 {
     const BinaryProperty* returnedValue = nullptr;
 
-    for (auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end();
-            ++property)
+    for(auto property = data_holder.binary_properties().begin(); property != data_holder.binary_properties().end(); ++property)
     {
-        if (property->name().compare(name) == 0)
+        if(property->name().compare(name) == 0)
         {
             returnedValue = &(*property);
             break;
@@ -170,9 +148,7 @@ const BinaryProperty* DataHolderHelper::find_binary_property(
     return returnedValue;
 }
 
-size_t DataHolderHelper::serialized_size(
-        const DataHolder& data_holder,
-        size_t current_alignment)
+size_t DataHolderHelper::serialized_size(const DataHolder& data_holder, size_t current_alignment)
 {
     size_t initial_alignment = current_alignment;
 
@@ -183,21 +159,13 @@ size_t DataHolderHelper::serialized_size(
     return current_alignment - initial_alignment;
 }
 
-size_t DataHolderHelper::serialized_size(
-        const DataHolderSeq& data_holders,
-        size_t current_alignment)
+size_t DataHolderHelper::serialized_size(const DataHolderSeq& data_holders, size_t current_alignment)
 {
     size_t initial_alignment = current_alignment;
 
     current_alignment += 4 + alignment(current_alignment, 4);
-    for (auto data_holder = data_holders.begin(); data_holder != data_holders.end(); ++data_holder)
-    {
+    for(auto data_holder = data_holders.begin(); data_holder != data_holders.end(); ++data_holder)
         current_alignment += serialized_size(*data_holder, current_alignment);
-    }
 
     return current_alignment - initial_alignment;
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

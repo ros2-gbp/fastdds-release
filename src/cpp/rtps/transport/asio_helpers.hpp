@@ -15,10 +15,9 @@
 #ifndef RTPS_TRANSPORT__ASIO_HELPERS_HPP_
 #define RTPS_TRANSPORT__ASIO_HELPERS_HPP_
 
-#include <chrono>
 #include <cstdint>
 
-#include "../network/asio.hpp"
+#include <asio.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -42,7 +41,7 @@ struct asio_helpers
      *
      * @return true if the buffer size was successfully set, false otherwise.
      */
-    template<typename BufferOptionType, typename SocketType>
+    template <typename BufferOptionType, typename SocketType>
     static inline bool try_setting_buffer_size(
             SocketType& socket,
             const uint32_t initial_buffer_value,
@@ -51,52 +50,21 @@ struct asio_helpers
     {
         asio::error_code ec;
 
-        assert(initial_buffer_value >= minimum_buffer_value);
-
         final_buffer_value = initial_buffer_value;
-        while (final_buffer_value > minimum_buffer_value)
+        while (final_buffer_value >= minimum_buffer_value)
         {
-            int32_t value_to_set = static_cast<int32_t>(final_buffer_value);
-            socket.set_option(BufferOptionType(value_to_set), ec);
+            socket.set_option(BufferOptionType(static_cast<int32_t>(final_buffer_value)), ec);
             if (!ec)
             {
-                BufferOptionType option;
-                socket.get_option(option, ec);
-                if (!ec)
-                {
-                    if (option.value() == value_to_set)
-                    {
-                        // Option actually set to the desired value
-                        return true;
-                    }
-                    // Try again with the value actually set
-                    final_buffer_value = option.value();
-                    continue;
-                }
-                // Could not determine the actual value, even though the option was set successfully.
-                // The current buffer size is not defined.
-                return false;
+                return true;
             }
 
             final_buffer_value /= 2;
         }
 
-        // Perform a final attempt to set the minimum value
         final_buffer_value = minimum_buffer_value;
-        int32_t value_to_set = static_cast<int32_t>(final_buffer_value);
-        socket.set_option(BufferOptionType(value_to_set), ec);
-        if (!ec)
-        {
-            // Last attempt was successful. Get the actual value set.
-            BufferOptionType option;
-            socket.get_option(option, ec);
-            if (!ec && (option.value() >= value_to_set))
-            {
-                final_buffer_value = option.value();
-                return true;
-            }
-        }
-        return false;
+        socket.set_option(BufferOptionType(final_buffer_value), ec);
+        return !ec;
     }
 
     /**
@@ -113,7 +81,7 @@ struct asio_helpers
      *
      * @return true if the buffer size was successfully set, false otherwise.
      */
-    template<typename BufferOptionType, typename SocketType>
+    template <typename BufferOptionType, typename SocketType>
     static inline bool configure_buffer_size(
             SocketType& socket,
             const uint32_t initial_buffer_value,
@@ -175,43 +143,6 @@ struct asio_helpers
             socket, receive_buffer_size, minimum_socket_buffer, final_receive_buffer_size);
 
         return send_buffer_size_set && receive_buffer_size_set;
-    }
-
-    /**
-     * @brief Convert a duration into the normalized `struct timeval` representation expected by
-     * `SO_SNDTIMEO` / `SO_RCVTIMEO`.
-     *
-     * The kernel requires `tv_usec` to be normalized to [0, 999999]. Passing the raw microsecond
-     * count makes any duration of one second or longer out of range, and the option is then rejected
-     * with `EINVAL`, silently leaving the socket without a timeout.
-     *
-     * @tparam Rep Representation type of the input duration.
-     * @tparam Period Period type of the input duration.
-     *
-     * @param timeout Timeout to convert. Non-positive values are mapped to a zero timeout.
-     * @param time_struct Output parameter receiving the normalized timeval.
-     */
-    template<typename Rep, typename Period>
-    static inline void duration_to_timeval(
-            const std::chrono::duration<Rep, Period>& timeout,
-            timeval& time_struct)
-    {
-        using namespace std::chrono;
-
-        if (timeout > timeout.zero())
-        {
-            const auto total_microseconds = duration_cast<microseconds>(timeout);
-            const auto whole_seconds = duration_cast<seconds>(total_microseconds);
-
-            time_struct.tv_sec = static_cast<decltype(time_struct.tv_sec)>(whole_seconds.count());
-            time_struct.tv_usec = static_cast<decltype(time_struct.tv_usec)>(
-                (total_microseconds - whole_seconds).count());
-        }
-        else
-        {
-            time_struct.tv_sec = 0;
-            time_struct.tv_usec = 0;
-        }
     }
 
 };

@@ -16,7 +16,8 @@ class bank_account
 public:
   void deposit(int amount)
   {
-    pool_.executor().execute(
+    execution::execute(
+        pool_.executor(),
         [this, amount]
         {
           balance_ += amount;
@@ -25,7 +26,8 @@ public:
 
   void withdraw(int amount)
   {
-    pool_.executor().execute(
+    execution::execute(
+        pool_.executor(),
         [this, amount]
         {
           if (balance_ >= amount)
@@ -35,7 +37,8 @@ public:
 
   void print_balance() const
   {
-    pool_.executor().execute(
+    execution::execute(
+        pool_.executor(),
         [this]
         {
           std::cout << "balance = " << balance_ << "\n";

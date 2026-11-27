@@ -18,16 +18,13 @@
 
 #include <statistics/rtps/StatisticsBase.hpp>
 
-#include <rtps/writer/BaseWriter.hpp>
-#include <statistics/types/types.hpp>
+#include <fastdds/rtps/writer/RTPSWriter.h>
 
+using namespace eprosima::fastdds::statistics;
 
-namespace eprosima {
-namespace fastdds {
-namespace statistics {
-
-using eprosima::fastdds::rtps::BaseWriter;
-using eprosima::fastdds::rtps::GUID_t;
+using eprosima::fastrtps::RecursiveTimedMutex;
+using eprosima::fastrtps::rtps::RTPSWriter;
+using eprosima::fastrtps::rtps::GUID_t;
 
 StatisticsWriterImpl::StatisticsWriterImpl()
 {
@@ -46,32 +43,27 @@ StatisticsWriterAncillary* StatisticsWriterImpl::get_members() const
 RecursiveTimedMutex& StatisticsWriterImpl::get_statistics_mutex()
 {
     static_assert(
-        std::is_base_of<StatisticsWriterImpl, BaseWriter>::value,
+        std::is_base_of<StatisticsWriterImpl, RTPSWriter>::value,
         "Must be call from a writer.");
 
-    return static_cast<BaseWriter*>(this)->getMutex();
+    return static_cast<RTPSWriter*>(this)->getMutex();
 }
 
 const GUID_t& StatisticsWriterImpl::get_guid() const
 {
-    using eprosima::fastdds::rtps::BaseWriter;
+    using eprosima::fastrtps::rtps::RTPSWriter;
 
     static_assert(
-        std::is_base_of<StatisticsWriterImpl, BaseWriter>::value,
-        "This method should be called from an actual BaseWriter");
+        std::is_base_of<StatisticsWriterImpl, RTPSWriter>::value,
+        "This method should be called from an actual RTPSWriter");
 
-    return static_cast<const BaseWriter*>(this)->getGuid();
+    return static_cast<const RTPSWriter*>(this)->getGuid();
 }
 
 void StatisticsWriterImpl::on_sample_datas(
-        const fastdds::rtps::SampleIdentity& sample_identity,
+        const eprosima::fastrtps::rtps::SampleIdentity& sample_identity,
         size_t num_sent_submessages)
 {
-    if (!are_statistics_writers_enabled(EventKind::SAMPLE_DATAS))
-    {
-        return;
-    }
-
     SampleIdentityCount notification;
     notification.sample_id(to_statistics_type(sample_identity));
     notification.count(static_cast<uint64_t>(num_sent_submessages));
@@ -90,23 +82,18 @@ void StatisticsWriterImpl::on_sample_datas(
 void StatisticsWriterImpl::on_data_generated(
         size_t num_destinations)
 {
-    std::lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+    std::lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
     auto members = get_members();
     members->data_counter += static_cast<uint64_t>(num_destinations);
 }
 
 void StatisticsWriterImpl::on_data_sent()
 {
-    if (!are_statistics_writers_enabled(EventKind::DATA_COUNT))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
 
     {
-        std::lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+        std::lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
         auto members = get_members();
         notification.count(members->data_counter);
     }
@@ -126,11 +113,6 @@ void StatisticsWriterImpl::on_data_sent()
 void StatisticsWriterImpl::on_heartbeat(
         uint32_t count)
 {
-    if (!are_statistics_writers_enabled(EventKind::HEARTBEAT_COUNT))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
     notification.count(count);
@@ -149,16 +131,11 @@ void StatisticsWriterImpl::on_heartbeat(
 
 void StatisticsWriterImpl::on_gap()
 {
-    if (!are_statistics_writers_enabled(EventKind::GAP_COUNT))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
 
     {
-        std::lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+        std::lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
         notification.count(++get_members()->gap_counter);
     }
 
@@ -182,16 +159,11 @@ void StatisticsWriterImpl::on_resent_data(
         return;
     }
 
-    if (!are_statistics_writers_enabled(EventKind::RESENT_DATAS))
-    {
-        return;
-    }
-
     EntityCount notification;
     notification.guid(to_statistics_type(get_guid()));
 
     {
-        std::lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+        std::lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
         notification.count(get_members()->resent_counter += to_send);
     }
 
@@ -214,16 +186,11 @@ void StatisticsWriterImpl::on_publish_throughput(
 
     if (payload > 0 )
     {
-        if (!are_statistics_writers_enabled(EventKind::PUBLICATION_THROUGHPUT))
-        {
-            return;
-        }
-
         // update state
         time_point<steady_clock> former_timepoint;
         auto& current_timepoint = get_members()->last_history_change_;
         {
-            lock_guard<fastdds::RecursiveTimedMutex> lock(get_statistics_mutex());
+            lock_guard<fastrtps::RecursiveTimedMutex> lock(get_statistics_mutex());
             former_timepoint = current_timepoint;
             current_timepoint = steady_clock::now();
         }
@@ -243,7 +210,3 @@ void StatisticsWriterImpl::on_publish_throughput(
                 });
     }
 }
-
-}  // namespace statistics
-}  // namespace fastdds
-}  // namespace eprosima

@@ -19,8 +19,8 @@
 #ifndef RTPS_HISTORY_BASICPAYLOADPOOL_HPP
 #define RTPS_HISTORY_BASICPAYLOADPOOL_HPP
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/history/IPayloadPool.h>
 
 #include <rtps/history/CacheChangePool.h>
 #include <rtps/history/PoolConfig.h>
@@ -28,7 +28,7 @@
 #include <memory>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 namespace detail {
@@ -59,10 +59,9 @@ public:
                                 [&payload_pool, &config](
                                     CacheChange_t* change)
                                 {
-                                    if (payload_pool->get_payload(config.payload_initial_size,
-                                    change->serializedPayload))
+                                    if (payload_pool->get_payload(config.payload_initial_size, *change))
                                     {
-                                        payload_pool->release_payload(change->serializedPayload);
+                                        payload_pool->release_payload(*change);
                                     }
                                 });
             }
@@ -104,7 +103,7 @@ private:
 };
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_HISTORY_BASICPAYLOADPOOL_HPP

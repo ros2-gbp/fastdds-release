@@ -24,13 +24,13 @@
 #include <mutex>
 #include <vector>
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/authentication/Authentication.h>
-#include <security/artifact_providers/Pkcs11Provider.hpp>
+#include <fastdds/rtps/security/authentication/Authentication.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
 #include <security/authentication/PKIHandshakeHandle.h>
+#include <security/artifact_providers/Pkcs11Provider.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class ResourceEvent;
@@ -45,7 +45,7 @@ public:
             IdentityHandle** local_identity_handle,
             GUID_t& adjusted_participant_key,
             const uint32_t domain_id,
-            const PropertyPolicy& part_props,
+            const RTPSParticipantAttributes& participant_attr,
             const GUID_t& candidate_participant_key,
             SecurityException& exception) override;
 
@@ -142,7 +142,7 @@ public:
      * @ref validate_local_identity for the local expiry timer to be armed.
      */
     void set_event_resource(
-            eprosima::fastdds::rtps::ResourceEvent& service) override;
+            eprosima::fastrtps::rtps::ResourceEvent& service) override;
 
     std::unique_ptr<detail::Pkcs11Provider> pkcs11_provider;
 
@@ -181,17 +181,17 @@ private:
     AuthenticationListener* listener_ = nullptr;
     std::mutex listener_mtx_;
 
-    eprosima::fastdds::rtps::ResourceEvent* event_resource_ = nullptr;
+    eprosima::fastrtps::rtps::ResourceEvent* event_resource_ = nullptr;
 
     //! Graveyard for self-expired timers, destroyed outside their own callback to
     //! avoid deleting a TimedEvent while it is firing (use-after-free).
-    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> expired_timers_;
+    std::vector<std::unique_ptr<eprosima::fastrtps::rtps::TimedEvent>> expired_timers_;
     std::mutex expired_timers_mtx_;
 };
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_PKIDH_H_

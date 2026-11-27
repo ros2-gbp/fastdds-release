@@ -19,25 +19,21 @@
 
 #include "TMutex.hpp"
 
-#include <algorithm>
 #include <array>
+#include <algorithm>
 #include <cassert>
-#include <pthread.h>
 
 // TODO contar que solo bloquea una vez y nunca mas despues de timeout.
 // TODO si se bloquea el dos, que no se bloqueen los posteriores
 
-using namespace eprosima::fastdds;
+using namespace eprosima::fastrtps;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 
 std::atomic<pid_t> g_tmutex_thread_pid(0);
-// *INDENT-OFF* Uncrustify parse this as a function declaration instead of a function pointer.
 int (*g_origin_lock_func)(pthread_mutex_t*){nullptr};
 int (*g_origin_timedlock_func)(pthread_mutex_t*, const struct timespec*){nullptr};
-int (*g_origin_clocklock_func)(pthread_mutex_t*, clockid_t, const struct timespec*){nullptr};
-// *INDENT-ON*
 
 typedef struct
 {
@@ -50,12 +46,11 @@ constexpr size_t g_tmutex_records_max_length = 30;
 std::array<tmutex_record, g_tmutex_records_max_length>  g_tmutex_records{{{LockType::LOCK, nullptr, 0}}};
 int32_t g_tmutex_records_end = -1;
 
-int32_t tmutex_find_record(
-        pthread_mutex_t* mutex)
+int32_t tmutex_find_record(pthread_mutex_t* mutex)
 {
     int32_t returned_position = -1;
 
-    for (int32_t position = 0; position <= g_tmutex_records_end; ++position)
+    for(int32_t position = 0; position <= g_tmutex_records_end; ++position)
     {
         if (mutex == g_tmutex_records[position].mutex)
         {
@@ -67,10 +62,10 @@ int32_t tmutex_find_record(
     return returned_position;
 }
 
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
-void eprosima::fastdds::tmutex_start_recording()
+void eprosima::fastrtps::tmutex_start_recording()
 {
     assert(0 == g_tmutex_thread_pid);
     g_tmutex_thread_pid = GET_TID();
@@ -78,15 +73,13 @@ void eprosima::fastdds::tmutex_start_recording()
     g_tmutex_records_end = -1;
 }
 
-void eprosima::fastdds::tmutex_stop_recording()
+void eprosima::fastrtps::tmutex_stop_recording()
 {
     assert(0 < g_tmutex_thread_pid);
     g_tmutex_thread_pid = 0;
 }
 
-void eprosima::fastdds::tmutex_record_mutex_(
-        LockType type,
-        pthread_mutex_t* mutex)
+void eprosima::fastrtps::tmutex_record_mutex_(LockType type, pthread_mutex_t* mutex)
 {
     assert(0 < g_tmutex_thread_pid);
 
@@ -104,22 +97,22 @@ void eprosima::fastdds::tmutex_record_mutex_(
     ++g_tmutex_records[position].count;
 }
 
-size_t eprosima::fastdds::tmutex_get_num_mutexes()
+size_t eprosima::fastrtps::tmutex_get_num_mutexes()
 {
     assert(0 == g_tmutex_thread_pid);
     return g_tmutex_records_end + 1;
 }
 
-size_t eprosima::fastdds::tmutex_get_num_lock_type()
+size_t eprosima::fastrtps::tmutex_get_num_lock_type()
 {
     size_t counter = 0;
 
-    if (-1 < g_tmutex_records_end)
+    if(-1 < g_tmutex_records_end)
     {
         std::for_each(g_tmutex_records.begin(), g_tmutex_records.begin() + g_tmutex_records_end + 1,
                 [&](const tmutex_record& record)
                 {
-                    if (record.type == LockType::LOCK)
+                    if(record.type == LockType::LOCK)
                     {
                         ++counter;
                     }
@@ -129,16 +122,16 @@ size_t eprosima::fastdds::tmutex_get_num_lock_type()
     return counter;
 }
 
-size_t eprosima::fastdds::tmutex_get_num_timedlock_type()
+size_t eprosima::fastrtps::tmutex_get_num_timedlock_type()
 {
     size_t counter = 0;
 
-    if (-1 < g_tmutex_records_end)
+    if(-1 < g_tmutex_records_end)
     {
         std::for_each(g_tmutex_records.begin(), g_tmutex_records.begin() + g_tmutex_records_end + 1,
                 [&](const tmutex_record& record)
                 {
-                    if (record.type == LockType::TIMED_LOCK)
+                    if(record.type == LockType::TIMED_LOCK)
                     {
                         ++counter;
                     }
@@ -148,33 +141,23 @@ size_t eprosima::fastdds::tmutex_get_num_timedlock_type()
     return counter;
 }
 
-pthread_mutex_t* eprosima::fastdds::tmutex_get_mutex(
-        const size_t index)
+pthread_mutex_t* eprosima::fastrtps::tmutex_get_mutex(const size_t index)
 {
     assert(index <= size_t(g_tmutex_records_end));
     return g_tmutex_records[index].mutex;
 }
 
-bool eprosima::fastdds::tmutex_lock_mutex(
-        const size_t index)
+void eprosima::fastrtps::tmutex_lock_mutex(const size_t index)
 {
     assert(index <= size_t(g_tmutex_records_end));
-    if (LockType::TIMED_LOCK == g_tmutex_records[index].type)
+
+    if(g_origin_lock_func != nullptr)
     {
-
-        if (g_origin_lock_func != nullptr)
-        {
-            (*g_origin_lock_func)(g_tmutex_records[index].mutex);
-        }
-
-        return true;
+        (*g_origin_lock_func)(g_tmutex_records[index].mutex);
     }
-
-    return false;
 }
 
-void eprosima::fastdds::tmutex_unlock_mutex(
-        const size_t index)
+void eprosima::fastrtps::tmutex_unlock_mutex(const size_t index)
 {
     assert(index <= size_t(g_tmutex_records_end));
     pthread_mutex_unlock(g_tmutex_records[index].mutex);

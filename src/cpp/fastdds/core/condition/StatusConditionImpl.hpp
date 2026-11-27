@@ -21,10 +21,12 @@
 
 #include <mutex>
 
-#include <fastdds/dds/core/ReturnCode.hpp>
 #include <fastdds/dds/core/status/StatusMask.hpp>
+#include <fastrtps/types/TypesBase.h>
 
 #include <fastdds/core/condition/ConditionNotifier.hpp>
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -78,7 +80,10 @@ struct StatusConditionImpl
      * @brief Retrieves the list of communication statuses that are currently triggered.
      * @return Triggered status.
      */
-    const StatusMask& get_raw_status() const;
+    const StatusMask& get_raw_status() const
+    {
+        return status_;
+    }
 
     /**
      * @brief Set the trigger value of a specific status

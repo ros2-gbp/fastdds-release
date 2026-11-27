@@ -16,15 +16,15 @@
  * @file RemoteLocators.hpp
  */
 
-#ifndef FASTDDS_RTPS_COMMON__REMOTELOCATORS_HPP
-#define FASTDDS_RTPS_COMMON__REMOTELOCATORS_HPP
+#ifndef _FASTDDS_RTPS_COMMON_REMOTELOCATORS_HPP_
+#define _FASTDDS_RTPS_COMMON_REMOTELOCATORS_HPP_
 
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
 #include <fastdds/dds/log/Log.hpp>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 /**
@@ -193,7 +193,6 @@ inline std::istream& operator >>(
             if (letter == 'M')
             {
                 input.get(sb_aux, '[');
-                input >> punct;
 
                 // Read every locator
                 while (punct != ']')
@@ -208,7 +207,6 @@ inline std::istream& operator >>(
 
             if (letter == 'U')
             {
-                input.get(sb_aux, '[');
                 input >> punct;
 
                 // Read every locator
@@ -226,7 +224,7 @@ inline std::istream& operator >>(
         {
             locList.unicast.clear();
             locList.multicast.clear();
-            EPROSIMA_LOG_WARNING(REMOTE_LOCATOR_LIST, "Error deserializing RemoteLocatorList");
+            logWarning(REMOTE_LOCATOR_LIST, "Error deserializing RemoteLocatorList");
         }
 
         input.exceptions(excp_mask);
@@ -235,8 +233,8 @@ inline std::istream& operator >>(
     return input;
 }
 
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace rtps */
+} /* namespace fastrtps */
+} /* namespace eprosima */
 
-#endif // FASTDDS_RTPS_COMMON__REMOTELOCATORS_HPP
+#endif /* _FASTDDS_RTPS_COMMON_REMOTELOCATORS_HPP_ */

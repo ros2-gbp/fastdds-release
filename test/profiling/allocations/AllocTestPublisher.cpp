@@ -17,151 +17,129 @@
  *
  */
 
-#include "AllocTestPublisher.hpp"
+#include "AllocTestPublisher.h"
 
 #include <thread>
-#include <chrono>
 
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
-#include <fastdds/dds/publisher/qos/PublisherQos.hpp>
-#include <fastdds/dds/topic/qos/TopicQos.hpp>
+#include <fastrtps/attributes/ParticipantAttributes.h>
+#include <fastrtps/attributes/PublisherAttributes.h>
+#include <fastrtps/Domain.h>
+#include <fastrtps/participant/Participant.h>
+#include <fastrtps/publisher/Publisher.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "AllocTestCommon.h"
-#include "AllocTestTypePubSubTypes.hpp"
 
-using namespace eprosima::fastdds::dds;
-
-#define CHECK_RETURN_CODE(ret) \
-    if (RETCODE_OK != ret) \
-    { \
-        return false; \
-    }
-
-#define CHECK_ENTITY_CREATION(entity) \
-    if (nullptr == entity) \
-    { \
-        return false; \
-    }
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 AllocTestPublisher::AllocTestPublisher()
-    : type_(new AllocTestTypePubSubType())
-    , participant_(nullptr)
-    , topic_(nullptr)
-    , publisher_(nullptr)
-    , writer_(nullptr)
-    , profile_("")
-    , output_file_("")
-    , matched_(0)
+    : mp_participant(nullptr)
+    , mp_publisher(nullptr)
 {
-}
 
-AllocTestPublisher::~AllocTestPublisher()
-{
-    if (participant_ != nullptr)
-    {
-        participant_->delete_contained_entities();
-        DomainParticipantFactory::get_shared_instance()->delete_participant(participant_);
-        participant_ = nullptr;
-    }
+
 }
 
 bool AllocTestPublisher::init(
         const char* profile,
-        uint32_t domain_id,
-        const std::string& output_file)
+        int domainId,
+        const std::string& outputFile)
 {
-    data_.index(0);
+    m_data.index(0);
 
-    profile_ = profile;
-    output_file_ = output_file;
+    m_profile = profile;
+    m_outputFile = outputFile;
+    Domain::loadXMLProfilesFile("test_xml_profiles.xml");
 
-    ReturnCode_t ret = RETCODE_OK;
+    ParticipantAttributes participant_att;
+    if (eprosima::fastrtps::xmlparser::XMLP_ret::XML_OK ==
+            eprosima::fastrtps::xmlparser::XMLProfileManager::fillParticipantAttributes("test_participant_profile",
+            participant_att))
+    {
+        participant_att.domainId = domainId;
+        mp_participant = Domain::createParticipant(participant_att);
+    }
 
-    std::shared_ptr<DomainParticipantFactory> factory = DomainParticipantFactory::get_shared_instance();
-    ret = factory->load_XML_profiles_file("test_xml_profile.xml");
-    CHECK_RETURN_CODE(ret);
+    if (mp_participant == nullptr)
+    {
+        return false;
+    }
 
-    DomainParticipantQos pqos;
-    ret = factory->get_participant_qos_from_profile("test_participant_profile", pqos);
-    CHECK_RETURN_CODE(ret);
+    //REGISTER THE TYPE
+    Domain::registerType(mp_participant, &m_type);
 
-    participant_ = factory->create_participant(domain_id, pqos);
-    CHECK_ENTITY_CREATION(participant_);
-
-    ret = type_.register_type(participant_);
-    CHECK_RETURN_CODE(ret);
-
-    topic_ = participant_->create_topic("AllocTestTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
-    CHECK_ENTITY_CREATION(topic_);
-
-    publisher_ = participant_->create_publisher(PUBLISHER_QOS_DEFAULT);
-    CHECK_ENTITY_CREATION(publisher_);
-
-    std::string prof = "test_publisher_profile_" + profile_;
-    writer_ = publisher_->create_datawriter_with_profile(topic_, prof, this);
-    CHECK_ENTITY_CREATION(writer_);
+    //CREATE THE PUBLISHER
+    std::string prof("test_publisher_profile_");
+    prof.append(profile);
+    mp_publisher = Domain::createPublisher(mp_participant, prof, (PublisherListener*)&m_listener);
+    if (mp_publisher == nullptr)
+    {
+        return false;
+    }
 
     bool show_allocation_traces = std::getenv("FASTDDS_PROFILING_PRINT_TRACES") != nullptr;
     eprosima_profiling::entities_created(show_allocation_traces);
-    return ret == RETCODE_OK;
+    return true;
+
 }
 
-void AllocTestPublisher::on_publication_matched(
-        DataWriter* /*writer*/,
-        const PublicationMatchedStatus& status)
+AllocTestPublisher::~AllocTestPublisher()
 {
-    if (status.current_count_change == 1)
+    Domain::removeParticipant(mp_participant);
+}
+
+void AllocTestPublisher::PubListener::onPublicationMatched(
+        Publisher* /*pub*/,
+        MatchingInfo& info)
+{
+    std::unique_lock<std::mutex> lock(mtx);
+    if (info.status == MATCHED_MATCHING)
     {
-        matched_++;
+        n_matched++;
         std::cout << "Publisher matched" << std::endl;
-    }
-    else if (status.current_count_change == -1)
-    {
-        matched_--;
-        std::cout << "Publisher unmatched" << std::endl;
     }
     else
     {
-        std::cout << status.current_count_change
-                  << " is not a valid value for PublicationMatchedStatus current count change" << std::endl;
+        n_matched--;
+        std::cout << "Publisher unmatched" << std::endl;
     }
-    cv_.notify_all();
+    cv.notify_all();
 }
 
-bool AllocTestPublisher::is_matched()
+bool AllocTestPublisher::PubListener::is_matched()
 {
-    return matched_ > 0;
+    std::unique_lock<std::mutex> lock(mtx);
+    return n_matched > 0;
 }
 
-void AllocTestPublisher::wait_match()
+void AllocTestPublisher::PubListener::wait_match()
 {
-    std::unique_lock<std::mutex> lck(mtx_);
-    cv_.wait(lck, [this]()
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [this]()
             {
-                return matched_ > 0;
+                return n_matched > 0;
             });
 }
 
-void AllocTestPublisher::wait_unmatch()
+void AllocTestPublisher::PubListener::wait_unmatch()
 {
-    std::unique_lock<std::mutex> lck(mtx_);
-    cv_.wait(lck, [this]()
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [this]()
             {
-                return matched_ <= 0;
+                return n_matched <= 0;
             });
 }
 
 void AllocTestPublisher::run(
         uint32_t samples,
-        bool wait_unmatching)
+        bool wait_unmatch)
 {
     // Restart callgrind graph
     eprosima_profiling::callgrind_zero_count();
 
     std::cout << "Publisher waiting for subscriber..." << std::endl;
-    wait_match();
+    m_listener.wait_match();
 
     // Flush callgrind graph
     eprosima_profiling::callgrind_dump();
@@ -178,7 +156,7 @@ void AllocTestPublisher::run(
         }
         else
         {
-            std::cout << "Message with index: " << data_.index() << " SENT" << std::endl;
+            std::cout << "Message with index: " << m_data.index() << " SENT" << std::endl;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -197,10 +175,10 @@ void AllocTestPublisher::run(
     eprosima_profiling::callgrind_dump();
     eprosima_profiling::all_samples_exchanged();
 
-    if (wait_unmatching)
+    if (wait_unmatch)
     {
         std::cout << "All messages have been sent. Waiting for subscriber to stop." << std::endl;
-        wait_unmatch();
+        m_listener.wait_unmatch();
     }
     else
     {
@@ -211,16 +189,16 @@ void AllocTestPublisher::run(
     // Flush callgrind graph
     eprosima_profiling::callgrind_dump();
     eprosima_profiling::undiscovery_finished();
-    eprosima_profiling::print_results(output_file_, "publisher", profile_);
+    eprosima_profiling::print_results(m_outputFile, "publisher", m_profile);
 }
 
 bool AllocTestPublisher::publish()
 {
-    bool ret = false;
-    if (is_matched())
+    if (m_listener.is_matched())
     {
-        data_.index(data_.index() + 1);
-        ret = (RETCODE_OK == writer_->write(&data_));
+        m_data.index(m_data.index() + 1);
+        mp_publisher->write((void*)&m_data);
+        return true;
     }
-    return ret;
+    return false;
 }

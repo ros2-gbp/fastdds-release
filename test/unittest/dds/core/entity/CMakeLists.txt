@@ -12,26 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(ENTITY_TESTS_SOURCE
-    EntityTests.cpp)
-
-if(ANDROID)
-    if (ANDROID_NATIVE_API_LEVEL LESS 24)
-        list(APPEND ENTITY_TESTS_SOURCE
-            ${ANDROID_IFADDRS_SOURCE_DIR}/ifaddrs.c
-            )
-    endif()
+if(WIN32)
+    add_definitions(-D_WIN32_WINNT=0x0601)
 endif()
 
+set(ENTITY_TESTS_SOURCE
+    ${PROJECT_SOURCE_DIR}/src/cpp/dynamic-types/TypesBase.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Entity.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/condition/Condition.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/condition/ConditionNotifier.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/condition/StatusCondition.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/condition/StatusConditionImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/condition/WaitSetImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
+    EntityTests.cpp)
+
 add_executable(EntityTests ${ENTITY_TESTS_SOURCE})
+target_compile_definitions(EntityTests PRIVATE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
 target_include_directories(EntityTests PRIVATE
-    ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
 )
-target_link_units(EntityTests UNITS dds::condition)
-target_link_libraries(EntityTests
-    fastcdr
-    GTest::gtest)
-gtest_discover_tests(EntityTests)
+target_link_libraries(EntityTests GTest::gtest fastcdr)
+add_gtest(EntityTests SOURCES ${ENTITY_TESTS_SOURCE})

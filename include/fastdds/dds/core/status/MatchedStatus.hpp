@@ -16,8 +16,8 @@
  * @file MatchedStatus.hpp
  */
 
-#ifndef FASTDDS_DDS_CORE_STATUS__MATCHEDSTATUS_HPP
-#define FASTDDS_DDS_CORE_STATUS__MATCHEDSTATUS_HPP
+#ifndef _MATCHED_STATUS_HPP_
+#define _MATCHED_STATUS_HPP_
 
 #include <cstdint>
 
@@ -52,4 +52,4 @@ struct MatchedStatus
 } // namespace fastdds
 } // namespace eprosima
 
-#endif //FASTDDS_DDS_CORE_STATUS__MATCHEDSTATUS_HPP
+#endif //_MATCHED_STATUS_HPP_

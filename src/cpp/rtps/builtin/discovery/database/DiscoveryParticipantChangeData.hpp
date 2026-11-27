@@ -23,7 +23,7 @@
 #include <fastdds/rtps/common/RemoteLocators.hpp>
 #include <fastdds/dds/core/policy/ParameterTypes.hpp>
 
-#include <nlohmann/json.hpp>
+#include <json.hpp>
 #include <rtps/builtin/discovery/database/backup/SharedBackupFunctions.hpp>
 
 namespace eprosima {
@@ -41,12 +41,12 @@ class DiscoveryParticipantChangeData
 public:
 
     DiscoveryParticipantChangeData()
-        : metatraffic_locators_(RemoteLocatorList(0, 0))
+        : metatraffic_locators_(fastrtps::rtps::RemoteLocatorList(0, 0))
     {
     }
 
     DiscoveryParticipantChangeData(
-            RemoteLocatorList metatraffic_locators,
+            fastrtps::rtps::RemoteLocatorList metatraffic_locators,
             bool is_client,
             bool is_local)
         : metatraffic_locators_(metatraffic_locators)
@@ -65,7 +65,7 @@ public:
         return is_local_;
     }
 
-    RemoteLocatorList metatraffic_locators() const
+    fastrtps::rtps::RemoteLocatorList metatraffic_locators() const
     {
         return metatraffic_locators_;
     }
@@ -73,8 +73,7 @@ public:
     void to_json(
             nlohmann::json& j) const
     {
-        j["is_client"] = false;
-        j["is_superclient"] = is_client_;
+        j["is_client"] = is_client_;
         j["is_local"] = is_local_;
         j["metatraffic_locators"] = object_to_string(metatraffic_locators_);
     }
@@ -82,11 +81,10 @@ public:
 private:
 
     // The metatraffic locators of from the serialized payload
-    RemoteLocatorList metatraffic_locators_;
-    // Whether this participant is a CLIENT/SUPER_CLIENT or a SERVER/BACKUP
+    fastrtps::rtps::RemoteLocatorList metatraffic_locators_;
+    // Whether this participant is a CLIENT or a SERVER/BACKUP/SUPER_CLIENT
     // This variable affects the discovery filter to applied to each entity:
-    // false => send all data ; true => send all data but needs special
-    // treatment when matching remote endpoints
+    // false => send all data ; true => send only data that is required to match endpoints
     bool is_client_ = false;
     // Whether this participant (CLIENT OR SERVER) is a client of this server
     bool is_local_ = false;

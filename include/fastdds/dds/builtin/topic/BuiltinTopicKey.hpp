@@ -14,21 +14,32 @@
 
 /**
  * @file BuiltinTopicKey.hpp
+ *
  */
 
-#ifndef FASTDDS_DDS_BUILTIN_TOPIC__BUILTINTOPICKEY_HPP
-#define FASTDDS_DDS_BUILTIN_TOPIC__BUILTINTOPICKEY_HPP
+#ifndef FASTDDS_DDS_BUILTIN_TOPIC_BUILTINTOPICKEY_HPP
+#define FASTDDS_DDS_BUILTIN_TOPIC_BUILTINTOPICKEY_HPP
 
-#include <fastdds/rtps/builtin/data/BuiltinTopicKey.hpp>
+#include <stdint.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace dds {
+namespace builtin {
 
-using BuiltinTopicKey_t = rtps::BuiltinTopicKey_t;
+// following API definition:
+// #define BUILTIN_TOPIC_KEY_TYPE_NATIVE uint32_t
 
-}  // namespace dds
-}  // namespace fastdds
-}  // namespace eprosima
+struct BuiltinTopicKey_t
+{
+    // BUILTIN_TOPIC_KEY_TYPE_NATIVE = long type
+    //!Value
+    uint32_t value[3];
+};
 
-#endif // FASTDDS_DDS_BUILTIN_TOPIC__BUILTINTOPICKEY_HPP
+} // builtin
+} // dds
+} // fastdds
+} // eprosima
+
+#endif // FASTDDS_DDS_BUILTIN_TOPIC_BUILTINTOPICKEY_HPP

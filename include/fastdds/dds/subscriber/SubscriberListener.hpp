@@ -16,14 +16,14 @@
  * @file SubscriberListener.hpp
  */
 
-#ifndef FASTDDS_DDS_SUBSCRIBER__SUBSCRIBERLISTENER_HPP
-#define FASTDDS_DDS_SUBSCRIBER__SUBSCRIBERLISTENER_HPP
+#ifndef _FASTDDS_SUBLISTENER_HPP_
+#define _FASTDDS_SUBLISTENER_HPP_
 
-#include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
-#include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/qos/DeadlineMissedStatus.h>
+#include <fastrtps/qos/LivelinessChangedStatus.h>
 #include <fastdds/dds/core/status/SubscriptionMatchedStatus.hpp>
 #include <fastdds/dds/subscriber/DataReaderListener.hpp>
-#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -44,14 +44,14 @@ public:
     /**
      * @brief Constructor
      */
-    FASTDDS_EXPORTED_API SubscriberListener()
+    RTPS_DllAPI SubscriberListener()
     {
     }
 
     /**
      * @brief Destructor
      */
-    FASTDDS_EXPORTED_API virtual ~SubscriberListener()
+    RTPS_DllAPI virtual ~SubscriberListener()
     {
     }
 
@@ -61,7 +61,7 @@ public:
      *
      * @param sub Subscriber
      */
-    FASTDDS_EXPORTED_API virtual void on_data_on_readers(
+    RTPS_DllAPI virtual void on_data_on_readers(
             Subscriber* sub)
     {
         (void)sub;
@@ -69,8 +69,8 @@ public:
 
 };
 
-} // namespace dds
-} // namespace fastdds
-} // namespace eprosima
+} /* namespace dds */
+} /* namespace fastdds */
+} /* namespace eprosima */
 
-#endif // FASTDDS_DDS_SUBSCRIBER__SUBSCRIBERLISTENER_HPP
+#endif /* _FASTDDS_SUBLISTENER_HPP_ */

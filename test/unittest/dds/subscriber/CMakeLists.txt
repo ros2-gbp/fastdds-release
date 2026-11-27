@@ -12,81 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../profiles/test_xml_profile.xml
-    ${CMAKE_CURRENT_BINARY_DIR}/test_xml_profile.xml
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../profiles/test_xml_profiles.xml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_xml_profiles.xml
     COPYONLY)
 
 set(SUBSCRIBERTESTS_SOURCE SubscriberTests.cpp)
-set(DATAREADERTESTS_SOURCE
-    DataReaderTests.cpp
-    )
-set(DATAREADERINSTANCETESTS_SOURCE DataReaderInstanceTests.cpp
-    )
-set(DATAREADERHISTORYTESTS_SOURCE DataReaderHistoryTests.cpp)
+set(DATAREADERTESTS_SOURCE DataReaderTests.cpp)
 
-if(ANDROID)
-    if (ANDROID_NATIVE_API_LEVEL LESS 24)
-        list(APPEND SUBSCRIBERTESTS_SOURCE
-            ${ANDROID_IFADDRS_SOURCE_DIR}/ifaddrs.c
-            )
-        list(APPEND DATAREADERTESTS_SOURCE
-            ${ANDROID_IFADDRS_SOURCE_DIR}/ifaddrs.c
-            )
-        list(APPEND DATAREADERINSTANCETESTS_SOURCE
-            ${ANDROID_IFADDRS_SOURCE_DIR}/ifaddrs.c
-            )
-        list(APPEND DATAREADERHISTORYTESTS_SOURCE
-            ${ANDROID_IFADDRS_SOURCE_DIR}/ifaddrs.c
-            )
-    endif()
+if(WIN32)
+    add_definitions(-D_WIN32_WINNT=0x0601)
 endif()
 
 add_executable(SubscriberTests ${SUBSCRIBERTESTS_SOURCE})
+target_compile_definitions(SubscriberTests PRIVATE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
 target_include_directories(SubscriberTests PRIVATE
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/test/utils
     )
-target_link_libraries(SubscriberTests fastdds fastcdr foonathan_memory
+target_link_libraries(SubscriberTests fastrtps fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
-gtest_discover_tests(SubscriberTests)
+add_gtest(SubscriberTests SOURCES ${SUBSCRIBERTESTS_SOURCE})
 
 add_executable(DataReaderTests ${DATAREADERTESTS_SOURCE})
+target_compile_definitions(DataReaderTests PRIVATE
+    BOOST_ASIO_STANDALONE
+    ASIO_STANDALONE
+    ASIO_DISABLE_VISIBILITY
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
 target_include_directories(DataReaderTests PRIVATE
-    ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
     )
-target_link_libraries(DataReaderTests fastdds fastcdr foonathan_memory
+target_link_libraries(DataReaderTests fastrtps fastcdr foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
-gtest_discover_tests(DataReaderTests)
-
-add_executable(DataReaderInstanceTests ${DATAREADERINSTANCETESTS_SOURCE})
-target_include_directories(DataReaderInstanceTests PRIVATE
-    ${Asio_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
-    ${PROJECT_SOURCE_DIR}/src/cpp
-    )
-target_link_units(DataReaderInstanceTests UNITS time)
-target_link_libraries(DataReaderInstanceTests foonathan_memory
-    GTest::gmock
-    ${CMAKE_DL_LIBS})
-gtest_discover_tests(DataReaderInstanceTests)
-
-add_executable(DataReaderHistoryTests ${DATAREADERHISTORYTESTS_SOURCE})
-target_include_directories(DataReaderHistoryTests PRIVATE
-    ${Asio_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
-    ${PROJECT_SOURCE_DIR}/src/cpp
-    ${THIRDPARTY_BOOST_INCLUDE_DIR}
-    )
-target_link_units(DataReaderHistoryTests UNITS dds::reader-history MOCKS BaseReader StatelessReader TypeSupport
-    RTPSDomainImpl xtypes::TypeObjectUtils)
-target_link_libraries(DataReaderHistoryTests
-    fastcdr
-    foonathan_memory
-    GTest::gmock
-    ${CMAKE_DL_LIBS})
-gtest_discover_tests(DataReaderHistoryTests)
+add_gtest(DataReaderTests SOURCES ${DATAREADERTESTS_SOURCE})

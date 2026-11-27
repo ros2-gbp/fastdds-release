@@ -17,24 +17,21 @@
  *
  */
 
-#include <fastdds/rtps/history/ReaderHistory.hpp>
+#include <fastdds/rtps/history/ReaderHistory.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/reader/RTPSReader.hpp>
-#include <fastdds/rtps/reader/ReaderListener.hpp>
+#include <fastrtps/utils/Semaphore.h>
+#include <fastdds/rtps/reader/RTPSReader.h>
+#include <fastdds/rtps/reader/ReaderListener.h>
 
 #include <rtps/common/ChangeComparison.hpp>
-#include <rtps/reader/BaseReader.hpp>
 #include <utils/collections/sorted_vector_insert.hpp>
-#include <utils/Semaphore.hpp>
 
 #include <mutex>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
-
-using BaseReader = fastdds::rtps::BaseReader;
 
 ReaderHistory::ReaderHistory(
         const HistoryAttributes& att)
@@ -59,18 +56,17 @@ bool ReaderHistory::can_change_be_added_nts(
 
     if (m_att.memoryPolicy == PREALLOCATED_MEMORY_MODE && total_payload_size > m_att.payloadMaxSize)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY,
-                "Change payload size of '" << total_payload_size
-                                           << "' bytes is larger than the history payload size of '"
-                                           << m_att.payloadMaxSize
-                                           << "' bytes and cannot be resized.");
+        logError(RTPS_READER_HISTORY,
+                "Change payload size of '" << total_payload_size <<
+                "' bytes is larger than the history payload size of '" << m_att.payloadMaxSize <<
+                "' bytes and cannot be resized.");
         will_never_be_accepted = true;
         return false;
     }
 
     if (writer_guid == c_Guid_Unknown)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY, "The Writer GUID_t must be defined");
+        logError(RTPS_READER_HISTORY, "The Writer GUID_t must be defined");
         will_never_be_accepted = true;
         return false;
     }
@@ -80,16 +76,8 @@ bool ReaderHistory::can_change_be_added_nts(
 
 bool ReaderHistory::received_change(
         CacheChange_t* change,
-        size_t unknown_missing_changes_up_to)
+        size_t)
 {
-    // Keep room for the changes this one is waiting for. Changes are delivered in order, so if the history were
-    // filled with later changes, the missing ones could never be stored and the reader would stall.
-    if ((0 < unknown_missing_changes_up_to) && (0 < m_att.maximumReservedCaches) &&
-            (m_changes.size() + unknown_missing_changes_up_to >= static_cast<size_t>(m_att.maximumReservedCaches)))
-    {
-        return false;
-    }
-
     return add_change(change);
 }
 
@@ -98,28 +86,26 @@ bool ReaderHistory::add_change(
 {
     if (mp_reader == nullptr || mp_mutex == nullptr)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY,
-                "You need to create a Reader with this History before adding any changes");
+        logError(RTPS_READER_HISTORY, "You need to create a Reader with this History before adding any changes");
         return false;
     }
 
     std::lock_guard<RecursiveTimedMutex> guard(*mp_mutex);
     if (m_att.memoryPolicy == PREALLOCATED_MEMORY_MODE && a_change->serializedPayload.length > m_att.payloadMaxSize)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY,
-                "Change payload size of '" << a_change->serializedPayload.length
-                                           << "' bytes is larger than the history payload size of '"
-                                           << m_att.payloadMaxSize
-                                           << "' bytes and cannot be resized.");
+        logError(RTPS_READER_HISTORY,
+                "Change payload size of '" << a_change->serializedPayload.length <<
+                "' bytes is larger than the history payload size of '" << m_att.payloadMaxSize <<
+                "' bytes and cannot be resized.");
         return false;
     }
     if (a_change->writerGUID == c_Guid_Unknown)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY, "The Writer GUID_t must be defined");
+        logError(RTPS_READER_HISTORY, "The Writer GUID_t must be defined");
     }
 
     eprosima::utilities::collections::sorted_vector_insert(m_changes, a_change, fastdds::rtps::history_order_cmp);
-    EPROSIMA_LOG_INFO(RTPS_READER_HISTORY,
+    logInfo(RTPS_READER_HISTORY,
             "Change " << a_change->sequenceNumber << " added with " << a_change->serializedPayload.length << " bytes");
 
     return true;
@@ -132,7 +118,7 @@ bool ReaderHistory::matches_change(
     if (nullptr == outer_change
             || nullptr == inner_change)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY, "Pointer is not valid");
+        logError(RTPS_READER_HISTORY, "Pointer is not valid");
         return false;
     }
 
@@ -144,16 +130,15 @@ History::iterator ReaderHistory::remove_change_nts(
         const_iterator removal,
         bool release)
 {
-    if (mp_reader == nullptr || mp_mutex == nullptr)
+    if ( mp_reader == nullptr || mp_mutex == nullptr)
     {
-        EPROSIMA_LOG_ERROR(RTPS_WRITER_HISTORY,
-                "You need to create a Writer with this History before removing any changes");
-        return remove_iterator_constness(removal);
+        logError(RTPS_WRITER_HISTORY, "You need to create a Writer with this History before removing any changes");
+        return changesEnd();
     }
 
-    if (removal == changesEnd())
+    if ( removal == changesEnd())
     {
-        EPROSIMA_LOG_INFO(RTPS_WRITER_HISTORY, "Trying to remove without a proper CacheChange_t referenced");
+        logInfo(RTPS_WRITER_HISTORY, "Trying to remove without a proper CacheChange_t referenced");
         return changesEnd();
     }
 
@@ -161,22 +146,13 @@ History::iterator ReaderHistory::remove_change_nts(
     auto ret_val = m_changes.erase(removal);
     m_isHistoryFull = false;
 
-    auto base_reader = BaseReader::downcast(mp_reader);
-    base_reader->change_removed_by_history(change);
+    mp_reader->change_removed_by_history(change);
     if (release)
     {
-        base_reader->release_cache(change);
+        mp_reader->releaseCache(change);
     }
 
     return ret_val;
-}
-
-History::iterator ReaderHistory::remove_change_nts(
-        const_iterator removal,
-        const std::chrono::time_point<std::chrono::steady_clock>&,
-        bool release)
-{
-    return ReaderHistory::remove_change_nts(removal, release);
 }
 
 void ReaderHistory::writer_unmatched(
@@ -196,7 +172,7 @@ bool ReaderHistory::remove_changes_with_guid(
 {
     if (mp_reader == nullptr || mp_mutex == nullptr)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY, "You need to create a Reader with History before removing any changes");
+        logError(RTPS_READER_HISTORY, "You need to create a Reader with History before removing any changes");
         return false;
     }
 
@@ -215,7 +191,7 @@ bool ReaderHistory::remove_fragmented_changes_until(
 {
     if (mp_reader == nullptr || mp_mutex == nullptr)
     {
-        EPROSIMA_LOG_ERROR(RTPS_READER_HISTORY, "You need to create a Reader with History before removing any changes");
+        logError(RTPS_READER_HISTORY, "You need to create a Reader with History before removing any changes");
         return false;
     }
 
@@ -230,7 +206,7 @@ bool ReaderHistory::remove_fragmented_changes_until(
             {
                 if (item->is_fully_assembled() == false)
                 {
-                    EPROSIMA_LOG_INFO(RTPS_READER_HISTORY, "Removing change " << item->sequenceNumber);
+                    logInfo(RTPS_READER_HISTORY, "Removing change " << item->sequenceNumber);
                     chit = remove_change_nts(chit);
                     continue;
                 }
@@ -266,12 +242,19 @@ bool ReaderHistory::get_min_change_from(
     return ret;
 }
 
+bool ReaderHistory::do_reserve_cache(
+        CacheChange_t** change,
+        uint32_t size)
+{
+    return mp_reader->reserveCache(change, size);
+}
+
 void ReaderHistory::do_release_cache(
         CacheChange_t* ch)
 {
-    BaseReader::downcast(mp_reader)->release_cache(ch);
+    mp_reader->releaseCache(ch);
 }
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */

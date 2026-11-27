@@ -20,10 +20,14 @@
 #include <string>
 #include <thread>
 
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/log/Log.hpp>
 #include <gstreamer-1.0/gst/gst.h>
+
 #include <optionparser.hpp>
+
+#include <fastdds/dds/log/Log.hpp>
+#include <fastrtps/Domain.h>
+#include <fastrtps/fastrtps_dll.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
 
 #include "VideoTestPublisher.hpp"
 #include "VideoTestSubscriber.hpp"
@@ -33,8 +37,8 @@
 #pragma warning (disable:4512)
 #endif // if defined(_MSC_VER)
 
-using namespace eprosima::fastdds;
-using namespace eprosima::fastdds::dds;
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
 
 using std::cout;
 using std::endl;
@@ -399,7 +403,7 @@ int main(
         }
     }
 
-    eprosima::fastdds::rtps::PropertyPolicy pub_part_property_policy, sub_part_property_policy,
+    PropertyPolicy pub_part_property_policy, sub_part_property_policy,
             pub_property_policy, sub_property_policy;
 
 #if HAVE_SECURITY
@@ -410,68 +414,41 @@ int main(
             option::printUsage(fwrite, stdout, usage, columns);
             return -1;
         }
-        // Subscriber
-        // Auth
-        sub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property("dds.sec.auth.plugin",
-                "builtin.PKI-DH"));
-        sub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.identity_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        sub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.identity_certificate",
-                    "file://" + certs_path + "/mainsubcert.pem"));
-        sub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.private_key",
-                    "file://" + certs_path + "/mainsubkey.pem"));
-        sub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property("dds.sec.crypto.plugin",
-                "builtin.AES-GCM-GMAC"));
-        // Access
-        sub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
-                "builtin.Access-Permissions"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.governance",
-                    "file://" + certs_path + "/governance_performance_tests.smime"));
-        sub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions",
-                    "file://" + certs_path + "/permissions_performance_tests.smime"));
 
-        // Publisher
-        // Auth
-        pub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property("dds.sec.auth.plugin",
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.plugin",
                 "builtin.PKI-DH"));
-        pub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.identity_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        pub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.identity_certificate",
-                    "file://" + certs_path + "/mainpubcert.pem"));
-        pub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property(
-                    "dds.sec.auth.builtin.PKI-DH.private_key",
-                    "file://" + certs_path + "/mainpubkey.pem"));
-        pub_part_property_policy.properties().emplace_back(eprosima::fastdds::rtps::Property("dds.sec.crypto.plugin",
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
+                "file://" + certs_path + "/maincacert.pem"));
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_certificate",
+                "file://" + certs_path + "/mainsubcert.pem"));
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.private_key",
+                "file://" + certs_path + "/mainsubkey.pem"));
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.crypto.plugin",
                 "builtin.AES-GCM-GMAC"));
-        // Access
-        pub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
-                "builtin.Access-Permissions"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
-                    "file://" + certs_path + "/maincacert.pem"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.governance",
-                    "file://" + certs_path + "/governance_performance_tests.smime"));
-        pub_part_property_policy.properties().emplace_back(Property(
-                    "dds.sec.access.builtin.Access-Permissions.permissions",
-                    "file://" + certs_path + "/permissions_performance_tests.smime"));
+        sub_part_property_policy.properties().emplace_back("rtps.participant.rtps_protection_kind", "ENCRYPT");
+        sub_property_policy.properties().emplace_back("rtps.endpoint.submessage_protection_kind", "ENCRYPT");
+        sub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
+
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.plugin",
+                "builtin.PKI-DH"));
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_ca",
+                "file://" + certs_path + "/maincacert.pem"));
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.identity_certificate",
+                "file://" + certs_path + "/mainpubcert.pem"));
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.auth.builtin.PKI-DH.private_key",
+                "file://" + certs_path + "/mainpubkey.pem"));
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.crypto.plugin",
+                "builtin.AES-GCM-GMAC"));
+        pub_part_property_policy.properties().emplace_back("rtps.participant.rtps_protection_kind", "ENCRYPT");
+        pub_property_policy.properties().emplace_back("rtps.endpoint.submessage_protection_kind", "ENCRYPT");
+        pub_property_policy.properties().emplace_back("rtps.endpoint.payload_protection_kind", "ENCRYPT");
     }
 #endif // if HAVE_SECURITY
 
     // Load an XML file with predefined profiles for publisher and subscriber
     if (sXMLConfigFile.length() > 0)
     {
-        DomainParticipantFactory::get_instance()->load_XML_profiles_file(sXMLConfigFile);
+        xmlparser::XMLProfileManager::loadXMLFile(sXMLConfigFile);
     }
 
     int num_args = 0;

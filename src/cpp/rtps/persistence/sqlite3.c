@@ -35248,7 +35248,8 @@ SQLITE_PRIVATE int sqlite3IsOverflow(double x){
 ** than 1GiB) the value returned might be less than the true string length.
 */
 SQLITE_PRIVATE int sqlite3Strlen30(const char *z){
-  return z==0 ? 0 : (0x3fffffff & (int)strlen(z));
+  if( z==0 ) return 0;
+  return 0x3fffffff & (int)strlen(z);
 }
 
 /*
@@ -124515,16 +124516,14 @@ SQLITE_PRIVATE void sqlite3MarkAllShadowTablesOf(sqlite3 *db, Table *pTab){
 ** zName is temporarily modified while this routine is running, but is
 ** restored to its original value prior to this routine returning.
 */
-int sqlite3ShadowTableName(sqlite3 *db, const char *zName){
-  const char *zTail;            /* Pointer to the last "_" in zName */
+SQLITE_PRIVATE int sqlite3ShadowTableName(sqlite3 *db, const char *zName){
+  char *zTail;                  /* Pointer to the last "_" in zName */
   Table *pTab;                  /* Table that zName is a shadow of */
-  char *zCopy;
   zTail = strrchr(zName, '_');
   if( zTail==0 ) return 0;
-  zCopy = sqlite3DbStrNDup(db, zName, (int)(zTail-zName));
-  pTab = zCopy ? sqlite3FindTable(db, zCopy, 0) : 0;
-
-  sqlite3DbFree(db, zCopy);
+  *zTail = 0;
+  pTab = sqlite3FindTable(db, zName, 0);
+  *zTail = '_';
   if( pTab==0 ) return 0;
   if( !IsVirtual(pTab) ) return 0;
   return sqlite3IsShadowTableOf(db, pTab, zName);

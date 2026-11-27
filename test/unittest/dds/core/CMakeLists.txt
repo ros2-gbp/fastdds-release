@@ -15,4 +15,3 @@
 add_subdirectory(condition)
 add_subdirectory(duration)
 add_subdirectory(entity)
-add_subdirectory(policy)

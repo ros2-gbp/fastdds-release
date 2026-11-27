@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(fastdds_FOUND TRUE)
+set(fastrtps_FOUND TRUE)
 
 add_subdirectory(C++/fuzz_XMLProfiles)
 add_subdirectory(C++/fuzz_processCDRMsg)
-add_subdirectory(C++/fuzz_proxy_cdr)

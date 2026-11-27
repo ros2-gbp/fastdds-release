@@ -23,12 +23,9 @@
 
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <string>
 
-#include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/dds/core/ReturnCode.hpp>
-#include <fastdds/utils/IPFinder.hpp>
+#include <fastrtps/types/TypesBase.h>
 #include <utils/Host.hpp>
 
 #if defined(_WIN32) || defined(__unix__)
@@ -37,7 +34,7 @@
 
 namespace eprosima {
 
-using ReturnCode_t = eprosima::fastdds::dds::ReturnCode_t;
+using ReturnCode_t = fastrtps::types::ReturnCode_t;
 #if defined(_WIN32) || defined(__unix__)
 using FileWatchHandle = std::unique_ptr<filewatch::FileWatch<std::string>>;
 #else
@@ -78,16 +75,6 @@ public:
     }
 
     /**
-     * Get the identifier of the current machine.
-     *
-     * @return the identifier of the current host.
-     */
-    inline fastcdr::string_255 machine_id() const
-    {
-        return Host::instance().machine_id();
-    }
-
-    /**
      * Get a reference to the singleton instance.
      *
      * @return reference to the singleton instance.
@@ -95,7 +82,6 @@ public:
     static const SystemInfo& instance()
     {
         static SystemInfo singleton;
-
         return singleton;
     }
 
@@ -206,16 +192,12 @@ public:
      *
      * @param [in] filename Path/name of the file to watch.
      * @param [in] callback Callback to execute when the file changes.
-     * @param [in] watch_thread_config Thread settings for watch thread.
-     * @param [in] callback_thread_config Thread settings for callback thread.
      *
      * @return The handle that represents the watcher object.
      */
     static FileWatchHandle watch_file(
             std::string filename,
-            std::function<void()> callback,
-            const fastdds::rtps::ThreadSettings& watch_thread_config,
-            const fastdds::rtps::ThreadSettings& callback_thread_config);
+            std::function<void()> callback);
 
     /**
      * Stop a file watcher.
@@ -228,54 +210,12 @@ public:
     static void stop_watching_file(
             FileWatchHandle& handle);
 
-    /**
-     * Get the current time as string, formatting it as specified by argument format.
-     *
-     * The function returns a timestamp of the current time in the following format: YYYY-MM-DD HH:MM:SS.ms
-     *
-     * @param [in] format Format of the date to be printed.
-     * This format is build according to the std::put_time(const struct tm* tmb, const charT* fmt) function.
-     * Default "%F %T".
-     *
-     * @return The current time in string format
-     */
-    static std::string get_timestamp(
-            const char* format = "%F %T");
-
-    /**
-     * Fetch and store/update the information relative to all network interfaces present on the system.
-     *
-     * @return true if successful, false otherwise
-     */
-    static bool update_interfaces();
-
-    /**
-     * Get the information relative to all network interfaces present on the system.
-     *
-     * The loopback interface is only included in the collection if \c return_loopback is true.
-     * If this information is already cached, it is returned without performing any system call,
-     * unless \c force_lookup is true.
-     *
-     * @param [out] vec_name Collection to be populated with the network interfaces information.
-     * @param [in] return_loopback Whether to include the loopback interface in the collection.
-     * @param [in] force_lookup Whether to force a system call even if information is cached.
-     *
-     * @return true if successful, false otherwise
-     */
-    static bool get_ips(
-            std::vector<fastdds::rtps::IPFinder::info_IP>& vec_name,
-            bool return_loopback,
-            bool force_lookup);
-
 private:
 
-    SystemInfo();
+    SystemInfo() = default;
 
     static std::string environment_file_;
 
-    static bool cached_interfaces_;
-    static std::vector<fastdds::rtps::IPFinder::info_IP> interfaces_;
-    static std::mutex interfaces_mtx_;
 };
 
 /**

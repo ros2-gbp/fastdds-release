@@ -21,12 +21,11 @@
 #define _FASTDDS_RTPS_EDPSERVER2_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastdds/rtps/common/CacheChange.hpp>
-
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/discovery/database/DiscoveryDataBase.hpp>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
 #include <rtps/builtin/discovery/database/DiscoveryDataFilter.hpp>
-#include <rtps/builtin/discovery/endpoint/EDPSimple.h>
+#include <rtps/builtin/discovery/database/DiscoveryDataBase.hpp>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDPSimple.h>
 #include <rtps/builtin/discovery/participant/PDPServer.hpp>
 
 namespace eprosima {
@@ -41,7 +40,7 @@ class EDPServerSUBListener;
  * Inherits from EDPSimple class.
  *@ingroup DISCOVERY_MODULE
  */
-class EDPServer : public EDPSimple
+class EDPServer : public fastrtps::rtps::EDPSimple
 {
     friend class EDPServerPUBListener;
     friend class EDPServerSUBListener;
@@ -54,9 +53,9 @@ public:
      * @param part Pointer to the RTPSParticipantImpl
      */
     EDPServer(
-            PDP* p,
-            RTPSParticipantImpl* part,
-            DurabilityKind_t durability_kind)
+            fastrtps::rtps::PDP* p,
+            fastrtps::rtps::RTPSParticipantImpl* part,
+            fastrtps::rtps::DurabilityKind_t durability_kind)
         : EDPSimple(p, part)
         , durability_(durability_kind)
     {
@@ -78,32 +77,32 @@ public:
      * @param rdata Pointer to the ReaderProxyData object.
      * @return true if correct.
      */
-    bool process_reader_proxy_data(
-            RTPSReader* reader,
-            ReaderProxyData* rdata) override;
+    bool processLocalReaderProxyData(
+            fastrtps::rtps::RTPSReader* reader,
+            fastrtps::rtps::ReaderProxyData* rdata) override;
     /**
      * This method generates the corresponding change in the publciations writer and send it to all known remote endpoints.
      * @param writer Pointer to the Writer object.
      * @param wdata Pointer to the WriterProxyData object.
      * @return true if correct.
      */
-    bool process_writer_proxy_data(
-            RTPSWriter* writer,
-            WriterProxyData* wdata) override;
+    bool processLocalWriterProxyData(
+            fastrtps::rtps::RTPSWriter* writer,
+            fastrtps::rtps::WriterProxyData* wdata) override;
     /**
      * This methods generates the change disposing of the local Reader and calls the unpairing and removal methods of the base class.
      * @param R Pointer to the RTPSReader object.
      * @return True if correct.
      */
-    bool remove_reader(
-            RTPSReader* R) override;
+    bool removeLocalReader(
+            fastrtps::rtps::RTPSReader* R) override;
     /**
      * This methods generates the change disposing of the local Writer and calls the unpairing and removal methods of the base class.
      * @param W Pointer to the RTPSWriter object.
      * @return True if correct.
      */
-    bool remove_writer(
-            RTPSWriter* W) override;
+    bool removeLocalWriter(
+            fastrtps::rtps::RTPSWriter* W) override;
 
     /**
      * This method removes all changes from the correct data writer history with the same identity as the one in the disposal_change
@@ -114,9 +113,9 @@ public:
      * @return True if successful.
      */
     bool process_disposal(
-            CacheChange_t* disposal_change,
-            ddb::DiscoveryDataBase& discovery_db,
-            GuidPrefix_t& change_guid_prefix,
+            fastrtps::rtps::CacheChange_t* disposal_change,
+            fastdds::rtps::ddb::DiscoveryDataBase& discovery_db,
+            fastrtps::rtps::GuidPrefix_t& change_guid_prefix,
             bool should_publish_disposal);
 
     /**
@@ -127,7 +126,7 @@ public:
      * @return True if successful.
      */
     bool process_and_release_change(
-            CacheChange_t* change,
+            fastrtps::rtps::CacheChange_t* change,
             bool release_from_reader);
 
 private:
@@ -139,7 +138,7 @@ private:
     virtual bool createSEDPEndpoints() override;
 
     //! TRANSIENT or TRANSIENT_LOCAL durability;
-    DurabilityKind_t durability_;
+    fastrtps::rtps::DurabilityKind_t durability_;
 
 };
 

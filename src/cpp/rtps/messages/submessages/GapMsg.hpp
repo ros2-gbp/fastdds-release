@@ -18,7 +18,7 @@
  */
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 bool RTPSMessageCreator::addMessageGap(
@@ -87,5 +87,5 @@ bool RTPSMessageCreator::addSubmessageGap(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

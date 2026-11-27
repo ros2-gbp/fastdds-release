@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
-#define FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
+#ifndef _FASTDDS_SHAREDMEM_SEGMENT_H_
+#define _FASTDDS_SHAREDMEM_SEGMENT_H_
 
 #include <boostconfig.hpp>
 
@@ -40,7 +40,6 @@
 #include <boost/interprocess/offset_ptr.hpp>
 #include <boost/thread/thread_time.hpp>
 
-#include "BoostAtExitRegistry.hpp"
 #include "RobustInterprocessCondition.hpp"
 #include "SharedMemUUID.hpp"
 
@@ -48,8 +47,7 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-template<typename T>
-using deleted_unique_ptr = std::unique_ptr<T, std::function<void (T*)>>;
+using Log = fastdds::dds::Log;
 
 /**
  * Provides shared memory functionallity abstrating from
@@ -59,7 +57,7 @@ class SharedSegmentBase
 {
 public:
 
-    template<class M>
+    template <class M>
     using sharable_lock = boost::interprocess::sharable_lock<M>;
     using sharable_mutex = boost::interprocess::interprocess_sharable_mutex;
 
@@ -103,22 +101,13 @@ public:
     virtual SharedSegmentBase::Offset get_offset_from_address(
             void* address) const = 0;
 
-    static deleted_unique_ptr<SharedSegmentBase::named_mutex> open_or_create_and_lock_named_mutex(
+    static std::unique_ptr<SharedSegmentBase::named_mutex> open_or_create_and_lock_named_mutex(
             const std::string& mutex_name)
     {
-        deleted_unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
+        std::unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
 
-        {
-            std::lock_guard<std::mutex> lock(mtx_());
-
-            named_mutex = deleted_unique_ptr<SharedSegmentBase::named_mutex>(
-                new SharedSegmentBase::named_mutex(boost::interprocess::open_or_create, mutex_name.c_str()),
-                [](SharedSegmentBase::named_mutex* p)
-                {
-                    std::lock_guard<std::mutex> lock(mtx_());
-                    delete p;
-                });
-        }
+        named_mutex = std::unique_ptr<SharedSegmentBase::named_mutex>(
+            new SharedSegmentBase::named_mutex(boost::interprocess::open_or_create, mutex_name.c_str()));
 
         boost::posix_time::ptime wait_time
             = boost::posix_time::microsec_clock::universal_time()
@@ -128,18 +117,9 @@ public:
             // Interprocess mutex timeout when locking. Possible deadlock: owner died without unlocking?
             // try to remove and create again
             SharedSegmentBase::named_mutex::remove(mutex_name.c_str());
-            named_mutex.reset();
-            {
-                std::lock_guard<std::mutex> lock(mtx_());
 
-                named_mutex = deleted_unique_ptr<SharedSegmentBase::named_mutex>(
-                    new SharedSegmentBase::named_mutex(boost::interprocess::open_or_create, mutex_name.c_str()),
-                    [](SharedSegmentBase::named_mutex* p)
-                    {
-                        std::lock_guard<std::mutex> lock(mtx_());
-                        delete p;
-                    });
-            }
+            named_mutex = std::unique_ptr<SharedSegmentBase::named_mutex>(
+                new SharedSegmentBase::named_mutex(boost::interprocess::open_or_create, mutex_name.c_str()));
 
             if (!named_mutex->try_lock())
             {
@@ -150,22 +130,13 @@ public:
         return named_mutex;
     }
 
-    static deleted_unique_ptr<SharedSegmentBase::named_mutex> try_open_and_lock_named_mutex(
+    static std::unique_ptr<SharedSegmentBase::named_mutex> try_open_and_lock_named_mutex(
             const std::string& mutex_name)
     {
-        deleted_unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
+        std::unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
 
-        {
-            std::lock_guard<std::mutex> lock(mtx_());
-
-            named_mutex = deleted_unique_ptr<SharedSegmentBase::named_mutex>(
-                new SharedSegmentBase::named_mutex(boost::interprocess::open_only, mutex_name.c_str()),
-                [](SharedSegmentBase::named_mutex* p)
-                {
-                    std::lock_guard<std::mutex> lock(mtx_());
-                    delete p;
-                });
-        }
+        named_mutex = std::unique_ptr<SharedSegmentBase::named_mutex>(
+            new SharedSegmentBase::named_mutex(boost::interprocess::open_only, mutex_name.c_str()));
 
         boost::posix_time::ptime wait_time
             = boost::posix_time::microsec_clock::universal_time()
@@ -178,46 +149,15 @@ public:
         return named_mutex;
     }
 
-    static deleted_unique_ptr<SharedSegmentBase::named_mutex> open_or_create_named_mutex(
+    static std::unique_ptr<SharedSegmentBase::named_mutex> open_named_mutex(
             const std::string& mutex_name)
     {
-        deleted_unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
+        std::unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
 
         // Todo(Adolfo) : Dataraces could occur, this algorithm has to be improved
 
-        {
-            std::lock_guard<std::mutex> lock(mtx_());
-
-            named_mutex = deleted_unique_ptr<SharedSegmentBase::named_mutex>(
-                new SharedSegmentBase::named_mutex(boost::interprocess::open_or_create, mutex_name.c_str()),
-                [](SharedSegmentBase::named_mutex* p)
-                {
-                    std::lock_guard<std::mutex> lock(mtx_());
-                    delete p;
-                });
-        }
-
-        return named_mutex;
-    }
-
-    static deleted_unique_ptr<SharedSegmentBase::named_mutex> open_named_mutex(
-            const std::string& mutex_name)
-    {
-        deleted_unique_ptr<SharedSegmentBase::named_mutex> named_mutex;
-
-        // Todo(Adolfo) : Dataraces could occur, this algorithm has to be improved
-
-        {
-            std::lock_guard<std::mutex> lock(mtx_());
-
-            named_mutex = deleted_unique_ptr<SharedSegmentBase::named_mutex>(
-                new SharedSegmentBase::named_mutex(boost::interprocess::open_only, mutex_name.c_str()),
-                [](SharedSegmentBase::named_mutex* p)
-                {
-                    std::lock_guard<std::mutex> lock(mtx_());
-                    delete p;
-                });
-        }
+        named_mutex = std::unique_ptr<SharedSegmentBase::named_mutex>(
+            new SharedSegmentBase::named_mutex(boost::interprocess::open_only, mutex_name.c_str()));
 
         return named_mutex;
     }
@@ -302,13 +242,6 @@ private:
     shared_mem_environment_initializer_;
 
     std::string name_;
-
-    static std::mutex& mtx_()
-    {
-        static std::mutex mtx_;
-        return mtx_;
-    }
-
 };
 
 template<typename T, typename U>
@@ -393,17 +326,51 @@ public:
     }
 
     /**
-     * Estimates the extra segment space required for an allocation, by creating a temporary segment.
-     * Defined in SharedMemSegment.cpp for SharedMemSegment and SharedFileSegment.
-     *
-     * @param allocation_alignment Alignment of the allocations.
-     * @param domain_name Prefix of the name of the temporary segment.
-     * @return The extra space each allocation takes in a segment, computed once per segment type.
-     * @throw std::exception if the temporary segment cannot be created.
+     * Estimates the extra segment space required for an allocation. This may throw
      */
     static uint32_t compute_per_allocation_extra_size(
             size_t allocation_alignment,
-            const std::string& domain_name);
+            const std::string& domain_name)
+    {
+        Id uuid;
+
+        try
+        {
+            static uint32_t extra_size = 0;
+
+            if (extra_size == 0)
+            {
+                uuid.generate();
+
+                auto name = domain_name + "_" + uuid.to_string();
+
+                SharedMemEnvironment::get().init();
+
+                {
+                    managed_shared_memory_type
+                            test_segment(boost::interprocess::create_only, name.c_str(),
+                            (std::max)((uint32_t)1024, static_cast<uint32_t>(allocation_alignment * 4)));
+
+                    auto m1 = test_segment.get_free_memory();
+                    test_segment.allocate_aligned(1, static_cast<uint32_t>(allocation_alignment));
+                    auto m2 = test_segment.get_free_memory();
+                    extra_size = static_cast<uint32_t>(m1 - m2);
+                }
+
+                managed_shared_object_type::remove(name.c_str());
+            }
+
+            return extra_size;
+
+        }
+        catch (const std::exception& e)
+        {
+            logError(RTPS_TRANSPORT_SHM, "Failed to create segment " << uuid.to_string()
+                                                                     << ": " << e.what());
+
+            throw;
+        }
+    }
 
     /**
      * Check the allocator internal structures
@@ -447,4 +414,5 @@ using SharedFileSegment = SharedSegment<
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // FASTDDS_UTILS_SHARED_MEMORY__SHAREDMEMSEGMENT_HPP
+#endif // _FASTDDS_SHAREDMEM_SEGMENT_H_
+

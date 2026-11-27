@@ -17,15 +17,15 @@
  *
  */
 
-#ifndef FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
-#define FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#ifndef FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
+#define FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_
 
 #include <assert.h>
 #include <memory>
 #include <type_traits>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 
 /**
  * A queue with a preallocated fixed size.
@@ -38,7 +38,7 @@ namespace fastdds {
  *
  * @ingroup UTILITIES_MODULE
  */
-template<
+template <
     typename _Ty,
     typename _Alloc = std::allocator<_Ty>>
 class FixedSizeQueue
@@ -47,7 +47,6 @@ class FixedSizeQueue
 public:
 
     using allocator_type = _Alloc;
-    using allocator_traits = std::allocator_traits<allocator_type>;
     using value_type = _Ty;
     using pointer = _Ty*;
     using const_pointer = const _Ty*;
@@ -260,9 +259,7 @@ public:
      */
     FixedSizeQueue(
             const FixedSizeQueue& other)
-        : FixedSizeQueue(
-                other.capacity(),
-                other.get_allocator())
+        : FixedSizeQueue(other.capacity(), other.get_allocator())
     {
         for (const_reference item : other)
         {
@@ -347,7 +344,7 @@ public:
             return false;
         }
         --head_;
-        allocator_traits::construct(allocator_, &(*head_), val);
+        allocator_.construct(&(*head_), val);
         ++size_;
         return true;
     }
@@ -387,7 +384,7 @@ public:
             return false;
         }
         --head_;
-        allocator_traits::construct(allocator_, &(*head_), std::forward<Args &&>(args)...);
+        allocator_.construct(&(*head_), std::forward<Args &&>(args)...);
         ++size_;
         return true;
     }
@@ -407,7 +404,7 @@ public:
         {
             return false;
         }
-        allocator_traits::construct(allocator_, &(*tail_), val);
+        allocator_.construct(&(*tail_), val);
         ++tail_;
         ++size_;
         return true;
@@ -447,7 +444,7 @@ public:
         {
             return false;
         }
-        allocator_traits::construct(allocator_, &(*tail_), std::forward<Args &&>(args)...);
+        allocator_.construct(&(*tail_), std::forward<Args &&>(args)...);
         ++tail_;
         ++size_;
         return true;
@@ -465,7 +462,7 @@ public:
         {
             return false;
         }
-        allocator_traits::destroy(allocator_, &(*head_));
+        allocator_.destroy(&(*head_));
         ++head_;
         --size_;
         return true;
@@ -484,7 +481,7 @@ public:
             return false;
         }
         --tail_;
-        allocator_traits::destroy(allocator_, &(*tail_));
+        allocator_.destroy(&(*tail_));
         --size_;
         return true;
     }
@@ -653,7 +650,7 @@ public:
             ++head_;
             memmove(&(*head_), &(*old_head), (pos - old_head) * sizeof(value_type));
 
-            allocator_traits::destroy(allocator_, &(*old_head));
+            allocator_.destroy(&(*old_head));
             --size_;
             iterator next = pos;
             return ++next;
@@ -665,7 +662,7 @@ public:
             memmove(&(*pos), &(*next), (tail_ - pos) * sizeof(value_type));
 
             --tail_;
-            allocator_traits::destroy(allocator_, &(*tail_));
+            allocator_.destroy(&(*tail_));
             --size_;
             return pos;
         }
@@ -687,7 +684,7 @@ protected:
 
 };
 
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
-#endif /* FASTDDS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */
+#endif /* FASTRTPS_UTILS_COLLECTIONS_FIXEDSIZEQUEUE_HPP_ */

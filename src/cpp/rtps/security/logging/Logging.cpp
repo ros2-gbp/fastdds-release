@@ -1,9 +1,7 @@
-#include <rtps/security/logging/Logging.h>
-
-#include <rtps/security/exceptions/SecurityException.h>
+#include <fastdds/rtps/security/logging/Logging.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -195,5 +193,5 @@ bool Logging::set_domain_id(
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima

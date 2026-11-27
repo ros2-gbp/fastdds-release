@@ -12,110 +12,111 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-###########################################################################
-# WriterProxyTests
-###########################################################################
 set(WRITERPROXYTESTS_SOURCE WriterProxyTests.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/WriterQos.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     )
+
+if(WIN32)
+    add_definitions(-D_WIN32_WINNT=0x0601)
+endif()
 
 add_executable(WriterProxyTests ${WRITERPROXYTESTS_SOURCE})
-target_link_units(WriterProxyTests UNITS rtps::external-locators rtps::common xtypes rtps::builtin-data
-    rtps::resource-event rtps::history MOCKS BaseReader StatefulReader BaseWriter MessageReceiver
-    RTPSDomainImpl xtypes::TypeObjectUtils TimedEvent ReaderHistory WriterHistory)
+target_compile_definitions(WriterProxyTests PRIVATE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
 target_include_directories(WriterProxyTests PRIVATE
-    ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/reader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSDomainImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/TimedEvent
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterProxyData
+    ${PROJECT_SOURCE_DIR}/test/mock/dds/QosPolicies
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ResourceEvent
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     )
-target_link_libraries(WriterProxyTests
-    fastcdr
-    foonathan_memory
+target_link_libraries(WriterProxyTests foonathan_memory
     GTest::gmock
     ${CMAKE_DL_LIBS})
-gtest_discover_tests(WriterProxyTests)
-
-###########################################################################
-# WriterProxyStopTest
-###########################################################################
-set(WRITERPROXYSTOPTEST_SOURCE WriterProxyStopTest.cpp
-    )
-
-add_executable(WriterProxyStopTest ${WRITERPROXYSTOPTEST_SOURCE})
-target_link_units(WriterProxyStopTest UNITS rtps::external-locators rtps::common rtps::timed-event xtypes
-    rtps::builtin-data rtps::history MOCKS BaseReader StatefulReader BaseWriter MessageReceiver
-    RTPSDomainImpl xtypes::TypeObjectUtils ReaderHistory WriterHistory)
-target_include_directories(WriterProxyStopTest PRIVATE
-    ${Asio_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/reader
-    ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
-    ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
-    )
-target_link_libraries(WriterProxyStopTest
-    fastcdr
-    foonathan_memory
-    GTest::gmock
-    ${CMAKE_DL_LIBS})
-gtest_discover_tests(WriterProxyStopTest)
+add_gtest(WriterProxyTests SOURCES ${WRITERPROXYTESTS_SOURCE})
 
 ###########################################################################
 # WriterProxyAcknackTests
 ###########################################################################
-set(WRITERPROXYACKNACKTESTS_SOURCE WriterProxyAcknackTests.cpp)
+set(WRITERPROXYACKNACKTESTS_SOURCE WriterProxyAcknackTests.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/publisher/qos/WriterQos.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEvent.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/resources/TimedEventImpl.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/flowcontrol/ThroughputControllerDescriptor.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/SystemInfo.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/utils/IPLocator.cpp
+    )
+
+if(WIN32)
+    add_definitions(-D_WIN32_WINNT=0x0601)
+endif()
 
 add_executable(WriterProxyAcknackTests ${WRITERPROXYACKNACKTESTS_SOURCE})
-target_link_units(WriterProxyAcknackTests UNITS rtps::common xtypes rtps::builtin-data rtps::network-factory
-    rtps::parameter-list rtps::timed-event rtps::proxy-data rtps::external-locators rtps::history MOCKS
-    BaseReader StatefulReader BaseWriter xtypes::TypeObjectUtils MessageReceiver RTPSDomainImpl ReaderHistory
-    WriterHistory)
+target_compile_definitions(WriterProxyAcknackTests PRIVATE
+    BOOST_ASIO_STANDALONE
+    ASIO_STANDALONE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    RETURN_VALID_PARTICIPANT
+    )
 target_include_directories(WriterProxyAcknackTests PRIVATE
     ${Asio_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/reader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/Endpoint
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ExternalLocatorsProcessor
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSWriter
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSParticipantImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/RTPSDomainImpl
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/StatefulReader
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/WriterProxyData
+    ${PROJECT_SOURCE_DIR}/test/mock/dds/QosPolicies
+    ${PROJECT_SOURCE_DIR}/test/mock/rtps/ResourceEvent
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR}/include
     ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
     )
-target_link_libraries(WriterProxyAcknackTests
-    fastcdr
-    foonathan_memory
+target_link_libraries(WriterProxyAcknackTests foonathan_memory
     GTest::gmock
-    ${CMAKE_DL_LIBS})
-gtest_discover_tests(WriterProxyAcknackTests)
-
-get_property(fastdds_include_directories TARGET ${PROJECT_NAME} PROPERTY INCLUDE_DIRECTORIES)
+    ${CMAKE_DL_LIBS}
+    ${THIRDPARTY_BOOST_LINK_LIBS})
+add_gtest(WriterProxyAcknackTests SOURCES ${WRITERPROXYACKNACKTESTS_SOURCE})
 
 ###########################################################################
 # StatefulReaderTests
 ###########################################################################
-set(STATEFUL_READER_TESTS_SOURCE StatefulReaderTests.cpp)
+set(STATEFULREADERTESTS_SOURCE StatefulReaderTests.cpp)
 
-add_executable(StatefulReaderTests ${STATEFUL_READER_TESTS_SOURCE})
-
-
-target_link_units(StatefulReaderTests UNITS core)
+add_executable(StatefulReaderTests ${STATEFULREADERTESTS_SOURCE})
+target_compile_definitions(StatefulReaderTests PRIVATE
+    BOOST_ASIO_STANDALONE
+    ASIO_STANDALONE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG> # Internal debug activated.
+    )
 target_include_directories(StatefulReaderTests PRIVATE
-    ${fastdds_include_directories}
-    )
-target_link_libraries(StatefulReaderTests
+    ${Asio_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/src/cpp)
+target_link_libraries(StatefulReaderTests fastcdr fastrtps foonathan_memory
     GTest::gmock
-    )
-gtest_discover_tests(StatefulReaderTests)
-
-###########################################################################
-# StatelessReaderTests
-###########################################################################
-set(STATELESS_READER_TESTS_SOURCE StatelessReaderTests.cpp)
-
-add_executable(StatelessReaderTests ${STATELESS_READER_TESTS_SOURCE})
-
-
-target_link_units(StatelessReaderTests UNITS core)
-target_include_directories(StatelessReaderTests PRIVATE
-    ${fastdds_include_directories}
-    )
-target_link_libraries(StatelessReaderTests
-    GTest::gmock
-    )
-gtest_discover_tests(StatelessReaderTests)
+    ${CMAKE_DL_LIBS})
+add_gtest(StatefulReaderTests SOURCES ${STATEFULREADERTESTS_SOURCE})

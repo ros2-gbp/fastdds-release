@@ -17,36 +17,33 @@
  *
  */
 
-#include <rtps/writer/ReaderProxy.hpp>
-
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
-#include <mutex>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/rtps/history/WriterHistory.h>
+#include <fastdds/rtps/writer/ReaderProxy.h>
+#include <fastdds/rtps/writer/StatefulWriter.h>
+#include <fastdds/rtps/resources/TimedEvent.h>
+#include <fastrtps/utils/TimeConversion.h>
 #include <fastdds/rtps/common/LocatorListComparisons.hpp>
 
-#include <rtps/DataSharing/DataSharingNotifier.hpp>
+#include <rtps/participant/RTPSParticipantImpl.h>
 #include <rtps/history/HistoryAttributesExtension.hpp>
-#include <rtps/messages/RTPSGapBuilder.hpp>
-#include <rtps/participant/RTPSParticipantImpl.hpp>
-#include <rtps/resources/TimedEvent.h>
-#include <rtps/writer/StatefulWriter.hpp>
-#include <rtps/writer/StatefulWriterListener.hpp>
-#include <utils/TimeConversion.hpp>
 
+#include "rtps/messages/RTPSGapBuilder.hpp"
+#include <rtps/DataSharing/DataSharingNotifier.hpp>
+
+#include <mutex>
+#include <cassert>
+#include <algorithm>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 ReaderProxy::ReaderProxy(
         const WriterTimes& times,
         const RemoteLocatorsAllocationAttributes& loc_alloc,
-        StatefulWriter* writer,
-        StatefulWriterListener* stateful_listener)
+        StatefulWriter* writer)
     : is_active_(false)
     , locator_info_(
         writer, loc_alloc.max_unicast_locators,
@@ -56,15 +53,14 @@ ReaderProxy::ReaderProxy(
     , is_reliable_(false)
     , disable_positive_acks_(false)
     , writer_(writer)
-    , changes_for_reader_(resource_limits_from_history(writer->get_history()->m_att, 0))
+    , changes_for_reader_(resource_limits_from_history(writer->mp_history->m_att, 0))
     , nack_supression_event_(nullptr)
     , initial_heartbeat_event_(nullptr)
     , timers_enabled_(false)
     , next_expected_acknack_count_(0)
     , last_nackfrag_count_(0)
-    , stateful_writer_listener_(stateful_listener)
 {
-    auto participant = writer_->get_participant_impl();
+    auto participant = writer_->getRTPSParticipant();
     if (nullptr != participant)
     {
         nack_supression_event_ = new TimedEvent(participant->getEventResource(),
@@ -73,7 +69,7 @@ ReaderProxy::ReaderProxy(
                             writer_->perform_nack_supression(guid());
                             return false;
                         },
-                        fastdds::rtps::TimeConv::Time_t2MilliSecondsDouble(times.nack_supression_duration));
+                        TimeConv::Time_t2MilliSecondsDouble(times.nackSupressionDuration));
 
         initial_heartbeat_event_ = new TimedEvent(participant->getEventResource(),
                         [&]() -> bool
@@ -93,7 +89,7 @@ bool ReaderProxy::rtps_is_relevant(
     if (nullptr != filter)
     {
         bool ret = filter->is_relevant(*change, guid());
-        EPROSIMA_LOG_INFO(RTPS_READER_PROXY,
+        logInfo(RTPS_READER_PROXY,
                 "Change " << change->instanceHandle << " is relevant for reader " << guid() << "? " << ret);
         return ret;
     }
@@ -120,17 +116,17 @@ void ReaderProxy::start(
         bool is_datasharing)
 {
     locator_info_.start(
-        reader_attributes.guid,
-        reader_attributes.remote_locators.unicast,
-        reader_attributes.remote_locators.multicast,
-        reader_attributes.expects_inline_qos,
+        reader_attributes.guid(),
+        reader_attributes.remote_locators().unicast,
+        reader_attributes.remote_locators().multicast,
+        reader_attributes.m_expectsInlineQos,
         is_datasharing);
 
     is_active_ = true;
-    durability_kind_ = reader_attributes.durability.durabilityKind();
-    expects_inline_qos_ = reader_attributes.expects_inline_qos;
-    is_reliable_ = reader_attributes.reliability.kind != dds::BEST_EFFORT_RELIABILITY_QOS;
-    disable_positive_acks_ = reader_attributes.disable_positive_acks_enabled();
+    durability_kind_ = reader_attributes.m_qos.m_durability.durabilityKind();
+    expects_inline_qos_ = reader_attributes.m_expectsInlineQos;
+    is_reliable_ = reader_attributes.m_qos.m_reliability.kind != BEST_EFFORT_RELIABILITY_QOS;
+    disable_positive_acks_ = reader_attributes.disable_positive_acks();
     if (durability_kind_ == DurabilityKind_t::VOLATILE)
     {
         SequenceNumber_t min_sequence = writer_->get_seq_num_min();
@@ -148,21 +144,21 @@ void ReaderProxy::start(
         initial_heartbeat_event_->restart_timer();
     }
 
-    EPROSIMA_LOG_INFO(RTPS_READER_PROXY, "Reader Proxy started");
+    logInfo(RTPS_READER_PROXY, "Reader Proxy started");
 }
 
 bool ReaderProxy::update(
         const ReaderProxyData& reader_attributes)
 {
-    durability_kind_ = reader_attributes.durability.durabilityKind();
-    expects_inline_qos_ = reader_attributes.expects_inline_qos;
-    is_reliable_ = reader_attributes.reliability.kind != dds::BEST_EFFORT_RELIABILITY_QOS;
-    disable_positive_acks_ = reader_attributes.disable_positive_acks_enabled();
+    durability_kind_ = reader_attributes.m_qos.m_durability.durabilityKind();
+    expects_inline_qos_ = reader_attributes.m_expectsInlineQos;
+    is_reliable_ = reader_attributes.m_qos.m_reliability.kind != BEST_EFFORT_RELIABILITY_QOS;
+    disable_positive_acks_ = reader_attributes.disable_positive_acks();
 
     locator_info_.update(
-        reader_attributes.remote_locators.unicast,
-        reader_attributes.remote_locators.multicast,
-        reader_attributes.expects_inline_qos);
+        reader_attributes.remote_locators().unicast,
+        reader_attributes.remote_locators().multicast,
+        reader_attributes.m_expectsInlineQos);
 
     return true;
 }
@@ -177,9 +173,6 @@ void ReaderProxy::stop()
     next_expected_acknack_count_ = 0;
     last_nackfrag_count_ = 0;
     changes_low_mark_ = SequenceNumber_t();
-
-    first_irrelevant_removed_ = SequenceNumber_t::unknown();
-    last_irrelevant_removed_ = SequenceNumber_t::unknown();
 }
 
 void ReaderProxy::disable_timers()
@@ -195,7 +188,7 @@ void ReaderProxy::disable_timers()
 }
 
 void ReaderProxy::update_nack_supression_interval(
-        const dds::Duration_t& interval)
+        const Duration_t& interval)
 {
     if (nack_supression_event_)
     {
@@ -267,8 +260,8 @@ void ReaderProxy::add_change(
     if (changes_for_reader_.push_back(change) == nullptr)
     {
         // This should never happen
-        EPROSIMA_LOG_ERROR(RTPS_READER_PROXY, "Error adding change " << seq_num
-                                                                     << " to reader proxy " << guid());
+        logError(RTPS_READER_PROXY, "Error adding change " << seq_num
+                                                           << " to reader proxy " << guid());
         eprosima::fastdds::dds::Log::Flush();
         assert(false);
     }
@@ -355,17 +348,14 @@ bool ReaderProxy::change_is_unsent(
                         SequenceNumber_t::unknown() != gap_seq)
                 {
                     // Check if the hole is due to irrelevant changes removed without informing the reader
-                    if (first_irrelevant_removed_ <= gap_seq )
+                    if (gap_seq == first_irrelevant_removed_)
                     {
-                        if (gap_seq == first_irrelevant_removed_)
-                        {
-                            first_irrelevant_removed_ = SequenceNumber_t::unknown();
-                            last_irrelevant_removed_ = SequenceNumber_t::unknown();
-                        }
-                        else if (gap_seq < last_irrelevant_removed_)
-                        {
-                            last_irrelevant_removed_ = gap_seq - 1;
-                        }
+                        first_irrelevant_removed_ = SequenceNumber_t::unknown();
+                        last_irrelevant_removed_ = SequenceNumber_t::unknown();
+                    }
+                    else if (gap_seq < last_irrelevant_removed_)
+                    {
+                        last_irrelevant_removed_ = gap_seq - 1;
                     }
                 }
             }
@@ -390,13 +380,6 @@ void ReaderProxy::acked_changes_set(
         {
             ++chit;
             ++future_low_mark;
-        }
-        if (stateful_writer_listener_ != nullptr)
-        {
-            for (auto it = changes_for_reader_.begin(); it != chit; ++it)
-            {
-                notify_acknowledged(*it);
-            }
         }
         changes_for_reader_.erase(changes_for_reader_.begin(), chit);
     }
@@ -435,7 +418,7 @@ void ReaderProxy::acked_changes_set(
                     if (current_sequence <= changes_low_mark_)
                     {
                         CacheChange_t* change = nullptr;
-                        if (writer_->get_history()->get_change(current_sequence, writer_->getGuid(), &change))
+                        if (writer_->mp_history->get_change(current_sequence, writer_->getGuid(), &change))
                         {
                             should_sort = true;
                             ChangeForReader_t cr(change);
@@ -487,17 +470,14 @@ bool ReaderProxy::requested_changes_set(
                         if (SequenceNumber_t::unknown() != first_irrelevant_removed_)
                         {
                             // Check if the hole is due to irrelevant changes removed without informing the reader
-                            if (first_irrelevant_removed_ <= sit )
+                            if (sit == first_irrelevant_removed_)
                             {
-                                if (sit == first_irrelevant_removed_)
-                                {
-                                    first_irrelevant_removed_ = SequenceNumber_t::unknown();
-                                    last_irrelevant_removed_ = SequenceNumber_t::unknown();
-                                }
-                                else if (sit < last_irrelevant_removed_)
-                                {
-                                    last_irrelevant_removed_ = sit - 1;
-                                }
+                                first_irrelevant_removed_ = SequenceNumber_t::unknown();
+                                last_irrelevant_removed_ = SequenceNumber_t::unknown();
+                            }
+                            else if (sit < last_irrelevant_removed_)
+                            {
+                                last_irrelevant_removed_ = sit - 1;
                             }
                         }
                     }
@@ -506,7 +486,7 @@ bool ReaderProxy::requested_changes_set(
 
     if (isSomeoneWasSetRequested)
     {
-        EPROSIMA_LOG_INFO(RTPS_READER_PROXY, "Requested Changes: " << seq_num_set);
+        logInfo(RTPS_READER_PROXY, "Requested Changes: " << seq_num_set);
     }
 
     return isSomeoneWasSetRequested;
@@ -517,7 +497,7 @@ bool ReaderProxy::process_initial_acknack(
 {
     if (is_local_reader())
     {
-        return 0 != convert_status_on_all_changes(UNACKNOWLEDGED, UNSENT, false, func);
+        return 0 != convert_status_on_all_changes(UNACKNOWLEDGED, UNSENT, func);
     }
 
     return true;
@@ -549,7 +529,6 @@ void ReaderProxy::from_unsent_to_status(
     if (ACKNOWLEDGED == status && seq_num == changes_low_mark_ + 1)
     {
         assert(changes_for_reader_.begin() == it);
-        notify_acknowledged(*it);
         changes_for_reader_.erase(it);
         acked_changes_set(seq_num + 1);
         return;
@@ -590,19 +569,18 @@ bool ReaderProxy::mark_fragment_as_sent_for_change(
 
 bool ReaderProxy::perform_nack_supression()
 {
-    return 0 != convert_status_on_all_changes(UNDERWAY, UNACKNOWLEDGED, false);
+    return 0 != convert_status_on_all_changes(UNDERWAY, UNACKNOWLEDGED);
 }
 
 uint32_t ReaderProxy::perform_acknack_response(
         const std::function<void(ChangeForReader_t& change)>& func)
 {
-    return convert_status_on_all_changes(REQUESTED, UNSENT, nullptr != stateful_writer_listener_, func);
+    return convert_status_on_all_changes(REQUESTED, UNSENT, func);
 }
 
 uint32_t ReaderProxy::convert_status_on_all_changes(
         ChangeForReaderStatus_t previous,
         ChangeForReaderStatus_t next,
-        bool notify_resend,
         const std::function<void(ChangeForReader_t& change)>& func)
 {
     assert(previous > next);
@@ -617,11 +595,6 @@ uint32_t ReaderProxy::convert_status_on_all_changes(
         {
             ++changed;
             change.setStatus(next);
-
-            if (notify_resend)
-            {
-                notify_resent(change);
-            }
 
             if (func)
             {
@@ -762,93 +735,6 @@ ReaderProxy::ChangeConstIterator ReaderProxy::find_change(
            : it->getSequenceNumber() == seq_num ? it : end;
 }
 
-bool ReaderProxy::has_been_delivered(
-        const SequenceNumber_t& seq_number,
-        bool& found) const
-{
-    if (seq_number <= changes_low_mark_)
-    {
-        // Change has already been acknowledged, so it has been delivered
-        return true;
-    }
-
-    ChangeConstIterator it = find_change(seq_number);
-    if (it != changes_for_reader_.end())
-    {
-        found = true;
-        return it->has_been_delivered();
-    }
-
-    return false;
-}
-
-void ReaderProxy::notify_acknowledged(
-        const ChangeForReader_t& change) const
-{
-    if (stateful_writer_listener_ != nullptr)
-    {
-        CacheChange_t* sample = change.getChange();
-        uint32_t payload_length = sample ? sample->serializedPayload.length : 0;
-        stateful_writer_listener_->on_writer_data_acknowledged(
-            writer_->getGuid(),
-            guid(),
-            change.getSequenceNumber(),
-            payload_length,
-            change.time_since_first_send(),
-            locator_info_.general_locator_selector_entry());
-    }
-}
-
-void ReaderProxy::notify_resent(
-        const ChangeForReader_t& change) const
-{
-    assert (stateful_writer_listener_ != nullptr);
-
-    const CacheChange_t* sample = change.getChange();
-    assert(sample != nullptr);
-
-    // Calc number of bytes to resend
-    uint64_t resent_bytes = 0;
-    const FragmentNumberSet_t& fragments = change.getUnsentFragments();
-    if (fragments.empty())
-    {
-        resent_bytes = sample->serializedPayload.length;
-    }
-    else
-    {
-        // Calculate number of bytes to resend
-        uint64_t num_fragments = fragments.count();
-        uint32_t fragment_size = sample->getFragmentSize();
-        if (fragments.max() < sample->getFragmentCount())
-        {
-            resent_bytes = num_fragments * fragment_size;
-        }
-        else
-        {
-            // Last fragment may be smaller
-            resent_bytes = (num_fragments - 1) * fragment_size;
-            uint32_t last_fragment_size = sample->serializedPayload.length % fragment_size;
-            if (last_fragment_size > 0)
-            {
-                resent_bytes += last_fragment_size;
-            }
-            else
-            {
-                resent_bytes += fragment_size;
-            }
-        }
-    }
-
-    // Notify to participant
-    assert(resent_bytes <= sample->serializedPayload.length);
-    stateful_writer_listener_->on_writer_resend_data(
-        writer_->getGuid(),
-        guid(),
-        sample->sequenceNumber,
-        static_cast<uint32_t>(resent_bytes),
-        locator_info_.general_locator_selector_entry());
-}
-
 }   // namespace rtps
-}   // namespace fastdds
+}   // namespace fastrtps
 }   // namespace eprosima

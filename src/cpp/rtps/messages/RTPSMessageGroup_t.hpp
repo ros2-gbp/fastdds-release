@@ -21,17 +21,15 @@
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastdds/rtps/common/CDRMessage_t.hpp>
-#include <rtps/messages/CDRMessage.hpp>
-#include <rtps/messages/RTPSMessageCreator.hpp>
-#include <fastdds/rtps/transport/NetworkBuffer.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/rtps/common/CDRMessage_t.h>
+#include <fastrtps/rtps/messages/CDRMessage.h>
+#include <fastrtps/rtps/messages/RTPSMessageCreator.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
-/**
+ /**
  * Class RTPSMessageGroup_t that contains the messages used to send multiples changes as one message.
  * @ingroup WRITER_MODULE
  */
@@ -42,16 +40,14 @@ public:
     RTPSMessageGroup_t(
 #if HAVE_SECURITY
             bool has_security,
-#endif // if HAVE_SECURITY
+#endif
             uint32_t payload,
             const GuidPrefix_t& participant_guid)
         : rtpsmsg_submessage_(0u)
         , rtpsmsg_fullmsg_(0u)
 #if HAVE_SECURITY
         , rtpsmsg_encrypt_(0u)
-#endif // if HAVE_SECURITY
-        , buffers_(ResourceLimitedContainerConfig(16, std::numeric_limits<size_t>::max dummy_avoid_winmax (), 16))
-        , payloads_(ResourceLimitedContainerConfig(16, std::numeric_limits<size_t>::max dummy_avoid_winmax (), 16))
+#endif
     {
         rtpsmsg_fullmsg_.reserve(payload);
         rtpsmsg_submessage_.reserve(payload);
@@ -61,7 +57,7 @@ public:
         {
             rtpsmsg_encrypt_.reserve(payload);
         }
-#endif // if HAVE_SECURITY
+#endif
 
         init(participant_guid);
     }
@@ -70,17 +66,14 @@ public:
             octet* buffer_ptr,
 #if HAVE_SECURITY
             bool has_security,
-#endif // if HAVE_SECURITY
+#endif
             uint32_t payload,
-            const GuidPrefix_t& participant_guid,
-            ResourceLimitedContainerConfig nb_config)
+            const GuidPrefix_t& participant_guid)
         : rtpsmsg_submessage_(0u)
         , rtpsmsg_fullmsg_(0u)
 #if HAVE_SECURITY
         , rtpsmsg_encrypt_(0u)
-#endif // if HAVE_SECURITY
-        , buffers_(nb_config)
-        , payloads_(nb_config)
+#endif
     {
         rtpsmsg_fullmsg_.init(buffer_ptr, payload);
         buffer_ptr += payload;
@@ -92,7 +85,7 @@ public:
             buffer_ptr += payload;
             rtpsmsg_encrypt_.init(buffer_ptr, payload);
         }
-#endif // if HAVE_SECURITY
+#endif
 
         init(participant_guid);
     }
@@ -110,17 +103,11 @@ public:
 
 #if HAVE_SECURITY
     CDRMessage_t rtpsmsg_encrypt_;
-#endif // if HAVE_SECURITY
-
-    //! Vector to store the NetworkBuffers that will be used to form the RTPS message.
-    eprosima::fastdds::ResourceLimitedVector<eprosima::fastdds::rtps::NetworkBuffer> buffers_;
-
-    //! Mirror vector of buffers_ to store the serialized payloads.
-    eprosima::fastdds::ResourceLimitedVector<eprosima::fastdds::rtps::SerializedPayload_t> payloads_;
+#endif
 };
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 #endif // DOXYGEN_SHOULD_SKIP_THIS_PUBLIC

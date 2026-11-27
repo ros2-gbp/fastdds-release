@@ -21,7 +21,7 @@
 
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 struct GUID_t;
@@ -61,7 +61,7 @@ public:
 
 
 }  // namespace rtps
-}  // namespace fastdds
+}  // namespace fastrtps
 }  // namespace eprosima
 
 #endif  // RTPS_DATASHARING_IDATASHARINGNOTIFIER_HPP

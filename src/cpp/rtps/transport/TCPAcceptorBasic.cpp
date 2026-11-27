@@ -14,33 +14,33 @@
 
 #include <rtps/transport/TCPAcceptorBasic.h>
 
-#include <fastdds/utils/IPLocator.hpp>
+#include <fastrtps/utils/IPLocator.h>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using IPLocator = fastdds::rtps::IPLocator;
+using IPLocator = fastrtps::rtps::IPLocator;
 
 TCPAcceptorBasic::TCPAcceptorBasic(
-        asio::io_context& io_context,
+        asio::io_service& io_service,
         TCPTransportInterface* parent,
         const Locator& locator)
-    : TCPAcceptor(io_context, parent, locator)
-    , socket_(*io_context_)
+    : TCPAcceptor(io_service, parent, locator)
+    , socket_(*io_service_)
 {
     endpoint_ = asio::ip::tcp::endpoint(parent->generate_protocol(), IPLocator::getPhysicalPort(locator_));
 }
 
 TCPAcceptorBasic::TCPAcceptorBasic(
-        asio::io_context& io_context,
-        const std::string& iface,
+        asio::io_service& io_service,
+        const std::string& interface,
         const Locator& locator)
-    : TCPAcceptor(io_context, iface, locator)
-    , socket_(*io_context_)
+    : TCPAcceptor(io_service, interface, locator)
+    , socket_(*io_service_)
 {
-    endpoint_ = asio::ip::tcp::endpoint(asio::ip::make_address(iface),
+    endpoint_ = asio::ip::tcp::endpoint(asio::ip::address_v4::from_string(interface),
                     IPLocator::getPhysicalPort(locator_));
 }
 
@@ -63,5 +63,5 @@ void TCPAcceptorBasic::accept(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

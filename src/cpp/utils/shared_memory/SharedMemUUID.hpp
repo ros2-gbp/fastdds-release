@@ -20,13 +20,12 @@
 #include <Windows.h>
 #endif // ifdef _MSC_VER
 
-#include <array>
-#include <cstdint>
-#include <chrono>
-#include <mutex>
+#include <stdint.h>
 #include <random>
-#include <thread>
+#include <chrono>
 #include <vector>
+#include <mutex>
+#include <array>
 
 namespace eprosima {
 namespace fastdds {
@@ -114,7 +113,7 @@ private:
 
 };
 
-template<size_t SIZE>
+template <size_t SIZE>
 class UUID
 {
 public:
@@ -187,7 +186,7 @@ private:
 } // namespace eprosima
 
 namespace std {
-template<>
+template <>
 struct hash<eprosima::fastdds::rtps::UUID<8>>
 {
     std::size_t operator ()(

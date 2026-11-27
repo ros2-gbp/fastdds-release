@@ -16,11 +16,11 @@
  * @file ReaderHistoryState.hpp
  */
 
-#ifndef FASTDDS_RTPS_READER_READERHISTORYSTATE_HPP_
-#define FASTDDS_RTPS_READER_READERHISTORYSTATE_HPP_
+#ifndef FASTRTPS_RTPS_READER_READERHISTORYSTATE_HPP_
+#define FASTRTPS_RTPS_READER_READERHISTORYSTATE_HPP_
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/SequenceNumber.hpp>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/SequenceNumber.h>
 
 #include <foonathan/memory/container.hpp>
 #include <foonathan/memory/memory_pool.hpp>
@@ -30,7 +30,7 @@
 #include <map>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 using guid_map_helper = utilities::collections::map_size_helper<GUID_t, GUID_t>;
@@ -76,7 +76,7 @@ struct ReaderHistoryState
 };
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 
-#endif /* FASTDDS_RTPS_READER_READERHISTORYSTATE_HPP_ */
+#endif /* FASTRTPS_RTPS_READER_READERHISTORYSTATE_HPP_ */

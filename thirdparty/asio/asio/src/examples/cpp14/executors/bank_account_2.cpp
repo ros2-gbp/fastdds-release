@@ -16,7 +16,9 @@ class bank_account
 public:
   void deposit(int amount)
   {
-    asio::require(pool_.executor(), execution::blocking.always).execute(
+    execution::execute(
+        asio::require(pool_.executor(),
+          execution::blocking.always),
         [this, amount]
         {
           balance_ += amount;
@@ -25,8 +27,9 @@ public:
 
   void withdraw(int amount)
   {
-    asio::require(pool_.executor(),
-      execution::blocking.always).execute(
+    execution::execute(
+        asio::require(pool_.executor(),
+          execution::blocking.always),
         [this, amount]
         {
           if (balance_ >= amount)
@@ -37,7 +40,9 @@ public:
   int balance() const
   {
     int result = 0;
-    asio::require(pool_.executor(), execution::blocking.always).execute(
+    execution::execute(
+        asio::require(pool_.executor(),
+          execution::blocking.always),
         [this, &result]
         {
           result = balance_;

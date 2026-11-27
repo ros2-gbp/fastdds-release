@@ -14,72 +14,68 @@
 
 #include "MockReceiverResource.h"
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
+namespace eprosima{
+namespace fastrtps{
+namespace rtps{
 
-MockReceiverResource::MockReceiverResource(
-        TransportInterface& transport,
-        const Locator_t& locator)
-    : msg_receiver(nullptr)
+MockReceiverResource::MockReceiverResource(TransportInterface& transport, const Locator_t& locator)
+        : msg_receiver(nullptr)
 {
+    m_maxMsgSize = 0x8FFF;
     // Internal channel is opened and assigned to this resource.
-    valid_ = transport.OpenInputChannel(locator, this, 0x8FFF);
-    if (!valid_)
+    mValid = transport.OpenInputChannel(locator, this, m_maxMsgSize);
+    if (!mValid)
     {
-        return;
+        return; // Invalid resource to be discarded by the factory.
     }
 
-    cleanup_ = [&transport, locator]()
-            {
-                transport.CloseInputChannel(locator);
-            };
+    // Implementation functions are bound to the right transport parameters
+    Cleanup = [&transport, locator]() { transport.CloseInputChannel(locator); };
+    LocatorMapsToManagedChannel = [&transport, locator](const Locator_t& locatorToCheck) -> bool
+    { return transport.DoInputLocatorsMatch(locator, locatorToCheck); };
 }
 
 MockReceiverResource::~MockReceiverResource()
 {
-    if (cleanup_ != nullptr)
+    if (Cleanup != nullptr)
     {
-        cleanup_();
+        Cleanup();
     }
 
-    delete msg_receiver.load();
+    delete msg_receiver;
 }
 
-MockMessageReceiver* MockReceiverResource::CreateMessageReceiver()
+MessageReceiver* MockReceiverResource::CreateMessageReceiver()
 {
-    if (msg_receiver.load() == nullptr)
+    if (msg_receiver == nullptr)
     {
-        msg_receiver.store(new MockMessageReceiver());
+        msg_receiver = new MockMessageReceiver();
+        msg_receiver->init(1024);
     }
-    return msg_receiver.load();
+    return msg_receiver;
 }
 
-void MockReceiverResource::OnDataReceived(
-        const octet* buf,
-        const uint32_t,
-        const Locator_t&,
-        const Locator_t&)
+void MockReceiverResource::OnDataReceived(const octet* buf, const uint32_t size,
+    const Locator_t&, const Locator_t& remote)
 {
-    MockMessageReceiver* recv = msg_receiver.load();
-    if (recv != nullptr)
+    if (msg_receiver != nullptr)
     {
-        recv->processCDRMsg(const_cast<octet*>(buf));
+        CDRMessage_t msg(0);
+        msg.wraps = true;
+        msg.buffer = const_cast<octet*>(buf);
+        msg.length = size;
+        msg_receiver->processCDRMsg(remote, &msg);
     }
 }
 
-void MockMessageReceiver::setCallback(
-        std::function<void()> cb)
+void MockMessageReceiver::setCallback(std::function<void()> cb)
 {
-    std::lock_guard<std::mutex> lock(callback_mutex);
     this->callback = cb;
 }
 
-void MockMessageReceiver::processCDRMsg(
-        octet* buffer)
+void MockMessageReceiver::processCDRMsg(const Locator_t&, CDRMessage_t*msg)
 {
-    data = buffer;
-    std::lock_guard<std::mutex> lock(callback_mutex);
+    data = msg->buffer;
     if (callback != nullptr)
     {
         callback();
@@ -87,5 +83,5 @@ void MockMessageReceiver::processCDRMsg(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

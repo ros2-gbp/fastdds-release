@@ -18,14 +18,14 @@
 #ifndef _SECURITY_AUTHENTICATION_PKIHANDSHAKEHANDLE_H_
 #define _SECURITY_AUTHENTICATION_PKIHANDSHAKEHANDLE_H_
 
-#include <openssl/evp.h>
-#include <rtps/security/authentication/Handshake.h>
-#include <rtps/security/common/SharedSecretHandle.h>
 #include <security/authentication/PKIIdentityHandle.h>
+#include <fastdds/rtps/security/authentication/Handshake.h>
+#include <fastdds/rtps/security/common/SharedSecretHandle.h>
+#include <openssl/evp.h>
 #include <string>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
@@ -65,7 +65,7 @@ typedef HandleImpl<PKIHandshake, PKIDH> PKIHandshakeHandle;
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_PKIHANDSHAKEHANDLE_H_

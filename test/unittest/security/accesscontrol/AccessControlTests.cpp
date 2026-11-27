@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
-#include <string>
+#include <security/OpenSSLInit.hpp>
+
+#include <fastrtps/rtps/builtin/data/ParticipantProxyData.h>
+#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
+#include <fastrtps/rtps/builtin/data/ReaderProxyData.h>
+
+#include <fastrtps/rtps/messages/CDRMessage.h>
+#include <security/authentication/PKIDH.h>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <security/accesscontrol/Permissions.h>
+#include <security/accesscontrol/PermissionsParser.h>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
 
 #include <gtest/gtest.h>
 
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/messages/CDRMessage.hpp>
-#include <security/accesscontrol/AccessPermissionsHandle.h>
-#include <security/accesscontrol/Permissions.h>
-#include <security/accesscontrol/PermissionsParser.h>
-#include <security/authentication/PKIDH.h>
-#include <security/authentication/PKIHandshakeHandle.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/OpenSSLInit.hpp>
+#include <iostream>
+#include <string>
 
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 static const char* certs_path = nullptr;
 
@@ -52,7 +54,7 @@ protected:
 
     AccessControlTest()
     {
-        static eprosima::fastdds::rtps::security::OpenSSLInit openssl_init;
+        static eprosima::fastrtps::rtps::security::OpenSSLInit openssl_init;
     }
 
     void fill_common_participant_security_attributes(
@@ -168,7 +170,6 @@ void AccessControlTest::get_access_handle(
         bool should_success)
 {
     IdentityHandle* identity_handle = nullptr;
-    auto part_props = participant_attr.properties;
 
     ValidationResult_t result = ValidationResult_t::VALIDATION_FAILED;
     SecurityException exception;
@@ -178,7 +179,7 @@ void AccessControlTest::get_access_handle(
         &identity_handle,
         adjusted_participant_key,
         domain_id,
-        part_props,
+        participant_attr,
         candidate_participant_key,
         exception);
 
@@ -190,7 +191,7 @@ void AccessControlTest::get_access_handle(
         authentication_plugin,
         *identity_handle,
         domain_id,
-        part_props,
+        participant_attr,
         exception);
 
     bool success = *access_handle != nullptr;
@@ -235,8 +236,8 @@ void AccessControlTest::check_remote_datareader(
     SecurityException exception;
 
     ReaderProxyData reader_proxy_data(1, 1);
-    reader_proxy_data.topic_name = eprosima::fastcdr::string_255(topic_name);
-    reader_proxy_data.partition.setNames(partitions);
+    reader_proxy_data.topicName(eprosima::fastrtps::string_255(topic_name));
+    reader_proxy_data.m_qos.m_partition.setNames(partitions);
     bool relay_only;
     bool result = access_plugin.check_remote_datareader(
         *access_handle,
@@ -293,8 +294,8 @@ void AccessControlTest::check_remote_datawriter(
     SecurityException exception;
 
     WriterProxyData writer_proxy_data(1, 1);
-    writer_proxy_data.topic_name = eprosima::fastcdr::string_255(topic_name);
-    writer_proxy_data.partition.setNames(partitions);
+    writer_proxy_data.topicName(eprosima::fastrtps::string_255(topic_name));
+    writer_proxy_data.m_qos.m_partition.setNames(partitions);
     bool result = access_plugin.check_remote_datawriter(
         *access_handle,
         domain_id,
@@ -497,7 +498,7 @@ TEST_F(AccessControlTest, validation_ok_on_chained_ca)
     permissions_ca = "chainedcacert.pem";
     permissions_file = "permissions_signed_by_chained_ca.smime";
     governance_file = "governance_signed_by_chained_ca.smime";
-
+    
     topic_name = "HelloWorldTopic_no_partitions";
 
     RTPSParticipantAttributes subscriber_participant_attr;
@@ -659,88 +660,18 @@ TEST(PermissionsParserTest, validity_with_invalid_time_zone_fails)
     }
 }
 
-/**
- * @test Regression test for local grant domain filtering.
- *
- * The local grant must only keep the rules applying to the participant's domain.
- * Permissions file only allows domains [0, 230], so creating a participant on domain 231 should fail.
- */
-TEST_F(AccessControlTest, participant_creation_fail_on_domain_not_in_grant)
-{
-    RTPSParticipantAttributes subscriber_participant_attr;
-    fill_subscriber_participant_security_attributes(subscriber_participant_attr);
-
-    SecurityException exception;
-    PermissionsHandle* access_handle = nullptr;
-
-    // Domain allowed by the grant
-    domain_id = 0;
-    get_access_handle(subscriber_participant_attr, &access_handle);
-    ASSERT_NE(access_handle, nullptr);
-    EXPECT_TRUE(access_plugin.check_create_participant(*access_handle, domain_id, exception)) << exception.what();
-    ASSERT_TRUE(access_plugin.return_permissions_handle(access_handle, exception)) << exception.what();
-
-    // Domain not allowed by the grant
-    domain_id = 231;
-    access_handle = nullptr;
-    get_access_handle(subscriber_participant_attr, &access_handle);
-    ASSERT_NE(access_handle, nullptr);
-    EXPECT_FALSE(access_plugin.check_create_participant(*access_handle, domain_id, exception));
-    ASSERT_TRUE(access_plugin.return_permissions_handle(access_handle, exception)) << exception.what();
-}
-
-/**
- * @test Regression test for local grant domain filtering.
- *
- * Permissions allow each topic in a single domain: HelloWorldTopic_domain_5 on domain 5 and
- * HelloWorldTopic_domain_10 on domain 10. Local endpoints must only be created on the topic
- * allowed in the participant's domain.
- */
-TEST_F(AccessControlTest, validate_topic_access_fail_on_topic_allowed_in_other_domain)
-{
-    permissions_file = "permissions_domain_filtered_grant.smime";
-
-    RTPSParticipantAttributes subscriber_participant_attr;
-    fill_subscriber_participant_security_attributes(subscriber_participant_attr);
-    RTPSParticipantAttributes publisher_participant_attr;
-    fill_publisher_participant_security_attributes(publisher_participant_attr);
-
-    domain_id = 10;
-
-    topic_name = "HelloWorldTopic_domain_10";
-    check_local_datareader(subscriber_participant_attr, true);
-    check_local_datawriter(publisher_participant_attr, true);
-
-    topic_name = "HelloWorldTopic_domain_5";
-    check_local_datareader(subscriber_participant_attr, false);
-    check_local_datawriter(publisher_participant_attr, false);
-
-    domain_id = 5;
-
-    topic_name = "HelloWorldTopic_domain_5";
-    check_local_datareader(subscriber_participant_attr, true);
-    check_local_datawriter(publisher_participant_attr, true);
-
-    topic_name = "HelloWorldTopic_domain_10";
-    check_local_datareader(subscriber_participant_attr, false);
-    check_local_datawriter(publisher_participant_attr, false);
-}
-
 int main(
         int argc,
         char** argv)
 {
     testing::InitGoogleTest(&argc, argv);
 
-    if (!::testing::GTEST_FLAG(list_tests))
-    {
-        certs_path = std::getenv("CERTS_PATH");
+    certs_path = std::getenv("CERTS_PATH");
 
-        if (certs_path == nullptr)
-        {
-            std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
-            exit(-1);
-        }
+    if (certs_path == nullptr)
+    {
+        std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
+        exit(-1);
     }
 
     return RUN_ALL_TESTS();

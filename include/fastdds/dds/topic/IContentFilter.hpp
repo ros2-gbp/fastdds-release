@@ -16,15 +16,19 @@
  * @file IContentFilter.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__ICONTENTFILTER_HPP
-#define FASTDDS_DDS_TOPIC__ICONTENTFILTER_HPP
+#ifndef _FASTDDS_DDS_TOPIC_ICONTENTFILTER_HPP_
+#define _FASTDDS_DDS_TOPIC_ICONTENTFILTER_HPP_
 
-#include <fastdds/fastdds_dll.hpp>
+#include <fastrtps/fastrtps_dll.h>
 
-#include <fastdds/rtps/common/Guid.hpp>
-#include <fastdds/rtps/common/SampleIdentity.hpp>
-#include <fastdds/rtps/common/SerializedPayload.hpp>
-#include <fastdds/rtps/common/WriteParams.hpp>
+#include <fastdds/dds/core/LoanableTypedCollection.hpp>
+
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/SampleIdentity.h>
+#include <fastdds/rtps/common/SerializedPayload.h>
+
+#include <fastrtps/types/TypesBase.h>
+#include <fastrtps/types/TypeDescriptor.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -35,10 +39,8 @@ namespace dds {
  */
 struct IContentFilter
 {
-    virtual ~IContentFilter() = default;
-
-    using SerializedPayload = eprosima::fastdds::rtps::SerializedPayload_t;
-    using GUID_t = fastdds::rtps::GUID_t;
+    using SerializedPayload = eprosima::fastrtps::rtps::SerializedPayload_t;
+    using GUID_t = fastrtps::rtps::GUID_t;
 
     /**
      * Selected information from the cache change that is passed to the content filter object on
@@ -46,24 +48,12 @@ struct IContentFilter
      */
     struct FilterSampleInfo
     {
-        using SampleIdentity = eprosima::fastdds::rtps::SampleIdentity;
-
-        FilterSampleInfo() = default;
-
-        explicit FilterSampleInfo(
-                const rtps::WriteParams& wparams)
-            : sample_identity(wparams.sample_identity())
-            , related_sample_identity(wparams.related_sample_identity())
-            , user_write_data(wparams.user_write_data())
-        {
-        }
+        using SampleIdentity = eprosima::fastrtps::rtps::SampleIdentity;
 
         /// Identity of the sample being filtered.
         SampleIdentity sample_identity;
         /// Identity of a sample related to the one being filtered.
         SampleIdentity related_sample_identity;
-        /// Extra write information that can be used by the prefilter.
-        std::shared_ptr<fastdds::rtps::WriteParams::UserWriteData> user_write_data;
     };
 
     /**
@@ -85,4 +75,4 @@ struct IContentFilter
 } // namespace fastdds
 } // namespace eprosima
 
-#endif  // FASTDDS_DDS_TOPIC__ICONTENTFILTER_HPP
+#endif  // _FASTDDS_DDS_TOPIC_ICONTENTFILTER_HPP_

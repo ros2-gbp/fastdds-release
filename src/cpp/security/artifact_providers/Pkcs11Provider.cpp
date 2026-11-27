@@ -18,24 +18,11 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
-#ifdef OPENSSL_API_COMPAT
-#undef OPENSSL_API_COMPAT
-#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <security/artifact_providers/Pkcs11Provider.hpp>
 
 #include <iostream>
-#include <string>
-
-#include <openssl/conf.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
-#if !defined(OPENSSL_NO_ENGINE)
-#include <openssl/engine.h>
-#include <openssl/ui.h>
-#endif // !defined(OPENSSL_NO_ENGINE)
 
 #include <fastdds/dds/log/Log.hpp>
 #include <utils/SystemInfo.hpp>
@@ -47,12 +34,10 @@
 
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 namespace detail {
-
-#if !defined(OPENSSL_NO_ENGINE)
 
 constexpr const char* FASTDDS_PKCS11_PIN = "FASTDDS_PKCS11_PIN";
 constexpr const char* PKCS11_ENGINE_ID = "pkcs11";
@@ -72,7 +57,7 @@ static int ui_read(
         case UIT_PROMPT:
         case UIT_VERIFY:
         {
-            EPROSIMA_LOG_WARNING(PKCS11_PROVIDER, "PKCS#11 engine is asking: " << UI_get0_output_string(uis));
+            logWarning(PKCS11_PROVIDER, "PKCS#11 engine is asking: " << UI_get0_output_string(uis));
             // Return an empty password without asking the user
             UI_set_result(ui, uis, "");
             return 1;
@@ -91,15 +76,8 @@ static int ui_close(
     return UI_method_get_closer(UI_OpenSSL())(ui);
 }
 
-#endif  // !defined(OPENSSL_NO_ENGINE)
-
 Pkcs11Provider::Pkcs11Provider()
 {
-#if defined(OPENSSL_NO_ENGINE)
-    has_initialization_error_ = true;
-    initialization_exception_ =
-            _SecurityException_(std::string("Cannot retrieve 'pkcs11' engine because 'OPENSSL_NO_ENGINE' is defined"));
-#else
     SSL_load_error_strings();                /* readable error messages */
     SSL_library_init();                      /* initialize library */
 
@@ -122,7 +100,7 @@ Pkcs11Provider::Pkcs11Provider()
 
     // Load the PIN from the environment
     std::string pin;
-    if (fastdds::dds::RETCODE_OK == SystemInfo::get_env(FASTDDS_PKCS11_PIN, pin))
+    if (ReturnCode_t::RETCODE_OK == SystemInfo::get_env(FASTDDS_PKCS11_PIN, pin))
     {
         if (!ENGINE_ctrl_cmd_string( pkcs11_, "PIN", pin.c_str(), 0))
         {
@@ -142,12 +120,10 @@ Pkcs11Provider::Pkcs11Provider()
         ENGINE_free(pkcs11_);
         return;
     }
-#endif // defined(OPENSSL_NO_ENGINE)
 }
 
 Pkcs11Provider::~Pkcs11Provider()
 {
-#if !defined(OPENSSL_NO_ENGINE)
     ENGINE_finish(pkcs11_);
     ENGINE_free(pkcs11_);
 
@@ -155,7 +131,6 @@ Pkcs11Provider::~Pkcs11Provider()
     {
         UI_destroy_method(ui_method_);
     }
-#endif  // !defined(OPENSSL_NO_ENGINE)
 }
 
 EVP_PKEY* Pkcs11Provider::load_private_key(
@@ -164,12 +139,6 @@ EVP_PKEY* Pkcs11Provider::load_private_key(
         const std::string& /*password*/,
         SecurityException& exception)
 {
-#if defined(OPENSSL_NO_ENGINE)
-    static_cast<void>(certificate);
-    static_cast<void>(pkey);
-    exception = initialization_exception_;
-    return nullptr;
-#else
     if (has_initialization_error_)
     {
         exception = initialization_exception_;
@@ -193,11 +162,10 @@ EVP_PKEY* Pkcs11Provider::load_private_key(
     }
 
     return returnedValue;
-#endif  // defined(OPENSSL_NO_ENGINE)
 }
 
 } // namespace detail
 } // namespace security
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

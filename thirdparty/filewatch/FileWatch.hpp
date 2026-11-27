@@ -23,16 +23,9 @@
 #ifndef FILEWATCHER_H
 #define FILEWATCHER_H
 
-#include <fastdds/rtps/attributes/ThreadSettings.hpp>
-
-#include <utils/thread.hpp>
-#include <utils/threading.hpp>
-
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#ifndef MINGW_COMPILER
-    #define stat _stat  // do not use stat in windows
-#endif  // ifndef MINGW_COMPILER
+#define stat _stat
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -72,7 +65,6 @@
 #include <utility>
 #include <vector>
 
-namespace eprosima {
 namespace filewatch {
     enum class Event {
         added,
@@ -99,36 +91,38 @@ namespace filewatch {
 
     public:
 
-        FileWatch(
-                T path,
-                UnderpinningRegex pattern,
-                std::function<void(const T& file, const Event event_type)> callback,
-                const fastdds::rtps::ThreadSettings& watch_thread_config,
-                const fastdds::rtps::ThreadSettings& callback_thread_config)
-            : _path(path)
-            , _pattern(pattern)
-            , _callback(callback)
-            , _directory(get_directory(path))
+        FileWatch(T path, UnderpinningRegex pattern, std::function<void(const T& file, const Event event_type)> callback) :
+            _path(path),
+            _pattern(pattern),
+            _callback(callback),
+            _directory(get_directory(path))
         {
-            init(watch_thread_config, callback_thread_config);
+            init();
         }
 
-        FileWatch(
-                T path,
-                std::function<void(const T& file, const Event event_type)> callback,
-                const fastdds::rtps::ThreadSettings& watch_thread_config,
-                const fastdds::rtps::ThreadSettings& callback_thread_config)
-            : FileWatch<T>(path, UnderpinningRegex(_regex_all), callback, watch_thread_config, callback_thread_config) {}
+        FileWatch(T path, std::function<void(const T& file, const Event event_type)> callback) :
+            FileWatch<T>(path, UnderpinningRegex(_regex_all), callback) {}
 
         ~FileWatch() {
             destroy();
         }
 
-        FileWatch(const FileWatch<T>& other) = delete;
-        FileWatch<T>& operator=(const FileWatch<T>& other) = delete;
+        FileWatch(const FileWatch<T>& other) : FileWatch<T>(other._path, other._callback) {}
+
+        FileWatch<T>& operator=(const FileWatch<T>& other)
+        {
+            if (this == &other) { return *this; }
+
+            destroy();
+            _path = other._path;
+            _callback = other._callback;
+            _directory = get_directory(other._path);
+            init();
+            return *this;
+        }
 
         // Const memeber varibles don't let me implent moves nicely, if moves are really wanted std::unique_ptr should be used and move that.
-        FileWatch(FileWatch<T>&&) = delete;
+        FileWatch<T>(FileWatch<T>&&) = delete;
         FileWatch<T>& operator=(FileWatch<T>&&) & = delete;
 
     private:
@@ -154,12 +148,12 @@ namespace filewatch {
         std::atomic<bool> _destory = { false };
         std::function<void(const T& file, const Event event_type)> _callback;
 
-        eprosima::thread _watch_thread;
+        std::thread _watch_thread;
 
         std::condition_variable _cv;
         std::mutex _callback_mutex;
         std::vector<std::pair<T, Event>> _callback_information;
-        eprosima::thread _callback_thread;
+        std::thread _callback_thread;
 
         std::promise<void> _running;
 
@@ -205,9 +199,7 @@ namespace filewatch {
         const static std::size_t event_size = (sizeof(struct inotify_event));
 #endif // __unix__
 
-        void init(
-            const fastdds::rtps::ThreadSettings& watch_thread_config = {},
-            const fastdds::rtps::ThreadSettings& callback_thread_config = {})
+        void init()
         {
 #ifdef _WIN32
             _close_event = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -215,7 +207,7 @@ namespace filewatch {
                 throw std::system_error(GetLastError(), std::system_category());
             }
 #endif // WIN32
-            _callback_thread = create_thread([this]() {
+            _callback_thread = std::thread([this]() {
                 try {
                     callback_thread();
                 } catch (...) {
@@ -224,8 +216,8 @@ namespace filewatch {
                     }
                     catch (...) {} // set_exception() may throw too
                 }
-            }, callback_thread_config, "dds.fwatch.cb");
-            _watch_thread = create_thread([this]() {
+            });
+            _watch_thread = std::thread([this]() {
                 try {
                     monitor_directory();
                 } catch (...) {
@@ -234,7 +226,7 @@ namespace filewatch {
                     }
                     catch (...) {} // set_exception() may throw too
                 }
-            }, watch_thread_config, "dds.fwatch");
+            });
 
             std::future<void> future = _running.get_future();
             future.get(); //block until the monitor_directory is up and running
@@ -406,7 +398,7 @@ namespace filewatch {
                                 std::ratio_multiply<std::hecto, typename std::chrono::nanoseconds::period>>(
                                     reinterpret_cast<ULARGE_INTEGER*>(&att.ftLastWriteTime)->QuadPart - base_.first.QuadPart);
 
-                    if (bytes_returned == 0 || ((current_time == last_write_time_) && current_size == last_size_ )) {
+                    if (bytes_returned == 0 || (current_time == last_write_time_) && current_size == last_size_ ) {
                         break;
                     }
 
@@ -514,11 +506,9 @@ namespace filewatch {
                 struct stat result;
                 stat(_path.c_str(), &result);
 
-                using clock = std::chrono::system_clock;
-                using duration = clock::duration;
-                std::chrono::time_point<clock> current_time;
-                current_time += std::chrono::duration_cast<duration>(std::chrono::seconds(result.st_mtim.tv_sec));
-                current_time += std::chrono::duration_cast<duration>(std::chrono::nanoseconds(result.st_mtim.tv_nsec));
+                std::chrono::time_point<std::chrono::system_clock> current_time;
+                current_time += std::chrono::seconds(result.st_mtim.tv_sec);
+                current_time += std::chrono::nanoseconds(result.st_mtim.tv_nsec);
 
                 unsigned long current_size = result.st_size;
 
@@ -614,9 +604,8 @@ namespace filewatch {
             struct stat result;
             stat(_path.c_str(), &result);
 
-            using duration = std::chrono::system_clock::duration;
-            last_write_time_ += std::chrono::duration_cast<duration>(std::chrono::seconds(result.st_mtim.tv_sec));
-            last_write_time_ += std::chrono::duration_cast<duration>(std::chrono::nanoseconds(result.st_mtim.tv_nsec));
+            last_write_time_ += std::chrono::seconds(result.st_mtim.tv_sec);
+            last_write_time_ += std::chrono::nanoseconds(result.st_mtim.tv_nsec);
 
             // Initialize filesize
             last_size_ = result.st_size;
@@ -628,6 +617,5 @@ namespace filewatch {
 
     template<class T> constexpr typename FileWatch<T>::C FileWatch<T>::_regex_all[];
     template<class T> constexpr typename FileWatch<T>::C FileWatch<T>::_this_directory[];
-}  // namespace filewatch
-}  // namespace eprosima
+}
 #endif

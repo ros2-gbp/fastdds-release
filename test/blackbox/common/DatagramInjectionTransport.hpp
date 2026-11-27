@@ -18,10 +18,11 @@
 #include <set>
 #include <vector>
 
-#include <fastdds/rtps/transport/ChainingTransport.hpp>
-#include <fastdds/rtps/transport/ChainingTransportDescriptor.hpp>
-#include <fastdds/rtps/transport/SenderResource.hpp>
-#include <fastdds/rtps/transport/TransportReceiverInterface.hpp>
+#include <fastdds/rtps/transport/ChainingTransport.h>
+#include <fastdds/rtps/transport/ChainingTransportDescriptor.h>
+#include <fastdds/rtps/network/SenderResource.h>
+
+using SenderResource = eprosima::fastrtps::rtps::SenderResource;
 
 namespace eprosima {
 namespace fastdds {
@@ -80,23 +81,23 @@ public:
     }
 
     bool send(
-            eprosima::fastdds::rtps::SenderResource* low_sender_resource,
-            const std::vector<NetworkBuffer>& buffers,
-            uint32_t total_bytes,
-            eprosima::fastdds::rtps::LocatorsIterator* destination_locators_begin,
-            eprosima::fastdds::rtps::LocatorsIterator* destination_locators_end,
+            eprosima::fastrtps::rtps::SenderResource* low_sender_resource,
+            const eprosima::fastrtps::rtps::octet* send_buffer,
+            uint32_t send_buffer_size,
+            eprosima::fastrtps::rtps::LocatorsIterator* destination_locators_begin,
+            eprosima::fastrtps::rtps::LocatorsIterator* destination_locators_end,
             const std::chrono::steady_clock::time_point& timeout) override
     {
-        return low_sender_resource->send(buffers, total_bytes, destination_locators_begin,
-                       destination_locators_end, timeout, 0);
+        return low_sender_resource->send(send_buffer, send_buffer_size, destination_locators_begin,
+                       destination_locators_end, timeout);
     }
 
     void receive(
             TransportReceiverInterface* next_receiver,
-            const eprosima::fastdds::rtps::octet* receive_buffer,
+            const eprosima::fastrtps::rtps::octet* receive_buffer,
             uint32_t receive_buffer_size,
-            const eprosima::fastdds::rtps::Locator_t& local_locator,
-            const eprosima::fastdds::rtps::Locator_t& remote_locator) override
+            const eprosima::fastrtps::rtps::Locator_t& local_locator,
+            const eprosima::fastrtps::rtps::Locator_t& remote_locator) override
     {
         auto mutator = parent_->get_datagram_mutator();
         if (mutator)
@@ -113,7 +114,7 @@ public:
     }
 
     bool OpenInputChannel(
-            const eprosima::fastdds::rtps::Locator_t& loc,
+            const eprosima::fastrtps::rtps::Locator_t& loc,
             TransportReceiverInterface* receiver_interface,
             uint32_t max_message_size) override
     {
@@ -140,7 +141,7 @@ public:
         std::basic_ifstream<char> file(filename, std::ios::binary | std::ios::in);
 
         file.seekg(0, file.end);
-        size_t file_size = static_cast<size_t>(file.tellg());
+        size_t file_size = file.tellg();
         file.seekg(0, file.beg);
 
         std::vector<uint8_t> buf(file_size);

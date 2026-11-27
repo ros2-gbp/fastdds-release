@@ -146,7 +146,7 @@ static const char* DataTags_str = "data_tags";
 static const char* Allow_str = "ALLOW";
 static const char* Deny_str = "DENY";
 
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps::security;
 
 void PermissionsParser::swap(
         PermissionsData& permissions)
@@ -180,32 +180,31 @@ bool PermissionsParser::parse_stream(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER,
+                        logError(XMLPARSER,
                                 "Invalid tag. Expected  " << Permission_str << " tag. Line " << PRINTLINE(
                                     permission_node));
                     }
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "Invalid tag. Expected  " << Permission_str << " tag. Line " << PRINTLINE(
+                    logError(XMLPARSER, "Invalid tag. Expected  " << Permission_str << " tag. Line " << PRINTLINE(
                                 permission_node));
 
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Malformed Permissions root. Line " << PRINTLINE(root));
+                logError(XMLPARSER, "Malformed Permissions root. Line " << PRINTLINE(root));
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Not found root node in Permissions XML.");
+            logError(XMLPARSER, "Not found root node in Permissions XML.");
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Error loading Permissions XML");
+        logError(XMLPARSER, "Error loading Permissions XML");
     }
 
     return returned_value;
@@ -235,8 +234,7 @@ bool PermissionsParser::parse_permissions(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Invalid tag. Expected  " << Grant_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Invalid tag. Expected  " << Grant_str << " tag. Line " << PRINTLINE(node));
                 returned_value = false;
             }
         }
@@ -244,7 +242,7 @@ bool PermissionsParser::parse_permissions(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected at least one " << Grant_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected at least one " << Grant_str << " tag. Line " << PRINTLINEPLUSONE(root));
     }
 
     return returned_value;
@@ -264,8 +262,7 @@ bool PermissionsParser::parse_grant(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER,
-                "Attribute name is required in " << Grant_str << " tag. Line " << PRINTLINE(root));
+        logError(XMLPARSER, "Attribute name is required in " << Grant_str << " tag. Line " << PRINTLINE(root));
         return false;
     }
 
@@ -283,20 +280,19 @@ bool PermissionsParser::parse_grant(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER,
-                        "Expected text in " << SubjectName_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Expected text in " << SubjectName_str << " tag. Line " << PRINTLINE(node));
                 return false;
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << SubjectName_str << " tag. Line " << PRINTLINE(node));
+            logError(XMLPARSER, "Expected " << SubjectName_str << " tag. Line " << PRINTLINE(node));
             return false;
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << SubjectName_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected " << SubjectName_str << " tag. Line " << PRINTLINEPLUSONE(root));
         return false;
     }
 
@@ -315,13 +311,13 @@ bool PermissionsParser::parse_grant(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Validity_str << " tag. Line " << PRINTLINE(node));
+            logError(XMLPARSER, "Expected " << Validity_str << " tag. Line " << PRINTLINE(node));
             return false;
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Validity_str << " tag. Line " << PRINTLINE(old_node));
+        logError(XMLPARSER, "Expected " << Validity_str << " tag. Line " << PRINTLINE(old_node));
         return false;
     }
 
@@ -359,8 +355,8 @@ bool PermissionsParser::parse_grant(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << AllowRule_str << " or " << DenyRule_str << " tag. Line "
-                                                  << PRINTLINE(old_node));
+        logError(XMLPARSER, "Expected " << AllowRule_str << " or " << DenyRule_str << " tag. Line " <<
+                PRINTLINE(old_node));
         return false;
     }
 
@@ -382,25 +378,25 @@ bool PermissionsParser::parse_grant(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid text in" << Default_str << " tag. Line " << PRINTLINE(node));
+                    logError(XMLPARSER, "Invalid text in" << Default_str << " tag. Line " << PRINTLINE(node));
                     return false;
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected text in" << Default_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Expected text in" << Default_str << " tag. Line " << PRINTLINE(node));
                 return false;
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Invalid tag. Expected tag " << Default_str << ". Line " << PRINTLINE(node));
+            logError(XMLPARSER, "Invalid tag. Expected tag " << Default_str << ". Line " << PRINTLINE(node));
             return false;
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected tag " << Default_str << ". Line " << PRINTLINE(old_node));
+        logError(XMLPARSER, "Expected tag " << Default_str << ". Line " << PRINTLINE(old_node));
         return false;
     }
 
@@ -459,53 +455,50 @@ bool PermissionsParser::parse_validity(
                         }
                         else
                         {
-                            EPROSIMA_LOG_ERROR(XMLPARSER,
+                            logError(XMLPARSER,
                                     "Fail parsing datetime value in " << NotAfter_str << " tag. Line "
-                                                                      << PRINTLINE(
-                                        node));
+                                                                      << PRINTLINE(node));
                         }
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << NotAfter_str << " tag. Line "
-                                                                  << PRINTLINE(node));
+                        logError(XMLPARSER, "Expected " << NotAfter_str << " tag. Line " << PRINTLINE(node));
                     }
 #if _MSC_VER != 1800
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << NotAfter_str << " tag. Line " << PRINTLINE(node));
+                    logError(XMLPARSER, "Expected " << NotAfter_str << " tag. Line " << PRINTLINE(node));
                 }
 #endif // if _MSC_VER != 1800
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "Expected " << NotAfter_str << " tag. Line " << PRINTLINEPLUSONE(old_node));
+                    logError(XMLPARSER, "Expected " << NotAfter_str << " tag. Line " << PRINTLINEPLUSONE(old_node));
                 }
 #if _MSC_VER != 1800
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Fail parsing datetime value in " << NotBefore_str << " tag. Line "
-                                                                                << PRINTLINE(node));
+                logError(XMLPARSER, "Fail parsing datetime value in " << NotBefore_str << " tag. Line "
+                                                                      << PRINTLINE(node));
             }
 #endif // if _MSC_VER != 1800
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected datetime value in " << NotBefore_str << " tag. Line "
-                                                                            << PRINTLINE(node));
+                logError(XMLPARSER, "Expected datetime value in " << NotBefore_str << " tag. Line "
+                                                                  << PRINTLINE(node));
             }
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << NotBefore_str << " tag. Line " << PRINTLINE(node));
+            logError(XMLPARSER, "Expected " << NotBefore_str << " tag. Line " << PRINTLINE(node));
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << NotBefore_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected " << NotBefore_str << " tag. Line " << PRINTLINEPLUSONE(root));
     }
 
     return returned_value;
@@ -530,13 +523,13 @@ bool PermissionsParser::parse_rule(
         }
         else
         {
-            EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Domains_str << " tag. Line " << PRINTLINE(node));
+            logError(XMLPARSER, "Expected " << Domains_str << " tag. Line " << PRINTLINE(node));
             return false;
         }
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Domains_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected " << Domains_str << " tag. Line " << PRINTLINEPLUSONE(root));
         return false;
     }
 
@@ -578,8 +571,8 @@ bool PermissionsParser::parse_rule(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Publish_str << " or " << Subscribe_str
-                                                          << " or " << Relay_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Expected " << Publish_str << " or " << Subscribe_str
+                                                << " or " << Relay_str << " tag. Line " << PRINTLINE(node));
                 return false;
             }
         }
@@ -613,9 +606,8 @@ bool PermissionsParser::parse_criteria(
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Topics_str << " or " << Partitions_str
-                                                          << " or " << DataTags_str << " tag. Line "
-                                                          << PRINTLINE(node));
+                logError(XMLPARSER, "Expected " << Topics_str << " or " << Partitions_str
+                                                << " or " << DataTags_str << " tag. Line " << PRINTLINE(node));
                 returned_value = false;
             }
         }
@@ -652,14 +644,13 @@ bool PermissionsParser::parse_topic(
                 }
                 else
                 {
-                    EPROSIMA_LOG_ERROR(XMLPARSER,
-                            "Expected topic name in " << Topic_str << " tag. Line " << PRINTLINE(node));
+                    logError(XMLPARSER, "Expected topic name in " << Topic_str << " tag. Line " << PRINTLINE(node));
                     returned_value = false;
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Topic_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Expected " << Topic_str << " tag. Line " << PRINTLINE(node));
                 returned_value = false;
             }
         }
@@ -667,7 +658,7 @@ bool PermissionsParser::parse_topic(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER, "Expected at least one " << Topic_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected at least one " << Topic_str << " tag. Line " << PRINTLINEPLUSONE(root));
     }
 
     return returned_value;
@@ -702,16 +693,15 @@ bool PermissionsParser::parse_partition(
                     }
                     else
                     {
-                        EPROSIMA_LOG_ERROR(XMLPARSER,
-                                "Expected topic name in " << Partition_str << " tag. Line " << PRINTLINE(
-                                    node));
+                        logError(XMLPARSER,
+                                "Expected topic name in " << Partition_str << " tag. Line " << PRINTLINE(node));
                         returned_value = false;
                     }
                 }
             }
             else
             {
-                EPROSIMA_LOG_ERROR(XMLPARSER, "Expected " << Partition_str << " tag. Line " << PRINTLINE(node));
+                logError(XMLPARSER, "Expected " << Partition_str << " tag. Line " << PRINTLINE(node));
                 returned_value = false;
             }
         }
@@ -719,8 +709,7 @@ bool PermissionsParser::parse_partition(
     }
     else
     {
-        EPROSIMA_LOG_ERROR(XMLPARSER,
-                "Expected at least one " << Partition_str << " tag. Line " << PRINTLINEPLUSONE(root));
+        logError(XMLPARSER, "Expected at least one " << Partition_str << " tag. Line " << PRINTLINEPLUSONE(root));
     }
 
     return returned_value;

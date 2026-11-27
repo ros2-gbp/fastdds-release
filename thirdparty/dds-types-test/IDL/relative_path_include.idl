@@ -1,7 +1,0 @@
-#include "../IDL/helpers/basic_inner_types.idl"
-#include "../IDL/helpers/typedef_only.idl"
-
-struct RelativePathIncludeStruct
-{
-    InnerEnumHelper value;
-};

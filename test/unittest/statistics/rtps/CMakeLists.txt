@@ -12,12 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if(WIN32)
+    add_definitions(-D_WIN32_WINNT=0x0601)
+endif()
+
 set(STATISTICS_RTPS_TESTS_SOURCE
     RTPSStatisticsTests.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/messages/CDRMessage.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/statistics/types/types.cxx
     )
 
 add_executable(RTPSStatisticsTests ${STATISTICS_RTPS_TESTS_SOURCE})
+
+target_compile_definitions(RTPSStatisticsTests PRIVATE
+    BOOST_ASIO_STANDALONE
+    ASIO_STANDALONE
+    $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
+    $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNAL_DEBUG> # Internal debug activated.
+    )
 
 target_include_directories(RTPSStatisticsTests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
@@ -26,38 +37,5 @@ target_include_directories(RTPSStatisticsTests PRIVATE
     ${Asio_INCLUDE_DIR}
     )
 
-target_link_libraries(RTPSStatisticsTests
-    fastdds
-    fastcdr
-    GTest::gtest
-    GTest::gmock
-    $<$<BOOL:${QNX}>:socket>
-)
-gtest_discover_tests(RTPSStatisticsTests)
-
-set(STATISTICS_RTPS_MONITORSERVICETESTS_SOURCE MonitorServiceTests.cpp)
-
-add_executable(MonitorServiceTests ${STATISTICS_RTPS_MONITORSERVICETESTS_SOURCE})
-
-target_link_units(MonitorServiceTests UNITS statistics::types dds::participant-qos rtps::network-factory
-    rtps::timed-event xtypes rtps::builtin-data rtps::parameter-list rtps::history rtps::proxy-data
-    rtps::locator-selector-sender dds::writer-history statistics::monitor-service MOCKS BaseReader StatefulReader
-    StatelessReader StatelessWriter BaseWriter StatefulWriter DomainParticipantFactory MessageReceiver RTPSDomainImpl
-    ReaderHistory StatisticsBase TypeSupport WriterHistory xtypes::TypeObjectUtils XMLProfileManager)
-target_include_directories(MonitorServiceTests PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_BINARY_DIR}/include
-    ${PROJECT_SOURCE_DIR}/src/cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/taocpp-pegtl
-    ${Asio_INCLUDE_DIR}
-    )
-
-target_link_libraries(MonitorServiceTests
-    fastcdr
-    GTest::gtest
-    GTest::gmock
-    $<$<BOOL:${TLS_FOUND}>:OpenSSL::SSL$<SEMICOLON>OpenSSL::Crypto>
-    $<$<BOOL:${QNX}>:socket>
-    )
-
-gtest_discover_tests(MonitorServiceTests)
+target_link_libraries(RTPSStatisticsTests fastrtps fastcdr GTest::gtest GTest::gmock)
+add_gtest(RTPSStatisticsTests SOURCES ${STATISTICS_RTPS_TESTS_SOURCE})

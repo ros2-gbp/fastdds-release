@@ -16,27 +16,26 @@
  * @file WriterProxy.h
  */
 
-#ifndef FASTDDS_RTPS_READER_WRITERPROXY_H_
-#define FASTDDS_RTPS_READER_WRITERPROXY_H_
+#ifndef FASTRTPS_RTPS_READER_WRITERPROXY_H_
+#define FASTRTPS_RTPS_READER_WRITERPROXY_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
 #include <algorithm>
 #include <set>
 #include <vector>
 
-#include <foonathan/memory/container.hpp>
-#include <foonathan/memory/memory_pool.hpp>
-
-#include <fastdds/rtps/common/Types.hpp>
-#include <fastdds/rtps/common/Locator.hpp>
-#include <fastdds/rtps/common/CacheChange.hpp>
-#include <fastdds/rtps/attributes/ReaderAttributes.hpp>
+#include <fastdds/rtps/common/Types.h>
+#include <fastdds/rtps/common/Locator.h>
+#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/rtps/attributes/ReaderAttributes.h>
 #include <fastdds/rtps/attributes/RTPSParticipantAllocationAttributes.hpp>
 #include <fastdds/rtps/messages/RTPSMessageSenderInterface.hpp>
-#include <fastdds/utils/collections/ResourceLimitedVector.hpp>
+#include <fastrtps/utils/collections/ResourceLimitedVector.hpp>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 
-#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <foonathan/memory/container.hpp>
+#include <foonathan/memory/memory_pool.hpp>
 
 // Testing purpose
 #ifndef TEST_FRIENDS
@@ -44,7 +43,7 @@
 #endif // TEST_FRIENDS
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 class RTPSParticipantImpl;
@@ -115,7 +114,7 @@ public:
     /**
      * Update the missing changes up to the provided sequenceNumber.
      * All changes with status UNKNOWN with seq_num <= input seq_num are marked MISSING.
-     * @param [in] seq_num Pointer to the SequenceNumber.
+     * @param[in] seq_num Pointer to the SequenceNumber.
      */
     void missing_changes_update(
             const SequenceNumber_t& seq_num);
@@ -123,7 +122,7 @@ public:
     /**
      * Update the lost changes up to the provided sequenceNumber.
      * All changes with status UNKNOWN or MISSING with seq_num < input seq_num are marked LOST.
-     * @param [in] seq_num Pointer to the SequenceNumber.
+     * @param[in] seq_num Pointer to the SequenceNumber.
      */
     int32_t lost_changes_update(
             const SequenceNumber_t& seq_num);
@@ -145,22 +144,79 @@ public:
             const SequenceNumber_t& seq_num);
 
     /**
+     * Called when a change has been removed from the reader's history.
+     * @param seq_num Sequence number of the removed change.
+     */
+    void change_removed_from_history(
+            const SequenceNumber_t& seq_num);
+
+    /**
      * Process a gap received from the writer.
      *
-     * Acts as a filter for the GAP message, removing any sequence number that should not be processed by the reader.
-     *
-     * @param gap_start           Sequence number as received in the GAP message.
-     * @param gap_list            Sequence number set as received in the GAP message.
-     * @param validated_start     First sequence number that should be processed by the caller.
-     * @param validated_gap_list  Sequence number set with the sequence numbers that should be processed by the caller.
-     *
-     * @return true if the gap was processed successfully, false otherwise.
+     * @param gap_start  Sequence number as received in the GAP message.
+     * @param gap_list   Sequence number set as received in the GAP message.
+     * @param remove_fn  Function to be called for each irrelevant change found.
      */
-    bool process_gap(
+    template<typename Func>
+    inline void process_gap(
             const SequenceNumber_t& gap_start,
             const SequenceNumberSet_t& gap_list,
-            SequenceNumber_t& validated_start,
-            SequenceNumberSet_t& validated_gap_list);
+            Func&& remove_fn)
+    {
+        // First sequence number that can be considered for GAP processing
+        SequenceNumber_t first_allowed_gap = changes_from_writer_low_mark_ + 1u;
+
+        // Cap start sequence number
+        SequenceNumber_t initial_seq = std::max(gap_start, first_allowed_gap);
+
+        // Default maximum allowed GAP is low mark + 256
+        SequenceNumber_t max_allowed_gap = changes_from_writer_low_mark_ + 256u;
+
+        // Special case when initial_seq is exactly the first allowed GAP
+        if (initial_seq == first_allowed_gap)
+        {
+            max_allowed_gap = gap_list.base() + 256u;
+
+            // Do not exceed max sequence number when known from a heartbeat
+            if (max_sequence_number_ > changes_from_writer_low_mark_)
+            {
+                max_allowed_gap = max_sequence_number_ + 1;
+            }
+        }
+
+        // Early exit if gap_start is beyond allowed range
+        if (gap_start > max_allowed_gap)
+        {
+            return;
+        }
+
+        // Iterate through all sequence numbers in [initial_seq, final_seq)
+        SequenceNumber_t auxSN;
+        SequenceNumber_t finalSN = std::min(gap_list.base(), max_allowed_gap);
+        for (auxSN = initial_seq; auxSN < finalSN; auxSN++)
+        {
+            if (irrelevant_change_set(auxSN))
+            {
+                remove_fn(auxSN);
+            }
+        }
+
+        // Early exit if the entire gap_list is beyond allowed range
+        if (gap_list.base() > max_allowed_gap)
+        {
+            return;
+        }
+
+        // Iterate through all sequence numbers in the gap_list
+        gap_list.for_each(
+            [&](SequenceNumber_t it)
+            {
+                if ((it < max_allowed_gap) && irrelevant_change_set(it))
+                {
+                    remove_fn(it);
+                }
+            });
+    }
 
     /**
      * Check if this proxy has any missing change.
@@ -197,7 +253,7 @@ public:
         return persistence_guid_;
     }
 
-    inline dds::LivelinessQosPolicyKind liveliness_kind() const
+    inline LivelinessQosPolicyKind liveliness_kind() const
     {
         return liveliness_kind_;
     }
@@ -267,7 +323,7 @@ public:
 
     /**
      * Checks whether a cache change was already received from this proxy.
-     * @param [in] seq_num Sequence number of the cache change to check.
+     * @param[in] seq_num Sequence number of the cache change to check.
      * @return true if the cache change was received, false otherwise.
      */
     bool change_was_received(
@@ -309,7 +365,7 @@ public:
      * @param interval New interval value.
      */
     void update_heartbeat_response_interval(
-            const dds::Duration_t& interval);
+            const Duration_t& interval);
 
     /**
      * Check if the destinations managed by this sender interface have changed.
@@ -356,14 +412,12 @@ public:
     /**
      * Send a message through this interface.
      *
-     * @param buffers Vector of NetworkBuffers to send with data already serialized.
-     * @param total_bytes Total number of bytes to send. Should be equal to the sum of the @c size field of all buffers.
+     * @param message Pointer to the buffer with the message already serialized.
      * @param max_blocking_time_point Future timepoint where blocking send should end.
      */
     virtual bool send(
-            const std::vector<eprosima::fastdds::rtps::NetworkBuffer>& buffers,
-            const uint32_t& total_bytes,
-            std::chrono::steady_clock::time_point max_blocking_time_point) override;
+            CDRMessage_t* message,
+            std::chrono::steady_clock::time_point max_blocking_time_point) const override;
 
     bool is_on_same_process() const
     {
@@ -393,16 +447,9 @@ public:
 
 private:
 
-    enum StateCode
-    {
-        IDLE = 0, //! Writer Proxy is not performing any critical operations.
-        BUSY, //! Writer Proxy is performing a critical operation. Some actions (e.g. stop) should wait for its completion.
-        STOPPED, //! Writer Proxy has been requested to \c stop.
-    };
-
     /**
      * Set initial value for last acked sequence number.
-     * @param [in] seq_num last acked sequence number.
+     * @param[in] seq_num last acked sequence number.
      */
     void loaded_from_storage(
             const SequenceNumber_t& seq_num);
@@ -422,7 +469,7 @@ private:
     //! Timed event to send initial acknack.
     TimedEvent* initial_acknack_;
     //! Last Heartbeatcount.
-    std::atomic<uint32_t> last_heartbeat_count_;
+    uint32_t last_heartbeat_count_;
     //!Indicates if the heartbeat has the final flag set.
     std::atomic<bool> heartbeat_final_flag_;
     //!Is the writer alive
@@ -450,7 +497,7 @@ private:
     //! Taken from QoS
     uint32_t ownership_strength_;
     //! Taken from QoS
-    dds::LivelinessQosPolicyKind liveliness_kind_;
+    LivelinessQosPolicyKind liveliness_kind_;
     //! Taken from proxy data
     GUID_t persistence_guid_;
     //! Taken from proxy data
@@ -459,21 +506,19 @@ private:
     bool is_datasharing_writer_;
     //! Wether at least one heartbeat was recevied.
     bool received_at_least_one_heartbeat_;
-    //! Current state of this Writer Proxy
-    std::atomic<StateCode> state_;
 
     using ChangeIterator = decltype(changes_received_)::iterator;
 
-#if !defined(NDEBUG) && defined(FASTDDS_SOURCE) && defined(__unix__)
+#if !defined(NDEBUG) && defined(FASTRTPS_SOURCE) && defined(__unix__)
     int get_mutex_owner() const;
 
     int get_thread_id() const;
-#endif // if !defined(NDEBUG) && defined(FASTDDS_SOURCE) && defined(__unix__)
+#endif // if !defined(NDEBUG) && defined(FASTRTPS_SOURCE) && defined(__unix__)
 };
 
 } /* namespace rtps */
-} /* namespace fastdds */
+} /* namespace fastrtps */
 } /* namespace eprosima */
 
 #endif // ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif /* FASTDDS_RTPS_READER_WRITERPROXY_H_ */
+#endif /* FASTRTPS_RTPS_READER_WRITERPROXY_H_ */

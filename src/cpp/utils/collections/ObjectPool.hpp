@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef FASTDDS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_
-#define FASTDDS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_
+#ifndef FASTRTPS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_
+#define FASTRTPS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_
 
 #include <memory>
 #include <type_traits>
@@ -39,7 +39,7 @@ namespace fastdds {
  *
  * @ingroup UTILITIES_MODULE
  */
-template<
+template <
     typename _Ty,
     typename _Alloc = std::allocator<_Ty>,
     typename _Collection = std::vector<_Ty, _Alloc>>
@@ -81,7 +81,7 @@ struct ObjectPool final
         return ret;
     }
 
-    template<class ... _Valty>
+    template <class ... _Valty>
     void put(
             _Valty&&... _Val)
     {
@@ -97,4 +97,4 @@ private:
 }  // namespace fastdds
 }  // namespace eprosima
 
-#endif /* FASTDDS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_ */
+#endif /* FASTRTPS_UTILS_COLLECTIONS_OBJECTPOOL_HPP_ */

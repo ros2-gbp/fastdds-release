@@ -23,9 +23,10 @@
 
 #include <fastdds/rtps/builtin/data/BuiltinEndpoints.hpp>
 #include <fastdds/rtps/common/EntityId_t.hpp>
+#include <fastdds/rtps/reader/StatelessReader.h>
+
 #include <rtps/builtin/BuiltinReader.hpp>
 #include <rtps/builtin/discovery/participant/DS/DiscoveryServerPDPEndpoints.hpp>
-#include <rtps/reader/StatelessReader.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -38,45 +39,45 @@ struct DiscoveryServerPDPEndpointsSecure : public DiscoveryServerPDPEndpoints
 {
     ~DiscoveryServerPDPEndpointsSecure() override = default;
 
-    BuiltinEndpointSet_t builtin_endpoints() const override
+    fastrtps::rtps::BuiltinEndpointSet_t builtin_endpoints() const override
     {
         return DiscoveryServerPDPEndpoints::builtin_endpoints() |
                DISC_BUILTIN_ENDPOINT_PARTICIPANT_SECURE_ANNOUNCER | DISC_BUILTIN_ENDPOINT_PARTICIPANT_SECURE_DETECTOR;
     }
 
     bool enable_pdp_readers(
-            RTPSParticipantImpl* participant) override
+            fastrtps::rtps::RTPSParticipantImpl* participant) override
     {
         return DiscoveryServerPDPEndpoints::enable_pdp_readers(participant) &&
                participant->enableReader(stateless_reader.reader_);
     }
 
     void disable_pdp_readers(
-            RTPSParticipantImpl* participant) override
+            fastrtps::rtps::RTPSParticipantImpl* participant) override
     {
         participant->disableReader(stateless_reader.reader_);
         DiscoveryServerPDPEndpoints::disable_pdp_readers(participant);
     }
 
     void delete_pdp_endpoints(
-            RTPSParticipantImpl* participant) override
+            fastrtps::rtps::RTPSParticipantImpl* participant) override
     {
         participant->deleteUserEndpoint(stateless_reader.reader_->getGuid());
         DiscoveryServerPDPEndpoints::delete_pdp_endpoints(participant);
     }
 
     void remove_from_pdp_reader_history(
-            const InstanceHandle_t& remote_participant) override
+            const fastrtps::rtps::InstanceHandle_t& remote_participant) override
     {
         stateless_reader.remove_from_history(remote_participant);
         DiscoveryServerPDPEndpoints::remove_from_pdp_reader_history(remote_participant);
     }
 
     void remove_from_pdp_reader_history(
-            CacheChange_t* change) override
+            fastrtps::rtps::CacheChange_t* change) override
     {
         assert(nullptr != change);
-        if (change->writerGUID.entityId == c_EntityId_SPDPWriter)
+        if (change->writerGUID.entityId == fastrtps::rtps::c_EntityId_SPDPWriter)
         {
             stateless_reader.history_->remove_change(change);
         }
@@ -87,7 +88,7 @@ struct DiscoveryServerPDPEndpointsSecure : public DiscoveryServerPDPEndpoints
     }
 
     //! Builtin Simple PDP reader
-    BuiltinReader<StatelessReader> stateless_reader;
+    BuiltinReader<fastrtps::rtps::StatelessReader> stateless_reader;
 };
 
 } // namespace rtps

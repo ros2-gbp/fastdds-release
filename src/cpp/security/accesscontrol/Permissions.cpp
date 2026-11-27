@@ -16,10 +16,23 @@
  * @file Permissions.cpp
  */
 
-#include <cassert>
-#include <fstream>
+#include <security/accesscontrol/Permissions.h>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
+#include <security/accesscontrol/GovernanceParser.h>
+#include <security/accesscontrol/PermissionsParser.h>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/logging/LogTopic.h>
+#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
+#include <fastdds/rtps/security/exceptions/SecurityException.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
+#include <fastdds/rtps/resources/TimedEvent.h>
+#include <fastdds/rtps/security/authentication/Authentication.h>
+#include <fastrtps/utils/StringMatching.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
+#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
 
 #include <openssl/opensslv.h>
+
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
 #define OPENSSL_CONST const
@@ -32,95 +45,19 @@
 #include <openssl/err.h>
 #include <openssl/obj_mac.h>
 
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
-
-#include <rtps/builtin/data/ParticipantProxyData.hpp>
-#include <rtps/builtin/data/ReaderProxyData.hpp>
-#include <rtps/builtin/data/WriterProxyData.hpp>
-#include <rtps/resources/TimedEvent.h>
-#include <rtps/security/authentication/Authentication.h>
-#include <rtps/security/exceptions/SecurityException.h>
-#include <security/accesscontrol/AccessPermissionsHandle.h>
-#include <security/accesscontrol/DistinguishedName.h>
-#include <security/accesscontrol/GovernanceParser.h>
-#include <security/accesscontrol/Permissions.h>
-#include <security/accesscontrol/PermissionsParser.h>
 #include <security/artifact_providers/FileProvider.hpp>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/logging/LogTopic.h>
-#include <utils/StringMatching.hpp>
+
+#include <cassert>
+#include <fstream>
 
 #define S1(x) #x
 #define S2(x) S1(x)
 #define LOCATION " (" __FILE__ ":" S2(__LINE__) ")"
 #define _SecurityException_(str) SecurityException(std::string(str) + LOCATION)
 
-namespace eprosima {
-namespace fastdds {
-namespace rtps {
-
-using namespace security;
-
-/**
- * @brief Convert a signature algortihm before adding it to a PermissionsToken.
- *
- * This methods converts the signature algorithm to the format used in the PermissionsToken.
- * Depending on the value of the use_legacy parameter, the algorithm will be converted to the legacy format or to the
- * one specified in the DDS-SEC 1.1 specification.
- *
- * @param algorithm The algorithm to convert.
- * @param use_legacy Whether to use the legacy format or not.
- *
- * @return The converted algorithm.
- */
-static std::string convert_to_token_algo(
-        const std::string& algorithm,
-        bool use_legacy)
-{
-    // Leave as internal format when legacy is used
-    if (use_legacy)
-    {
-        return algorithm;
-    }
-
-    // Convert to token format
-    if (algorithm == RSA_SHA256)
-    {
-        return RSA_SHA256_FOR_TOKENS;
-    }
-    else if (algorithm == ECDSA_SHA256)
-    {
-        return ECDSA_SHA256_FOR_TOKENS;
-    }
-
-    return algorithm;
-}
-
-/**
- * @brief Parse a signature algorithm from a PermissionsToken.
- *
- * This method parses a signature algorithm from a PermissionsToken.
- * It converts the algorithm to the internal (legacy) format used by the library.
- *
- * @param algorithm The algorithm to parse.
- *
- * @return The parsed algorithm.
- */
-static std::string parse_token_algo(
-        const std::string& algorithm)
-{
-    // Convert to internal format, allowing both legacy and new formats
-    if (algorithm == RSA_SHA256_FOR_TOKENS)
-    {
-        return RSA_SHA256;
-    }
-    else if (algorithm == ECDSA_SHA256_FOR_TOKENS)
-    {
-        return ECDSA_SHA256;
-    }
-
-    return algorithm;
-}
+using namespace eprosima::fastrtps;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 static bool is_domain_in_set(
         const uint32_t domain_id,
@@ -338,6 +275,76 @@ static bool get_signature_algorithm(
     }
 
     return returnedValue;
+}
+
+static bool rfc2253_string_compare(
+        const std::string& str1,
+        const std::string& str2)
+{
+    bool returned_value = true;
+
+    size_t str1_mark_low = 0, str1_mark_high = 0, str2_mark_low = 0, str2_mark_high = 0;
+
+    str1_mark_high = str1.find_first_of(',');
+    if (str1_mark_high == std::string::npos)
+    {
+        str1_mark_high = str1.length();
+    }
+    str2_mark_high = str2.find_first_of(',');
+    if (str2_mark_high == std::string::npos)
+    {
+        str2_mark_high = str2.length();
+    }
+
+    while (str1_mark_low < str1_mark_high && str2_mark_low < str2_mark_high)
+    {
+        // Trim
+        size_t str1_trim_high = str1_mark_high - 1, str2_trim_high = str2_mark_high - 1;
+
+        while (str1.at(str1_mark_low) == ' ' && (str1_mark_low + 1) != str1_trim_high)
+        {
+            ++str1_mark_low;
+        }
+        while (str2.at(str2_mark_low) == ' ' && (str2_mark_low + 1) != str2_trim_high)
+        {
+            ++str2_mark_low;
+        }
+        while (str1.at(str1_trim_high) == ' ' && (str1_trim_high - 1) != str1_mark_low)
+        {
+            --str1_trim_high;
+        }
+        while (str2.at(str2_trim_high) == ' ' && (str2_trim_high - 1) != str2_mark_low)
+        {
+            --str2_trim_high;
+        }
+
+        if (str1.compare(str1_mark_low, str1_trim_high - str1_mark_low + 1, str2,
+                str2_mark_low, str2_trim_high - str2_mark_low + 1) != 0)
+        {
+            returned_value = false;
+            break;
+        }
+
+        str1_mark_low = str1_mark_high + 1;
+        str2_mark_low = str2_mark_high + 1;
+        str1_mark_high = str1.find_first_of(',', str1_mark_low);
+        if (str1_mark_high == std::string::npos)
+        {
+            str1_mark_high = str1.length();
+        }
+        str2_mark_high = str2.find_first_of(',', str2_mark_low);
+        if (str2_mark_high == std::string::npos)
+        {
+            str2_mark_high = str2.length();
+        }
+    }
+
+    if (str1_mark_low < str1_mark_high || str2_mark_low < str2_mark_high)
+    {
+        returned_value = false;
+    }
+
+    return returned_value;
 }
 
 // Auxiliary functions
@@ -633,6 +640,9 @@ static bool check_subject_name(
             {
                 if (rfc2253_string_compare(grant.subject_name, lih->cert_sn_rfc2253_))
                 {
+                    ah->grant = std::move(grant);
+                    returned_value = true;
+
                     // Remove rules not apply to my domain
                     auto iterator = grant.rules.begin();
                     while (iterator != grant.rules.end())
@@ -646,10 +656,6 @@ static bool check_subject_name(
                             ++iterator;
                         }
                     }
-
-                    // Store the grant only once it holds this domain's rules alone
-                    ah->grant = std::move(grant);
-                    returned_value = true;
 
                     break;
                 }
@@ -758,8 +764,7 @@ static bool check_subject_name(
 }
 
 static bool generate_permissions_token(
-        AccessPermissionsHandle& handle,
-        bool transmit_legacy_algorithms)
+        AccessPermissionsHandle& handle)
 {
     Property property;
     PermissionsToken& token = handle->permissions_token_;
@@ -771,7 +776,7 @@ static bool generate_permissions_token(
     token.properties().push_back(std::move(property));
 
     property.name("dds.perm_ca.algo");
-    property.value() = convert_to_token_algo(handle->algo, transmit_legacy_algorithms);
+    property.value() = handle->algo;
     property.propagate(true);
     token.properties().push_back(std::move(property));
 
@@ -792,17 +797,14 @@ static bool generate_credentials_token(
     {
         try
         {
+            std::ifstream ifs(file.substr(7).c_str());
             Property property;
             property.name("dds.perm.cert");
+            property.value().assign((std::istreambuf_iterator<char>(ifs)),
+                    (std::istreambuf_iterator<char>()));
             property.propagate(true);
-
-            std::ifstream ifs(file.substr(7), std::ios::binary);
-            std::ostringstream oss;
-            oss << ifs.rdbuf();
-            property.value() = oss.str();
-            returned_value = static_cast<bool>(ifs);
-
             token.properties().push_back(std::move(property));
+            returned_value = true;
         }
         catch (std::exception&)
         {
@@ -821,12 +823,12 @@ PermissionsHandle* Permissions::validate_local_permissions(
         Authentication& auth_plugin,
         const IdentityHandle& identity,
         const uint32_t domain_id,
-        const PropertyPolicy& part_props,
+        const RTPSParticipantAttributes& participant_attr,
         SecurityException& exception)
 {
     drain_expired_timers();
 
-    PropertyPolicy access_properties = PropertyPolicyHelper::get_properties_with_prefix(part_props,
+    PropertyPolicy access_properties = PropertyPolicyHelper::get_properties_with_prefix(participant_attr.properties,
                     "dds.sec.access.builtin.Access-Permissions.");
 
     if (PropertyPolicyHelper::length(access_properties) == 0)
@@ -834,13 +836,6 @@ PermissionsHandle* Permissions::validate_local_permissions(
         exception = _SecurityException_("Not found any dds.sec.access.builtin.Access-Permissions property");
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return nullptr;
-    }
-
-    bool transmit_legacy_algorithms = false;
-    std::string* legacy = PropertyPolicyHelper::find_property(access_properties, "transmit_algorithms_as_legacy");
-    if (legacy != nullptr)
-    {
-        transmit_legacy_algorithms = (*legacy == "true");
     }
 
     std::string* permissions_ca = PropertyPolicyHelper::find_property(access_properties, "permissions_ca");
@@ -885,7 +880,7 @@ PermissionsHandle* Permissions::validate_local_permissions(
                 // Check subject name.
                 if (check_subject_name(identity, *ah, domain_id, rules, permissions_data, exception))
                 {
-                    if (generate_permissions_token(*ah, transmit_legacy_algorithms))
+                    if (generate_permissions_token(*ah))
                     {
                         if (generate_credentials_token(*ah, *permissions, exception))
                         {
@@ -1022,8 +1017,7 @@ PermissionsHandle* Permissions::validate_remote_permissions(
 
     if (algo != nullptr)
     {
-        std::string used_algo = parse_token_algo(*algo);
-        if (used_algo.compare(lph->algo) != 0)
+        if (algo->compare(lph->algo) != 0)
         {
             exception = _SecurityException_("Remote participant PermissionsCA algorithm differs from local");
             EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
@@ -1081,6 +1075,7 @@ PermissionsHandle* Permissions::validate_remote_permissions(
 bool Permissions::check_create_participant(
         const PermissionsHandle& local_handle,
         const uint32_t /*domain_id*/,
+        const RTPSParticipantAttributes&,
         SecurityException& exception)
 {
     bool returned_value = false;
@@ -1286,7 +1281,7 @@ bool Permissions::check_remote_datawriter(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = publication_data.topic_name.c_str();
+    const char* topic_name = publication_data.topicName().c_str();
 
     if (rah.nil())
     {
@@ -1308,7 +1303,7 @@ bool Permissions::check_remote_datawriter(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + publication_data.topic_name.to_string());
+            "Not found topic access rule for topic " + publication_data.topicName().to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1319,7 +1314,7 @@ bool Permissions::check_remote_datawriter(
         {
             if (is_topic_in_criterias(topic_name, rule.publishes))
             {
-                returned_value = check_rule(topic_name, rule, publication_data.partition.getNames(),
+                returned_value = check_rule(topic_name, rule, publication_data.m_qos.m_partition.getNames(),
                                 rule.publishes, exception);
                 break;
             }
@@ -1347,7 +1342,7 @@ bool Permissions::check_remote_datareader(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = subscription_data.topic_name.c_str();
+    const char* topic_name = subscription_data.topicName().c_str();
 
     relay_only = false;
 
@@ -1371,7 +1366,7 @@ bool Permissions::check_remote_datareader(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + subscription_data.topic_name.to_string());
+            "Not found topic access rule for topic " + subscription_data.topicName().to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1380,7 +1375,7 @@ bool Permissions::check_remote_datareader(
     {
         if (is_domain_in_set(domain_id, rule.domains))
         {
-            const std::vector<std::string>& partitions = subscription_data.partition.getNames();
+            const std::vector<std::string>& partitions = subscription_data.m_qos.m_partition.getNames();
             if (is_topic_in_criterias(topic_name, rule.subscribes))
             {
                 returned_value = check_rule(topic_name, rule, partitions, rule.subscribes, exception);
@@ -1490,14 +1485,14 @@ bool Permissions::set_listener(
 }
 
 void Permissions::set_event_resource(
-        eprosima::fastdds::rtps::ResourceEvent& service)
+        eprosima::fastrtps::rtps::ResourceEvent& service)
 {
     event_resource_ = &service;
 }
 
 void Permissions::drain_expired_timers()
 {
-    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> reaped;
+    std::vector<std::unique_ptr<eprosima::fastrtps::rtps::TimedEvent>> reaped;
     {
         std::lock_guard<std::mutex> lock(expired_timers_mtx_);
         reaped.swap(expired_timers_);
@@ -1526,7 +1521,7 @@ void Permissions::arm_permissions_expiry(
     const double interval_ms = (ms <= 0) ? 1.0 : static_cast<double>(ms);
 
     AccessPermissionsHandle* phandle = &handle;
-    handle->expiry_event_.reset(new eprosima::fastdds::rtps::TimedEvent(
+    handle->expiry_event_.reset(new eprosima::fastrtps::rtps::TimedEvent(
                 *event_resource_,
                 [this, phandle]() -> bool
                 {
@@ -1550,7 +1545,3 @@ void Permissions::arm_permissions_expiry(
                 interval_ms));
     handle->expiry_event_->restart_timer();
 }
-
-} // namespace rtps
-} // namespace fastdds
-} // namespace eprosima

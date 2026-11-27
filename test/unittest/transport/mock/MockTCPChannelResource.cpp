@@ -15,7 +15,7 @@
 #include "MockTCPChannelResource.h"
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 MockTCPChannelResource::MockTCPChannelResource(
@@ -46,30 +46,16 @@ uint32_t MockTCPChannelResource::read(
 }
 
 size_t MockTCPChannelResource::send(
-        const octet*,
-        size_t,
-        const octet*,
-        size_t,
-        asio::error_code&)
-{
-    return 0;
-}
-
-size_t MockTCPChannelResource::send(
         const octet* /*header*/,
         size_t /*header_size*/,
-        const std::vector<NetworkBuffer>& buffers,
-        uint32_t total_bytes,
-        asio::error_code&)
+        const octet* buffer,
+        size_t size,
+        asio::error_code& /*ec*/)
 {
     last_send_data.clear();
-    for (const auto& nb : buffers)
-    {
-        const auto* p = static_cast<const octet*>(nb.buffer);
-        last_send_data.insert(last_send_data.end(), p, p + nb.size);
-    }
+    last_send_data.insert(last_send_data.end(), buffer, buffer + size);
     send_called = true;
-    return total_bytes;
+    return size;
 }
 
 asio::ip::tcp::endpoint MockTCPChannelResource::remote_endpoint() const
@@ -119,5 +105,5 @@ void MockTCPChannelResource::shutdown(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima

@@ -14,9 +14,6 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
-#ifdef OPENSSL_API_COMPAT
-#undef OPENSSL_API_COMPAT
-#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <fstream>
@@ -25,15 +22,15 @@
 #include <string>
 #include <vector>
 
+#include "AuthenticationPluginTests.hpp"
+
+#include <fastdds/rtps/common/BinaryProperty.h>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <fastrtps/rtps/messages/CDRMessage.h>
+
 #include <openssl/opensslv.h>
 #include <openssl/pem.h>
-
-#include <fastdds/rtps/common/BinaryProperty.hpp>
-#include <rtps/messages/CDRMessage.hpp>
-
-#include "AuthenticationPluginTests.hpp"
-#include <security/authentication/PKIHandshakeHandle.h>
-#include <security/authentication/PKIIdentityHandle.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -41,8 +38,8 @@
 #define IS_OPENSSL_1_1 0
 #endif // if OPENSSL_VERSION_NUMBER >= 0x10100000L
 
-using namespace eprosima::fastdds::rtps;
-using namespace eprosima::fastdds::rtps::security;
+using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastrtps::rtps::security;
 
 static const char* certs_path = nullptr;
 
@@ -93,7 +90,7 @@ IdentityToken AuthenticationPluginTest::generate_remote_identity_token_ok(
 
     // dds.cert.sn
     property.name("dds.cert.sn");
-    const X509_NAME* cert_sn = X509_get_subject_name(h->cert_);
+    X509_NAME* cert_sn = X509_get_subject_name(h->cert_);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     property.value() = cert_sn_str;
     OPENSSL_free(cert_sn_str);
@@ -419,75 +416,6 @@ void AuthenticationPluginTest::check_shared_secrets(
     ASSERT_TRUE(*sharedsecret_1 == *sharedsecret_2);
 }
 
-TEST_F(AuthenticationPluginTest, validate_local_identity_kagree_algo)
-{
-    const std::string correct_values[] =
-    {
-        "DH",
-        "ECDH",
-        "DH+MODP-2048-256",
-        "ECDH+prime256v1-CEUM"
-    };
-
-    const std::string wrong_values[] =
-    {
-        "RSA+MODP-2048-256",
-        "ECDH+MODP-2048-256",
-        "RSA",
-        "ECDH+prime256v1",
-        "unknown",
-        ""
-    };
-
-    auto test_fn = [this](
-        const std::string& alg,
-        ValidationResult_t expected_result) -> void
-            {
-                IdentityHandle* local_identity_handle = nullptr;
-                GUID_t adjusted_participant_key;
-                uint32_t domain_id = 0;
-                RTPSParticipantAttributes participant_attr;
-                GUID_t candidate_participant_key;
-                SecurityException exception;
-                ValidationResult_t result = ValidationResult_t::VALIDATION_FAILED;
-
-                fill_candidate_participant_key(candidate_participant_key);
-                participant_attr.properties = get_valid_policy();
-                participant_attr.properties.properties().emplace_back(
-                    Property("dds.sec.auth.builtin.PKI-DH.preferred_key_agreement", alg));
-                result = plugin.validate_local_identity(&local_identity_handle,
-                                adjusted_participant_key,
-                                domain_id,
-                                participant_attr.properties,
-                                candidate_participant_key,
-                                exception);
-
-                ASSERT_TRUE(result == expected_result);
-                if (ValidationResult_t::VALIDATION_OK == result)
-                {
-                    ASSERT_TRUE(local_identity_handle != nullptr);
-                    check_local_identity_handle(*local_identity_handle);
-                    ASSERT_TRUE(adjusted_participant_key != GUID_t::unknown());
-                    ASSERT_TRUE(plugin.return_identity_handle(local_identity_handle, exception));
-                }
-                else
-                {
-                    ASSERT_TRUE(local_identity_handle == nullptr);
-                    ASSERT_TRUE(adjusted_participant_key == GUID_t::unknown());
-                }
-            };
-
-    for (const std::string& value : correct_values)
-    {
-        test_fn(value, ValidationResult_t::VALIDATION_OK);
-    }
-
-    for (const std::string& value : wrong_values)
-    {
-        test_fn(value, ValidationResult_t::VALIDATION_FAILED);
-    }
-}
-
 TEST_F(AuthenticationPluginTest, validate_local_identity_validation_ok_with_pwd)
 {
     IdentityHandle* local_identity_handle = nullptr;
@@ -514,7 +442,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_validation_ok_with_pwd)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -549,7 +477,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_no_pwd)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -584,7 +512,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_wrong_pwd)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -617,7 +545,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_wrong_identity_ca)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -650,7 +578,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_wrong_identity_certific
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -686,7 +614,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_revoked_certificate)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -719,7 +647,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_revoked_certificate_wit
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -752,7 +680,7 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_expired_certificate)
     result = plugin.validate_local_identity(&local_identity_handle,
                     adjusted_participant_key,
                     domain_id,
-                    participant_attr.properties,
+                    participant_attr,
                     candidate_participant_key,
                     exception);
 
@@ -767,8 +695,6 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_expired_certificate)
  */
 TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate)
 {
-    using namespace eprosima::fastdds::rtps::security;
-
     SecurityException exception;
     uint32_t domain_id = 0;
 
@@ -781,7 +707,7 @@ TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate
     participant_attr.properties = get_valid_policy();
 
     ASSERT_EQ(plugin.validate_local_identity(&local_identity_handle, adjusted_participant_key,
-            domain_id, participant_attr.properties, candidate_participant_key, exception),
+            domain_id, participant_attr, candidate_participant_key, exception),
             ValidationResult_t::VALIDATION_OK);
     ASSERT_NE(local_identity_handle, nullptr);
 
@@ -806,10 +732,10 @@ TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate
 
     // Non-empty participant data (only its length is checked before the sink).
     ParticipantProxyData participant_data(c_default_RTPSParticipantAllocationAttributes);
-    participant_data.guid = adjusted_participant_key;
+    participant_data.m_guid = adjusted_participant_key;
     CDRMessage_t cdr_participant_data(RTPSMESSAGE_DEFAULT_SIZE);
     cdr_participant_data.msg_endian = BIGEND;
-    ASSERT_TRUE(participant_data.write_to_cdr_message(&cdr_participant_data, false));
+    ASSERT_TRUE(participant_data.writeToCDRMessage(&cdr_participant_data, false));
 
     HandshakeHandle* handshake_handle = nullptr;
     HandshakeMessageToken* handshake_message_out = nullptr;
@@ -831,8 +757,6 @@ TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate
  */
 TEST_F(AuthenticationPluginTest, process_handshake_request_empty_subject_certificate)
 {
-    using namespace eprosima::fastdds::rtps::security;
-
     SecurityException exception;
     uint32_t domain_id = 0;
 
@@ -845,7 +769,7 @@ TEST_F(AuthenticationPluginTest, process_handshake_request_empty_subject_certifi
     participant_attr.properties = get_valid_policy();
 
     ASSERT_EQ(plugin.validate_local_identity(&local_identity_handle, adjusted_participant_key,
-            domain_id, participant_attr.properties, candidate_participant_key, exception),
+            domain_id, participant_attr, candidate_participant_key, exception),
             ValidationResult_t::VALIDATION_OK);
     ASSERT_NE(local_identity_handle, nullptr);
 
@@ -859,10 +783,10 @@ TEST_F(AuthenticationPluginTest, process_handshake_request_empty_subject_certifi
 
     // Start the handshake as initiator, so the handle expects a +Reply.
     ParticipantProxyData participant_data(c_default_RTPSParticipantAllocationAttributes);
-    participant_data.guid = adjusted_participant_key;
+    participant_data.m_guid = adjusted_participant_key;
     CDRMessage_t cdr_participant_data(RTPSMESSAGE_DEFAULT_SIZE);
     cdr_participant_data.msg_endian = BIGEND;
-    ASSERT_TRUE(participant_data.write_to_cdr_message(&cdr_participant_data, false));
+    ASSERT_TRUE(participant_data.writeToCDRMessage(&cdr_participant_data, false));
 
     HandshakeHandle* handshake_handle = nullptr;
     HandshakeMessageToken* handshake_message_request = nullptr;
@@ -901,15 +825,12 @@ int main(
 {
     testing::InitGoogleTest(&argc, argv);
 
-    if (!::testing::GTEST_FLAG(list_tests))
-    {
-        certs_path = std::getenv("CERTS_PATH");
+    certs_path = std::getenv("CERTS_PATH");
 
-        if (certs_path == nullptr)
-        {
-            std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
-            exit(-1);
-        }
+    if (certs_path == nullptr)
+    {
+        std::cout << "Cannot get enviroment variable CERTS_PATH" << std::endl;
+        exit(-1);
     }
 
     return RUN_ALL_TESTS();

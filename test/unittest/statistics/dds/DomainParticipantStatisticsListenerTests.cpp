@@ -18,10 +18,9 @@
 #include <gmock/gmock.h>
 
 #include <fastdds/dds/publisher/DataWriter.hpp>
-#include <mock/fastdds/dds/publisher/DataWriterMock.hpp>
 
 #include <statistics/fastdds/domain/DomainParticipantStatisticsListener.hpp>
-#include <statistics/types/types.hpp>
+#include <statistics/types/types.h>
 
 namespace eprosima {
 namespace fastdds {
@@ -32,7 +31,7 @@ class DomainParticipantStatisticsListenerTests : public ::testing::Test
 {
 protected:
 
-    using TestDataWriter = eprosima::fastdds::dds::TestDataWriter;
+    using DataWriter = eprosima::fastdds::dds::DataWriter;
 
     void SetUp() override
     {
@@ -98,7 +97,7 @@ protected:
     {
         for (size_t i = 0; i < writers_.size(); i++)
         {
-            EXPECT_CALL(mock::mock_of(&writers_[i]), write(data_to_check_[i])).Times(num_times);
+            EXPECT_CALL(writers_[i], write(data_to_check_[i])).Times(num_times);
         }
     }
 
@@ -106,7 +105,7 @@ protected:
     {
         for (auto& writer : writers_)
         {
-            EXPECT_CALL(mock::mock_of(&writer), write(testing::_)).Times(0);
+            EXPECT_CALL(writer, write).Times(0);
         }
     }
 
@@ -117,11 +116,11 @@ protected:
         {
             if (i == n)
             {
-                EXPECT_CALL(mock::mock_of(&writers_[i]), write(data_to_check_[i])).Times(1);
+                EXPECT_CALL(writers_[i], write(data_to_check_[i])).Times(1);
             }
             else
             {
-                EXPECT_CALL(mock::mock_of(&writers_[i]), write(testing::_)).Times(0);
+                EXPECT_CALL(writers_[i], write).Times(0);
             }
         }
     }
@@ -135,7 +134,7 @@ protected:
     }
 
     void write_all_data_except(
-            uint32_t kind)
+            EventKind kind)
     {
         for (const Data& data : data_)
         {
@@ -150,14 +149,14 @@ protected:
     {
         for (auto& writer : writers_)
         {
-            testing::Mock::VerifyAndClearExpectations(&mock::mock_of(&writer));
+            testing::Mock::VerifyAndClearExpectations(&writer);
         }
     }
 
-    std::array<TestDataWriter, 17> writers_;
+    std::array<testing::StrictMock<DataWriter>, 17> writers_;
     std::array<void*, 17> data_to_check_;
     std::array<Data, 17> data_;
-    std::array<uint32_t, 17> kinds_ =
+    std::array<EventKind, 17> kinds_ =
     {
         EventKind::HISTORY2HISTORY_LATENCY,
         EventKind::NETWORK_LATENCY,

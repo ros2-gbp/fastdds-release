@@ -16,15 +16,16 @@
  * @file ContentFilteredTopic.hpp
  */
 
-#ifndef FASTDDS_DDS_TOPIC__CONTENTFILTEREDTOPIC_HPP
-#define FASTDDS_DDS_TOPIC__CONTENTFILTEREDTOPIC_HPP
+#ifndef _FASTDDS_DDS_TOPIC_CONTENTFILTEREDTOPIC_HPP_
+#define _FASTDDS_DDS_TOPIC_CONTENTFILTEREDTOPIC_HPP_
 
-#include <fastdds/dds/core/ReturnCode.hpp>
+#include <fastrtps/fastrtps_dll.h>
 #include <fastdds/dds/topic/TopicDescription.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
-#include <fastdds/fastdds_dll.hpp>
 
 #define FASTDDS_SQLFILTER_NAME eprosima::fastdds::dds::sqlfilter_name
+
+using eprosima::fastrtps::types::ReturnCode_t;
 
 namespace eprosima {
 namespace fastdds {
@@ -47,7 +48,7 @@ class ContentFilteredTopic : public TopicDescription
 
 private:
 
-    ContentFilteredTopic(
+    RTPS_DllAPI ContentFilteredTopic(
             const std::string& name,
             Topic* related_topic,
             const std::string& filter_expression,
@@ -55,7 +56,7 @@ private:
 
 public:
 
-    virtual ~ContentFilteredTopic();
+    RTPS_DllAPI virtual ~ContentFilteredTopic();
 
     /**
      * @brief Getter for the related topic.
@@ -63,7 +64,7 @@ public:
      * This operation returns the Topic associated with the ContentFilteredTopic.
      * That is, the Topic specified when the ContentFilteredTopic was created.
      */
-    FASTDDS_EXPORTED_API Topic* get_related_topic() const;
+    RTPS_DllAPI Topic* get_related_topic() const;
 
     /**
      * @brief Get the filter expression.
@@ -74,7 +75,7 @@ public:
      *
      * @return the @c filter_expression.
      */
-    FASTDDS_EXPORTED_API const std::string& get_filter_expression() const;
+    RTPS_DllAPI const std::string& get_filter_expression() const;
 
     /**
      * @brief Get the expression parameters.
@@ -90,7 +91,7 @@ public:
      *
      * @return RETCODE_OK
      */
-    FASTDDS_EXPORTED_API ReturnCode_t get_expression_parameters(
+    RTPS_DllAPI ReturnCode_t get_expression_parameters(
             std::vector<std::string>& expression_parameters) const;
 
     /**
@@ -103,7 +104,7 @@ public:
      * @return RETCODE_OK             if the expression parameters where correctly updated.
      * @return RETCODE_BAD_PARAMETER  if the expression parameters do not match with the current @c filter_expression.
      */
-    FASTDDS_EXPORTED_API ReturnCode_t set_expression_parameters(
+    RTPS_DllAPI ReturnCode_t set_expression_parameters(
             const std::vector<std::string>& expression_parameters);
 
     /**
@@ -119,7 +120,7 @@ public:
      * @return RETCODE_BAD_PARAMETER  if @c filter_expression is not valid for this ContentFilteredTopic.
      * @return RETCODE_BAD_PARAMETER  if the expression parameters do not match with the @c filter_expression.
      */
-    FASTDDS_EXPORTED_API ReturnCode_t set_filter_expression(
+    RTPS_DllAPI ReturnCode_t set_filter_expression(
             const std::string& filter_expression,
             const std::vector<std::string>& expression_parameters);
 
@@ -127,7 +128,7 @@ public:
      * @brief Getter for the DomainParticipant
      * @return DomainParticipant pointer
      */
-    FASTDDS_EXPORTED_API DomainParticipant* get_participant() const override;
+    DomainParticipant* get_participant() const override;
 
     TopicDescriptionImpl* get_impl() const override;
 
@@ -141,4 +142,4 @@ protected:
 } // namespace fastdds
 } // namespace eprosima
 
-#endif  // FASTDDS_DDS_TOPIC__CONTENTFILTEREDTOPIC_HPP
+#endif  // _FASTDDS_DDS_TOPIC_CONTENTFILTEREDTOPIC_HPP_

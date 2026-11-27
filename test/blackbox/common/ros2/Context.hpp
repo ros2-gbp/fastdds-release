@@ -26,7 +26,6 @@
 
 #include <gtest/gtest.h>
 
-#include <fastdds/dds/core/detail/DDSReturnCode.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -45,13 +44,14 @@
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/rtps/common/Time_t.hpp>
+#include <fastdds/rtps/common/Time_t.h>
+#include <fastrtps/types/TypesBase.h>
 
 #include "./DataReaderHolder.hpp"
 #include "./DataWriterHolder.hpp"
 #include "./TopicHolder.hpp"
 #include "../BlackboxTests.hpp"
-#include "../../types/HelloWorldPubSubTypes.hpp"
+#include "../../types/HelloWorldPubSubTypes.h"
 
 namespace eprosima {
 namespace testing {
@@ -67,7 +67,7 @@ public:
 
     Context()
     {
-        factory_ = DomainParticipantFactory::get_shared_instance();
+        factory_ = DomainParticipantFactory::get_instance();
 
         uint32_t domain_id = static_cast<uint32_t>(GET_PID() % 230);
         participant_ = factory_->create_participant(domain_id, PARTICIPANT_QOS_DEFAULT);
@@ -146,7 +146,7 @@ public:
         topic_holder = topics_[topic_name];
         if (!topic_holder)
         {
-            EXPECT_EQ(RETCODE_OK, type_support.register_type(participant_, type_name));
+            EXPECT_EQ(ReturnCode_t::RETCODE_OK, type_support.register_type(participant_, type_name));
             auto topic = participant_->create_topic("testing/" + topic_name, type_name, TOPIC_QOS_DEFAULT);
             ASSERT_NE(nullptr, topic);
             topic_holder = std::make_shared<TopicHolder>(participant_, topic);
@@ -229,8 +229,8 @@ private:
         {
             RosDiscoveryInfoPubSubType::type discovery_info;
             std::stringstream ss;
-            ss << "Publication " << publication->writer()->guid() << " created on topic "
-               << publication->writer()->get_topic()->get_name();
+            ss << "Publication " << publication->writer()->guid() << " created on topic " <<
+                publication->writer()->get_topic()->get_name();
             discovery_info.message(ss.str());
             discovery_info_pub_->writer()->write(&discovery_info);
         }
@@ -243,8 +243,8 @@ private:
         {
             RosDiscoveryInfoPubSubType::type discovery_info;
             std::stringstream ss;
-            ss << "Publication " << publication->writer()->guid() << " deleted on topic "
-               << publication->writer()->get_topic()->get_name();
+            ss << "Publication " << publication->writer()->guid() << " deleted on topic " <<
+                publication->writer()->get_topic()->get_name();
             discovery_info.message(ss.str());
             discovery_info_pub_->writer()->write(&discovery_info);
         }
@@ -257,8 +257,8 @@ private:
         {
             RosDiscoveryInfoPubSubType::type discovery_info;
             std::stringstream ss;
-            ss << "Subscription " << subscription->reader()->guid() << " created on topic "
-               << subscription->reader()->get_topicdescription()->get_name();
+            ss << "Subscription " << subscription->reader()->guid() << " created on topic " <<
+                subscription->reader()->get_topicdescription()->get_name();
             discovery_info.message(ss.str());
             discovery_info_pub_->writer()->write(&discovery_info);
         }
@@ -271,15 +271,15 @@ private:
         {
             RosDiscoveryInfoPubSubType::type discovery_info;
             std::stringstream ss;
-            ss << "Subscription " << subscription->reader()->guid() << " deleted on topic "
-               << subscription->reader()->get_topicdescription()->get_name();
+            ss << "Subscription " << subscription->reader()->guid() << " deleted on topic " <<
+                subscription->reader()->get_topicdescription()->get_name();
             discovery_info.message(ss.str());
             discovery_info_pub_->writer()->write(&discovery_info);
         }
     }
 
     std::mutex mutex_;
-    std::shared_ptr<DomainParticipantFactory> factory_{};
+    DomainParticipantFactory* factory_{};
     DomainParticipant* participant_ = nullptr;
     Publisher* publisher_ = nullptr;
     Subscriber* subscriber_ = nullptr;

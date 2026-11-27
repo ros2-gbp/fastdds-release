@@ -28,11 +28,7 @@ if(NOT ((MSVC OR MSVC_IDE) AND EPROSIMA_INSTALLER) AND fastcdr_FOUND)
         $<$<AND:$<NOT:$<BOOL:${WIN32}>>,$<STREQUAL:"${CMAKE_BUILD_TYPE}","Debug">>:__DEBUG>
         $<$<BOOL:${INTERNAL_DEBUG}>:__INTERNALDEBUG>
         )
-    target_link_libraries(DDSParticipantDiscovery
-        fastcdr
-        fastdds
-        ${CMAKE_DL_LIBS}
-        )
+    target_link_libraries(DDSParticipantDiscovery fastrtps ${CMAKE_DL_LIBS})
 
     ###########################################################################
     # Necessary files
@@ -61,6 +57,3 @@ if(NOT ((MSVC OR MSVC_IDE) AND EPROSIMA_INSTALLER) AND fastcdr_FOUND)
         endif()
     endif()
 endif()
-
-# Trace each TSan report. No-op if TSan is not enabled
-tsan_name_reports()

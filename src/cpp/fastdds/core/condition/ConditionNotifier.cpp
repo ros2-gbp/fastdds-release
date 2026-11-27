@@ -29,10 +29,6 @@ namespace fastdds {
 namespace dds {
 namespace detail {
 
-ConditionNotifier::ConditionNotifier() = default;
-
-ConditionNotifier::~ConditionNotifier() = default;
-
 void ConditionNotifier::attach_to (
         WaitSetImpl* wait_set)
 {

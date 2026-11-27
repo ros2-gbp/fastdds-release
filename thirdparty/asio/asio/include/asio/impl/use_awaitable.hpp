@@ -2,7 +2,7 @@
 // impl/use_awaitable.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2020 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,8 +17,6 @@
 
 #include "asio/detail/config.hpp"
 #include "asio/async_result.hpp"
-#include "asio/cancellation_signal.hpp"
-#include "asio/disposition.hpp"
 
 #include "asio/detail/push_options.hpp"
 
@@ -34,9 +32,8 @@ public:
   typedef awaitable<T, Executor> awaitable_type;
 
   // Construct from the entry point of a new thread of execution.
-  awaitable_handler_base(awaitable<awaitable_thread_entry_point, Executor> a,
-      const Executor& ex, cancellation_slot pcs, cancellation_state cs)
-    : awaitable_thread<Executor>(std::move(a), ex, pcs, cs)
+  awaitable_handler_base(awaitable<void, Executor> a, const Executor& ex)
+    : awaitable_thread<Executor>(std::move(a), ex)
   {
   }
 
@@ -49,8 +46,7 @@ public:
 protected:
   awaitable_frame<T, Executor>* frame() noexcept
   {
-    return static_cast<awaitable_frame<T, Executor>*>(
-        this->entry_point()->top_of_stack_);
+    return static_cast<awaitable_frame<T, Executor>*>(this->top_of_stack_);
   }
 };
 
@@ -68,7 +64,44 @@ public:
   {
     this->frame()->attach_thread(this);
     this->frame()->return_void();
-    this->frame()->clear_cancellation_slot();
+    this->frame()->pop_frame();
+    this->pump();
+  }
+};
+
+template <typename Executor>
+class awaitable_handler<Executor, asio::error_code>
+  : public awaitable_handler_base<Executor, void>
+{
+public:
+  using awaitable_handler_base<Executor, void>::awaitable_handler_base;
+
+  void operator()(const asio::error_code& ec)
+  {
+    this->frame()->attach_thread(this);
+    if (ec)
+      this->frame()->set_error(ec);
+    else
+      this->frame()->return_void();
+    this->frame()->pop_frame();
+    this->pump();
+  }
+};
+
+template <typename Executor>
+class awaitable_handler<Executor, std::exception_ptr>
+  : public awaitable_handler_base<Executor, void>
+{
+public:
+  using awaitable_handler_base<Executor, void>::awaitable_handler_base;
+
+  void operator()(std::exception_ptr ex)
+  {
+    this->frame()->attach_thread(this);
+    if (ex)
+      this->frame()->set_except(ex);
+    else
+      this->frame()->return_void();
     this->frame()->pop_frame();
     this->pump();
   }
@@ -76,94 +109,116 @@ public:
 
 template <typename Executor, typename T>
 class awaitable_handler<Executor, T>
-  : public awaitable_handler_base<Executor,
-      conditional_t<is_disposition<T>::value, void, T>>
+  : public awaitable_handler_base<Executor, T>
 {
 public:
-  using awaitable_handler_base<Executor,
-    conditional_t<is_disposition<T>::value, void, T>>
-      ::awaitable_handler_base;
+  using awaitable_handler_base<Executor, T>::awaitable_handler_base;
 
   template <typename Arg>
   void operator()(Arg&& arg)
   {
     this->frame()->attach_thread(this);
-    if constexpr (is_disposition<T>::value)
-    {
-      if (arg == no_error)
-        this->frame()->return_void();
-      else
-        this->frame()->set_disposition(arg);
-    }
+    this->frame()->return_value(std::forward<Arg>(arg));
+    this->frame()->pop_frame();
+    this->pump();
+  }
+};
+
+template <typename Executor, typename T>
+class awaitable_handler<Executor, asio::error_code, T>
+  : public awaitable_handler_base<Executor, T>
+{
+public:
+  using awaitable_handler_base<Executor, T>::awaitable_handler_base;
+
+  template <typename Arg>
+  void operator()(const asio::error_code& ec, Arg&& arg)
+  {
+    this->frame()->attach_thread(this);
+    if (ec)
+      this->frame()->set_error(ec);
     else
       this->frame()->return_value(std::forward<Arg>(arg));
-    this->frame()->clear_cancellation_slot();
     this->frame()->pop_frame();
     this->pump();
   }
 };
 
-template <typename Executor, typename T0, typename T1>
-class awaitable_handler<Executor, T0, T1>
-  : public awaitable_handler_base<Executor,
-      conditional_t<is_disposition<T0>::value, T1, std::tuple<T0, T1>>>
+template <typename Executor, typename T>
+class awaitable_handler<Executor, std::exception_ptr, T>
+  : public awaitable_handler_base<Executor, T>
 {
 public:
-  using awaitable_handler_base<Executor,
-    conditional_t<is_disposition<T0>::value, T1, std::tuple<T0, T1>>>
-      ::awaitable_handler_base;
+  using awaitable_handler_base<Executor, T>::awaitable_handler_base;
 
-  template <typename Arg0, typename Arg1>
-  void operator()(Arg0&& arg0, Arg1&& arg1)
+  template <typename Arg>
+  void operator()(std::exception_ptr ex, Arg&& arg)
   {
     this->frame()->attach_thread(this);
-    if constexpr (is_disposition<T0>::value)
-    {
-      if (arg0 == no_error)
-        this->frame()->return_value(std::forward<Arg1>(arg1));
-      else
-        this->frame()->set_disposition(std::forward<Arg0>(arg0));
-    }
+    if (ex)
+      this->frame()->set_except(ex);
     else
-    {
-      this->frame()->return_values(std::forward<Arg0>(arg0),
-          std::forward<Arg1>(arg1));
-    }
-    this->frame()->clear_cancellation_slot();
+      this->frame()->return_value(std::forward<Arg>(arg));
     this->frame()->pop_frame();
     this->pump();
   }
 };
 
-template <typename Executor, typename T0, typename... Ts>
-class awaitable_handler<Executor, T0, Ts...>
-  : public awaitable_handler_base<Executor,
-      conditional_t<is_disposition<T0>::value,
-        std::tuple<Ts...>, std::tuple<T0, Ts...>>>
+template <typename Executor, typename... Ts>
+class awaitable_handler
+  : public awaitable_handler_base<Executor, std::tuple<Ts...>>
 {
 public:
   using awaitable_handler_base<Executor,
-      conditional_t<is_disposition<T0>::value,
-        std::tuple<Ts...>, std::tuple<T0, Ts...>>>
-          ::awaitable_handler_base;
+    std::tuple<Ts...>>::awaitable_handler_base;
 
-  template <typename Arg0, typename... Args>
-  void operator()(Arg0&& arg0, Args&&... args)
+  template <typename... Args>
+  void operator()(Args&&... args)
   {
     this->frame()->attach_thread(this);
-    if constexpr (is_disposition<T0>::value)
-    {
-      if (arg0 == no_error)
-        this->frame()->return_values(std::forward<Args>(args)...);
-      else
-        this->frame()->set_disposition(std::forward<Arg0>(arg0));
-    }
+    this->frame()->return_values(std::forward<Args>(args)...);
+    this->frame()->pop_frame();
+    this->pump();
+  }
+};
+
+template <typename Executor, typename... Ts>
+class awaitable_handler<Executor, asio::error_code, Ts...>
+  : public awaitable_handler_base<Executor, std::tuple<Ts...>>
+{
+public:
+  using awaitable_handler_base<Executor,
+    std::tuple<Ts...>>::awaitable_handler_base;
+
+  template <typename... Args>
+  void operator()(const asio::error_code& ec, Args&&... args)
+  {
+    this->frame()->attach_thread(this);
+    if (ec)
+      this->frame()->set_error(ec);
     else
-    {
-      this->frame()->return_values(std::forward<Arg0>(arg0),
-          std::forward<Args>(args)...);
-    }
-    this->frame()->clear_cancellation_slot();
+      this->frame()->return_values(std::forward<Args>(args)...);
+    this->frame()->pop_frame();
+    this->pump();
+  }
+};
+
+template <typename Executor, typename... Ts>
+class awaitable_handler<Executor, std::exception_ptr, Ts...>
+  : public awaitable_handler_base<Executor, std::tuple<Ts...>>
+{
+public:
+  using awaitable_handler_base<Executor,
+    std::tuple<Ts...>>::awaitable_handler_base;
+
+  template <typename... Args>
+  void operator()(std::exception_ptr ex, Args&&... args)
+  {
+    this->frame()->attach_thread(this);
+    if (ex)
+      this->frame()->set_except(ex);
+    else
+      this->frame()->return_values(std::forward<Args>(args)...);
     this->frame()->pop_frame();
     this->pump();
   }
@@ -181,7 +236,7 @@ T dummy_return()
 }
 
 template <>
-inline void dummy_return()
+void dummy_return()
 {
 }
 #endif // defined(_MSC_VER)
@@ -191,31 +246,21 @@ class async_result<use_awaitable_t<Executor>, R(Args...)>
 {
 public:
   typedef typename detail::awaitable_handler<
-      Executor, decay_t<Args>...> handler_type;
+      Executor, typename decay<Args>::type...> handler_type;
   typedef typename handler_type::awaitable_type return_type;
-
-  template <typename Initiation, typename... InitArgs>
-#if defined(__APPLE_CC__) && (__clang_major__ == 13)
-  __attribute__((noinline))
-#endif // defined(__APPLE_CC__) && (__clang_major__ == 13)
-  static handler_type* do_init(
-      detail::awaitable_frame_base<Executor>* frame, Initiation& initiation,
-      use_awaitable_t<Executor> u, InitArgs&... args)
-  {
-    (void)u;
-    ASIO_HANDLER_LOCATION((u.file_name_, u.line_, u.function_name_));
-    handler_type handler(frame->detach_thread());
-    std::move(initiation)(std::move(handler), std::move(args)...);
-    return nullptr;
-  }
 
   template <typename Initiation, typename... InitArgs>
   static return_type initiate(Initiation initiation,
       use_awaitable_t<Executor> u, InitArgs... args)
   {
-    co_await [&] (auto* frame)
+    (void)u;
+
+    co_await [&](auto* frame)
       {
-        return do_init(frame, initiation, u, args...);
+        ASIO_HANDLER_LOCATION((u.file_name_, u.line_, u.function_name_));
+        handler_type handler(frame->detach_thread());
+        std::move(initiation)(std::move(handler), std::move(args)...);
+        return static_cast<handler_type*>(nullptr);
       };
 
     for (;;) {} // Never reached.

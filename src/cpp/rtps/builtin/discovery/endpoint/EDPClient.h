@@ -21,11 +21,13 @@
 #define _FASTDDS_RTPS_EDPCLIENT_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <rtps/builtin/discovery/endpoint/EDPSimple.h>
+#include <fastdds/rtps/builtin/discovery/endpoint/EDPSimple.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
+
+using namespace fastrtps::rtps;
 
 /**
  * Class EDPClient, extends the EDPSimple functionality to accommodate client side needs
@@ -49,36 +51,36 @@ public:
 
     /**
      * This method generates the corresponding change in the subscription writer and send it to all known remote endpoints.
-     * @param rtps_reader Pointer to the Reader object.
+     * @param reader Pointer to the Reader object.
      * @param rdata Pointer to the ReaderProxyData object.
      * @return true if correct.
      */
-    bool process_reader_proxy_data(
-            RTPSReader* rtps_reader,
+    bool processLocalReaderProxyData(
+            RTPSReader* reader,
             ReaderProxyData* rdata) override;
     /**
      * This method generates the corresponding change in the publciations writer and send it to all known remote endpoints.
-     * @param rtps_writer Pointer to the Writer object.
+     * @param writer Pointer to the Writer object.
      * @param wdata Pointer to the WriterProxyData object.
      * @return true if correct.
      */
-    bool process_writer_proxy_data(
-            RTPSWriter* rtps_writer,
+    bool processLocalWriterProxyData(
+            RTPSWriter* writer,
             WriterProxyData* wdata) override;
     /**
      * This methods generates the change disposing of the local Reader and calls the unpairing and removal methods of the base class.
-     * @param rtps_reader Pointer to the RTPSReader object.
+     * @param R Pointer to the RTPSReader object.
      * @return True if correct.
      */
-    bool remove_reader(
-            RTPSReader* rtps_reader) override;
+    bool removeLocalReader(
+            RTPSReader* R) override;
     /**
      * This methods generates the change disposing of the local Writer and calls the unpairing and removal methods of the base class.
-     * @param rtps_writer Pointer to the RTPSWriter object.
+     * @param W Pointer to the RTPSWriter object.
      * @return True if correct.
      */
-    bool remove_writer(
-            RTPSWriter* rtps_writer) override;
+    bool removeLocalWriter(
+            RTPSWriter* W) override;
 
 };
 

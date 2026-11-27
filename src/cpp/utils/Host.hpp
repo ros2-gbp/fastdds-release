@@ -15,20 +15,18 @@
 #ifndef UTILS_HOST_HPP_
 #define UTILS_HOST_HPP_
 
-#include <fastcdr/cdr/fixed_size_string.hpp>
+#include <fastdds/rtps/common/Locator.h>
+
+#include <fastrtps/utils/md5.h>
+#include <fastrtps/utils/IPFinder.h>
 
 #include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/common/LocatorList.hpp>
-#include <fastdds/utils/IPFinder.hpp>
-#include <fastdds/utils/md5.hpp>
-
 
 namespace eprosima {
 
-
 /**
  * This singleton generates a host_id based on system interfaces
- * ip addresses, mac addresses or the machine UUID.
+ * ip addresses or mac addresses
  */
 class Host
 {
@@ -56,49 +54,10 @@ public:
         return mac_id_;
     }
 
-    inline fastcdr::string_255 machine_id() const
-    {
-        return machine_id_;
-    }
-
     static Host& instance()
     {
         static Host singleton;
         return singleton;
-    }
-
-    static inline uint16_t compute_id(
-            const fastdds::rtps::LocatorList& loc)
-    {
-        uint16_t ret_val = 0;
-
-        if (loc.size() > 0)
-        {
-            fastdds::MD5 md5;
-            for (auto& l : loc)
-            {
-                md5.update(l.address, sizeof(l.address));
-            }
-            md5.finalize();
-
-            // Hash the 16-bytes md5.digest into a uint16_t
-            ret_val = 0;
-            for (size_t i = 0; i < sizeof(md5.digest); i += 2)
-            {
-                // Treat the next two bytes as a big-endian uint16_t and
-                // hash them into ret_val.
-                uint16_t tmp = static_cast<uint16_t>(md5.digest[i]);
-                tmp = (tmp << 8) | static_cast<uint16_t>(md5.digest[i + 1]);
-                ret_val ^= tmp;
-            }
-        }
-        else
-        {
-            reinterpret_cast<uint8_t*>(&ret_val)[0] = 127;
-            reinterpret_cast<uint8_t*>(&ret_val)[1] = 1;
-        }
-
-        return ret_val;
     }
 
 private:
@@ -107,15 +66,36 @@ private:
     {
         // Compute the host id
         fastdds::rtps::LocatorList loc;
-        fastdds::rtps::IPFinder::getIP4Address(&loc);
-        id_ = compute_id(loc);
+        fastrtps::rtps::IPFinder::getIP4Address(&loc);
+
+        {
+            if (loc.size() > 0)
+            {
+                MD5 md5;
+                for (auto& l : loc)
+                {
+                    md5.update(l.address, sizeof(l.address));
+                }
+                md5.finalize();
+                id_ = 0;
+                for (size_t i = 0; i < sizeof(md5.digest); i += 2)
+                {
+                    id_ ^= ((md5.digest[i] << 8) | md5.digest[i + 1]);
+                }
+            }
+            else
+            {
+                reinterpret_cast<uint8_t*>(&id_)[0] = 127;
+                reinterpret_cast<uint8_t*>(&id_)[1] = 1;
+            }
+        }
 
         // Compute the MAC id
-        std::vector<fastdds::rtps::IPFinder::info_MAC> macs;
-        if (fastdds::rtps::IPFinder::getAllMACAddress(&macs) &&
+        std::vector<fastrtps::rtps::IPFinder::info_MAC> macs;
+        if (fastrtps::rtps::IPFinder::getAllMACAddress(&macs) &&
                 macs.size() > 0)
         {
-            fastdds::MD5 md5;
+            MD5 md5;
             for (auto& m : macs)
             {
                 md5.update(m.address, sizeof(m.address));
@@ -132,27 +112,17 @@ private:
         }
         else
         {
-            EPROSIMA_LOG_WARNING(UTILS, "Cannot get MAC addresses. Failing back to IP based ID");
+            logWarning(UTILS, "Cannot get MAC addresses. Failing back to IP based ID");
             for (size_t i = 0; i < mac_id_length; i += 2)
             {
                 mac_id_.value[i] = (id_ >> 8);
                 mac_id_.value[i + 1] = (id_ & 0xFF);
             }
         }
-
-        // Compute the machine id hash
-        machine_id_ = compute_machine_id();
-        if (machine_id_ == "")
-        {
-            EPROSIMA_LOG_WARNING(UTILS, "Cannot get machine id. Failing back to IP based ID");
-        }
     }
-
-    static fastcdr::string_255 compute_machine_id();
 
     uint16_t id_;
     uint48 mac_id_;
-    fastcdr::string_255 machine_id_;
 };
 
 } // eprosima

@@ -19,19 +19,19 @@
 #ifndef _SECURITY_AUTHENTICATION_AESGCMGMAC_KEYEXCHANGE_H_
 #define _SECURITY_AUTHENTICATION_AESGCMGMAC_KEYEXCHANGE_H_
 
+#include <fastdds/rtps/security/cryptography/CryptoKeyExchange.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.h>
 
-#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
-#include <rtps/security/cryptography/CryptoKeyExchange.h>
 #include <security/cryptography/AESGCMGMAC_Types.h>
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 namespace security {
 
 class AESGCMGMAC_KeyExchange : public CryptoKeyExchange
 {
-public:
+    public:
 
     AESGCMGMAC_KeyExchange();
     ~AESGCMGMAC_KeyExchange();
@@ -43,38 +43,38 @@ public:
             SecurityException& exception) override;
 
     bool set_remote_participant_crypto_tokens(
-            const ParticipantCryptoHandle& local_participant_crypto,
-            ParticipantCryptoHandle& remote_participant_crypto,
-            const ParticipantCryptoTokenSeq& remote_participant_tokens,
-            SecurityException& exception) override;
+            const ParticipantCryptoHandle &local_participant_crypto,
+            ParticipantCryptoHandle &remote_participant_crypto,
+            const ParticipantCryptoTokenSeq &remote_participant_tokens,
+            SecurityException &exception) override;
 
     bool create_local_datawriter_crypto_tokens(
-            DatawriterCryptoTokenSeq& local_datawriter_crypto_tokens,
-            DatawriterCryptoHandle& local_datawriter_crypto,
-            DatareaderCryptoHandle& remote_datareader_crypto,
-            SecurityException& exception) override;
+            DatawriterCryptoTokenSeq &local_datawriter_crypto_tokens,
+            DatawriterCryptoHandle &local_datawriter_crypto,
+            DatareaderCryptoHandle &remote_datareader_crypto,
+            SecurityException &exception) override;
 
     bool create_local_datareader_crypto_tokens(
-            DatareaderCryptoTokenSeq& local_datareader_crypto_tokens,
-            DatareaderCryptoHandle& local_datareader_crypto,
-            DatawriterCryptoHandle& remote_datawriter_crypto,
-            SecurityException& exception) override;
+            DatareaderCryptoTokenSeq &local_datareader_crypto_tokens,
+            DatareaderCryptoHandle &local_datareader_crypto,
+            DatawriterCryptoHandle &remote_datawriter_crypto,
+            SecurityException &exception) override;
 
     bool set_remote_datareader_crypto_tokens(
-            DatawriterCryptoHandle& local_datawriter_crypto,
-            DatareaderCryptoHandle& remote_datareader_crypto,
-            const DatareaderCryptoTokenSeq& remote_datareader_tokens,
-            SecurityException& exception) override;
+             DatawriterCryptoHandle &local_datawriter_crypto,
+             DatareaderCryptoHandle &remote_datareader_crypto,
+             const DatareaderCryptoTokenSeq &remote_datareader_tokens,
+             SecurityException &exception) override;
 
     bool set_remote_datawriter_crypto_tokens(
-            DatareaderCryptoHandle& local_datareader_crypto,
-            DatawriterCryptoHandle& remote_datawriter_crypto,
-            const DatawriterCryptoTokenSeq& remote_datawriter_tokens,
-            SecurityException& exception) override;
+             DatareaderCryptoHandle &local_datareader_crypto,
+             DatawriterCryptoHandle &remote_datawriter_crypto,
+             const DatawriterCryptoTokenSeq &remote_datawriter_tokens,
+             SecurityException &exception) override;
 
     bool return_crypto_tokens(
-            const CryptoTokenSeq& crypto_tokens,
-            SecurityException& exception) override;
+            const CryptoTokenSeq &crypto_tokens,
+            SecurityException &exception) override;
 
     //CDR Serialization and Deserialization of KeyMaterials
     std::vector<uint8_t> KeyMaterialCDRSerialize(
@@ -91,7 +91,7 @@ public:
 
 } //namespace security
 } //namespace rtps
-} //namespace fastdds
+} //namespace fastrtps
 } //namespace eprosima
 
 #endif // _SECURITY_AUTHENTICATION_AESGCMGMAC_KEYEXCHANGE_H_

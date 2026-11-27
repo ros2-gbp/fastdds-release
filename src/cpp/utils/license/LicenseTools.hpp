@@ -27,11 +27,11 @@
 #include <openssl/rsa.h>
 #endif  // HAVE_SECURITY
 
-#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/common/Types.h>
 
 namespace eprosima {
 
-using fastdds::rtps::octet;
+using fastrtps::rtps::octet;
 
 /**
  * @brief Verify signature of data using eProsima's licensing public key.

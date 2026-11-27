@@ -3,7 +3,7 @@
 using namespace testing;
 
 namespace eprosima {
-namespace fastdds {
+namespace fastrtps {
 namespace rtps {
 
 std::ostream& operator <<(
@@ -21,7 +21,7 @@ std::ostream& operator <<(
 }
 
 } // namespace rtps
-} // namespace fastdds
+} // namespace fastrtps
 } // namespace eprosima
 
 int main(
