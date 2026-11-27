@@ -53,6 +53,8 @@ using eprosima::fastrtps::rtps::IPLocator;
 using eprosima::fastrtps::rtps::UDPTransportDescriptor;
 using eprosima::fastrtps::rtps::UDPv4TransportDescriptor;
 using eprosima::fastrtps::rtps::UDPv6TransportDescriptor;
+using eprosima::fastdds::rtps::BuiltinTransports;
+using eprosima::fastdds::rtps::BuiltinTransportsOptions;
 
 template<class TypeSupport>
 class PubSubWriter
@@ -162,7 +164,6 @@ class PubSubWriter
         Listener(
                 PubSubWriter& writer)
             : writer_(writer)
-            , times_deadline_missed_(0)
             , times_liveliness_lost_(0)
         {
         }
@@ -192,7 +193,8 @@ class PubSubWriter
                 const eprosima::fastrtps::OfferedDeadlineMissedStatus& status) override
         {
             (void)pub;
-            times_deadline_missed_ = status.total_count;
+            std::lock_guard<std::mutex> lk(mutex_);
+            offered_deadline_status_ = status;
         }
 
         void on_liveliness_lost(
@@ -206,7 +208,14 @@ class PubSubWriter
 
         unsigned int missed_deadlines() const
         {
-            return times_deadline_missed_;
+            std::lock_guard<std::mutex> lk(mutex_);
+            return offered_deadline_status_.total_count;
+        }
+
+        unsigned int missed_deadlines_change() const
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            return offered_deadline_status_.total_count_change;
         }
 
         unsigned int times_liveliness_lost() const
@@ -220,9 +229,10 @@ class PubSubWriter
                 const Listener&) = delete;
 
         PubSubWriter& writer_;
+        mutable std::mutex mutex_;
 
-        //! The number of times deadline was missed
-        unsigned int times_deadline_missed_;
+        eprosima::fastrtps::OfferedDeadlineMissedStatus offered_deadline_status_{};
+
         //! The number of times liveliness was lost
         unsigned int times_liveliness_lost_;
 
@@ -260,8 +270,8 @@ public:
         publisher_attr_.topic.topicKind =
                 type_.m_isGetKeyDefined ? ::eprosima::fastrtps::rtps::WITH_KEY : ::eprosima::fastrtps::rtps::NO_KEY;
 
-        // By default, memory mode is preallocated (the most restritive)
-        publisher_attr_.historyMemoryPolicy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
+        // By default, memory mode is PREALLOCATED_WITH_REALLOC_MEMORY_MODE
+        publisher_attr_.historyMemoryPolicy = eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 
         // By default, heartbeat period and nack response delay are 100 milliseconds.
         publisher_attr_.times.heartbeatPeriod.seconds = 0;
@@ -561,30 +571,54 @@ public:
     }
 
 #if HAVE_SECURITY
-    void waitAuthorized()
+    void wait_authorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Writer is waiting authorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return authorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]()
+                    {
+                        return authorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]()
+                    {
+                        return authorized_ >= expected;
+                    });
+        }
 
         std::cout << "Writer authorization finished..." << std::endl;
     }
 
-    void waitUnauthorized()
+    void wait_unauthorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Writer is waiting unauthorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return unauthorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]() -> bool
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]() -> bool
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
 
         std::cout << "Writer unauthorization finished..." << std::endl;
     }
@@ -748,18 +782,27 @@ public:
     }
 
     PubSubWriter& setup_transports(
-            eprosima::fastdds::rtps::BuiltinTransports transports)
+            BuiltinTransports transports)
     {
         participant_attr_.rtps.setup_transports(transports);
+        return *this;
+    }
+
+    PubSubWriter& setup_transports(
+            BuiltinTransports transports,
+            const BuiltinTransportsOptions& options)
+    {
+        participant_attr_.rtps.setup_transports(transports, options);
         return *this;
     }
 
     PubSubWriter& setup_large_data_tcp(
             bool v6 = false,
             const uint16_t& port = 0,
-            const uint32_t& tcp_negotiation_timeout = 0)
+            const BuiltinTransportsOptions& options = BuiltinTransportsOptions())
     {
         participant_attr_.rtps.useBuiltinTransports = false;
+        participant_attr_.rtps.max_msg_size_no_frag = options.maxMessageSize;
 
         /* Transports configuration */
         // UDP transport for PDP over multicast
@@ -769,6 +812,9 @@ public:
         if (v6)
         {
             auto pdp_transport = std::make_shared<eprosima::fastdds::rtps::UDPv6TransportDescriptor>();
+            pdp_transport->maxMessageSize = options.maxMessageSize;
+            pdp_transport->sendBufferSize = options.sockets_buffer_size;
+            pdp_transport->receiveBufferSize = options.sockets_buffer_size;
             participant_attr_.rtps.userTransports.push_back(pdp_transport);
 
             auto data_transport = std::make_shared<eprosima::fastdds::rtps::TCPv6TransportDescriptor>();
@@ -777,12 +823,18 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_attr_.rtps.userTransports.push_back(data_transport);
         }
         else
         {
             auto pdp_transport = std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
+            pdp_transport->maxMessageSize = options.maxMessageSize;
+            pdp_transport->sendBufferSize = options.sockets_buffer_size;
+            pdp_transport->receiveBufferSize = options.sockets_buffer_size;
             participant_attr_.rtps.userTransports.push_back(pdp_transport);
 
             auto data_transport = std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
@@ -791,7 +843,10 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_attr_.rtps.userTransports.push_back(data_transport);
         }
 
@@ -1105,14 +1160,14 @@ public:
     }
 
     PubSubWriter& property_policy(
-            const eprosima::fastrtps::rtps::PropertyPolicy property_policy)
+            const eprosima::fastrtps::rtps::PropertyPolicy& property_policy)
     {
         participant_attr_.rtps.properties = property_policy;
         return *this;
     }
 
     PubSubWriter& entity_property_policy(
-            const eprosima::fastrtps::rtps::PropertyPolicy property_policy)
+            const eprosima::fastrtps::rtps::PropertyPolicy& property_policy)
     {
         publisher_attr_.properties = property_policy;
         return *this;
@@ -1198,6 +1253,14 @@ public:
         return *this;
     }
 
+    PubSubWriter& ownership_strength(
+            uint32_t strength)
+    {
+        publisher_attr_.qos.m_ownership.kind = eprosima::fastrtps::EXCLUSIVE_OWNERSHIP_QOS;
+        publisher_attr_.qos.m_ownershipStrength.value = strength;
+        return *this;
+    }
+
     PubSubWriter& load_publisher_attr(
             const std::string& xml)
     {
@@ -1238,9 +1301,10 @@ public:
     }
 
     PubSubWriter& socket_buffer_size(
-            uint32_t sockerBufferSize)
+            uint32_t socketBufferSize)
     {
-        participant_attr_.rtps.listenSocketBufferSize = sockerBufferSize;
+        participant_attr_.rtps.listenSocketBufferSize = socketBufferSize;
+        participant_attr_.rtps.sendSocketBufferSize = socketBufferSize;
         return *this;
     }
 
@@ -1255,6 +1319,13 @@ public:
             int32_t participantId)
     {
         participant_attr_.rtps.participantID = participantId;
+        return *this;
+    }
+
+    PubSubWriter& set_events_thread_settings(
+            const eprosima::fastdds::rtps::ThreadSettings& settings)
+    {
+        participant_attr_.rtps.timed_events_thread = settings;
         return *this;
     }
 
@@ -1279,6 +1350,40 @@ public:
         publisher_attr_.qos.m_partition.clear();
         publisher_attr_.qos.m_partition.push_back(partition.c_str());
         return publisher_->updateAttributes(publisher_attr_);
+    }
+
+    struct WriterQosView
+    {
+        eprosima::fastrtps::PublisherAttributes* att;
+        eprosima::fastrtps::DeadlineQosPolicy& deadline()
+        {
+            return att->qos.m_deadline; // has .period
+        }
+
+    };
+
+    bool set_qos()
+    {
+        return publisher_->updateAttributes(publisher_attr_);
+    }
+
+    bool set_qos(
+            const WriterQosView& v)
+    {
+        (void)v;
+        return publisher_->updateAttributes(publisher_attr_);
+    }
+
+    bool set_qos(
+            const eprosima::fastrtps::PublisherAttributes& att)
+    {
+        publisher_attr_ = att;
+        return publisher_->updateAttributes(publisher_attr_);
+    }
+
+    WriterQosView get_qos()
+    {
+        return WriterQosView{& publisher_attr_ };
     }
 
     bool remove_all_changes(
@@ -1312,6 +1417,11 @@ public:
     unsigned int missed_deadlines() const
     {
         return listener_.missed_deadlines();
+    }
+
+    unsigned int missed_deadlines_change() const
+    {
+        return listener_.missed_deadlines_change();
     }
 
     unsigned int times_liveliness_lost() const

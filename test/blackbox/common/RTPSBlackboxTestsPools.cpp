@@ -26,11 +26,13 @@
 using namespace eprosima::fastrtps;
 using namespace eprosima::fastrtps::rtps;
 
+namespace {
 enum communication_type
 {
     TRANSPORT,
     INTRAPROCESS
 };
+}  // namespace
 
 class RTPSCustomPools : public testing::TestWithParam<communication_type>
 {
@@ -238,7 +240,7 @@ private:
     std::vector<octet*> free_payloads_;
 };
 
-template <class TData, class TType>
+template<class TData, class TType>
 void do_test(
         const std::string& topic_name,
         std::list<TData>& data,
@@ -246,9 +248,10 @@ void do_test(
         bool pool_on_reader,
         bool should_not_copy)
 {
+    TType type_support;
     uint32_t num_samples = static_cast<uint32_t>(data.size());
     uint32_t num_endpoints = (uint32_t)pool_on_reader + (uint32_t)pool_on_writer;
-    uint32_t payload_size = static_cast<uint32_t>(TData::getMaxCdrSerializedSize());
+    uint32_t payload_size = static_cast<uint32_t>(type_support.m_typeSize);
     payload_size += static_cast<uint32_t>(eprosima::fastcdr::Cdr::alignment(payload_size, 4)); /* possible submessage alignment */
     payload_size += 4u; // encapsulation header
 

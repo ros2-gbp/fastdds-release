@@ -27,6 +27,7 @@
 #include "PubSubWriter.hpp"
 
 using BuiltinTransports = eprosima::fastdds::rtps::BuiltinTransports;
+using BuiltinTransportsOptions = eprosima::fastdds::rtps::BuiltinTransportsOptions;
 
 class TestChainingTransportDescriptor : public eprosima::fastdds::rtps::ChainingTransportDescriptor
 {
@@ -67,7 +68,8 @@ public:
     }
 
     bool init(
-            const eprosima::fastrtps::rtps::PropertyPolicy* properties = nullptr) override
+            const eprosima::fastrtps::rtps::PropertyPolicy* properties = nullptr,
+            const uint32_t& max_msg_size_no_frag = 0) override
     {
         const std::string* value =
                 eprosima::fastrtps::rtps::PropertyPolicyHelper::find_property(*properties, test_property_name);
@@ -75,7 +77,7 @@ public:
         {
             descriptor_.init_function_called();
         }
-        return low_level_transport_->init(properties);
+        return low_level_transport_->init(properties, max_msg_size_no_frag);
     }
 
     bool send(
@@ -155,7 +157,8 @@ public:
     }
 
     static void test_api(
-            const BuiltinTransports& builtin_transports)
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
     {
         if (builtin_transports == BuiltinTransports::NONE)
         {
@@ -170,7 +173,17 @@ public:
         }
         else
         {
-            run_test("", "", "", builtin_transports);
+            run_test("", "", "", builtin_transports, builtin_transports_options);
+        }
+    }
+
+    static void test_api_100kb(
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
+    {
+        if (builtin_transports != BuiltinTransports::NONE)
+        {
+            run_test_api_100kb(builtin_transports, builtin_transports_options);
         }
     }
 
@@ -180,14 +193,16 @@ private:
             const std::string& profiles_file,
             const std::string& participant_profile,
             const std::string& env_var_value,
-            const BuiltinTransports& builtin_transports)
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
     {
         enum class BuiltinTransportsTestCase : uint8_t
         {
             NONE,
             XML,
             ENV,
-            API
+            API,
+            API_OPTIONS
         };
 
         BuiltinTransportsTestCase test_case = BuiltinTransportsTestCase::NONE;
@@ -198,6 +213,7 @@ private:
             ASSERT_NE(participant_profile, "");
             ASSERT_EQ(builtin_transports, BuiltinTransports::NONE);
             ASSERT_EQ(env_var_value, "");
+            ASSERT_EQ(builtin_transports_options, nullptr);
             test_case = BuiltinTransportsTestCase::XML;
         }
         else if (env_var_value != "")
@@ -205,6 +221,7 @@ private:
             ASSERT_EQ(profiles_file, "");
             ASSERT_EQ(participant_profile, "");
             ASSERT_EQ(builtin_transports, BuiltinTransports::NONE);
+            ASSERT_EQ(builtin_transports_options, nullptr);
             test_case = BuiltinTransportsTestCase::ENV;
         }
         else if (builtin_transports != BuiltinTransports::NONE)
@@ -212,7 +229,9 @@ private:
             ASSERT_EQ(profiles_file, "");
             ASSERT_EQ(participant_profile, "");
             ASSERT_EQ(env_var_value, "");
-            test_case = BuiltinTransportsTestCase::API;
+            test_case =
+                    (builtin_transports_options !=
+                    nullptr) ? BuiltinTransportsTestCase::API_OPTIONS : BuiltinTransportsTestCase::API;
         }
 
         ASSERT_NE(test_case, BuiltinTransportsTestCase::NONE);
@@ -255,6 +274,12 @@ private:
                 reader.setup_transports(builtin_transports);
                 break;
             }
+            case BuiltinTransportsTestCase::API_OPTIONS:
+            {
+                writer.setup_transports(builtin_transports, *builtin_transports_options);
+                reader.setup_transports(builtin_transports, *builtin_transports_options);
+                break;
+            }
             default:
             {
                 FAIL();
@@ -276,6 +301,57 @@ private:
 
         // Send data
         auto data = default_helloworld_data_generator();
+        reader.startReception(data);
+        writer.send(data);
+        ASSERT_TRUE(data.empty());
+
+        // Wait for reception acknowledgement
+        reader.block_for_all();
+        EXPECT_TRUE(writer.waitForAllAcked(std::chrono::seconds(3)));
+    }
+
+    static void run_test_api_100kb(
+            const BuiltinTransports& builtin_transports,
+            const BuiltinTransportsOptions* const builtin_transports_options = nullptr)
+    {
+        /* Test configuration */
+        PubSubWriter<Data100kbPubSubType> writer(TEST_TOPIC_NAME);
+        PubSubReader<Data100kbPubSubType> reader(TEST_TOPIC_NAME);
+
+        // Reliable keep all to wait of all acked as end condition
+        writer.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
+
+        reader.reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS)
+                .history_kind(eprosima::fastdds::dds::KEEP_ALL_HISTORY_QOS);
+
+        // Builtin transport configuration according to test_case
+        if (builtin_transports_options != nullptr)
+        {
+            writer.setup_transports(builtin_transports, *builtin_transports_options);
+            reader.setup_transports(builtin_transports, *builtin_transports_options);
+        }
+        else
+        {
+            writer.setup_transports(builtin_transports);
+            reader.setup_transports(builtin_transports);
+        }
+
+        /* Run test */
+        // Init writer
+        writer.init();
+        ASSERT_TRUE(writer.isInitialized());
+
+        // Init reader
+        reader.init();
+        ASSERT_TRUE(reader.isInitialized());
+
+        // Wait for discovery
+        writer.wait_discovery();
+        reader.wait_discovery();
+
+        // Send data
+        auto data = default_data100kb_data_generator();
         reader.startReception(data);
         writer.send(data);
         ASSERT_TRUE(data.empty());
@@ -506,6 +582,14 @@ TEST(ChainingTransportTests, builtin_transports_api_shm)
     BuiltinTransportsTest::test_api(BuiltinTransports::SHM);
 }
 
+TEST(ChainingTransportTests, builtin_transports_api_shm_no_frag)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 200000;
+    options.sockets_buffer_size = 200000;
+    BuiltinTransportsTest::test_api_100kb(BuiltinTransports::SHM, &options);
+}
+
 TEST(ChainingTransportTests, builtin_transports_api_udpv4)
 {
     BuiltinTransportsTest::test_api(BuiltinTransports::UDPv4);
@@ -521,12 +605,52 @@ TEST(ChainingTransportTests, builtin_transports_api_large_data)
     BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA);
 }
 
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_max_msg_size)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 70000;
+    options.sockets_buffer_size = 70000;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsOptions options;
+    options.non_blocking_send = true;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsOptions options;
+    options.tcp_negotiation_timeout = 50;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_with_all_options)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 70000;
+    options.sockets_buffer_size = 70000;
+    options.non_blocking_send = true;
+    options.tcp_negotiation_timeout = 50;
+    BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATA, &options);
+}
+
 #ifndef __APPLE__
 TEST(ChainingTransportTests, builtin_transports_api_large_datav6)
 {
     BuiltinTransportsTest::test_api(BuiltinTransports::LARGE_DATAv6);
 }
 #endif // __APPLE__
+
+TEST(ChainingTransportTests, builtin_transports_api_large_data_no_frag)
+{
+    BuiltinTransportsOptions options;
+    options.maxMessageSize = 200000;
+    options.sockets_buffer_size = 200000;
+    BuiltinTransportsTest::test_api_100kb(BuiltinTransports::LARGE_DATA, &options);
+}
 
 TEST(ChainingTransportTests, builtin_transports_env_none)
 {
@@ -561,6 +685,27 @@ TEST(ChainingTransportTests, builtin_transports_env_udpv6)
 TEST(ChainingTransportTests, builtin_transports_env_large_data)
 {
     BuiltinTransportsTest::test_env("LARGE_DATA");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_max_msg_size)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?max_msg_size=70KB&sockets_size=70KB");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?non_blocking=true");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsTest::test_env("LARGE_DATA?tcp_negotiation_timeout=50");
+}
+
+TEST(ChainingTransportTests, builtin_transports_env_large_data_with_all_options)
+{
+    BuiltinTransportsTest::test_env(
+        "LARGE_DATA?max_msg_size=70KB&sockets_size=70KB&non_blocking=true&tcp_negotiation_timeout=50");
 }
 
 #ifndef __APPLE__
@@ -603,6 +748,26 @@ TEST(ChainingTransportTests, builtin_transports_xml_udpv6)
 TEST(ChainingTransportTests, builtin_transports_xml_large_data)
 {
     BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_max_msg_size)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_max_msg_size");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_non_blocking_send)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_non_blocking_send");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_tcp_negotiation_timeout)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_tcp_negotiation_timeout");
+}
+
+TEST(ChainingTransportTests, builtin_transports_xml_large_data_with_all_options)
+{
+    BuiltinTransportsTest::test_xml("builtin_transports_profile.xml", "participant_largedata_all_options");
 }
 
 #ifndef __APPLE__

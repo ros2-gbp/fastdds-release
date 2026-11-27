@@ -364,19 +364,19 @@ int main(
     // Check parameters validity
     if (use_security && test_agent == TestAgent::BOTH)
     {
-        logError(ThroughputTest, "Intra-process delivery NOT supported with security");
+        EPROSIMA_LOG_ERROR(ThroughputTest, "Intra-process delivery NOT supported with security");
         return 1;
     }
     else if ( Arg::EnablerValue::ON == data_sharing && use_security )
     {
-        logError(ThroughputTest, "Sharing sample APIs NOT supported with RTPS encryption");
+        EPROSIMA_LOG_ERROR(ThroughputTest, "Sharing sample APIs NOT supported with RTPS encryption");
         return 1;
     }
 #endif // if HAVE_SECURITY
 
     if ((Arg::EnablerValue::ON == data_sharing || data_loans) && dynamic_types)
     {
-        logError(ThroughputTest, "Sharing sample APIs NOT supported with dynamic types");
+        EPROSIMA_LOG_ERROR(ThroughputTest, "Sharing sample APIs NOT supported with dynamic types");
         return 1;
     }
 
@@ -395,6 +395,8 @@ int main(
         }
         std::cout << "certs_path: " << certs_path << std::endl;
 
+        // Subscriber
+        // Auth
         sub_part_property_policy.properties().emplace_back(Property(
                     "dds.sec.auth.plugin",
                     "builtin.PKI-DH"));
@@ -410,16 +412,21 @@ int main(
         sub_part_property_policy.properties().emplace_back(Property(
                     "dds.sec.crypto.plugin",
                     "builtin.AES-GCM-GMAC"));
-        sub_part_property_policy.properties().emplace_back(
-            "rtps.participant.rtps_protection_kind",
-            "ENCRYPT");
-        sub_property_policy.properties().emplace_back(
-            "rtps.endpoint.submessage_protection_kind",
-            "ENCRYPT");
-        sub_property_policy.properties().emplace_back(
-            "rtps.endpoint.payload_protection_kind",
-            "ENCRYPT");
+        // Access
+        sub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
+                "builtin.Access-Permissions"));
+        sub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
+                    "file://" + certs_path + "/maincacert.pem"));
+        sub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.governance",
+                    "file://" + certs_path + "/governance_performance_tests.smime"));
+        sub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.permissions",
+                    "file://" + certs_path + "/permissions_performance_tests.smime"));
 
+        // Publisher
+        // Auth
         pub_part_property_policy.properties().emplace_back(Property(
                     "dds.sec.auth.plugin",
                     "builtin.PKI-DH"));
@@ -435,15 +442,18 @@ int main(
         pub_part_property_policy.properties().emplace_back(Property(
                     "dds.sec.crypto.plugin",
                     "builtin.AES-GCM-GMAC"));
-        pub_part_property_policy.properties().emplace_back(
-            "rtps.participant.rtps_protection_kind",
-            "ENCRYPT");
-        pub_property_policy.properties().emplace_back(
-            "rtps.endpoint.submessage_protection_kind",
-            "ENCRYPT");
-        pub_property_policy.properties().emplace_back(
-            "rtps.endpoint.payload_protection_kind",
-            "ENCRYPT");
+        // Access
+        pub_part_property_policy.properties().emplace_back(Property("dds.sec.access.plugin",
+                "builtin.Access-Permissions"));
+        pub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.permissions_ca",
+                    "file://" + certs_path + "/maincacert.pem"));
+        pub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.governance",
+                    "file://" + certs_path + "/governance_performance_tests.smime"));
+        pub_part_property_policy.properties().emplace_back(Property(
+                    "dds.sec.access.builtin.Access-Permissions.permissions",
+                    "file://" + certs_path + "/permissions_performance_tests.smime"));
     }
 #endif // if HAVE_SECURITY
 

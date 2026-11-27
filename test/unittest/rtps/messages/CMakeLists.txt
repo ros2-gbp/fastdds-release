@@ -52,4 +52,4 @@ target_link_libraries(MessageReceiverTests
     GTest::gmock
     ${fastdds_link_libraries}
 )
-add_gtest(MessageReceiverTests SOURCES ${MESSAGE_RECEIVER_TESTS_SOURCE})
+gtest_discover_tests(MessageReceiverTests)

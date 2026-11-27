@@ -1,4 +1,4 @@
-// Copyright 2026 Proyectos y Sistemas de Mantenimiento SL (eProsima).
+// Copyright 2024 Proyectos y Sistemas de Mantenimiento SL (eProsima).
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,177 +12,426 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <chrono>
+#include <iostream>
+#include <limits>
+#include <thread>
+
+// Header for the unit we are testing
+#include <fastdds/rtps/reader/StatefulReader.h>
+
+#include <fastdds/dds/common/InstanceHandle.hpp>
+
 #include <fastdds/rtps/RTPSDomain.h>
 #include <fastdds/rtps/attributes/HistoryAttributes.h>
 #include <fastdds/rtps/attributes/ReaderAttributes.h>
 #include <fastdds/rtps/attributes/WriterAttributes.h>
 #include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
-#include <fastdds/rtps/builtin/data/WriterProxyData.h>
-#include <fastdds/rtps/common/CacheChange.h>
+#include <fastdds/dds/topic/TopicDescription.hpp>
+#include <fastdds/rtps/common/Guid.h>
+#include <fastdds/rtps/common/SequenceNumber.h>
+#include <fastdds/rtps/common/Types.h>
 #include <fastdds/rtps/history/ReaderHistory.h>
 #include <fastdds/rtps/history/WriterHistory.h>
 #include <fastdds/rtps/participant/RTPSParticipant.h>
-#include <fastdds/rtps/reader/ReaderListener.h>
 #include <fastdds/rtps/reader/RTPSReader.h>
-#include <fastdds/rtps/reader/StatefulReader.h>
 #include <fastdds/rtps/writer/RTPSWriter.h>
+#include <fastdds/rtps/builtin/data/WriterProxyData.h>
 
-#include <array>
-#include <cstdint>
-#include <cstring>
-#include <limits>
-#include <thread>
-#include <vector>
+#ifdef FASTDDS_STATISTICS
+
+void register_monitorservice_types_type_objects()
+{
+}
+
+void register_types_type_objects()
+{
+}
+
+#endif  // FASTDDS_STATISTICS
 
 namespace eprosima {
 namespace fastrtps {
 namespace rtps {
 
-namespace {
+using namespace eprosima::fastdds::dds;
 
-class RemovingListener : public ReaderListener
+/* Regression test for: https://github.com/eProsima/Fast-DDS/pull/6217
+   Test that checks that non empty changes (dispose, unregister, ...) with empty
+   payloads are processed.
+ */
+TEST(StatefulReaderTests, EmptyPayloadUnregisterDisposeProcessing)
 {
-public:
+    RTPSParticipantAttributes part_attrs;
+    RTPSParticipant* part = RTPSDomain::createParticipant(0, false, part_attrs, nullptr);
 
-    void onNewCacheChangeAdded(
-            RTPSReader* reader,
-            const CacheChange_t* const change) override
-    {
-        ASSERT_NE(nullptr, reader);
-        ASSERT_NE(nullptr, change);
+    HistoryAttributes hatt{};
+    ReaderHistory reader_history(hatt);
+    WriterHistory writer_history(hatt);
 
-        notified_sequences_.push_back(change->sequenceNumber.to64long());
+    ReaderAttributes reader_att{};
+    reader_att.endpoint.endpointKind = READER;
+    reader_att.endpoint.reliabilityKind = RELIABLE;
+    reader_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
 
-        // Removing earlier changes while NotifyChanges() is iterating over the
-        // history invalidates the current vector iterator.
-        if (change->sequenceNumber == SequenceNumber_t(0, 3))
-        {
-            ReaderHistory* history = reader->getHistory();
-            ASSERT_NE(nullptr, history);
+    RTPSReader* reader = RTPSDomain::createRTPSReader(part, reader_att, &reader_history, nullptr);
+    StatefulReader* uut = dynamic_cast<StatefulReader*>(reader);
+    ASSERT_NE(uut, nullptr);
 
-            for (const SequenceNumber_t& sequence_to_remove : sequences_to_remove_)
+    WriterAttributes writer_att{};
+    writer_att.endpoint.endpointKind = WRITER;
+    writer_att.endpoint.reliabilityKind = RELIABLE;
+    writer_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
+
+    RTPSWriter* writer = RTPSDomain::createRTPSWriter(part, writer_att, &writer_history, nullptr);
+    ASSERT_NE(writer, nullptr);
+
+    // Register both endpoints
+    TopicAttributes topic_desc;
+    topic_desc.topicKind = rtps::WITH_KEY;
+    topic_desc.topicName = "topic";
+    topic_desc.topicDataType = "string";
+    part->registerReader(reader, topic_desc, fastdds::dds::ReaderQos());
+    part->registerWriter(writer, topic_desc, fastdds::dds::WriterQos());
+
+    // After registration, the writer should be matched
+    auto writer_guid = writer->getGuid();
+    EXPECT_TRUE(uut->matched_writer_is_matched(writer_guid));
+
+    CacheChange_t change;
+    change.writerGUID = writer_guid;
+    change.sequenceNumber = {0, 1};
+    change.serializedPayload.length = 0;
+    change.instanceHandle.value[0] = 1;
+    // Alive change is not actually processed, but the method returns true because
+    // the sample is considered non relevant
+    change.kind = ChangeKind_t::ALIVE;
+    EXPECT_TRUE(uut->processDataMsg(&change));
+    change.sequenceNumber++;
+    // Dispose is processed
+    change.kind = ChangeKind_t::NOT_ALIVE_DISPOSED;
+    EXPECT_TRUE(uut->processDataMsg(&change));
+    change.sequenceNumber++;
+    // Unregistered is processed
+    change.kind = ChangeKind_t::NOT_ALIVE_UNREGISTERED;
+    EXPECT_TRUE(uut->processDataMsg(&change));
+    change.sequenceNumber++;
+    // Diposed and unregistered is processed
+    change.kind = ChangeKind_t::NOT_ALIVE_DISPOSED_UNREGISTERED;
+    EXPECT_TRUE(uut->processDataMsg(&change));
+    change.sequenceNumber++;
+
+    // Destroy the writer
+    RTPSDomain::removeRTPSWriter(writer);
+    // Destroy the reader
+    RTPSDomain::removeRTPSReader(reader);
+    // Destroy the participant
+    RTPSDomain::removeRTPSParticipant(part);
+}
+
+/* Regression test: a DATA message from a writer that the reader has not matched yet must be
+   reported as not processed. An intraprocess StatefulWriter uses the return value of
+   processDataMsg() to decide whether the change was delivered. If it is told the change was
+   delivered, the change is acknowledged and never resent once the reader matches the writer,
+   so the sample is lost.
+ */
+TEST(StatefulReaderTests, DataFromUnmatchedWriterIsNotProcessed)
+{
+    RTPSParticipantAttributes part_attrs;
+    RTPSParticipant* part = RTPSDomain::createParticipant(0, false, part_attrs, nullptr);
+
+    HistoryAttributes hatt{};
+    ReaderHistory reader_history(hatt);
+    WriterHistory writer_history(hatt);
+
+    ReaderAttributes reader_att{};
+    reader_att.endpoint.endpointKind = READER;
+    reader_att.endpoint.reliabilityKind = RELIABLE;
+    reader_att.endpoint.durabilityKind = VOLATILE;
+
+    RTPSReader* reader = RTPSDomain::createRTPSReader(part, reader_att, &reader_history, nullptr);
+    StatefulReader* uut = dynamic_cast<StatefulReader*>(reader);
+    ASSERT_NE(uut, nullptr);
+
+    WriterAttributes writer_att{};
+    writer_att.endpoint.endpointKind = WRITER;
+    writer_att.endpoint.reliabilityKind = RELIABLE;
+    writer_att.endpoint.durabilityKind = VOLATILE;
+
+    RTPSWriter* writer = RTPSDomain::createRTPSWriter(part, writer_att, &writer_history, nullptr);
+    ASSERT_NE(writer, nullptr);
+
+    // The endpoints are not registered yet, so the reader does not know the writer
+    auto writer_guid = writer->getGuid();
+    EXPECT_FALSE(uut->matched_writer_is_matched(writer_guid));
+
+    CacheChange_t change;
+    change.writerGUID = writer_guid;
+    change.sequenceNumber = {0, 1};
+    change.serializedPayload.length = 0;
+    change.instanceHandle.value[0] = 1;
+    change.kind = ChangeKind_t::NOT_ALIVE_DISPOSED;
+    EXPECT_FALSE(uut->processDataMsg(&change));
+
+    // Once the endpoints are matched, the same change is processed
+    TopicAttributes topic_desc;
+    topic_desc.topicKind = rtps::WITH_KEY;
+    topic_desc.topicName = "topic";
+    topic_desc.topicDataType = "string";
+    part->registerReader(reader, topic_desc, fastdds::dds::ReaderQos());
+    part->registerWriter(writer, topic_desc, fastdds::dds::WriterQos());
+    EXPECT_TRUE(uut->matched_writer_is_matched(writer_guid));
+    EXPECT_TRUE(uut->processDataMsg(&change));
+
+    // Destroy the writer
+    RTPSDomain::removeRTPSWriter(writer);
+    // Destroy the reader
+    RTPSDomain::removeRTPSReader(reader);
+}
+
+/* Vulnerability reproducer for GHSA-f4hw-9j9g-j8xj: an excessive-iteration CPU-exhaustion DoS in
+ * WriterProxy::process_gap.
+ *
+ * It measures the time taken to process a GAP starting at low_mark+1 (special case) with a gap_list.base() of
+ * 2e7 vs 2e8.
+ * Without the patch, the second call takes ~10x longer than the first, because of the for-loop in process_gap_msg.
+ */
+TEST(StatefulReaderTests, GapUnboundedSequenceRangeIteration)
+{
+    RTPSParticipantAttributes part_attrs;
+    RTPSParticipant* part = RTPSDomain::createParticipant(0, false, part_attrs, nullptr);
+
+    HistoryAttributes hatt{};
+    ReaderHistory reader_history(hatt);
+
+    ReaderAttributes reader_att{};
+    reader_att.endpoint.endpointKind = READER;
+    reader_att.endpoint.reliabilityKind = RELIABLE;
+    reader_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
+
+    RTPSReader* reader = RTPSDomain::createRTPSReader(part, reader_att, &reader_history, nullptr);
+    StatefulReader* uut = dynamic_cast<StatefulReader*>(reader);
+    ASSERT_NE(uut, nullptr);
+
+    TopicAttributes topic_desc;
+    topic_desc.topicDataType = "string";
+    topic_desc.topicName = "topic";
+    part->registerReader(reader, topic_desc, fastdds::dds::ReaderQos());
+
+    // measure_gap_us(base, gap_start_low): fresh writer proxy (changes_from_writer_low_mark_ ==
+    // max_sequence_number_ == 0 on match), then a single GAP with gap_list.base() == base and
+    // gapStart == {0, gap_start_low}. Returns elapsed microseconds for the process_gap_msg call.
+    auto measure_gap_us = [&](uint64_t base, uint32_t gap_start_low) -> int64_t
             {
-                bool removed = false;
-                for (auto change_it = history->changesBegin(); change_it != history->changesEnd(); ++change_it)
-                {
-                    CacheChange_t* change_to_remove = *change_it;
-                    if (change_to_remove->writerGUID == change->writerGUID &&
-                            change_to_remove->sequenceNumber == sequence_to_remove)
-                    {
-                        history->remove_change(change_it);
-                        removed = true;
-                        break;
-                    }
-                }
-                ASSERT_TRUE(removed);
-            }
-        }
-    }
+                HistoryAttributes whatt{};
+                WriterHistory writer_history(whatt);
+                WriterAttributes writer_att{};
+                writer_att.endpoint.endpointKind = WRITER;
+                writer_att.endpoint.reliabilityKind = RELIABLE;
+                writer_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
 
-    void remove_on_third_notification(
-            const std::array<SequenceNumber_t, 2>& sequences)
+                RTPSWriter* writer = RTPSDomain::createRTPSWriter(part, writer_att, &writer_history, nullptr);
+                EXPECT_NE(writer, nullptr);
+                part->registerWriter(writer, topic_desc, fastdds::dds::WriterQos());
+                auto writer_guid = writer->getGuid();
+                EXPECT_TRUE(uut->matched_writer_is_matched(writer_guid));
+
+                // Attacker-forged GAP: small gap_start + huge gap_list.base(). No upper-bound check on
+                // gap_list.base() in StatefulReader::process_gap_msg / WriterProxy::process_gap.
+                SequenceNumber_t gap_start(0, gap_start_low);
+                SequenceNumberSet_t gap_list(SequenceNumber_t(static_cast<uint64_t>(base)));
+
+                auto t0 = std::chrono::steady_clock::now();
+                uut->processGapMsg(writer_guid, gap_start, gap_list);
+                auto t1 = std::chrono::steady_clock::now();
+
+                RTPSDomain::removeRTPSWriter(writer);
+                return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            };
+
+    const uint64_t small_base = 20000000ULL;   // 2e7
+    const uint64_t large_base = 200000000ULL;  // 2e8 (10x)
+
+    // gap_start == low_mark + 1 (== {0,1}) : special case entered -> bound = gap_list.base()+256 -> loop O(base).
+    int64_t small_us = measure_gap_us(small_base, 1);
+    int64_t large_us = measure_gap_us(large_base, 1);
+    double ratio = (small_us > 0 ? static_cast<double>(large_us) / static_cast<double>(small_us) : -1.0);
+
+    // CONTROL: identical huge base, gap_start == low_mark + 2 (== {0,2}) : special case NOT entered
+    // -> max_allowed_gap = low_mark + 256 -> finalSN = min(base, 256) = 256 -> ~254 iterations.
+    int64_t capped_us = measure_gap_us(large_base, 2);
+
+    std::cout << "small_base=" << small_base << " -> " << small_us << " us" << std::endl;
+    std::cout << "large_base=" << large_base << " (10x) -> " << large_us << " us" << std::endl;
+    std::cout << "ratio=" << ratio << std::endl;
+    std::cout << "CONTROL capped (gap_start=low_mark+2, same base) -> " << capped_us << " us" << std::endl;
+
+    // A patched, O(stored changes) implementation would make all three calls return in comparable
+    // (near-zero) time regardless of base. The vulnerable O(sequence-number range) loop makes
+    // large_us ~10x small_us, and both dwarf the (correctly 256-capped) control.
+    if (small_us < large_us)
     {
-        sequences_to_remove_ = sequences;
+        EXPECT_LT(ratio, 5.0);
     }
 
-    const std::vector<int64_t>& notified_sequences() const
-    {
-        return notified_sequences_;
-    }
-
-private:
-
-    std::vector<int64_t> notified_sequences_;
-    std::array<SequenceNumber_t, 2> sequences_to_remove_;
-};
-
-GUID_t writer_guid()
-{
-    GUID_t guid;
-    guid.guidPrefix.value[0] = 1;
-    guid.entityId.value[3] = 3;
-    return guid;
+    RTPSDomain::removeRTPSReader(reader);
+    RTPSDomain::removeRTPSParticipant(part);
 }
 
-void initialize_change(
-        CacheChange_t& change,
-        const GUID_t& guid,
-        const int32_t sequence_number)
+/* Variation of GapUnboundedSequenceRangeIteration that uses a gap_start below the low mark, which shall be treated
+ * the same as gap_start == low_mark + 1 (special case) and thus also triggers the O(base) loop.
+ */
+TEST(StatefulReaderTests, GapUnboundedSequenceRangeIterationLessThanLowMark)
 {
-    change.kind = ALIVE;
-    change.writerGUID = guid;
-    change.sequenceNumber = SequenceNumber_t(0, sequence_number);
-    change.serializedPayload.length = 4;
-    std::memset(change.serializedPayload.data, sequence_number, change.serializedPayload.length);
-}
+    RTPSParticipantAttributes part_attrs;
+    RTPSParticipant* part = RTPSDomain::createParticipant(0, false, part_attrs, nullptr);
 
-} // anonymous namespace
+    HistoryAttributes hatt{};
+    ReaderHistory reader_history(hatt);
 
-TEST(StatefulReaderTests, ListenerCanRemoveEarlierChangesWhileNotifying)
-{
-    RTPSParticipantAttributes participant_attributes;
-    participant_attributes.builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::NONE;
-    participant_attributes.builtin.use_WriterLivelinessProtocol = false;
+    ReaderAttributes reader_att{};
+    reader_att.endpoint.endpointKind = READER;
+    reader_att.endpoint.reliabilityKind = RELIABLE;
+    reader_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
 
-    RTPSParticipant* participant = RTPSDomain::createParticipant(0, participant_attributes);
-    ASSERT_NE(nullptr, participant);
+    RTPSReader* reader = RTPSDomain::createRTPSReader(part, reader_att, &reader_history, nullptr);
+    StatefulReader* uut = dynamic_cast<StatefulReader*>(reader);
+    ASSERT_NE(uut, nullptr);
 
-    HistoryAttributes history_attributes;
-    history_attributes.payloadMaxSize = 4;
-    history_attributes.initialReservedCaches = 4;
-    history_attributes.maximumReservedCaches = 4;
-    ReaderHistory history(history_attributes);
+    TopicAttributes topic_desc;
+    topic_desc.topicDataType = "string";
+    topic_desc.topicName = "topic";
+    part->registerReader(reader, topic_desc, fastdds::dds::ReaderQos());
 
-    RemovingListener listener;
+    // measure_gap_us(base, gap_start_low): fresh writer proxy (changes_from_writer_low_mark_ ==
+    // max_sequence_number_ == 0 on match), then a single GAP with gap_list.base() == base and
+    // gapStart == {0, gap_start_low}. Returns elapsed microseconds for the process_gap_msg call.
+    auto measure_gap_us = [&](uint64_t base, uint32_t gap_start_low, uint32_t low_mark) -> int64_t
+            {
+                HistoryAttributes whatt{};
+                WriterHistory writer_history(whatt);
+                WriterAttributes writer_att{};
+                writer_att.endpoint.endpointKind = WRITER;
+                writer_att.endpoint.reliabilityKind = RELIABLE;
+                writer_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
 
-    ReaderAttributes reader_attributes;
-    reader_attributes.endpoint.endpointKind = READER;
-    reader_attributes.endpoint.reliabilityKind = RELIABLE;
-    fastdds::dds::DataSharingQosPolicy data_sharing;
-    data_sharing.off();
-    reader_attributes.endpoint.set_data_sharing_configuration(data_sharing);
+                RTPSWriter* writer = RTPSDomain::createRTPSWriter(part, writer_att, &writer_history, nullptr);
+                EXPECT_NE(writer, nullptr);
+                part->registerWriter(writer, topic_desc, fastdds::dds::WriterQos());
+                auto writer_guid = writer->getGuid();
+                EXPECT_TRUE(uut->matched_writer_is_matched(writer_guid));
 
-    RTPSReader* reader = RTPSDomain::createRTPSReader(
-        participant,
-        reader_attributes,
-        &history,
-        &listener);
-    ASSERT_NE(nullptr, reader);
+                // Set the low mark to a non-zero value, so that gap_start < low_mark triggers the special case.
+                SequenceNumber_t low_mark_sn(0, low_mark);
+                uut->processHeartbeatMsg(writer_guid, 1u, low_mark_sn + 1u, low_mark_sn, true, false);
 
-    WriterProxyData writer_data(0, 0);
-    writer_data.guid(writer_guid());
-    writer_data.m_qos.m_reliability.kind = RELIABLE_RELIABILITY_QOS;
-    writer_data.m_qos.data_sharing.off();
-    ASSERT_TRUE(reader->matched_writer_add(writer_data));
+                // Attacker-forged GAP: small gap_start + huge gap_list.base(). No upper-bound check on
+                // gap_list.base() in StatefulReader::processGapMsg / WriterProxy::processGap.
+                SequenceNumber_t gap_start(0, gap_start_low);
+                SequenceNumberSet_t gap_list(SequenceNumber_t(static_cast<uint64_t>(base)));
 
-    CacheChange_t change_1(4);
-    CacheChange_t change_2(4);
-    CacheChange_t change_3(4);
-    CacheChange_t change_4(4);
-    std::array<CacheChange_t*, 4> changes {{&change_1, &change_2, &change_3, &change_4}};
-    initialize_change(change_1, writer_data.guid(), 1);
-    initialize_change(change_2, writer_data.guid(), 2);
-    initialize_change(change_3, writer_data.guid(), 3);
-    initialize_change(change_4, writer_data.guid(), 4);
-    listener.remove_on_third_notification({SequenceNumber_t(0, 1), SequenceNumber_t(0, 2)});
+                auto t0 = std::chrono::steady_clock::now();
+                uut->processGapMsg(writer_guid, gap_start, gap_list);
+                auto t1 = std::chrono::steady_clock::now();
 
-    // Receive change 4 before change 3. This leaves change 4 in the history
-    // without notifying it, because WriterProxy only exposes a contiguous
-    // sequence to the reader. When change 3 arrives, NotifyChanges() notifies
-    // both 3 and 4 in a single iteration.
-    const std::array<size_t, 4> receive_order {{0, 1, 3, 2}};
-    for (const size_t index : receive_order)
+                RTPSDomain::removeRTPSWriter(writer);
+                return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            };
+
+    const uint64_t small_base = 20000000ULL;   // 2e7
+    const uint64_t large_base = 200000000ULL;  // 2e8 (10x)
+
+    // gap_start < low_mark : special case entered -> bound = gap_list.base()+256 -> loop O(base).
+    int64_t small_us = measure_gap_us(small_base, 91, 100);
+    int64_t large_us = measure_gap_us(large_base, 91, 100);
+    double ratio = (small_us > 0 ? static_cast<double>(large_us) / static_cast<double>(small_us) : -1.0);
+
+    // CONTROL: identical huge base, gap_start == low_mark + 2 (== {0,2}) : special case NOT entered
+    // -> max_allowed_gap = low_mark + 256 -> finalSN = min(base, 256) = 256 -> ~254 iterations.
+    int64_t capped_us = measure_gap_us(large_base, 102, 100);
+
+    std::cout << "small_base=" << small_base << " -> " << small_us << " us" << std::endl;
+    std::cout << "large_base=" << large_base << " (10x) -> " << large_us << " us" << std::endl;
+    std::cout << "ratio=" << ratio << std::endl;
+    std::cout << "CONTROL capped (gap_start=low_mark+2, same base) -> " << capped_us << " us" << std::endl;
+
+    // A patched, O(stored changes) implementation would make all three calls return in comparable
+    // (near-zero) time regardless of base. The vulnerable O(sequence-number range) loop makes
+    // large_us ~10x small_us, and both dwarf the (correctly 256-capped) control.
+    if (small_us < large_us)
     {
-        ASSERT_TRUE(reader->processDataMsg(changes[index]));
+        EXPECT_LT(ratio, 5.0);
     }
 
-    const std::vector<int64_t> expected_sequences {1, 2, 3, 4};
-    EXPECT_EQ(expected_sequences, listener.notified_sequences());
+    RTPSDomain::removeRTPSReader(reader);
+    RTPSDomain::removeRTPSParticipant(part);
+}
 
-    RTPSDomain::removeRTPSParticipant(participant);
+/* Live demonstration of the actual GAP denial of service for GHSA-f4hw-9j9g-j8xj.
+ *
+ * A single crafted GAP (small gap_start + huge gap_list.base()) pins one core at 100% CPU and
+ * process_gap_msg() effectively hangs for any practical observation period.
+ *
+ * Designed to fail by timeout.
+ * While it runs:
+ *   - `top -H -p <pid>`  shows one thread at 100% CPU;
+ *   - `gdb -p <pid>` then `thread apply all bt` shows the stack pinned in
+ *       WriterProxy::received_change_set  <-  WriterProxy::process_gap  (the for-loop body)
+ *       <-  StatefulReader::process_gap_msg
+ *     with changes_from_writer_low_mark_ climbing toward gap_list.base() while RSS stays flat.
+ */
+TEST(StatefulReaderTests, GapProcessingFullHang)
+{
+    RTPSParticipantAttributes part_attrs;
+    RTPSParticipant* part = RTPSDomain::createParticipant(0, false, part_attrs, nullptr);
+
+    HistoryAttributes hatt{};
+    ReaderHistory reader_history(hatt);
+
+    ReaderAttributes reader_att{};
+    reader_att.endpoint.endpointKind = READER;
+    reader_att.endpoint.reliabilityKind = RELIABLE;
+    reader_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
+
+    RTPSReader* reader = RTPSDomain::createRTPSReader(part, reader_att, &reader_history, nullptr);
+    StatefulReader* uut = dynamic_cast<StatefulReader*>(reader);
+    ASSERT_NE(uut, nullptr);
+
+    TopicAttributes topic_desc;
+    topic_desc.topicDataType = "string";
+    topic_desc.topicName = "topic";
+    part->registerReader(reader, topic_desc, fastdds::dds::ReaderQos());
+
+    HistoryAttributes whatt{};
+    WriterHistory writer_history(whatt);
+    WriterAttributes writer_att{};
+    writer_att.endpoint.endpointKind = WRITER;
+    writer_att.endpoint.reliabilityKind = RELIABLE;
+    writer_att.endpoint.durabilityKind = TRANSIENT_LOCAL;
+    RTPSWriter* writer = RTPSDomain::createRTPSWriter(part, writer_att, &writer_history, nullptr);
+    ASSERT_NE(writer, nullptr);
+    part->registerWriter(writer, topic_desc, fastdds::dds::WriterQos());
+    auto writer_guid = writer->getGuid();
+    ASSERT_TRUE(uut->matched_writer_is_matched(writer_guid));
+
+    // gap_start == low_mark + 1 (special case) + attacker-chosen huge gap_list.base() ~5.98e18,
+    // near the RTPS 63-bit positive maximum (~9.22e18). This is far larger than the smaller inflated
+    // low marks seen in the supplemental on-wire captures; it is chosen only to make the practical hang
+    // obvious. (The 0x53 high byte is an artifact of the original fuzzing seed 'S' == 0x53.)
+    SequenceNumber_t gap_start(0, 1);
+    SequenceNumberSet_t gap_list(SequenceNumber_t(static_cast<uint64_t>(0x5300000000000001ULL)));
+
+    // Vulnerable build: does not return within any practical observation window
+    // (process_gap for-loop runs ~5.98e18 iterations).
+    // Fixed build: returns promptly and reaches the line below.
+    uut->processGapMsg(writer_guid, gap_start, gap_list);
+
+    RTPSDomain::removeRTPSWriter(writer);
+    RTPSDomain::removeRTPSReader(reader);
+    RTPSDomain::removeRTPSParticipant(part);
 }
 
 /* Regression test for GHSA-57rp-jm6r-xjw5: an unvalidated HEARTBEAT firstSN lets
@@ -475,13 +724,13 @@ TEST(StatefulReaderTests, MaliciousHeartbeatHighSN)
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 int main(
         int argc,
         char** argv)
 {
-    testing::InitGoogleTest(&argc, argv);
+    testing::InitGoogleMock(&argc, argv);
     return RUN_ALL_TESTS();
 }

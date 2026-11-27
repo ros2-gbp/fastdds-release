@@ -58,7 +58,7 @@ bool AESGCMGMAC_KeyExchange::create_local_participant_crypto_tokens(
 
     if (local_participant.nil() || remote_participant.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Not a valid ParticipantCryptoHandle received");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Not a valid ParticipantCryptoHandle received");
         return false;
     }
 
@@ -103,7 +103,7 @@ bool AESGCMGMAC_KeyExchange::create_local_participant_crypto_tokens(
 
         if (remote_participant->Participant2ParticipantKeyMaterial.empty())
         {
-            logError(SECURITY_CRYPTO, "No participant key material to tokenize");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "No participant key material to tokenize");
             return false;
         }
 
@@ -142,19 +142,19 @@ bool AESGCMGMAC_KeyExchange::set_remote_participant_crypto_tokens(
 
     if (local_participant.nil() || remote_participant.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Not a valid ParticipantCryptoHandle received");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Not a valid ParticipantCryptoHandle received");
         return false;
     }
     //As only relevant KeyMaterials are tokenized, only one Token is exchanged
     if (remote_participant_tokens.size() != 1)
     {
-        logWarning(SECURITY_CRYPTO, "Invalid CryptoTokenSeq length");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid CryptoTokenSeq length");
         exception = SecurityException("Incorrect remote CryptoSequence length");
         return false;
     }
     if (remote_participant_tokens.at(0).class_id() != "DDS:Crypto:AES_GCM_GMAC")
     {
-        logWarning(SECURITY_CRYPTO, "MalformedCryptoToken");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "MalformedCryptoToken");
         exception = SecurityException("Incorrect token type received");
         return false;
     }
@@ -162,7 +162,7 @@ bool AESGCMGMAC_KeyExchange::set_remote_participant_crypto_tokens(
             remote_participant_tokens.at(0).properties().size() != 0 ||
             remote_participant_tokens.at(0).binary_properties().at(0).name() != "dds.cryp.keymat")
     {
-        logWarning(SECURITY_CRYPTO, "MalformedCryptoToken");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "MalformedCryptoToken");
         exception = SecurityException("Malformed CryptoToken");
         return false;
     }
@@ -206,7 +206,7 @@ bool AESGCMGMAC_KeyExchange::create_local_datawriter_crypto_tokens(
 
     if (local_writer.nil() || remote_reader.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid CryptoHandle received");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid CryptoHandle received");
         return false;
     }
 
@@ -249,7 +249,7 @@ bool AESGCMGMAC_KeyExchange::create_local_datareader_crypto_tokens(
 
     if (local_reader.nil() || remote_writer.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid CryptoHandle received");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid CryptoHandle received");
         return false;
     }
 
@@ -291,14 +291,14 @@ bool AESGCMGMAC_KeyExchange::set_remote_datareader_crypto_tokens(
 
     if (local_writer.nil() || remote_reader.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid CryptoHandle received");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid CryptoHandle received");
         return false;
     }
     //As only relevant KeyMaterials are tokenized, only one or two Token are exchanged
     auto nTokens = remote_datareader_tokens.size();
     if (nTokens != 1 && nTokens != 2)
     {
-        logWarning(SECURITY_CRYPTO, "Malformed CryptoTokenSequence");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoTokenSequence");
         exception = SecurityException("Incorrect remote CryptoSequence length");
         return false;
     }
@@ -306,7 +306,7 @@ bool AESGCMGMAC_KeyExchange::set_remote_datareader_crypto_tokens(
     {
         if (remote_datareader_tokens.at(i).class_id() != "DDS:Crypto:AES_GCM_GMAC")
         {
-            logWarning(SECURITY_CRYPTO, "Malformed CryptoToken");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoToken");
             exception = SecurityException("Incorrect token type received");
             return false;
         }
@@ -315,7 +315,7 @@ bool AESGCMGMAC_KeyExchange::set_remote_datareader_crypto_tokens(
                 remote_datareader_tokens.at(i).properties().size() != 0 ||
                 remote_datareader_tokens.at(i).binary_properties().at(0).name() != "dds.cryp.keymat")
         {
-            logWarning(SECURITY_CRYPTO, "Malformed CryptoToken");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoToken");
             exception = SecurityException("Malformed CryptoToken");
             return false;
         }
@@ -362,14 +362,14 @@ bool AESGCMGMAC_KeyExchange::set_remote_datawriter_crypto_tokens(
 
     if (local_reader.nil() || remote_writer.nil())
     {
-        logWarning(SECURITY_CRYPTO, "Invalid CryptoHandle");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Invalid CryptoHandle");
         return false;
     }
     //As only relevant KeyMaterials are tokenized, only one or two Token are exchanged
     auto nTokens = remote_datawriter_tokens.size();
     if (nTokens != 1 && nTokens != 2)
     {
-        logWarning(SECURITY_CRYPTO, "Malformed CryptoTokenSequence");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoTokenSequence");
         exception = SecurityException("Incorrect remote CryptoSequence length");
         return false;
     }
@@ -378,7 +378,7 @@ bool AESGCMGMAC_KeyExchange::set_remote_datawriter_crypto_tokens(
     {
         if (remote_datawriter_tokens.at(i).class_id() != "DDS:Crypto:AES_GCM_GMAC")
         {
-            logWarning(SECURITY_CRYPTO, "Malformed CryptoToken");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoToken");
             exception = SecurityException("Incorrect token type received");
             return false;
         }
@@ -387,7 +387,7 @@ bool AESGCMGMAC_KeyExchange::set_remote_datawriter_crypto_tokens(
                 remote_datawriter_tokens.at(i).properties().size() != 0 ||
                 remote_datawriter_tokens.at(i).binary_properties().at(0).name() != "dds.cryp.keymat")
         {
-            logWarning(SECURITY_CRYPTO, "Malformed CryptoToken");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed CryptoToken");
             exception = SecurityException("Malformed CryptoToken");
             return false;
         }
@@ -529,7 +529,7 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
 
     if (size < 4)
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: message too short");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: message too short");
         return false;
     }
 
@@ -566,13 +566,13 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
     pos = 4 + 3;  // 4 - transformation_kind. 3 - 0's
     if (!has_room(pos, 1))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_salt length");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_salt length");
         return false;
     }
     key_len = data[pos++];
     if (key_len > max_key_len || !has_room(pos, key_len))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_salt length");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_salt length");
         return false;
     }
     memcpy(buffer.master_salt.data(), &data[pos], key_len);
@@ -581,7 +581,7 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
     // sender_key_id : octet[4]
     if (!has_room(pos, 4))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: missing sender_key_id");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing sender_key_id");
         return false;
     }
     memcpy(buffer.sender_key_id.data(), &data[pos], 4);
@@ -593,13 +593,13 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
     pos += 3;
     if (!has_room(pos, 1))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_sender_key length");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_sender_key length");
         return false;
     }
     key_len = data[pos++];
     if (key_len > max_key_len || !has_room(pos, key_len))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_sender_key length");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_sender_key length");
         return false;
     }
     memcpy(buffer.master_sender_key.data(), &data[pos], key_len);
@@ -608,7 +608,7 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
     // receiver_specific_key_id : octet[4]
     if (!has_room(pos, 4))
     {
-        logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: missing receiver_specific_key_id");
+        EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing receiver_specific_key_id");
         return false;
     }
     uint8_t has_specific_key = 0;
@@ -626,13 +626,13 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
         pos += 3;
         if (!has_room(pos, 1))
         {
-            logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_receiver_specific_key length");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: missing master_receiver_specific_key length");
             return false;
         }
         key_len = data[pos++];
         if (key_len > max_key_len || !has_room(pos, key_len))
         {
-            logWarning(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_receiver_specific_key length");
+            EPROSIMA_LOG_WARNING(SECURITY_CRYPTO, "Malformed KeyMaterial: invalid master_receiver_specific_key length");
             return false;
         }
         memcpy(buffer.master_receiver_specific_key.data(), &data[pos], key_len);
@@ -661,19 +661,19 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
         EVP_CIPHER_CTX* e_ctx = EVP_CIPHER_CTX_new();
         if(!EVP_EncryptInit(e_ctx, EVP_aes_128_gcm(), (const unsigned char*)key.data(), iv))
         {
-            logError(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptInit function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptInit function returns an error");
             output.clear();
             return output;
         }
         if(!EVP_EncryptUpdate(e_ctx, &output[32], &actual_size, (const unsigned char*)plaintext.data(), static_cast<int>(plaintext.size())))
         {
-            logError(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptUpdate function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptUpdate function returns an error");
             output.clear();
             return output;
         }
         if(!EVP_EncryptFinal(e_ctx, &output[32 + actual_size], &final_size))
         {
-            logError(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptFinal function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to encrypt data. EVP_EncryptFinal function returns an error");
             output.clear();
             return output;
         }
@@ -704,20 +704,20 @@ bool AESGCMGMAC_KeyExchange::KeyMaterialCDRDeserialize(
         EVP_CIPHER_CTX* d_ctx = EVP_CIPHER_CTX_new();
         if(!EVP_DecryptInit(d_ctx, EVP_aes_128_gcm(), (const unsigned char*)key.data(), iv))
         {
-            logError(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptInit function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptInit function returns an error");
             plaintext.clear();
             return plaintext;
         }
         if(!EVP_DecryptUpdate(d_ctx, &plaintext[0], &actual_size, (const unsigned char*)crypto.data() + 32, static_cast<int>(crypto.size() - 32)))
         {
-            logError(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptUpdate function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptUpdate function returns an error");
             plaintext.clear();
             return plaintext;
         }
         EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16, tag);
         if(!EVP_DecryptFinal(d_ctx, &plaintext[actual_size], &final_size))
         {
-            logError(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptFinal function returns an error");
+            EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Unable to decrypt data. EVP_DecryptFinal function returns an error");
             plaintext.clear();
             return plaintext;
         }

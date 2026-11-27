@@ -25,11 +25,23 @@
 
     Available tests:
 
-        test_fast_discovery_closure
-        test_fast_discovery_parse_XML_file_prefix_OK
-        test_fast_discovery_parse_XML_file_prefix_OK_URI
-        test_fast_discovery_parse_XML_file_server_address
-        test_fast_discovery_parse_XML_file_server_address_URI
+        test_fast_discovery_closure,
+        test_fast_discovery_udpv6_address,
+        test_fast_discovery_parse_XML_file_default_profile,
+        test_fast_discovery_parse_XML_file_URI_profile,
+        test_fast_discovery_prefix_override,
+        test_fast_discovery_locator_address_override,
+        test_fast_discovery_locator_override_same_address,
+        test_fast_discovery_locator_port_override,
+        test_fast_discovery_locator_override_same_port,
+        test_fast_discovery_backup,
+        test_fast_discovery_no_XML,
+        test_fast_discovery_incorrect_participant,
+        test_fast_discovery_no_prefix,
+        test_fast_discovery_several_server_ids,
+        test_fast_discovery_invalid_locator,
+        test_fast_discovery_non_existent_profile,
+
 """
 
 import argparse
@@ -39,6 +51,9 @@ from tabnanny import check
 import time
 import signal
 import os
+
+if os.name == 'nt':
+    import ctypes
 
 from xml.dom import minidom
 from xml.etree.ElementTree import XML
@@ -52,16 +67,27 @@ def signal_handler(signum, frame):
 def send_command(command):
     print("Executing command: " + str(command))
 
-    # this subprocess cannot be executed in shell=True or using bash
+    creationflags = 0
+    if os.name == 'nt':
+        # Give the child its own console so we can deliver CTRL_C_EVENT to
+        # it without also affecting the launcher (PowerShell). We cannot use
+        # Start-Process -WindowStyle Hidden on Windows containers, and
+        # CREATE_NEW_PROCESS_GROUP + CTRL_BREAK_EVENT does not work either
+        # because the server only installs a SIGINT handler, not SIGBREAK.
+        creationflags = subprocess.CREATE_NEW_CONSOLE
+
+    # This subprocess cannot be executed in shell=True or using bash
     #  because a background script will not broadcast the signals
     #  it receives
     proc = subprocess.Popen(command,
                             stdout=subprocess.PIPE,
-                            universal_newlines=True
+                            stderr=subprocess.PIPE,
+                            universal_newlines=True,
+                            creationflags=creationflags,
                             )
 
-    # sleep to let the server run
-    time.sleep(1)
+    # Sleep to let the server run
+    time.sleep(3)
 
     # 1. An exit code of 0 means everything was alright
     # 2. An exit code of 1 means the tool's process terminated before even
@@ -71,17 +97,44 @@ def send_command(command):
     #    output was different than expected
     exit_code = 0
 
-    # direct this script to ignore SIGINT
+    # If the process already exited due to failure (e.g. bad arguments, missing XML),
+    # skip signalling entirely and collect the output.
+    if proc.poll() is not None:
+        output, err = proc.communicate()
+        return output, err, exit_code
+
+    # Direct this script to ignore SIGINT
     signal.signal(signal.SIGINT, signal_handler)
 
-    # send SIGINT to process and wait for processing
+    # On Windows, detach from the launcher's console and attach to the child's brand-new
+    # console. From that attached state, GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)
+    # broadcasts CTRL+C to every process in the attached console. This reaches the server's
+    # SIGINT handler and triggers the clean-shutdown path (which prints "### Server shut down ###")
+    # without leaking the signal to PowerShell.
+    kernel32 = None
+    if os.name == 'nt':
+        kernel32 = ctypes.windll.kernel32
+        ATTACH_PARENT_PROCESS = -1
+        CTRL_C_EVENT = 0
+        kernel32.FreeConsole()
+        if not kernel32.AttachConsole(proc.pid):
+            # Restore our console and bail out hard if the attached failed
+            kernel32.AttachConsole(ATTACH_PARENT_PROCESS)
+            proc.kill()
+            print('Could not attach to child console to send CTRL_C')
+            sys.exit(2)
+        # Ignore CTRL+C in our own process so the broadcast does not terminate the Python launcher.
+        kernel32.SetConsoleCtrlHandler(None, True)
+
+    # Send signal to process and wait for processing
     lease = 0
     while True:
 
         if os.name == 'posix':
             proc.send_signal(signal.SIGINT)
         elif os.name == 'nt':
-            proc.send_signal(signal.CTRL_C_EVENT)
+            # pid == 0 targets all processes attached to our (the child's) console.
+            kernel32.GenerateConsoleCtrlEvent(0, 0)
 
         time.sleep(1)
         lease += 1
@@ -91,6 +144,12 @@ def send_command(command):
             print('iterating...')
         else:
             break
+
+    # Restore the launcher's console attachment on Windows before returning.
+    if os.name == 'nt':
+        kernel32.FreeConsole()
+        kernel32.AttachConsole(-1)  # ATTACH_PARENT_PROCESS
+        kernel32.SetConsoleCtrlHandler(None, False)
 
     # Check whether SIGINT was able to terminate the process
     if proc.poll() is None:
@@ -157,11 +216,36 @@ def test_fast_discovery_closure(fast_discovery_tool):
 
     sys.exit(exit_code)
 
+def test_fast_discovery_udpv6_address(fast_discovery_tool):
+    """Test that discovery command manages IPv4 and IPv6 correctly."""
+
+    command = [
+        fast_discovery_tool, '-i', '1', '-l', '154.56.134.194', '-p',
+        '32123', '-l', '2a02:ec80:600:ed1a::3', '-p', '14520'
+    ]
+
+    output, err, exit_code = send_command(command)
+
+    if exit_code != 0:
+        print(output)
+        sys.exit(exit_code)
+
+    EXPECTED_OUTPUTS = [
+        "UDPv4:[154.56.134.194]:32123",
+        "UDPv6:[2a02:ec80:600:ed1a::3]:14520",
+    ]
+
+    for pattern in EXPECTED_OUTPUTS:
+        exit_code = check_output(output, err, pattern, False)
+        if exit_code != 0:
+            break
+
+    sys.exit(exit_code)
 
 def test_fast_discovery_parse_XML_file_default_profile(fast_discovery_tool):
     """Test that discovery command read XML default profile correctly."""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
 
     prefix = default_profile.getElementsByTagName('prefix')
@@ -198,7 +282,7 @@ def test_fast_discovery_parse_XML_file_default_profile(fast_discovery_tool):
 def test_fast_discovery_parse_XML_file_URI_profile(fast_discovery_tool):
     """Test that discovery command read XML profile using URI."""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     uri_profile = XML_parse_profile(XML_file_path, "UDP_server_two")
 
     prefix = uri_profile.getElementsByTagName('prefix')
@@ -234,7 +318,7 @@ def test_fast_discovery_parse_XML_file_URI_profile(fast_discovery_tool):
 def test_fast_discovery_prefix_override(fast_discovery_tool):
     """Test that discovery command overrides prefix given in XML file"""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
 
     EXPECTED_SERVER_ID = "Server GUID prefix: 44.53.00.5f.45.50.52.4f.53.49.4d.41"
@@ -265,9 +349,9 @@ def test_fast_discovery_prefix_override(fast_discovery_tool):
 def test_fast_discovery_locator_address_override(fast_discovery_tool):
     """Test that discovery command overrides locator given in XML file when using -l option"""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
-   
+
     prefix = default_profile.getElementsByTagName('prefix')
     PREFIX = prefix[0].firstChild.data
     EXPECTED_SERVER_ID = "Server GUID prefix: " + PREFIX.lower()
@@ -304,9 +388,9 @@ def test_fast_discovery_locator_address_override(fast_discovery_tool):
 def test_fast_discovery_locator_override_same_address(fast_discovery_tool):
     """Test that discovery command overrides locator given in XML file even if the address is the same"""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
-   
+
     prefix = default_profile.getElementsByTagName('prefix')
     PREFIX = prefix[0].firstChild.data
     EXPECTED_SERVER_ID = "Server GUID prefix: " + PREFIX.lower()
@@ -343,9 +427,9 @@ def test_fast_discovery_locator_override_same_address(fast_discovery_tool):
 def test_fast_discovery_locator_port_override(fast_discovery_tool):
     """Test that discovery command overrides locator given in XML file when using -p option"""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
-   
+
     prefix = default_profile.getElementsByTagName('prefix')
     PREFIX = prefix[0].firstChild.data
     EXPECTED_SERVER_ID = "Server GUID prefix: " + PREFIX.lower()
@@ -382,9 +466,9 @@ def test_fast_discovery_locator_port_override(fast_discovery_tool):
 def test_fast_discovery_locator_override_same_port(fast_discovery_tool):
     """Test that discovery command overrides locator given in XML file even if the port is the same"""
 
-    XML_file_path = 'test_xml_discovery_server.xml'
+    XML_file_path = 'test_xml_discovery_server_profile.xml'
     default_profile = XML_parse_profile(XML_file_path, "")
-   
+
     prefix = default_profile.getElementsByTagName('prefix')
     PREFIX = prefix[0].firstChild.data
     EXPECTED_SERVER_ID = "Server GUID prefix: " + PREFIX.lower()
@@ -421,7 +505,7 @@ def test_fast_discovery_locator_override_same_port(fast_discovery_tool):
 def test_fast_discovery_backup(fast_discovery_tool):
     """Test that launches a BACKUP using CLI and XML"""
 
-    XML_file_path = "test_xml_discovery_server.xml"
+    XML_file_path = "test_xml_discovery_server_profile.xml"
     EXPECTED_PARTICIPANT_TYPE = "Participant Type:   BACKUP"
     EXPECTED_SERVER_ID = "Server GUID prefix: 44.53.00.5f.45.50.52.4f.53.49.4d.41"
     EXPECTED_SERVER_ADDRESS = []
@@ -476,7 +560,7 @@ def test_fast_discovery_no_XML(fast_discovery_tool):
 def test_fast_discovery_incorrect_participant(fast_discovery_tool):
     """Test that checks failure if the participant is not SERVER/BACKUP"""
 
-    XML_file_path = "test_wrong_xml_discovery_server.xml"
+    XML_file_path = "test_wrong_xml_discovery_server_profile.xml"
     command = [fast_discovery_tool, '-x', 'UDP_simple@' + XML_file_path]
     output, err, exit_code = send_command(command)
 
@@ -494,7 +578,7 @@ def test_fast_discovery_incorrect_participant(fast_discovery_tool):
 def test_fast_discovery_no_prefix(fast_discovery_tool):
     """Test failure when no server ID is provided"""
 
-    XML_file_path = "test_wrong_xml_discovery_server.xml"
+    XML_file_path = "test_wrong_xml_discovery_server_profile.xml"
     command = [fast_discovery_tool, '-x', 'UDP_no_prefix@' + XML_file_path]
     output, err, exit_code = send_command(command)
     exit_code = check_output(output, err, "Server id is mandatory if not defined in the XML file", True)
@@ -522,7 +606,7 @@ def test_fast_discovery_invalid_locator(fast_discovery_tool):
 def test_fast_discovery_non_existent_profile(fast_discovery_tool):
     """Test failure when the profile does not exist in the XML file"""
 
-    XML_file_path = "test_xml_discovery_server.xml"
+    XML_file_path = "test_xml_discovery_server_profile.xml"
     command = [fast_discovery_tool, '-x', 'non_existent_profile@' + XML_file_path]
     output, err, exit_code = send_command(command)
     exit_code = check_output(output, err, "Error loading specified profile from XML file", True)
@@ -543,7 +627,7 @@ def test_fast_discovery_security_disabled(fast_discovery_tool):
 def test_fast_discovery_security_enabled_xml_prefix(fast_discovery_tool):
     """Test failure when the printed guid is not the specified in the XML file"""
 
-    XML_file_path = "test_xml_secure_discovery_server.xml"
+    XML_file_path = "test_xml_secure_discovery_server_profile.xml"
     command = [fast_discovery_tool, '-x', XML_file_path]
     output, err, exit_code = send_command(command)
     if exit_code != 0:
@@ -563,7 +647,7 @@ def test_fast_discovery_security_enabled_xml_prefix(fast_discovery_tool):
 def test_fast_discovery_security_enabled_cli_prefix(fast_discovery_tool):
     """Test failure when the printed guid is not the specified in the XML file"""
 
-    XML_file_path = "test_xml_secure_discovery_server.xml"
+    XML_file_path = "test_xml_secure_discovery_server_profile.xml"
     command = [fast_discovery_tool, '-i', '0', '-x', 'secure_ds_no_prefix@' + XML_file_path]
     output, err, exit_code = send_command(command)
     if exit_code != 0:
@@ -597,8 +681,10 @@ if __name__ == '__main__':
 
     # Tests dictionary
     tests = {
-        'test_fast_discovery_closure': lambda: test_fast_discovery_closure(
-            args.binary_path),
+        'test_fast_discovery_closure': lambda:
+            test_fast_discovery_closure(args.binary_path),
+        'test_fast_discovery_udpv6_address': lambda:
+            test_fast_discovery_udpv6_address(args.binary_path),
         'test_fast_discovery_parse_XML_file_default_profile': lambda:
             test_fast_discovery_parse_XML_file_default_profile(args.binary_path),
         'test_fast_discovery_parse_XML_file_URI_profile': lambda:

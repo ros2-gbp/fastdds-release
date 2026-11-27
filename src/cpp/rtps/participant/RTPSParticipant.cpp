@@ -125,6 +125,21 @@ const RTPSParticipantAttributes& RTPSParticipant::getRTPSParticipantAttributes()
     return mp_impl->getRTPSParticipantAttributes();
 }
 
+const RTPSParticipantConstantAttributes& RTPSParticipant::get_const_attributes() const
+{
+    return mp_impl->get_const_attributes();
+}
+
+const RTPSParticipantMutableAttributes RTPSParticipant::get_mutable_attributes() const
+{
+    return mp_impl->get_mutable_attributes();
+}
+
+RTPSParticipantAttributes RTPSParticipant::copy_attributes() const
+{
+    return mp_impl->copy_attributes();
+}
+
 uint32_t RTPSParticipant::getMaxMessageSize() const
 {
     return mp_impl->getMaxMessageSize();
@@ -178,6 +193,29 @@ void RTPSParticipant::enable()
     mp_impl->enable();
 }
 
+bool RTPSParticipant::ignore_participant(
+        const GuidPrefix_t& participant_guid)
+{
+    return mp_impl->ignore_participant(participant_guid);
+}
+
+bool RTPSParticipant::ignore_writer(
+        const GUID_t& /*writer_guid*/)
+{
+    return false;
+}
+
+bool RTPSParticipant::ignore_reader(
+        const GUID_t& /*reader_guid*/)
+{
+    return false;
+}
+
+std::vector<fastdds::rtps::TransportNetmaskFilterInfo> RTPSParticipant::get_netmask_filter_info() const
+{
+    return mp_impl->get_netmask_filter_info();
+}
+
 #if HAVE_SECURITY
 
 bool RTPSParticipant::is_security_enabled_for_writer(
@@ -210,9 +248,61 @@ bool RTPSParticipant::remove_statistics_listener(
     return mp_impl->remove_statistics_listener(listener, kind);
 }
 
+void RTPSParticipant::set_enabled_statistics_writers_mask(
+        uint32_t enabled_writers)
+{
+    mp_impl->set_enabled_statistics_writers_mask(enabled_writers);
+}
+
+const fastdds::statistics::rtps::IStatusObserver* RTPSParticipant::create_monitor_service(
+        fastdds::statistics::rtps::IStatusQueryable& sq)
+{
+    return mp_impl->create_monitor_service(sq);
+}
+
+bool RTPSParticipant::create_monitor_service()
+{
+    return mp_impl->create_monitor_service();
+}
+
+bool RTPSParticipant::is_monitor_service_created() const
+{
+    return mp_impl->is_monitor_service_created();
+}
+
+bool RTPSParticipant::enable_monitor_service() const
+{
+    return mp_impl->enable_monitor_service();
+}
+
+bool RTPSParticipant::disable_monitor_service() const
+{
+    return mp_impl->disable_monitor_service();
+}
+
+bool RTPSParticipant::fill_discovery_data_from_cdr_message(
+        fastrtps::rtps::ParticipantProxyData& data,
+        fastdds::statistics::MonitorServiceStatusData& msg)
+{
+    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
+}
+
+bool RTPSParticipant::fill_discovery_data_from_cdr_message(
+        fastrtps::rtps::WriterProxyData& data,
+        fastdds::statistics::MonitorServiceStatusData& msg)
+{
+    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
+}
+
+bool RTPSParticipant::fill_discovery_data_from_cdr_message(
+        fastrtps::rtps::ReaderProxyData& data,
+        fastdds::statistics::MonitorServiceStatusData& msg)
+{
+    return mp_impl->fill_discovery_data_from_cdr_message(data, msg);
+}
+
 #endif // FASTDDS_STATISTICS
 
 } /* namespace rtps */
 } /* namespace fastrtps */
 } /* namespace eprosima */
-

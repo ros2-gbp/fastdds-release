@@ -30,6 +30,7 @@
 #include <fastdds/rtps/common/Locator.h>
 #include <fastdds/rtps/common/SequenceNumber.h>
 #include <fastdds/rtps/common/Types.h>
+#include <fastdds/rtps/common/VendorId_t.hpp>
 #include <fastdds/rtps/history/ReaderHistory.h>
 #include <fastdds/rtps/history/WriterHistory.h>
 #include <fastdds/rtps/messages/MessageReceiver.h>
@@ -83,9 +84,11 @@ public:
         return true;
     }
 
-    void remove_change(
-            CacheChange_t*) override
+    bool remove_change(
+            CacheChange_t*,
+            const std::chrono::time_point<std::chrono::steady_clock>&) override
     {
+        return true;
     }
 
     uint32_t get_max_payload() override
@@ -132,7 +135,8 @@ public:
             const SequenceNumber_t&,
             const SequenceNumber_t&,
             bool,
-            bool) override
+            bool,
+            fastdds::rtps::VendorId_t) override
     {
         ++heartbeat_count;
         return true;
@@ -141,7 +145,8 @@ public:
     bool processGapMsg(
             const GUID_t&,
             const SequenceNumber_t&,
-            const SequenceNumberSet_t&) override
+            const SequenceNumberSet_t&,
+            fastdds::rtps::VendorId_t) override
     {
         ++gap_count;
         return true;
@@ -176,7 +181,8 @@ public:
             uint32_t,
             const SequenceNumberSet_t&,
             bool,
-            bool& result) override
+            bool& result,
+            fastdds::rtps::VendorId_t) override
     {
         ++acknack_count;
         result = true;
@@ -189,7 +195,8 @@ public:
             uint32_t,
             const SequenceNumber_t&,
             const FragmentNumberSet_t,
-            bool& result) override
+            bool& result,
+            fastdds::rtps::VendorId_t) override
     {
         ++nack_frag_count;
         result = true;
@@ -241,10 +248,20 @@ public:
     }
 
     bool change_removed_by_history(
-            CacheChange_t*) override
+            CacheChange_t*,
+            const std::chrono::time_point<std::chrono::steady_clock>&) override
     {
         return true;
     }
+
+#ifdef FASTDDS_STATISTICS
+    bool get_connections(
+            fastdds::statistics::rtps::ConnectionList&) override
+    {
+        return true;
+    }
+
+#endif // ifdef FASTDDS_STATISTICS
 
     DeliveryRetCode deliver_sample_nts(
             CacheChange_t*,

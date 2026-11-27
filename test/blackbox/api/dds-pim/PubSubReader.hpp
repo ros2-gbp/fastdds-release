@@ -71,8 +71,11 @@ using eprosima::fastrtps::rtps::IPLocator;
 using eprosima::fastdds::rtps::UDPTransportDescriptor;
 using eprosima::fastdds::rtps::UDPv4TransportDescriptor;
 using eprosima::fastdds::rtps::UDPv6TransportDescriptor;
+using eprosima::fastdds::rtps::BuiltinTransports;
+using eprosima::fastdds::rtps::BuiltinTransportsOptions;
 
 using SampleLostStatusFunctor = std::function<void (const eprosima::fastdds::dds::SampleLostStatus&)>;
+using SampleRejectedStatusFunctor = std::function<void (const eprosima::fastdds::dds::SampleRejectedStatus&)>;
 
 template<class TypeSupport, typename TypeTraits = PubSubTypeTraits<TypeSupport>>
 class PubSubReader
@@ -170,7 +173,6 @@ protected:
         Listener(
                 PubSubReader& reader)
             : reader_(reader)
-            , times_deadline_missed_(0)
         {
         }
 
@@ -220,8 +222,8 @@ protected:
                 const eprosima::fastrtps::RequestedDeadlineMissedStatus& status) override
         {
             (void)datareader;
-
-            times_deadline_missed_ = status.total_count;
+            std::lock_guard<std::mutex> lk(mutex_);
+            requested_deadline_status_ = status;
         }
 
         void on_requested_incompatible_qos(
@@ -261,9 +263,25 @@ protected:
             reader_.set_sample_lost_status(status);
         }
 
+        void on_sample_rejected(
+                eprosima::fastdds::dds::DataReader* datareader,
+                const eprosima::fastdds::dds::SampleRejectedStatus& status) override
+        {
+            (void)datareader;
+
+            reader_.set_sample_rejected_status(status);
+        }
+
         unsigned int missed_deadlines() const
         {
-            return times_deadline_missed_;
+            std::lock_guard<std::mutex> lk(mutex_);
+            return requested_deadline_status_.total_count;
+        }
+
+        unsigned int missed_deadlines_change() const
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            return requested_deadline_status_.total_count_change;
         }
 
     private:
@@ -272,6 +290,9 @@ protected:
                 const Listener&) = delete;
 
         PubSubReader& reader_;
+        mutable std::mutex mutex_;
+
+        eprosima::fastdds::dds::RequestedDeadlineMissedStatus requested_deadline_status_{};
 
         //! Number of times deadline was missed
         unsigned int times_deadline_missed_;
@@ -345,8 +366,9 @@ public:
             datareader_qos_.data_sharing().off();
         }
 
-        // By default, memory mode is preallocated (the most restritive)
-        datareader_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
+        // By default, memory mode is PREALLOCATED_WITH_REALLOC_MEMORY_MODE
+        datareader_qos_.endpoint().history_memory_policy =
+                eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 
         // By default, heartbeat period delay is 100 milliseconds.
         datareader_qos_.reliable_reader_qos().times.heartbeatResponseDelay.seconds = 0;
@@ -381,6 +403,11 @@ public:
     eprosima::fastdds::dds::DataReader& get_native_reader() const
     {
         return *datareader_;
+    }
+
+    eprosima::fastdds::dds::Subscriber& get_native_subscriber() const
+    {
+        return *subscriber_;
     }
 
     void init()
@@ -543,6 +570,7 @@ public:
         while (ret);
 
         receiving_.store(true);
+        std::lock_guard<std::mutex> lock(mutex_);
         return get_last_sequence_received();
     }
 
@@ -609,13 +637,13 @@ public:
     }
 
     size_t block_for_unread_count_of(
-            size_t n_unread)
+            uint64_t n_unread)
     {
         block([this, n_unread]() -> bool
                 {
                     return current_unread_count_ >= n_unread;
                 });
-        return current_unread_count_;
+        return static_cast<size_t>(current_unread_count_);
     }
 
     void block(
@@ -835,30 +863,54 @@ public:
     }
 
 #if HAVE_SECURITY
-    void waitAuthorized()
+    void wait_authorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Reader is waiting authorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return authorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]()
+                    {
+                        return authorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]()
+                    {
+                        return authorized_ >= expected;
+                    });
+        }
 
         std::cout << "Reader authorization finished..." << std::endl;
     }
 
-    void waitUnauthorized()
+    void wait_unauthorized(
+            std::chrono::seconds timeout = std::chrono::seconds::zero(),
+            unsigned int expected = 1)
     {
         std::unique_lock<std::mutex> lock(mutexAuthentication_);
 
         std::cout << "Reader is waiting unauthorization..." << std::endl;
 
-        cvAuthentication_.wait(lock, [&]() -> bool
-                {
-                    return unauthorized_ > 0;
-                });
+        if (timeout == std::chrono::seconds::zero())
+        {
+            cvAuthentication_.wait(lock, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
+        else
+        {
+            cvAuthentication_.wait_for(lock, timeout, [&]()
+                    {
+                        return unauthorized_ >= expected;
+                    });
+        }
 
         std::cout << "Reader unauthorization finished..." << std::endl;
     }
@@ -1013,18 +1065,27 @@ public:
     }
 
     PubSubReader& setup_transports(
-            eprosima::fastdds::rtps::BuiltinTransports transports)
+            BuiltinTransports transports)
     {
         participant_qos_.setup_transports(transports);
+        return *this;
+    }
+
+    PubSubReader& setup_transports(
+            BuiltinTransports transports,
+            const BuiltinTransportsOptions& options)
+    {
+        participant_qos_.setup_transports(transports, options);
         return *this;
     }
 
     PubSubReader& setup_large_data_tcp(
             bool v6 = false,
             const uint16_t& port = 0,
-            const uint32_t& tcp_negotiation_timeout = 0)
+            const BuiltinTransportsOptions& options = BuiltinTransportsOptions())
     {
         participant_qos_.transport().use_builtin_transports = false;
+        participant_qos_.transport().max_msg_size_no_frag = options.maxMessageSize;
 
         /* Transports configuration */
         // UDP transport for PDP over multicast
@@ -1042,7 +1103,10 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_qos_.transport().user_transports.push_back(data_transport);
         }
         else
@@ -1056,7 +1120,10 @@ public:
             data_transport->check_crc = false;
             data_transport->apply_security = false;
             data_transport->enable_tcp_nodelay = true;
-            data_transport->tcp_negotiation_timeout = tcp_negotiation_timeout;
+            data_transport->maxMessageSize = options.maxMessageSize;
+            data_transport->sendBufferSize = options.sockets_buffer_size;
+            data_transport->receiveBufferSize = options.sockets_buffer_size;
+            data_transport->tcp_negotiation_timeout = options.tcp_negotiation_timeout;
             participant_qos_.transport().user_transports.push_back(data_transport);
         }
 
@@ -1147,6 +1214,15 @@ public:
     {
         datareader_qos_.reader_resource_limits().matched_publisher_allocation.initial = initial;
         datareader_qos_.reader_resource_limits().matched_publisher_allocation.maximum = maximum;
+        return *this;
+    }
+
+    PubSubReader& participants_allocation_properties(
+            size_t initial,
+            size_t maximum)
+    {
+        participant_qos_.allocation().participants.initial = initial;
+        participant_qos_.allocation().participants.maximum = maximum;
         return *this;
     }
 
@@ -1348,9 +1424,10 @@ public:
     }
 
     PubSubReader& socket_buffer_size(
-            uint32_t sockerBufferSize)
+            uint32_t socketBufferSize)
     {
-        participant_qos_.transport().listen_socket_buffer_size = sockerBufferSize;
+        participant_qos_.transport().listen_socket_buffer_size = socketBufferSize;
+        participant_qos_.transport().send_socket_buffer_size = socketBufferSize;
         return *this;
     }
 
@@ -1493,6 +1570,12 @@ public:
         return *this;
     }
 
+    PubSubReader& ownership_exclusive()
+    {
+        datareader_qos_.ownership().kind = eprosima::fastdds::dds::EXCLUSIVE_OWNERSHIP_QOS;
+        return *this;
+    }
+
     PubSubReader& load_participant_attr(
             const std::string& /*xml*/)
     {
@@ -1622,6 +1705,13 @@ public:
         return *this;
     }
 
+    PubSubReader& data_representation(
+            const std::vector<eprosima::fastdds::dds::DataRepresentationId_t>& values)
+    {
+        datareader_qos_.type_consistency().representation.m_value = values;
+        return *this;
+    }
+
     bool update_partition(
             const std::string& partition)
     {
@@ -1697,6 +1787,11 @@ public:
     unsigned int missed_deadlines() const
     {
         return listener_.missed_deadlines();
+    }
+
+    unsigned int missed_deadlines_change() const
+    {
+        return listener_.missed_deadlines_change();
     }
 
     void liveliness_lost()
@@ -1777,6 +1872,22 @@ public:
         return status;
     }
 
+    bool set_qos()
+    {
+        return (ReturnCode_t::RETCODE_OK == datareader_->set_qos(datareader_qos_));
+    }
+
+    bool set_qos(
+            const eprosima::fastdds::dds::DataReaderQos& att)
+    {
+        return (ReturnCode_t::RETCODE_OK == datareader_->set_qos(att));
+    }
+
+    eprosima::fastdds::dds::DataReaderQos get_qos()
+    {
+        return (datareader_->get_qos());
+    }
+
     bool is_matched() const
     {
         return matched_ > 0;
@@ -1836,6 +1947,22 @@ public:
         return *this;
     }
 
+    void set_sample_rejected_status(
+            const eprosima::fastdds::dds::SampleRejectedStatus& status)
+    {
+        if (sample_rejected_status_functor_)
+        {
+            sample_rejected_status_functor_(status);
+        }
+    }
+
+    PubSubReader& sample_rejected_status_functor(
+            SampleRejectedStatusFunctor functor)
+    {
+        sample_rejected_status_functor_ = functor;
+        return *this;
+    }
+
     const eprosima::fastrtps::rtps::GUID_t& participant_guid() const
     {
         return participant_guid_;
@@ -1848,9 +1975,19 @@ public:
         return status;
     }
 
-private:
+    eprosima::fastdds::dds::TypeSupport get_type_support()
+    {
+        return type_;
+    }
 
-    void receive_one(
+    eprosima::fastdds::dds::DomainParticipant* get_participant()
+    {
+        return participant_;
+    }
+
+protected:
+
+    virtual void receive_one(
             eprosima::fastdds::dds::DataReader* datareader,
             bool& returnedValue)
     {
@@ -1975,8 +2112,6 @@ private:
     //! functor to check which API to retrieve samples
     std::function<void (eprosima::fastdds::dds::DataReader* datareader, bool&)> receive_;
 
-protected:
-
     void receive(
             eprosima::fastdds::dds::DataReader* datareader,
             bool& returnedValue)
@@ -2068,7 +2203,7 @@ protected:
     std::map<LastSeqInfo, eprosima::fastrtps::rtps::SequenceNumber_t> last_seq;
     std::atomic<size_t> current_processed_count_;
     std::atomic<size_t> number_samples_expected_;
-    std::atomic<size_t> current_unread_count_;
+    std::atomic<uint64_t> current_unread_count_;
     bool discovery_result_;
 
     std::string xml_file_ = "";
@@ -2123,6 +2258,8 @@ protected:
 
     //! Functor called when called SampleLostStatus listener.
     SampleLostStatusFunctor sample_lost_status_functor_;
+    //! Functor called when called SampleRejectedStatus listener.
+    SampleRejectedStatusFunctor sample_rejected_status_functor_;
 
     //! Expression for CFT
     std::string filter_expression_;
@@ -2291,6 +2428,13 @@ protected:
                 eprosima::fastdds::dds::SampleLostStatus status;
                 ASSERT_EQ(ReturnCode_t::RETCODE_OK, reader_.datareader_->get_sample_lost_status(status));
                 reader_.set_sample_lost_status(status);
+            }
+
+            if (triggered_statuses.is_active(eprosima::fastdds::dds::StatusMask::sample_rejected()))
+            {
+                eprosima::fastdds::dds::SampleRejectedStatus status;
+                ASSERT_EQ(ReturnCode_t::RETCODE_OK, reader_.datareader_->get_sample_rejected_status(status));
+                reader_.set_sample_rejected_status(status);
             }
 
             // We also have to process the subscriber

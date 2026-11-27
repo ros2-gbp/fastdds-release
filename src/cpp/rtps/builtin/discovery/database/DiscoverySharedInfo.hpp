@@ -26,7 +26,7 @@
 
 #include <rtps/builtin/discovery/database/DiscoveryParticipantsAckStatus.hpp>
 
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -46,9 +46,7 @@ public:
             eprosima::fastrtps::rtps::CacheChange_t* change,
             const eprosima::fastrtps::rtps::GuidPrefix_t& known_participant);
 
-    ~DiscoverySharedInfo()
-    {
-    }
+    ~DiscoverySharedInfo() = default;
 
     virtual eprosima::fastrtps::rtps::CacheChange_t* update_and_unmatch(
             eprosima::fastrtps::rtps::CacheChange_t* change);
@@ -58,10 +56,13 @@ public:
 
     void add_or_update_ack_participant(
             const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p,
-            bool status = false)
+            DiscoveryParticipantsAckStatus::ParticipantState status = DiscoveryParticipantsAckStatus::ParticipantState::PENDING_SEND)
     {
-        logInfo(DISCOVERY_DATABASE, "Adding relevant participant " << guid_p << " with status " << status << " to " <<
-                fastrtps::rtps::iHandle2GUID(change_->instanceHandle));
+        EPROSIMA_LOG_INFO(
+            DISCOVERY_DATABASE,
+            "Adding relevant participant " << guid_p
+                                           << " with status " << status
+                                           << " to " << fastrtps::rtps::iHandle2GUID(change_->instanceHandle));
         relevant_participants_builtin_ack_status_.add_or_update_participant(guid_p, status);
     }
 
@@ -69,6 +70,12 @@ public:
             const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p)
     {
         relevant_participants_builtin_ack_status_.remove_participant(guid_p);
+    }
+
+    bool is_waiting_ack(
+            const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const
+    {
+        return relevant_participants_builtin_ack_status_.is_waiting_ack(guid_p);
     }
 
     bool is_matched(
@@ -101,7 +108,7 @@ public:
     virtual void to_json(
             nlohmann::json& j) const;
 
-private:
+protected:
 
     eprosima::fastrtps::rtps::CacheChange_t* change_;
 

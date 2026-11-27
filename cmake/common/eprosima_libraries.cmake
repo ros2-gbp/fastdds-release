@@ -97,7 +97,7 @@ macro(eprosima_find_package package)
             # Update submodule
             message(STATUS "Updating submodule thirdparty/${package}")
             execute_process(
-                COMMAND git submodule update --recursive --init "thirdparty/${package}"
+                COMMAND git submodule update --quiet --recursive --init "thirdparty/${package}"
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                 RESULT_VARIABLE EXECUTE_RESULT
                 )
@@ -120,6 +120,7 @@ macro(eprosima_find_package package)
             endforeach()
             add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty/${package})
             set(${package}_FOUND TRUE)
+            set(${package}_LIB_DIR ${PROJECT_BINARY_DIR}/thirdparty/${package}/src/cpp)
             message(STATUS "Found ${package}: ${PROJECT_SOURCE_DIR}/thirdparty/${package}")
         endif()
     endif()
@@ -219,7 +220,7 @@ macro(eprosima_find_thirdparty package thirdparty_name)
             # Update submodule
             message(STATUS "Updating submodule thirdparty/${thirdparty_name}")
             execute_process(
-                COMMAND git submodule update --recursive --init "thirdparty/${thirdparty_name}"
+                COMMAND git submodule update --quiet --recursive --init "thirdparty/${thirdparty_name}"
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                 RESULT_VARIABLE EXECUTE_RESULT
                 )

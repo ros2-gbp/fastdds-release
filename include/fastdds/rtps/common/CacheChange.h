@@ -19,6 +19,7 @@
 #ifndef _FASTDDS_RTPS_CACHECHANGE_H_
 #define _FASTDDS_RTPS_CACHECHANGE_H_
 
+#include <atomic>
 #include <cassert>
 #include <limits>
 
@@ -28,8 +29,8 @@
 #include <fastdds/rtps/common/SerializedPayload.h>
 #include <fastdds/rtps/common/Time_t.h>
 #include <fastdds/rtps/common/Types.h>
+#include <fastdds/rtps/common/VendorId_t.hpp>
 #include <fastdds/rtps/common/WriteParams.h>
-
 #include <fastdds/rtps/history/IPayloadPool.h>
 
 namespace eprosima {
@@ -49,6 +50,8 @@ struct CacheChangeWriterInfo_t
     //! Used to link with next node in a list. Used by FlowControllerImpl.
     //! Cannot be cached because there are several comparisons without locking.
     CacheChange_t* volatile next = nullptr;
+    //! Used to know if the object is already in a list.
+    std::atomic_bool is_linked {false};
 };
 
 /*!
@@ -62,6 +65,8 @@ struct CacheChangeReaderInfo_t
     int32_t disposed_generation_count;
     //! No-writers generation of the instance when this entry was added to it
     int32_t no_writers_generation_count;
+    //! Ownership stregth of its writer when the sample was received.
+    uint32_t writer_ownership_strength;
 };
 
 /**
@@ -86,6 +91,9 @@ struct RTPS_DllAPI CacheChange_t
     bool isRead = false;
     //!Source TimeStamp
     Time_t sourceTimestamp{};
+    //! Vendor Id of the writer that generated this change.
+    fastdds::rtps::VendorId_t vendor_id = c_VendorId_Unknown;
+
     union
     {
         CacheChangeReaderInfo_t reader_info;
@@ -139,6 +147,7 @@ struct RTPS_DllAPI CacheChange_t
         reader_info.receptionTimestamp = ch_ptr->reader_info.receptionTimestamp;
         write_params = ch_ptr->write_params;
         isRead = ch_ptr->isRead;
+        vendor_id = ch_ptr->vendor_id;
         fragment_size_ = ch_ptr->fragment_size_;
         fragment_count_ = ch_ptr->fragment_count_;
         first_missing_fragment_ = ch_ptr->first_missing_fragment_;
@@ -162,6 +171,7 @@ struct RTPS_DllAPI CacheChange_t
         reader_info.receptionTimestamp = ch_ptr->reader_info.receptionTimestamp;
         write_params = ch_ptr->write_params;
         isRead = ch_ptr->isRead;
+        vendor_id = ch_ptr->vendor_id;
 
         // Copy certain values from serializedPayload
         serializedPayload.encapsulation = ch_ptr->serializedPayload.encapsulation;
@@ -170,7 +180,7 @@ struct RTPS_DllAPI CacheChange_t
         setFragmentSize(ch_ptr->fragment_size_, false);
     }
 
-    ~CacheChange_t()
+    virtual ~CacheChange_t()
     {
         if (payload_owner_ != nullptr)
         {
@@ -204,6 +214,14 @@ struct RTPS_DllAPI CacheChange_t
     bool is_fully_assembled()
     {
         return first_missing_fragment_ >= fragment_count_;
+    }
+
+    /*! Checks if the first fragment is present.
+     * @return true when it contains the first fragment. In other case, false.
+     */
+    bool contains_first_fragment()
+    {
+        return 0 < first_missing_fragment_;
     }
 
     /*!
@@ -251,8 +269,7 @@ struct RTPS_DllAPI CacheChange_t
             {
                 // Keep index of next fragment on the payload portion at the beginning of each fragment. Last
                 // fragment will have fragment_count_ as 'next fragment index'
-                size_t offset = 0;
-                for (uint32_t i = 1; i <= fragment_count_; i++, offset += fragment_size_)
+                for (uint32_t i = 1; i <= fragment_count_; i++)
                 {
                     set_next_missing_fragment(i - 1, i);  // index to next fragment in missing list
                 }

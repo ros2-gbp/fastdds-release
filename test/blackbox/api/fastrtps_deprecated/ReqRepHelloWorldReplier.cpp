@@ -42,9 +42,9 @@ ReqRepHelloWorldReplier::ReqRepHelloWorldReplier()
     , initialized_(false)
     , matched_(0)
 {
-    // By default, memory mode is preallocated (the most restritive)
-    sattr.historyMemoryPolicy = PREALLOCATED_MEMORY_MODE;
-    puattr.historyMemoryPolicy = PREALLOCATED_MEMORY_MODE;
+    // By default, memory mode is PREALLOCATED_WITH_REALLOC_MEMORY_MODE
+    sattr.historyMemoryPolicy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+    puattr.historyMemoryPolicy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 }
 
 ReqRepHelloWorldReplier::~ReqRepHelloWorldReplier()
@@ -131,7 +131,7 @@ void ReqRepHelloWorldReplier::ReplyListener::onNewDataMessage(
     {
         if (info.sampleKind == ALIVE)
         {
-            ASSERT_EQ(hello.message().to_string().compare("HelloWorld"), 0);
+            ASSERT_EQ(hello.message().compare("HelloWorld"), 0);
             replier_.newNumber(info.sample_identity, hello.index());
         }
     }

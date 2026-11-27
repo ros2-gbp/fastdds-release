@@ -46,9 +46,9 @@ ReqRepHelloWorldRequester::ReqRepHelloWorldRequester()
     , initialized_(false)
     , matched_(0)
 {
-    // By default, memory mode is preallocated (the most restritive)
-    datareader_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
-    datawriter_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE;
+    // By default, memory mode is PREALLOCATED_WITH_REALLOC_MEMORY_MODE
+    datareader_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+    datawriter_qos_.endpoint().history_memory_policy = eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 
     datawriter_qos_.reliable_writer_qos().times.heartbeatPeriod.seconds = 1;
     datawriter_qos_.reliable_writer_qos().times.heartbeatPeriod.nanosec = 0;
@@ -221,7 +221,7 @@ void ReqRepHelloWorldRequester::ReplyListener::on_data_available(
     {
         if (info.valid_data)
         {
-            ASSERT_EQ(hello.message().to_string().compare("GoodBye"), 0);
+            ASSERT_EQ(hello.message().compare("GoodBye"), 0);
             requester_.newNumber(info.related_sample_identity, hello.index());
         }
     }

@@ -17,6 +17,8 @@
 
 #ifdef  _MSC_VER
 #include <io.h>
+#elif defined(MINGW_COMPILER)
+#include <io.h>
 #else
 #include <sys/file.h>
 #endif // ifdef  _MSC_VER
@@ -223,7 +225,119 @@ private:
         {
             if (0 != std::remove(file_path.c_str()))
             {
-                logWarning(RTPS_TRANSPORT_SHM, "Failed to remove " << file_path);
+                EPROSIMA_LOG_WARNING(RTPS_TRANSPORT_SHM, "Failed to remove " << file_path);
+            }
+        }
+
+        return lock_status;
+    }
+
+#elif defined(MINGW_COMPILER)
+    int open_and_lock_file(
+            const std::string& file_path,
+            bool* was_lock_created,
+            bool* was_lock_released)
+    {
+        int test_exist;
+
+        // Try open exclusive
+        auto ret = _sopen_s(&test_exist, file_path.c_str(), _O_WRONLY, 0x0010, _S_IREAD | _S_IWRITE);
+
+        if (ret == 0)
+        {
+            *was_lock_created = false;
+
+            if (was_lock_released)
+            {
+                *was_lock_released = true;
+            }
+
+            _close(test_exist);
+        }
+        else
+        {
+            // Try open shared
+            ret = _sopen_s(&test_exist, file_path.c_str(), _O_RDONLY, 0x0010, _S_IREAD | _S_IWRITE);
+
+            if (ret == 0)
+            {
+                if (was_lock_released)
+                {
+                    *was_lock_released = false;
+                }
+
+                *was_lock_created = false;
+
+                return test_exist;
+            }
+            else
+            {
+                if (was_lock_released)
+                {
+                    *was_lock_released = true;
+                }
+
+                *was_lock_created = true;
+            }
+        }
+
+        int fd;
+        // Open or create shared
+        ret = _sopen_s(&fd, file_path.c_str(), O_CREAT | _O_RDONLY, 0x0010, _S_IREAD | _S_IWRITE);
+
+        if (ret != 0)
+        {
+            char errmsg[1024];
+            strerror_s(errmsg, sizeof(errmsg), errno);
+            throw std::runtime_error("failed to open/create " + file_path + " " + std::string(errmsg));
+        }
+
+        return fd;
+    }
+
+    void unlock_and_close()
+    {
+        _close(fd_);
+
+        test_lock(SharedDir::get_lock_path(name_), true);
+    }
+
+    static LockStatus test_lock(
+            const std::string& file_path,
+            bool remove_if_unlocked = false)
+    {
+        LockStatus lock_status;
+
+        int fd;
+        auto ret = _sopen_s(&fd, file_path.c_str(), _O_RDONLY, 0x0010, _S_IREAD | _S_IWRITE);
+
+        if (ret == 0)
+        {
+            lock_status = LockStatus::NOT_LOCKED;
+
+            _close(fd);
+
+            // Lock exclusive
+            ret = _sopen_s(&fd, file_path.c_str(), _O_WRONLY, 0x0010, _S_IREAD | _S_IWRITE);
+            if (ret != 0)
+            {
+                lock_status = LockStatus::LOCKED;
+            }
+            else
+            {
+                _close(fd);
+            }
+        }
+        else
+        {
+            lock_status = LockStatus::OPEN_FAILED;
+        }
+
+        if (lock_status == LockStatus::NOT_LOCKED && remove_if_unlocked)
+        {
+            if (0 != std::remove(file_path.c_str()))
+            {
+                EPROSIMA_LOG_WARNING(RTPS_TRANSPORT_SHM, "Failed to remove " << file_path);
             }
         }
 
@@ -237,40 +351,55 @@ private:
             bool* was_lock_created,
             bool* was_lock_released)
     {
-        auto fd = open(file_path.c_str(), O_RDONLY, 0666);
+        int fd = -1;
+        do
+        {
+            fd = open(file_path.c_str(), O_RDONLY, 0);
 
-        if (fd != -1)
-        {
-            *was_lock_created = false;
-        }
-        else
-        {
-            *was_lock_created = true;
-            fd = open(file_path.c_str(), O_CREAT | O_RDONLY, 0666);
-        }
-
-        if (was_lock_released != nullptr)
-        {
-            // Lock exclusive
-            if (0 == flock(fd, LOCK_EX | LOCK_NB))
+            if (fd != -1)
             {
-                // Exclusive => shared
-                flock(fd, LOCK_SH | LOCK_NB);
-                *was_lock_released = true;
-                return fd;
+                *was_lock_created = false;
             }
             else
             {
-                *was_lock_released = false;
+                *was_lock_created = true;
+                fd = open(file_path.c_str(), O_CREAT | O_RDONLY, 0666);
+            }
+
+            if (was_lock_released != nullptr)
+            {
+                // Lock exclusive
+                if (0 == flock(fd, LOCK_EX | LOCK_NB))
+                {
+                    // Check if file was deleted by clean up script between open and lock
+                    // if yes, repeat file creation
+                    struct stat buffer = {};
+                    if (stat(file_path.c_str(), &buffer) != 0 && errno == ENOENT)
+                    {
+                        close(fd);
+                        fd = -1;
+                        continue;
+                    }
+
+                    // Exclusive => shared
+                    flock(fd, LOCK_SH | LOCK_NB);
+                    *was_lock_released = true;
+                    return fd;
+                }
+                else
+                {
+                    *was_lock_released = false;
+                }
+            }
+
+            // Lock shared
+            if (0 != flock(fd, LOCK_SH | LOCK_NB))
+            {
+                close(fd);
+                throw std::runtime_error(("failed to lock " + file_path).c_str());
             }
         }
-
-        // Lock shared
-        if (0 != flock(fd, LOCK_SH | LOCK_NB))
-        {
-            close(fd);
-            throw std::runtime_error(("failed to lock " + file_path).c_str());
-        }
+        while (fd == -1);
 
         return fd;
     }
@@ -289,7 +418,7 @@ private:
     {
         LockStatus lock_status;
 
-        auto fd = open(file_path.c_str(), O_RDONLY, 0666);
+        auto fd = open(file_path.c_str(), O_RDONLY, 0);
 
         if (fd != -1)
         {
@@ -314,7 +443,7 @@ private:
         {
             if (0 != std::remove(file_path.c_str()))
             {
-                logWarning(RTPS_TRANSPORT_SHM, "Failed to remove " << file_path);
+                EPROSIMA_LOG_WARNING(RTPS_TRANSPORT_SHM, "Failed to remove " << file_path);
             }
         }
 
