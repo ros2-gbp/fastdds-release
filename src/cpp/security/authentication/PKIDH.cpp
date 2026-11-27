@@ -510,7 +510,7 @@ static bool adjust_participant_key(
 {
     assert(cert != nullptr);
 
-    X509_NAME* cert_sn = X509_get_subject_name(cert);
+    const X509_NAME* cert_sn = X509_get_subject_name(cert);
     assert(cert_sn != nullptr);
 
     unsigned char md[SHA256_DIGEST_LENGTH];
@@ -1206,7 +1206,7 @@ ValidationResult_t PKIDH::validate_local_identity(
         if ((*ih)->cert_ != nullptr)
         {
             // Get subject name.
-            X509_NAME* cert_sn = X509_get_subject_name((*ih)->cert_);
+            const X509_NAME* cert_sn = X509_get_subject_name((*ih)->cert_);
             assert(cert_sn != nullptr);
             char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
             assert(cert_sn_str != nullptr);
@@ -1218,6 +1218,14 @@ ValidationResult_t PKIDH::validate_local_identity(
             char buffer[bufsize];
             int length = BIO_read(cert_sn_rfc2253_str, buffer, bufsize);
             BIO_free(cert_sn_rfc2253_str);
+            if (length <= 0)
+            {
+                exception = _SecurityException_("Cannot print certificate subject name in RFC2253 format");
+                EMERGENCY_SECURITY_LOGGING("PKIDH", exception.what());
+                delete ih;
+                ERR_clear_error();
+                return ValidationResult_t::VALIDATION_FAILED;
+            }
             (*ih)->cert_sn_rfc2253_.assign(buffer, length);
 
 
@@ -1510,7 +1518,7 @@ ValidationResult_t PKIDH::begin_handshake_reply(
         return ValidationResult_t::VALIDATION_FAILED;
     }
 
-    X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
+    const X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
     assert(cert_sn != nullptr);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     assert(cert_sn_str != nullptr);
@@ -1528,6 +1536,11 @@ ValidationResult_t PKIDH::begin_handshake_reply(
     char buffer[bufsize];
     int str_length = BIO_read(cert_sn_rfc2253_str, buffer, bufsize);
     BIO_free(cert_sn_rfc2253_str);
+    if (str_length <= 0)
+    {
+        WARNING_SECURITY_LOGGING("PKIDH", "Cannot print certificate subject name in RFC2253 format");
+        return ValidationResult_t::VALIDATION_FAILED;
+    }
     rih->cert_sn_rfc2253_.assign(buffer, str_length);
 
     if (!verify_certificate(lih->store_, rih->cert_, lih->there_are_crls_))
@@ -1935,7 +1948,7 @@ ValidationResult_t PKIDH::process_handshake_request(
         return ValidationResult_t::VALIDATION_FAILED;
     }
 
-    X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
+    const X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
     assert(cert_sn != nullptr);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     assert(cert_sn_str != nullptr);
@@ -1952,6 +1965,11 @@ ValidationResult_t PKIDH::process_handshake_request(
     char buffer[bufsize];
     int str_length = BIO_read(cert_sn_rfc2253_str, buffer, bufsize);
     BIO_free(cert_sn_rfc2253_str);
+    if (str_length <= 0)
+    {
+        WARNING_SECURITY_LOGGING("PKIDH", "Cannot print certificate subject name in RFC2253 format");
+        return ValidationResult_t::VALIDATION_FAILED;
+    }
     rih->cert_sn_rfc2253_.assign(buffer, str_length);
 
     if (!verify_certificate(lih->store_, rih->cert_, lih->there_are_crls_))

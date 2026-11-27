@@ -20,8 +20,10 @@
 #endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
+#include <memory>
 #include <asio.hpp>
-#include <asio/ssl.hpp>
+#include <asio/ssl/context.hpp>
+#include <asio/ssl/stream.hpp>
 #include <asio/strand.hpp>
 #include <rtps/transport/TCPChannelResource.h>
 
@@ -81,9 +83,6 @@ public:
     void set_options(
             const TCPTransportDescriptor* options) override;
 
-    void set_tls_verify_mode(
-            const TCPTransportDescriptor* options);
-
     void set_tls_sni(
             const TCPTransportDescriptor* options);
 
@@ -94,7 +93,7 @@ public:
 
     inline std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> secure_socket()
     {
-        return secure_socket_;
+        return std::atomic_load(&secure_socket_);
     }
 
 private:
@@ -108,6 +107,7 @@ private:
     asio::ssl::context& ssl_context_;
     asio::strand<asio::io_context::executor_type> strand_read_;
     asio::strand<asio::io_context::executor_type> strand_write_;
+    // Must be accessed with std::atomic_load/std::atomic_store, as connect() replaces it concurrently with senders
     std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> secure_socket_;
 };
 

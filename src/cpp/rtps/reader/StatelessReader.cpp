@@ -358,13 +358,13 @@ bool StatelessReader::change_received(
         }
 
         // Update Ownership strength.
-        if (dds::EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind)
+        if ((dds::EXCLUSIVE_OWNERSHIP_QOS == m_att.ownershipKind) && (matched_writers_.end() != writer))
         {
-            assert(matched_writers_.end() != writer);
             change->reader_info.writer_ownership_strength = writer->ownership_strength;
         }
         else
         {
+            // Non-exclusive ownership, or a change accepted from a non-matched writer. No ownership arbitration applies.
             change->reader_info.writer_ownership_strength = (std::numeric_limits<uint32_t>::max)();
         }
 
@@ -612,7 +612,8 @@ bool StatelessReader::process_data_msg(
                 {
                     update_last_notified(change->writerGUID, change->sequenceNumber);
                 }
-                return false;
+                // Could process later when `will_never_be_accepted` is false
+                return will_never_be_accepted;
             }
 
             if (!fastdds::rtps::change_is_relevant_for_filter(*change, m_guid, data_filter_))
@@ -630,6 +631,7 @@ bool StatelessReader::process_data_msg(
                         IDSTRING
                         "Reached the maximum number of samples allowed by this reader's QoS. Rejecting change for reader: "
                         << m_guid );
+                // Could process later when a cache is available
                 return false;
             }
 
@@ -655,9 +657,16 @@ bool StatelessReader::process_data_msg(
                     EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Problem copying DataSharing CacheChange from writer "
                             << change->writerGUID);
                     change_pool_->release_cache(change_to_add);
-                    return false;
+                    // No datasharing pool available, irrecoverable error.
+                    return true;
                 }
-                datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add);
+                if (!datasharing_pool->get_datasharing_change(change->serializedPayload, *change_to_add))
+                {
+                    EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding change with invalid DataSharing payload "
+                            "from writer " << change->writerGUID);
+                    change_pool_->release_cache(change_to_add);  // Drop the change permanently
+                    return true;
+                }
             }
             else if (change->serializedPayload.length == 0 && change->kind != ChangeKind_t::ALIVE &&
                     change->instanceHandle.isDefined())
@@ -683,6 +692,7 @@ bool StatelessReader::process_data_msg(
                         << m_guid << " is "
                         << (fixed_payload_size_ > 0 ? fixed_payload_size_ : (std::numeric_limits<uint32_t>::max)()));
                 change_pool_->release_cache(change_to_add);
+                // Could process later when a payload is available
                 return false;
             }
 
@@ -696,7 +706,8 @@ bool StatelessReader::process_data_msg(
                     change_to_add->serializedPayload.payload_owner->release_payload(change_to_add->serializedPayload);
                 }
                 change_pool_->release_cache(change_to_add);
-                return false;
+                // A change with a higher sequence number was already received, so this one is discarded forever
+                return true;
             }
         }
     }
@@ -719,6 +730,14 @@ bool StatelessReader::process_data_frag_msg(
     {
         if (writer.guid == writer_guid)
         {
+            // Datasharing communication will never send fragments, so the message is spoofed
+            if (writer.is_datasharing)
+            {
+                EPROSIMA_LOG_WARNING(RTPS_MSG_IN, IDSTRING "Discarding DATA_FRAG from DataSharing writer "
+                        << writer_guid);
+                return true;
+            }
+
             // Always assert liveliness on scope exit
             auto assert_liveliness_lambda = [&lock, this, &writer_guid](void*)
                     {
@@ -726,9 +745,6 @@ bool StatelessReader::process_data_frag_msg(
                         assert_writer_liveliness(writer_guid);
                     };
             std::unique_ptr<void, decltype(assert_liveliness_lambda)> p{ this, assert_liveliness_lambda };
-
-            // Datasharing communication will never send fragments
-            assert(!writer.is_datasharing);
 
             // Check if CacheChange was received.
             if (!thereIsUpperRecordOf(writer_guid, incomingChange->sequenceNumber))
@@ -781,8 +797,11 @@ bool StatelessReader::process_data_frag_msg(
                             }
                         }
 
-                        // Pending change should be dropped. Check if it can be reused
-                        if (sampleSize <= work_change->serializedPayload.max_size)
+                        // Pending change should be dropped. Check if the new fragmentation fits the buffer
+                        uint32_t min_required_size = 0;
+                        if (CacheChange_t::calculate_required_fragmented_payload_size(
+                                    sampleSize, change_to_add->getFragmentSize(), min_required_size) &&
+                                min_required_size <= work_change->serializedPayload.max_size)
                         {
                             // Sample fits inside pending change. Reuse it.
                             work_change->copy_not_memcpy(change_to_add);
