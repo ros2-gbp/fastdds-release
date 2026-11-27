@@ -1,4 +1,4 @@
-From cef93270a480ef4829317eb0cd7e187df68415f5 Mon Sep 17 00:00:00 2001
+From 90073d3f13ee2aad1e35d084a1fb2c606926eab6 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Steven!=20Ragnar=C3=B6k?=
  <nuclearsandwich@users.noreply.github.com>
 Date: Tue, 15 Feb 2022 17:09:05 -0500
@@ -33,7 +33,7 @@ index 2a2d782d..d534e842 100644
                  RESULT_VARIABLE EXECUTE_RESULT
                  )
 diff --git a/package.xml b/package.xml
-index 6e13a2c4..fba69cf3 100644
+index 9d99502f..94e8861f 100644
 --- a/package.xml
 +++ b/package.xml
 @@ -14,8 +14,6 @@
@@ -46,7 +46,7 @@ index 6e13a2c4..fba69cf3 100644
    <depend>foonathan_memory_vendor</depend>
    <depend>libssl-dev</depend>
 diff --git a/rpm/ros-humble-fastrtps.spec b/rpm/ros-humble-fastrtps.spec
-index b8a49f9c..1a4f625c 100644
+index ace51da2..27ae8f65 100644
 --- a/rpm/ros-humble-fastrtps.spec
 +++ b/rpm/ros-humble-fastrtps.spec
 @@ -22,7 +22,6 @@ Requires:       ros-humble-fastcdr
