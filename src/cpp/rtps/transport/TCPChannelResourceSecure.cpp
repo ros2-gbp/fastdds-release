@@ -16,8 +16,10 @@
 
 #include <chrono>
 #include <future>
+#include <memory>
 #include <thread>
 
+#include <asio/steady_timer.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 
@@ -56,7 +58,6 @@ TCPChannelResourceSecure::TCPChannelResourceSecure(
     , strand_write_(make_strand(context))
     , secure_socket_(socket)
 {
-    set_tls_verify_mode(parent->configuration());
     set_tls_sni(parent->configuration());
 }
 
@@ -84,14 +85,15 @@ void TCPChannelResourceSecure::connect(
                 std::to_string(IPLocator::getPhysicalPort(locator_)));
 
             TCPTransportInterface* parent = parent_;
-            secure_socket_ = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(context_, ssl_context_);
-            set_tls_verify_mode(parent->configuration());
+            const auto secure_socket =
+                    std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(context_, ssl_context_);
+            std::atomic_store(&secure_socket_, secure_socket);
             set_tls_sni(parent->configuration());
             std::weak_ptr<TCPChannelResource> channel_weak_ptr = myself;
-            const auto secure_socket = secure_socket_;
+            io_context* context = &context_;
 
-            asio::async_connect(secure_socket_->lowest_layer(), endpoints,
-                    [secure_socket, channel_weak_ptr, parent](const std::error_code& error, ip::tcp::endpoint)
+            asio::async_connect(secure_socket->lowest_layer(), endpoints,
+                    [secure_socket, channel_weak_ptr, parent, context](const std::error_code& error, ip::tcp::endpoint)
                     {
                         if (!error)
                         {
@@ -102,7 +104,7 @@ void TCPChannelResourceSecure::connect(
                             }
 
                             secure_socket->async_handshake(role,
-                            [channel_weak_ptr, parent](const std::error_code& error)
+                            [channel_weak_ptr, parent, context](const std::error_code& error)
                             {
                                 if (!error)
                                 {
@@ -111,8 +113,16 @@ void TCPChannelResourceSecure::connect(
                                 else
                                 {
                                     EPROSIMA_LOG_ERROR(RTCP_TLS, "Handshake failed: " << error.message());
-                                    std::this_thread::sleep_for(std::chrono::seconds(5)); // Retry, but after a big while
-                                    parent->SocketConnected(channel_weak_ptr, error);
+                                    // Retry after a big wait without blocking the io_context thread.
+                                    // The channel stays in eConnecting until then, so sends do not trigger new connects.
+                                    std::shared_ptr<asio::steady_timer> retry_timer =
+                                    std::make_shared<asio::steady_timer>(*context);
+                                    retry_timer->expires_after(std::chrono::seconds(5));
+                                    retry_timer->async_wait(
+                                        [retry_timer, channel_weak_ptr, parent, error](const std::error_code&)
+                                        {
+                                            parent->SocketConnected(channel_weak_ptr, error);
+                                        });
                                 }
                             });
                         }
@@ -136,7 +146,7 @@ void TCPChannelResourceSecure::disconnect()
     auto prev_status = change_status(eConnectionStatus::eDisconnecting);
     if (eConnecting < prev_status && alive())
     {
-        auto socket = secure_socket_;
+        auto socket = std::atomic_load(&secure_socket_);
 
         post(context_, [&, socket]()
                 {
@@ -172,7 +182,7 @@ uint32_t TCPChannelResourceSecure::read(
     {
         std::promise<size_t> read_bytes_promise;
         auto bytes_future = read_bytes_promise.get_future();
-        auto socket = secure_socket_;
+        auto socket = std::atomic_load(&secure_socket_);
 
         asio::post(strand_read_, [&, socket]()
                 {
@@ -215,9 +225,11 @@ size_t TCPChannelResourceSecure::send(
 
     if (connected())
     {
+        auto socket = std::atomic_load(&secure_socket_);
+
         if (parent_->configuration()->non_blocking_send &&
                 !check_socket_send_buffer(header_size + total_bytes,
-                secure_socket_->lowest_layer().native_handle()))
+                socket->lowest_layer().native_handle()))
         {
             return 0;
         }
@@ -233,7 +245,6 @@ size_t TCPChannelResourceSecure::send(
         // Work around meanwhile
         std::promise<size_t> write_bytes_promise;
         auto bytes_future = write_bytes_promise.get_future();
-        auto socket = secure_socket_;
 
         asio::post(strand_write_, [&, socket]()
                 {
@@ -263,62 +274,30 @@ size_t TCPChannelResourceSecure::send(
 
 asio::ip::tcp::endpoint TCPChannelResourceSecure::remote_endpoint() const
 {
-    return secure_socket_->lowest_layer().remote_endpoint();
+    return std::atomic_load(&secure_socket_)->lowest_layer().remote_endpoint();
 }
 
 asio::ip::tcp::endpoint TCPChannelResourceSecure::local_endpoint() const
 {
-    return secure_socket_->lowest_layer().local_endpoint();
+    return std::atomic_load(&secure_socket_)->lowest_layer().local_endpoint();
 }
 
 asio::ip::tcp::endpoint TCPChannelResourceSecure::remote_endpoint(
         asio::error_code& ec) const
 {
-    return secure_socket_->lowest_layer().remote_endpoint(ec);
+    return std::atomic_load(&secure_socket_)->lowest_layer().remote_endpoint(ec);
 }
 
 asio::ip::tcp::endpoint TCPChannelResourceSecure::local_endpoint(
         asio::error_code& ec) const
 {
-    return secure_socket_->lowest_layer().local_endpoint(ec);
+    return std::atomic_load(&secure_socket_)->lowest_layer().local_endpoint(ec);
 }
 
 void TCPChannelResourceSecure::set_options(
         const TCPTransportDescriptor* options)
 {
-    set_socket_options(secure_socket_->lowest_layer(), options);
-}
-
-void TCPChannelResourceSecure::set_tls_verify_mode(
-        const TCPTransportDescriptor* options)
-{
-    using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
-
-    if (options->apply_security)
-    {
-        if (options->tls_config.verify_mode != TLSVerifyMode::UNUSED)
-        {
-            ssl::verify_mode vm = 0x00;
-            if (options->tls_config.get_verify_mode(TLSVerifyMode::VERIFY_NONE))
-            {
-                vm |= ssl::verify_none;
-            }
-            else if (options->tls_config.get_verify_mode(TLSVerifyMode::VERIFY_PEER))
-            {
-                vm |= ssl::verify_peer;
-            }
-            else if (options->tls_config.get_verify_mode(TLSVerifyMode::VERIFY_FAIL_IF_NO_PEER_CERT))
-            {
-                vm |= ssl::verify_fail_if_no_peer_cert;
-            }
-            else if (options->tls_config.get_verify_mode(TLSVerifyMode::VERIFY_CLIENT_ONCE))
-            {
-                vm |= ssl::verify_client_once;
-            }
-            secure_socket_->set_verify_mode(vm);
-        }
-
-    }
+    set_socket_options(std::atomic_load(&secure_socket_)->lowest_layer(), options);
 }
 
 void TCPChannelResourceSecure::set_tls_sni(
@@ -329,26 +308,27 @@ void TCPChannelResourceSecure::set_tls_sni(
         if (!options->tls_config.server_name.empty())
         {
             // This is not done through asio because it seems it is not supported, so call directly to OpenSSL
-            SSL_set_tlsext_host_name(secure_socket_->native_handle(), options->tls_config.server_name.c_str());
+            SSL_set_tlsext_host_name(std::atomic_load(&secure_socket_)->native_handle(),
+                    options->tls_config.server_name.c_str());
         }
     }
 }
 
 void TCPChannelResourceSecure::cancel()
 {
-    secure_socket_->lowest_layer().cancel();
+    std::atomic_load(&secure_socket_)->lowest_layer().cancel();
 }
 
 void TCPChannelResourceSecure::close()
 {
-    secure_socket_->lowest_layer().close();
+    std::atomic_load(&secure_socket_)->lowest_layer().close();
 }
 
 void TCPChannelResourceSecure::shutdown(
         asio::socket_base::shutdown_type)
 {
     // WARNING: This function blocks until receiving the peer’s close_notify (or an error occurs).
-    secure_socket_->shutdown();
+    std::atomic_load(&secure_socket_)->shutdown();
 }
 
 } // namespace rtps

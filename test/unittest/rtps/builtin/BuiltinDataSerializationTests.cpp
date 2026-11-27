@@ -14,8 +14,11 @@
 
 #include <array>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <set>
+#include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -3785,6 +3788,71 @@ TEST(BuiltinDataSerializationTests, msg_partition_oob_strlen)
     ASSERT_NO_FATAL_FAILURE(out.read_from_cdr_message(&msg, c_VendorId_eProsima));
 }
 
+#if defined(__SANITIZE_ADDRESS__)
+/**
+ * @test Deserialization rejects a `PID_TOPIC_NAME` with no NUL terminator in its declared length,
+ * without leaking bytes past that length into the parsed topic name.
+ */
+TEST(BuiltinDataSerializationTests, msg_topic_name_oob_strlen)
+{
+    const uint8_t buffer[] = {
+        0x00, 0x03, 0x00, 0x00,  // Encapsulation (PL_CDR_LE)
+        0x05, 0x00, 0x14, 0x00,  // PID_TOPIC_NAME, parameter length 20
+        0x08, 0x00, 0x00, 0x00,  // String length 8
+        0x61, 0x61, 0x61, 0x61,  // 8 bytes with no NUL terminator
+        0x61, 0x61, 0x61, 0x61,
+        0x53, 0x45, 0x43, 0x52,  // "SECRET!" outside the declared string of size 8
+        0x45, 0x54, 0x21, 0x00,
+        0x01, 0x00, 0x00, 0x00,  // PID_SENTINEL
+    };
+
+    CDRMessage_t msg(0);
+    msg.init(const_cast<octet*>(reinterpret_cast<const octet*>(buffer)), sizeof(buffer));
+    msg.length = sizeof(buffer);
+    msg.msg_endian = LITTLEEND;
+
+    ReaderProxyData out(max_unicast_locators, max_multicast_locators);
+    EXPECT_FALSE(out.read_from_cdr_message(&msg, c_VendorId_eProsima));
+    EXPECT_EQ(std::string::npos, std::string(out.topic_name.c_str()).find("SECRET"));
+}
+#endif // defined(__SANITIZE_ADDRESS__)
+
+#if defined(__SANITIZE_ADDRESS__)
+/**
+ * @test Tests a `PID_PROPERTY_LIST` whose strings have no NUL terminator does not cause an OOB read when
+ * accessing the parsed properties.
+ * Property storage is sized to the received data, so `second()` reads past the allocation.
+ * Run this test under AddressSanitizer to detect the resulting invalid memory access.
+ */
+TEST(BuiltinDataSerializationTests, msg_property_list_oob_strlen)
+{
+    const uint8_t buffer[] = {
+        0x00, 0x03, 0x00, 0x00,  // Encapsulation (PL_CDR_LE)
+        0x59, 0x00, 0x14, 0x00,  // PID_PROPERTY_LIST, parameter length 20
+        0x01, 0x00, 0x00, 0x00,  // num_properties 1
+        0x04, 0x00, 0x00, 0x00,  // Name length 4
+        0x61, 0x61, 0x61, 0x61,  // 4 bytes with no NUL terminator
+        0x04, 0x00, 0x00, 0x00,  // Value length 4
+        0x62, 0x62, 0x62, 0x62,  // 4 bytes with no NUL terminator
+        0x01, 0x00, 0x00, 0x00,  // PID_SENTINEL
+    };
+
+    CDRMessage_t msg(0);
+    msg.init(const_cast<octet*>(reinterpret_cast<const octet*>(buffer)), sizeof(buffer));
+    msg.length = sizeof(buffer);
+
+    ParticipantProxyData out(RTPSParticipantAllocationAttributes{});
+    ASSERT_NO_FATAL_FAILURE(out.read_from_cdr_message(&msg, true, network, false, c_VendorId_eProsima));
+
+    // Same accesses done by discovery on received properties (e.g. PDP::check_participant_type)
+    for (const auto& property : out.properties)
+    {
+        ASSERT_NO_FATAL_FAILURE(property.first());
+        ASSERT_NO_FATAL_FAILURE(property.second());
+    }
+}
+#endif // defined(__SANITIZE_ADDRESS__)
+
 // Regression test for redmine issue #24418.
 // easy_mode with ~50KB of leading zeros triggers catastrophic backtracking in the IPv4 regex.
 TEST(BuiltinDataSerializationTests, msg_wireprotocol_config_malformed_easy_mode)
@@ -3896,6 +3964,81 @@ TEST(BuiltinDataSerializationTests, msg_property_list_oversized_num_properties)
     ASSERT_NO_FATAL_FAILURE(out.read_from_cdr_message(&msg, true, network, true));
 
     EXPECT_EQ(0u, out.properties.size());
+}
+
+// Loads the raw bytes of a minimized ClusterFuzz testcase from regressions/.
+// Returns the selector (0, 1, or 2) and the message with the bytes after the selector.
+void read_cdr_message_from_regression_file(
+        const std::string& filename,
+        uint8_t& selector,
+        CDRMessage_t& msg)
+{
+    // Read file
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    ASSERT_TRUE(file.is_open()) << "Could not open regression file: " << filename;
+
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // Check file size
+    ASSERT_LE(file_size, std::numeric_limits<uint32_t>::max());
+    ASSERT_GE(file_size, 1u);
+    uint32_t payload_size = static_cast<uint32_t>(file_size) - 1u;
+
+    // Reserve payload
+    msg.reserve(payload_size);
+    ASSERT_NE(msg.buffer, nullptr);
+    ASSERT_EQ(msg.max_size, payload_size);
+    msg.length = payload_size;
+
+    // Read selector
+    ASSERT_TRUE(static_cast<bool>(file.read(reinterpret_cast<char*>(&selector), 1u)));
+    selector = selector % 3u;
+
+    // Read payload
+    ASSERT_TRUE(static_cast<bool>(file.read(reinterpret_cast<char*>(msg.buffer), msg.max_size)));
+}
+
+// Load and check the files from regressions/
+
+TEST(BuiltinDataSerializationTests, regressions)
+{
+    std::vector<std::string> test_files = {
+        "./regressions/25507.bin"           // Redmine issue #25507
+    };
+
+    uint8_t selector = 0;
+    std::vector<uint8_t> payload;
+
+    for (const auto& test_file : test_files)
+    {
+        CDRMessage_t msg(0);
+        read_cdr_message_from_regression_file(test_file, selector, msg);
+
+        // Dispatch on the same selector used by fuzz_proxy_cdr, exercising the exact
+        // deserialization path used when receiving PDP/SEDP discovery data.
+        switch (selector)
+        {
+            case 0:
+            {
+                ParticipantProxyData pdata(RTPSParticipantAllocationAttributes{});
+                EXPECT_NO_THROW(pdata.read_from_cdr_message(&msg, true, network, false, c_VendorId_eProsima));
+                break;
+            }
+            case 1:
+            {
+                ReaderProxyData pdata(max_unicast_locators, max_multicast_locators);
+                EXPECT_NO_THROW(pdata.read_from_cdr_message(&msg, c_VendorId_eProsima));
+                break;
+            }
+            default:
+            {
+                WriterProxyData pdata(max_unicast_locators, max_multicast_locators);
+                EXPECT_NO_THROW(pdata.read_from_cdr_message(&msg, c_VendorId_eProsima));
+                break;
+            }
+        }
+    }
 }
 
 } // namespace rtps
