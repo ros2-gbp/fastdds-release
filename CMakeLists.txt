@@ -30,7 +30,7 @@ endif()
 ###############################################################################
 # Project                                                                     #
 ###############################################################################
-project(fastrtps VERSION "2.6.12" LANGUAGES C CXX)
+project(fastrtps VERSION "2.6.13" LANGUAGES C CXX)
 
 set(PROJECT_NAME_LARGE "Fast RTPS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
@@ -422,10 +422,15 @@ if(BUILD_DOCUMENTATION)
             # file(ARCHIVE_EXTRACT INPUT "./eprosima-fast-rtps.zip" DESTINATION  "${PROJECT_BINARY_DIR}/doc/")
             execute_process(COMMAND "${UNZIP_EXE}" "./eprosima-fast-rtps.zip" -d "${PROJECT_BINARY_DIR}/doc/")
             file(REMOVE_RECURSE "${PROJECT_BINARY_DIR}/doc/manual")
-            if (DOWNLOAD_RC)
+
+            if (EXISTS "${PROJECT_BINARY_DIR}/doc/html")
+                file(RENAME "${PROJECT_BINARY_DIR}/doc/html" "${PROJECT_BINARY_DIR}/doc/manual")
+            elseif (EXISTS "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}")
+                file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}" "${PROJECT_BINARY_DIR}/doc/manual")
+            elseif (EXISTS "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-latest")
                 file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-latest" "${PROJECT_BINARY_DIR}/doc/manual")
             else()
-                file(RENAME "${PROJECT_BINARY_DIR}/doc/eprosima-fast-rtps-v${PROJECT_VERSION}" "${PROJECT_BINARY_DIR}/doc/manual")
+                message(FATAL_ERROR "The downloaded documentation did not extract any known directory into ${PROJECT_BINARY_DIR}/doc")
             endif()
             file(REMOVE  "./eprosima-fast-rtps.zip")
 
