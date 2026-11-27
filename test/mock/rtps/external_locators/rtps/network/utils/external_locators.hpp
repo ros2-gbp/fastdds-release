@@ -16,26 +16,22 @@
  * @file external_locators.hpp
  */
 
-#ifndef _RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP_
-#define _RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP_
+#ifndef FASTDDS_RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP
+#define FASTDDS_RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP
 
 #include <fastdds/rtps/attributes/ExternalLocators.hpp>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
-#include <fastdds/rtps/builtin/data/WriterProxyData.h>
 #include <fastdds/rtps/common/LocatorList.hpp>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
+
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 namespace network {
 namespace external_locators {
-
-using eprosima::fastrtps::rtps::LocatorSelectorEntry;
-using eprosima::fastrtps::rtps::ParticipantProxyData;
-using eprosima::fastrtps::rtps::ReaderProxyData;
-using eprosima::fastrtps::rtps::WriterProxyData;
 
 /**
  * Sets the external locators entry for externality index 0 to a list of listening locators.
@@ -89,6 +85,12 @@ void add_external_locators(
 {
 }
 
+void add_external_locators(
+        LocatorList&,
+        const ExternalLocators&)
+{
+}
+
 /**
  * Filter the locators of a remote participant according to the matching algorithm.
  *
@@ -129,4 +131,4 @@ void filter_remote_locators(
 } // namespace fastdds
 } // namespace eprosima
 
-#endif  // _RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP_
+#endif  // FASTDDS_RTPS_NETWORK_UTILS_EXTERNAL_LOCATORS_HPP

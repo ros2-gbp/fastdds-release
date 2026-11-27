@@ -32,7 +32,7 @@
 #include <fastdds/dds/publisher/qos/PublisherQos.hpp>
 
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds::rtps;
 
 PublisherModule::~PublisherModule()
 {
@@ -162,7 +162,7 @@ void PublisherModule::run(
     {
         if (zero_copy_)
         {
-            if (ReturnCode_t::RETCODE_OK == writer_->loan_sample(sample))
+            if (RETCODE_OK == writer_->loan_sample(sample))
             {
                 FixedSized* data = static_cast<FixedSized*>(sample);
                 data->index(index);
@@ -234,27 +234,29 @@ void PublisherModule::on_publication_matched(
 
 void PublisherModule::on_participant_discovery(
         DomainParticipant* /*participant*/,
-        ParticipantDiscoveryInfo&& info)
+        ParticipantDiscoveryStatus status,
+        const ParticipantBuiltinTopicData& info,
+        bool& /*should_be_ignored*/)
 {
-    if (info.status == ParticipantDiscoveryInfo::DISCOVERED_PARTICIPANT)
+    if (status == ParticipantDiscoveryStatus::DISCOVERED_PARTICIPANT)
     {
         std::cout << "Publisher participant " << //participant->getGuid() <<
-            " discovered participant " << info.info.m_guid << std::endl;
+            " discovered participant " << info.guid << std::endl;
     }
-    else if (info.status == ParticipantDiscoveryInfo::CHANGED_QOS_PARTICIPANT)
+    else if (status == ParticipantDiscoveryStatus::CHANGED_QOS_PARTICIPANT)
     {
         std::cout << "Publisher participant " << //participant->getGuid() <<
-            " detected changes on participant " << info.info.m_guid << std::endl;
+            " detected changes on participant " << info.guid << std::endl;
     }
-    else if (info.status == ParticipantDiscoveryInfo::REMOVED_PARTICIPANT)
+    else if (status == ParticipantDiscoveryStatus::REMOVED_PARTICIPANT)
     {
         std::cout << "Publisher participant " << // participant->getGuid() <<
-            " removed participant " << info.info.m_guid << std::endl;
+            " removed participant " << info.guid << std::endl;
     }
-    else if (info.status == ParticipantDiscoveryInfo::DROPPED_PARTICIPANT)
+    else if (status == ParticipantDiscoveryStatus::DROPPED_PARTICIPANT)
     {
         std::cout << "Publisher participant " << //participant->getGuid() <<
-            " dropped participant " << info.info.m_guid << std::endl;
+            " dropped participant " << info.guid << std::endl;
         if (exit_on_lost_liveliness_)
         {
             run_ = false;

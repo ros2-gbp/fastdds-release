@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastrtps/rtps/common/SequenceNumber.h>
-
 #include <algorithm>
 #include <climits>
+
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
+#include <fastdds/rtps/common/SequenceNumber.hpp>
+
+using namespace eprosima::fastdds::rtps;
 
 /*!
  * @fn TEST(SequenceNumber, IncrementalOperator)

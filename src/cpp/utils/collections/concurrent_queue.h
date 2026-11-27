@@ -13,15 +13,15 @@
 // limitations under the License.
 
 
-#ifndef _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
-#define _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
+#ifndef _FASTDDS_UTILS_CONCURRENT_QUEUE_H_
+#define _FASTDDS_UTILS_CONCURRENT_QUEUE_H_
 
 #include <queue>
 #include <mutex>
 #include <condition_variable>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 
 /**
  * @brief ConcurrentQueue. A thread-safe shared queue.
@@ -151,7 +151,7 @@ protected:
     Queue queue_;
 };
 
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTRTPS_UTILS_CONCURRENT_QUEUE_H_
+#endif // _FASTDDS_UTILS_CONCURRENT_QUEUE_H_

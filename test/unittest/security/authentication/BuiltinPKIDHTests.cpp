@@ -14,6 +14,9 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <fstream>
@@ -22,15 +25,15 @@
 #include <string>
 #include <vector>
 
-#include "AuthenticationPluginTests.hpp"
-
-#include <fastdds/rtps/common/BinaryProperty.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/authentication/PKIHandshakeHandle.h>
-#include <fastrtps/rtps/messages/CDRMessage.h>
-
 #include <openssl/opensslv.h>
 #include <openssl/pem.h>
+
+#include <fastdds/rtps/common/BinaryProperty.hpp>
+#include <rtps/messages/CDRMessage.hpp>
+
+#include "AuthenticationPluginTests.hpp"
+#include <security/authentication/PKIHandshakeHandle.h>
+#include <security/authentication/PKIIdentityHandle.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -38,8 +41,8 @@
 #define IS_OPENSSL_1_1 0
 #endif // if OPENSSL_VERSION_NUMBER >= 0x10100000L
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+using namespace eprosima::fastdds::rtps;
+using namespace eprosima::fastdds::rtps::security;
 
 static const char* certs_path = nullptr;
 
@@ -90,7 +93,7 @@ IdentityToken AuthenticationPluginTest::generate_remote_identity_token_ok(
 
     // dds.cert.sn
     property.name("dds.cert.sn");
-    X509_NAME* cert_sn = X509_get_subject_name(h->cert_);
+    const X509_NAME* cert_sn = X509_get_subject_name(h->cert_);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     property.value() = cert_sn_str;
     OPENSSL_free(cert_sn_str);
@@ -764,6 +767,8 @@ TEST_F(AuthenticationPluginTest, validate_local_identity_expired_certificate)
  */
 TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate)
 {
+    using namespace eprosima::fastdds::rtps::security;
+
     SecurityException exception;
     uint32_t domain_id = 0;
 
@@ -801,10 +806,10 @@ TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate
 
     // Non-empty participant data (only its length is checked before the sink).
     ParticipantProxyData participant_data(c_default_RTPSParticipantAllocationAttributes);
-    participant_data.m_guid = adjusted_participant_key;
+    participant_data.guid = adjusted_participant_key;
     CDRMessage_t cdr_participant_data(RTPSMESSAGE_DEFAULT_SIZE);
     cdr_participant_data.msg_endian = BIGEND;
-    ASSERT_TRUE(participant_data.writeToCDRMessage(&cdr_participant_data, false));
+    ASSERT_TRUE(participant_data.write_to_cdr_message(&cdr_participant_data, false));
 
     HandshakeHandle* handshake_handle = nullptr;
     HandshakeMessageToken* handshake_message_out = nullptr;
@@ -826,6 +831,8 @@ TEST_F(AuthenticationPluginTest, begin_handshake_reply_empty_subject_certificate
  */
 TEST_F(AuthenticationPluginTest, process_handshake_request_empty_subject_certificate)
 {
+    using namespace eprosima::fastdds::rtps::security;
+
     SecurityException exception;
     uint32_t domain_id = 0;
 
@@ -852,10 +859,10 @@ TEST_F(AuthenticationPluginTest, process_handshake_request_empty_subject_certifi
 
     // Start the handshake as initiator, so the handle expects a +Reply.
     ParticipantProxyData participant_data(c_default_RTPSParticipantAllocationAttributes);
-    participant_data.m_guid = adjusted_participant_key;
+    participant_data.guid = adjusted_participant_key;
     CDRMessage_t cdr_participant_data(RTPSMESSAGE_DEFAULT_SIZE);
     cdr_participant_data.msg_endian = BIGEND;
-    ASSERT_TRUE(participant_data.writeToCDRMessage(&cdr_participant_data, false));
+    ASSERT_TRUE(participant_data.write_to_cdr_message(&cdr_participant_data, false));
 
     HandshakeHandle* handshake_handle = nullptr;
     HandshakeMessageToken* handshake_message_request = nullptr;

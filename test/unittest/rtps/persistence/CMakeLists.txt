@@ -12,24 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if(SANITIZER STREQUAL "UNDEFINED")
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/cpp/rtps/persistence/sqlite3.c
-        PROPERTIES COMPILE_OPTIONS
-        "-fno-sanitize=bounds-strict")
-endif()
-
 if(SQLITE3_SUPPORT)
     # this test includes C sources
     enable_language(C)
 
     set(PERSISTENCETESTS_SOURCE
         PersistenceTests.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
-        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutErrConsumer.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
+        ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/history/CacheChangePool.cpp
         ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
@@ -59,8 +51,10 @@ if(SQLITE3_SUPPORT)
         ${PROJECT_SOURCE_DIR}/src/cpp
         )
     target_link_libraries(PersistenceTests
+        fastcdr
+        fastdds::log
         foonathan_memory
-            GTest::gmock
+        GTest::gmock
         ${CMAKE_DL_LIBS}
         )
     if(MSVC OR MSVC_IDE)

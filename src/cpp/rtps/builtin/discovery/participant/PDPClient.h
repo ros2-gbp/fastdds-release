@@ -21,19 +21,16 @@
 #define _FASTDDS_RTPS_PDPCLIENT_H_
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastdds/rtps/builtin/discovery/participant/PDP.h>
-#include <fastdds/rtps/messages/RTPSMessageGroup.h>
-
-#include <rtps/builtin/discovery/participant/timedevent/DSClientEvent.h>
-
+#include <rtps/attributes/ServerAttributes.hpp>
 #include <rtps/builtin/discovery/participant/DS/DiscoveryServerPDPEndpoints.hpp>
 #include <rtps/builtin/discovery/participant/DS/DiscoveryServerPDPEndpointsSecure.hpp>
+#include <rtps/builtin/discovery/participant/PDP.h>
+#include <rtps/builtin/discovery/participant/timedevent/DSClientEvent.h>
+#include <rtps/messages/RTPSMessageGroup.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
-
-using namespace fastrtps::rtps;
 
 class StatefulWriter;
 class StatefulReader;
@@ -139,7 +136,7 @@ public:
      */
     bool remove_remote_participant(
             const GUID_t& participant_guid,
-            ParticipantDiscoveryInfo::DISCOVERY_STATUS reason) override;
+            ParticipantDiscoveryStatus reason) override;
 
 #if HAVE_SECURITY
     bool pairing_remote_writer_with_local_reader_after_security(
@@ -156,6 +153,12 @@ public:
      */
     void update_remote_servers_list();
 
+    /**
+     * Get the list of remote servers to which the client is already connected.
+     * @return A reference to the list of RemoteServerAttributes
+     */
+    const fastdds::rtps::RemoteServerList_t& connected_servers();
+
 protected:
 
     void update_builtin_locators() override;
@@ -164,17 +167,23 @@ protected:
      * Manually match the local PDP reader with the PDP writer of a given server. The function is
      * not thread safe (nts) in the sense that it does not take the PDP mutex. It does however take
      * temp_data_lock_
+     * @param server_att Remote server attributes
+     * @param from_this_host Whether the server is from this host or not
      */
     void match_pdp_writer_nts_(
-            const eprosima::fastdds::rtps::RemoteServerAttributes& server_att);
+            const eprosima::fastdds::rtps::RemoteServerAttributes& server_att,
+            bool from_this_host);
 
     /**
      * Manually match the local PDP writer with the PDP reader of a given server. The function is
      * not thread safe (nts) in the sense that it does not take the PDP mutex. It does however take
      * temp_data_lock_
+     * @param server_att Remote server attributes
+     * @param from_this_host Whether the server is from this host or not
      */
     void match_pdp_reader_nts_(
-            const eprosima::fastdds::rtps::RemoteServerAttributes& server_att);
+            const eprosima::fastdds::rtps::RemoteServerAttributes& server_att,
+            bool from_this_host);
 
 private:
 
@@ -184,19 +193,27 @@ private:
      * Manually match the local PDP reader with the PDP writer of a given server. The function is
      * not thread safe (nts) in the sense that it does not take the PDP mutex. It does however take
      * temp_data_lock_
+     * @param server_att Remote server attributes
+     * @param prefix_override GUID prefix of the server
+     * @param from_this_host Whether the server is from this host or not
      */
     void match_pdp_writer_nts_(
             const eprosima::fastdds::rtps::RemoteServerAttributes& server_att,
-            const eprosima::fastdds::rtps::GuidPrefix_t& prefix_override);
+            const eprosima::fastdds::rtps::GuidPrefix_t& prefix_override,
+            bool from_this_host);
 
     /**
      * Manually match the local PDP writer with the PDP reader of a given server. The function is
      * not thread safe (nts) in the sense that it does not take the PDP mutex. It does however take
      * temp_data_lock_
+     * @param server_att Remote server attributes
+     * @param prefix_override GUID prefix of the server
+     * @param from_this_host Whether the server is from this host or not
      */
     void match_pdp_reader_nts_(
             const eprosima::fastdds::rtps::RemoteServerAttributes& server_att,
-            const eprosima::fastdds::rtps::GuidPrefix_t& prefix_override);
+            const eprosima::fastdds::rtps::GuidPrefix_t& prefix_override,
+            bool from_this_host);
 
 #if HAVE_SECURITY
     /**
@@ -257,6 +274,9 @@ private:
 
     //! flag to know this client must use super client participant type
     bool _super_client;
+
+    //! List of real connected servers
+    std::list<eprosima::fastdds::rtps::RemoteServerAttributes> connected_servers_;
 };
 
 } /* namespace rtps */

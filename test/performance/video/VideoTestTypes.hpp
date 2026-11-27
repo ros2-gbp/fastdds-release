@@ -38,11 +38,11 @@
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/dds/topic/TopicDataType.hpp>
 
-#include <fastdds/rtps/attributes/PropertyPolicy.h>
-#include <fastdds/rtps/common/all_common.h>
+#include <fastdds/rtps/attributes/PropertyPolicy.hpp>
+#include <fastdds/rtps/common/Types.hpp>
+#include <fastdds/rtps/common/SerializedPayload.hpp>
 
-#include <fastrtps/utils/IPFinder.h>
-#include <fastrtps/utils/TimeConversion.h>
+#include <fastdds/utils/IPFinder.hpp>
 
 
 
@@ -126,9 +126,9 @@ public:
 
     bool serialize(
             void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override;
+            eprosima::fastdds::rtps::SerializedPayload_t* payload) override;
     bool deserialize(
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            eprosima::fastdds::rtps::SerializedPayload_t* payload,
             void* data) override;
     std::function<uint32_t()> getSerializedSizeProvider(
             void* data) override;
@@ -137,7 +137,7 @@ public:
             void* data) override;
     bool getKey(
             void* /*data*/,
-            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
+            eprosima::fastdds::rtps::InstanceHandle_t* /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;
@@ -188,9 +188,9 @@ public:
 
     bool serialize(
             void* data,
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload) override;
+            eprosima::fastdds::rtps::SerializedPayload_t* payload) override;
     bool deserialize(
-            eprosima::fastrtps::rtps::SerializedPayload_t* payload,
+            eprosima::fastdds::rtps::SerializedPayload_t* payload,
             void* data) override;
     std::function<uint32_t()> getSerializedSizeProvider(
             void* data) override;
@@ -199,7 +199,7 @@ public:
             void* data) override;
     bool getKey(
             void* /*data*/,
-            eprosima::fastrtps::rtps::InstanceHandle_t* /*ihandle*/,
+            eprosima::fastdds::rtps::InstanceHandle_t* /*ihandle*/,
             bool force_md5 = false) override
     {
         (void)force_md5;

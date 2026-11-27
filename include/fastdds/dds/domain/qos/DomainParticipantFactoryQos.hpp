@@ -17,12 +17,12 @@
  *
  */
 
-#ifndef _FASTDDS_PARTICIPANTFACTORYQOS_HPP_
-#define _FASTDDS_PARTICIPANTFACTORYQOS_HPP_
+#ifndef FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTFACTORYQOS_HPP
+#define FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTFACTORYQOS_HPP
 
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -40,14 +40,14 @@ public:
     /**
      * @brief Constructor
      */
-    RTPS_DllAPI DomainParticipantFactoryQos()
+    FASTDDS_EXPORTED_API DomainParticipantFactoryQos()
     {
     }
 
     /**
      * @brief Destructor
      */
-    RTPS_DllAPI virtual ~DomainParticipantFactoryQos()
+    FASTDDS_EXPORTED_API virtual ~DomainParticipantFactoryQos()
     {
     }
 
@@ -162,10 +162,10 @@ private:
 
 };
 
-RTPS_DllAPI extern const DomainParticipantFactoryQos PARTICIPANT_FACTORY_QOS_DEFAULT;
+FASTDDS_EXPORTED_API extern const DomainParticipantFactoryQos PARTICIPANT_FACTORY_QOS_DEFAULT;
 
-} /* namespace dds */
-} /* namespace fastdds */
-} /* namespace eprosima */
+} // namespace dds
+} // namespace fastdds
+} // namespace eprosima
 
-#endif /* _FASTDDS_PARTICIPANTFACTORYQOS_HPP_ */
+#endif // FASTDDS_DDS_DOMAIN_QOS__DOMAINPARTICIPANTFACTORYQOS_HPP

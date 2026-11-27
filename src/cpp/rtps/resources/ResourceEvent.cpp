@@ -16,9 +16,10 @@
  * @file ResourceEvent.cpp
  */
 
+#include <rtps/resources/ResourceEvent.h>
+
 #include <cassert>
 
-#include <fastdds/rtps/resources/ResourceEvent.h>
 #include <fastdds/dds/log/Log.hpp>
 
 #include "TimedEventImpl.h"
@@ -26,7 +27,7 @@
 #include <utils/threading.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 static bool event_compare(
@@ -327,5 +328,5 @@ void ResourceEvent::init_thread(
 }
 
 } /* namespace rtps */
-} /* namespace fastrtps */
+} /* namespace fastdds */
 } /* namespace eprosima */

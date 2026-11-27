@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastrtps/rtps/common/CacheChange.h>
-
 #include <climits>
 #include <vector>
+
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
+#include <fastdds/rtps/common/CacheChange.hpp>
+
+using namespace eprosima::fastdds::rtps;
 
 struct FragmentTestStep
 {

@@ -17,8 +17,8 @@
 #include <asio.hpp>
 
 #include <fastdds/rtps/attributes/ThreadSettings.hpp>
-#include <fastdds/rtps/messages/MessageReceiver.h>
 
+#include <rtps/messages/MessageReceiver.h>
 #include <rtps/transport/UDPTransportInterface.h>
 #include <utils/threading.hpp>
 
@@ -26,7 +26,6 @@ namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using octet = fastrtps::rtps::octet;
 using Log = fastdds::dds::Log;
 
 UDPChannelResource::UDPChannelResource(
@@ -137,5 +136,5 @@ void UDPChannelResource::release()
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

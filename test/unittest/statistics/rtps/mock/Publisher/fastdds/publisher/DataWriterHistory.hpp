@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _FASTDDS_PUBLISHER_DATAWRITERHISTORY_HPP_
-#define _FASTDDS_PUBLISHER_DATAWRITERHISTORY_HPP_
+#ifndef FASTDDS_PUBLISHER__DATAWRITERHISTORY_HPP
+#define FASTDDS_PUBLISHER__DATAWRITERHISTORY_HPP
 
 #include <chrono>
 #include <functional>
@@ -21,24 +21,21 @@
 
 #include <gmock/gmock.h>
 
-#include <fastdds/rtps/history/WriterHistory.h>
-#include <fastdds/rtps/resources/ResourceManagement.h>
-#include <fastrtps/utils/TimedMutex.hpp>
+#include <fastdds/dds/core/policy/QosPolicies.hpp>
+#include <fastdds/rtps/attributes/ResourceManagement.hpp>
+#include <fastdds/rtps/history/IChangePool.hpp>
+#include <fastdds/rtps/history/IPayloadPool.hpp>
+#include <fastdds/rtps/history/WriterHistory.hpp>
+#include <fastdds/utils/TimedMutex.hpp>
 
 namespace eprosima {
-namespace fastrtps {
-
-class TopicAttributes;
-
+namespace fastdds {
 namespace rtps {
 
 class WriteParams;
 
 } // namespace rtps
-} // namespace fastrtps
 
-
-namespace fastdds {
 namespace dds {
 
 class DomainParticipant;
@@ -48,32 +45,39 @@ class DataWriterListener;
 class Topic;
 
 
-static fastrtps::rtps::HistoryAttributes to_history_attributes(
-        const fastrtps::TopicAttributes&,
+static fastdds::rtps::HistoryAttributes to_history_attributes(
+        const HistoryQosPolicy&,
+        const ResourceLimitsQosPolicy&,
+        const rtps::TopicKind_t&,
         uint32_t,
-        fastrtps::rtps::MemoryManagementPolicy_t)
+        rtps::MemoryManagementPolicy_t)
 {
 
-    return fastrtps::rtps::HistoryAttributes();
+    return fastdds::rtps::HistoryAttributes();
 }
 
-class DataWriterHistory : public fastrtps::rtps::WriterHistory
+class DataWriterHistory : public fastdds::rtps::WriterHistory
 {
 public:
 
     DataWriterHistory(
-            const fastrtps::TopicAttributes& topic_att,
+            const std::shared_ptr<rtps::IPayloadPool>& payload_pool,
+            const std::shared_ptr<rtps::IChangePool>& change_pool,
+            const HistoryQosPolicy& history_qos,
+            const ResourceLimitsQosPolicy& resource_limits_qos,
+            const rtps::TopicKind_t& topic_kind,
             uint32_t payloadMaxSize,
-            fastrtps::rtps::MemoryManagementPolicy_t mempolicy,
-            std::function<void (const fastrtps::rtps::InstanceHandle_t&)>)
-        : WriterHistory(to_history_attributes(topic_att, payloadMaxSize, mempolicy))
+            rtps::MemoryManagementPolicy_t mempolicy,
+            std::function<void (const fastdds::rtps::InstanceHandle_t&)>)
+        : WriterHistory(to_history_attributes(history_qos, resource_limits_qos, topic_kind, payloadMaxSize,
+                mempolicy), payload_pool, change_pool)
     {
     }
 
     MOCK_METHOD4(add_pub_change, bool(
-                fastrtps::rtps::CacheChange_t*,
-                fastrtps::rtps::WriteParams&,
-                std::unique_lock<fastrtps::RecursiveTimedMutex>&,
+                fastdds::rtps::CacheChange_t*,
+                fastdds::rtps::WriteParams&,
+                std::unique_lock<fastdds::RecursiveTimedMutex>&,
                 const std::chrono::time_point<std::chrono::steady_clock>&));
 
 };
@@ -82,4 +86,4 @@ public:
 }  // namespace fastdds
 }  // namespace eprosima
 
-#endif // _FASTDDS_PUBLISHER_DATAWRITERHISTORY_HPP_
+#endif // FASTDDS_PUBLISHER__DATAWRITERHISTORY_HPP

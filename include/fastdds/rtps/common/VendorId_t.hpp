@@ -16,8 +16,8 @@
  * @file VendorId_t.hpp
  */
 
-#ifndef _FASTDDS_RTPS_COMMON_VENDORIDT_HPP_
-#define _FASTDDS_RTPS_COMMON_VENDORIDT_HPP_
+#ifndef FASTDDS_RTPS_COMMON__VENDORID_T_HPP
+#define FASTDDS_RTPS_COMMON__VENDORID_T_HPP
 
 #include <array>
 #include <cstdint>
@@ -35,6 +35,7 @@ const VendorId_t c_VendorId_Unknown = {0x00, 0x00};
 const VendorId_t c_VendorId_eProsima = {0x01, 0x0F};
 const VendorId_t c_VendorId_SafeDDS = {0x01, 0x15};
 const VendorId_t c_VendorId_rti_connext = {0x01, 0x01};
+const VendorId_t c_VendorId_opendds = {0x01, 0x03};
 
 } // namespace rtps
 } // namespace fastdds
@@ -55,4 +56,4 @@ inline std::ostream& operator <<(
     return output;
 }
 
-#endif /* _FASTDDS_RTPS_COMMON_VENDORIDT_HPP_ */
+#endif // FASTDDS_RTPS_COMMON__VENDORID_T_HPP

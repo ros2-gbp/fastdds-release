@@ -26,19 +26,19 @@
     FRIEND_TEST(WriterProxyTests, GapIgnoredUntilHeartbeat); \
     FRIEND_TEST(WriterProxyTests, MaliciousHeartbeatHighSN);
 
-#include <rtps/reader/WriterProxy.h>
-#include <rtps/participant/RTPSParticipantImpl.h>
-#include <fastrtps/rtps/reader/RTPSReader.h>
-#include <fastrtps/rtps/reader/StatefulReader.h>
-#include <fastrtps/rtps/builtin/data/WriterProxyData.h>
-#include <fastrtps/rtps/resources/TimedEvent.h>
+#include <fastdds/rtps/reader/RTPSReader.hpp>
 
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/participant/RTPSParticipantImpl.hpp>
+#include <rtps/reader/StatefulReader.hpp>
+#include <rtps/reader/WriterProxy.h>
 #include <rtps/reader/WriterProxy.cpp>
+#include <rtps/resources/TimedEvent.h>
 
 #include "../../common/operators.hpp"
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 TEST(WriterProxyTests, MissingChangesUpdate)
@@ -54,8 +54,8 @@ TEST(WriterProxyTests, MissingChangesUpdate)
     // Testing the Timed events are properly configured
     EXPECT_CALL(readerMock, getEventResource()).Times(1u);
     WriterProxy wproxy(&readerMock, RemoteLocatorsAllocationAttributes(), ResourceLimitedContainerConfig());
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     wproxy.start(wattr, SequenceNumber_t());
 
@@ -253,8 +253,8 @@ TEST(WriterProxyTests, LostChangesUpdate)
     StatefulReader readerMock;
     EXPECT_CALL(readerMock, getEventResource()).Times(1u);
     WriterProxy wproxy(&readerMock, RemoteLocatorsAllocationAttributes(), ResourceLimitedContainerConfig());
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     wproxy.start(wattr, SequenceNumber_t());
 
@@ -379,8 +379,8 @@ TEST(WriterProxyTests, ReceivedChangeSet)
     /// Tests that heartbeat response timed event is updated with new interval
     /// Tests that initial acknack timed event is started
 
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     wproxy.start(wattr, SequenceNumber_t());
 
@@ -549,8 +549,8 @@ TEST(WriterProxyTests, IrrelevantChangeSet)
     StatefulReader readerMock;
     EXPECT_CALL(readerMock, getEventResource()).Times(1u);
     WriterProxy wproxy(&readerMock, RemoteLocatorsAllocationAttributes(), ResourceLimitedContainerConfig());
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     wproxy.start(wattr, SequenceNumber_t());
 
@@ -800,8 +800,8 @@ TEST(WriterProxyTests, GapIgnoredUntilHeartbeat)
     StatefulReader readerMock;
     EXPECT_CALL(readerMock, getEventResource()).Times(1u);
     WriterProxy wproxy(&readerMock, RemoteLocatorsAllocationAttributes(), ResourceLimitedContainerConfig());
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     EXPECT_CALL(*wproxy.heartbeat_response_, restart_timer()).Times(::testing::AnyNumber());
     wproxy.start(wattr, SequenceNumber_t());
@@ -840,9 +840,10 @@ TEST(WriterProxyTests, MaliciousHeartbeatHighSN)
 
     WriterProxyData wattr(4u, 1u);
     StatefulReader readerMock;
+    EXPECT_CALL(readerMock, getEventResource()).Times(1u);
     WriterProxy wproxy(&readerMock, RemoteLocatorsAllocationAttributes(), ResourceLimitedContainerConfig());
-    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initialAcknackDelay)).Times(1u);
-    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeatResponseDelay)).Times(1u);
+    EXPECT_CALL(*wproxy.initial_acknack_, update_interval(readerMock.getTimes().initial_acknack_delay)).Times(1u);
+    EXPECT_CALL(*wproxy.heartbeat_response_, update_interval(readerMock.getTimes().heartbeat_response_delay)).Times(1u);
     EXPECT_CALL(*wproxy.initial_acknack_, restart_timer()).Times(1u);
     EXPECT_CALL(*wproxy.heartbeat_response_, restart_timer()).Times(::testing::AnyNumber());
     wproxy.start(wattr, SequenceNumber_t());
@@ -861,7 +862,7 @@ TEST(WriterProxyTests, MaliciousHeartbeatHighSN)
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 int main(

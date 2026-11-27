@@ -17,75 +17,63 @@
  *
  */
 
-#include "../../common/BlackboxTests.hpp"
-#include "TCPReqRepHelloWorldReplier.hpp"
-
-#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
-#include <fastdds/dds/domain/DomainParticipant.hpp>
-#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/dds/topic/Topic.hpp>
-
-#include <fastdds/dds/subscriber/Subscriber.hpp>
-#include <fastdds/dds/subscriber/DataReader.hpp>
-
-#include <fastdds/dds/subscriber/SampleInfo.hpp>
-
-#include <fastdds/dds/publisher/Publisher.hpp>
-#include <fastdds/dds/publisher/DataWriter.hpp>
-
-#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/TCPv6TransportDescriptor.h>
-#include <fastrtps/utils/IPLocator.h>
-
 #include <gtest/gtest.h>
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastdds::rtps;
+#include <fastdds/dds/core/condition/Condition.hpp>
+#include <fastdds/dds/core/condition/StatusCondition.hpp>
+#include <fastdds/dds/core/status/PublicationMatchedStatus.hpp>
+#include <fastdds/dds/core/status/SubscriptionMatchedStatus.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
+#include <fastdds/dds/domain/qos/ReplierQos.hpp>
+#include <fastdds/dds/publisher/DataWriter.hpp>
+#include <fastdds/dds/rpc/RequestInfo.hpp>
+#include <fastdds/dds/rpc/ServiceTypeSupport.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/TCPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPLocator.hpp>
+
+#include "TCPReqRepHelloWorldReplier.hpp"
+#include "TCPReqRepHelloWorldService.hpp"
+
 using namespace eprosima::fastdds::dds;
+using namespace eprosima::fastdds::dds::rpc;
+using namespace eprosima::fastdds::rtps;
 
 TCPReqRepHelloWorldReplier::TCPReqRepHelloWorldReplier()
-    : request_listener_(*this)
-    , reply_listener_(*this)
+    : replier_(nullptr)
+    , service_(nullptr)
     , participant_(nullptr)
-    , request_subscriber_(nullptr)
-    , reply_publisher_(nullptr)
     , initialized_(false)
     , matched_(0)
 {
-    // By default, memory mode is PREALLOCATED_WITH_REALLOC_MEMORY_MODE
-    datareader_qos_.endpoint().history_memory_policy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
-    datawriter_qos_.endpoint().history_memory_policy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
 }
 
 TCPReqRepHelloWorldReplier::~TCPReqRepHelloWorldReplier()
 {
-    if (participant_ != nullptr)
+    stop_processing_thread_.set_trigger_value(true);
+
+    // stop the processing thread
+    if (processing_thread_.joinable())
     {
-        if (request_subscriber_)
+        processing_thread_.join();
+    }
+
+    if (participant_)
+    {
+        if (service_)
         {
-            if (request_datareader_)
+            if (replier_)
             {
-                request_subscriber_->delete_datareader(request_datareader_);
+                participant_->delete_service_replier(service_->get_service_name(), replier_);
             }
-            participant_->delete_subscriber(request_subscriber_);
+
+            participant_->delete_service(service_);
         }
-        if (reply_publisher_)
-        {
-            if (reply_datawriter_)
-            {
-                reply_publisher_->delete_datawriter(reply_datawriter_);
-            }
-            participant_->delete_publisher(reply_publisher_);
-        }
-        if (request_topic_)
-        {
-            participant_->delete_topic(request_topic_);
-        }
-        if (reply_topic_)
-        {
-            participant_->delete_topic(reply_topic_);
-        }
-        eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->delete_participant(participant_);
+
+        participant_->delete_contained_entities();
+        DomainParticipantFactory::get_instance()->delete_participant(participant_);
     }
 }
 
@@ -96,10 +84,12 @@ void TCPReqRepHelloWorldReplier::init(
         uint32_t maxInitialPeer,
         const char* certs_folder)
 {
+    ASSERT_NE(initialized_, true);
+
     DomainParticipantQos participant_qos;
     participant_qos.wire_protocol().participant_id = participantId;
     participant_qos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod = Duration_t(1, 0);
-    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastrtps::c_TimeInfinite;
+    participant_qos.wire_protocol().builtin.discovery_config.leaseDuration = c_TimeInfinite;
 
     participant_qos.transport().use_builtin_transports = false;
 
@@ -143,61 +133,29 @@ void TCPReqRepHelloWorldReplier::init(
     ASSERT_NE(participant_, nullptr);
     ASSERT_TRUE(participant_->is_enabled());
 
-    // Register type
-    type_.reset(new HelloWorldPubSubType());
-    ASSERT_EQ(participant_->register_type(type_), ReturnCode_t::RETCODE_OK);
+    // Register service type and create service
+    TCPReqRepHelloWorldService service;
+    service_ = service.init(participant_);
+    ASSERT_NE(service_, nullptr);
 
-    configDatareader("Request");
-    request_topic_ = participant_->create_topic(datareader_topicname_,
-                    type_->getName(), TOPIC_QOS_DEFAULT);
-    ASSERT_NE(request_topic_, nullptr);
-    ASSERT_TRUE(request_topic_->is_enabled());
+    // Create replier
+    replier_ = participant_->create_service_replier(service_, create_replier_qos());
+    ASSERT_NE(replier_, nullptr);
+    ASSERT_EQ(replier_->is_enabled(), true);
 
-    configDatawriter("Reply");
-    reply_topic_ = participant_->create_topic(datawriter_topicname_,
-                    type_->getName(), TOPIC_QOS_DEFAULT);
-    ASSERT_NE(reply_topic_, nullptr);
-    ASSERT_TRUE(reply_topic_->is_enabled());
-
-    //Create subscriber
-    request_subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
-    ASSERT_NE(request_subscriber_, nullptr);
-    ASSERT_TRUE(request_subscriber_->is_enabled());
-
-    //Create publisher
-    reply_publisher_ = participant_->create_publisher(PUBLISHER_QOS_DEFAULT);
-    ASSERT_NE(reply_publisher_, nullptr);
-    ASSERT_TRUE(reply_publisher_->is_enabled());
-
-    //Create datareader
-    datareader_qos_.reliability().kind = RELIABLE_RELIABILITY_QOS;
-    //Increase default max_blocking_time to 1s in case the CPU is overhead
-    datareader_qos_.reliability().max_blocking_time = Duration_t(1, 0);
-    request_datareader_ = request_subscriber_->create_datareader(request_topic_, datareader_qos_,
-                    &request_listener_);
-    ASSERT_NE(request_datareader_, nullptr);
-    ASSERT_TRUE(request_datareader_->is_enabled());
-
-    //Create datawriter
-    datawriter_qos_.reliability().kind = RELIABLE_RELIABILITY_QOS;
-    datawriter_qos_.reliability().max_blocking_time = Duration_t(1, 0);
-    reply_datawriter_ = reply_publisher_->create_datawriter(reply_topic_, datawriter_qos_, &reply_listener_);
-    ASSERT_NE(reply_datawriter_, nullptr);
-    ASSERT_TRUE(reply_datawriter_->is_enabled());
+    init_processing_thread();
 
     initialized_ = true;
 }
 
 void TCPReqRepHelloWorldReplier::newNumber(
-        SampleIdentity sample_identity,
+        const RequestInfo& info,
         uint16_t number)
 {
-    WriteParams wparams;
     HelloWorld hello;
     hello.index(number);
     hello.message("GoodBye");
-    wparams.related_sample_identity(sample_identity);
-    ASSERT_EQ(reply_datawriter_->write((void*)&hello, wparams), true);
+    ASSERT_EQ(replier_->send_reply((void*)&hello, info), RETCODE_OK);
 }
 
 void TCPReqRepHelloWorldReplier::wait_discovery(
@@ -275,20 +233,129 @@ bool TCPReqRepHelloWorldReplier::is_matched()
     return matched_ > 1;
 }
 
-void TCPReqRepHelloWorldReplier::ReplyListener::on_data_available(
-        DataReader* datareader)
+void TCPReqRepHelloWorldReplier::init_processing_thread()
 {
-    ASSERT_NE(datareader, nullptr);
+    wait_set_.attach_condition(stop_processing_thread_);
+    wait_set_.attach_condition(replier_->get_replier_writer()->get_statuscondition());
+    wait_set_.attach_condition(replier_->get_replier_reader()->get_statuscondition());
 
-    HelloWorld hello;
-    SampleInfo info;
+    processing_thread_ = std::thread(&TCPReqRepHelloWorldReplier::process_status_changes, this);
+}
 
-    if (ReturnCode_t::RETCODE_OK == datareader->take_next_sample((void*)&hello, &info))
+void TCPReqRepHelloWorldReplier::process_status_changes()
+{
+    while (!stop_processing_thread_.get_trigger_value())
     {
-        if (info.valid_data)
+        ReturnCode_t retcode;
+        ConditionSeq triggered_conditions;
+
+        retcode = wait_set_.wait(triggered_conditions, c_TimeInfinite);
+
+        if (RETCODE_OK != retcode)
         {
-            ASSERT_EQ(hello.message().compare("HelloWorld"), 0);
-            replier_.newNumber(info.sample_identity, hello.index());
+            std::cout << "TCPReplier: Error processing status changes" << std::endl;
+            continue;
+        }
+
+        for (Condition* condition : triggered_conditions)
+        {
+            // Process reader/writer status changes
+            StatusCondition* status_condition = dynamic_cast<StatusCondition*>(condition);
+
+            // Check if the triggered condition is a status condition.
+            // If it is, process it and notify the changes to the main thread
+            if (status_condition)
+            {
+                Entity* entity = status_condition->get_entity();
+                StatusMask status_changes = entity->get_status_changes();
+
+                if (status_changes.is_active(StatusMask::publication_matched()))
+                {
+                    std::cout << "TCPReplier: Processing publication matched status" << std::endl;
+
+                    DataWriter* writer = dynamic_cast<DataWriter*>(entity);
+                    ASSERT_NE(writer, nullptr);
+                    ASSERT_EQ(writer, replier_->get_replier_writer());
+
+                    PublicationMatchedStatus status;
+                    if (RETCODE_OK != writer->get_publication_matched_status(status))
+                    {
+                        std::cout << "TCPReplier: Error processing publication matched status" << std::endl;
+                        continue;
+                    }
+
+                    if (status.current_count_change > 0)
+                    {
+                        matched();
+                    }
+                    else if (status.current_count_change < 0)
+                    {
+                        unmatched();
+                    }
+                }
+                else if (status_changes.is_active(StatusMask::subscription_matched()))
+                {
+                    std::cout << "TCPReplier: Processing subscription matched status" << std::endl;
+
+                    DataReader* reader = dynamic_cast<DataReader*>(entity);
+                    ASSERT_NE(reader, nullptr);
+                    ASSERT_EQ(reader, replier_->get_replier_reader());
+
+                    SubscriptionMatchedStatus status;
+                    if (RETCODE_OK != reader->get_subscription_matched_status(status))
+                    {
+                        std::cout << "TCPReplier: Error processing subscription matched status" << std::endl;
+                        continue;
+                    }
+
+                    if (status.current_count_change > 0)
+                    {
+                        matched();
+                    }
+                    else if (status.current_count_change < 0)
+                    {
+                        unmatched();
+                    }
+                }
+                else if (status_changes.is_active(StatusMask::data_available()))
+                {
+                    std::cout << "TCPReplier: Processing data available status" << std::endl;
+
+                    DataReader* reader = dynamic_cast<DataReader*>(entity);
+                    ASSERT_NE(reader, nullptr);
+                    ASSERT_EQ(reader, replier_->get_replier_reader());
+
+                    HelloWorld hello;
+                    RequestInfo info;
+
+                    while (RETCODE_OK == replier_->take_request((void*)&hello, info))
+                    {
+                        if (info.valid_data)
+                        {
+                            ASSERT_EQ(hello.message().compare("HelloWorld"), 0);
+                            newNumber(info, hello.index());
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+ReplierQos TCPReqRepHelloWorldReplier::create_replier_qos()
+{
+    ReplierQos replier_qos;
+    TCPReqRepHelloWorldService service;
+
+    DataWriterQos& writer_qos = replier_qos.writer_qos;
+    DataReaderQos& reader_qos = replier_qos.reader_qos;
+
+    reader_qos.endpoint().history_memory_policy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+    writer_qos.endpoint().history_memory_policy = PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+
+    //Increase default max_blocking_time to 1s in case the CPU is overhead
+    reader_qos.reliability().max_blocking_time = Duration_t(1, 0);
+    writer_qos.reliability().max_blocking_time = Duration_t(1, 0);
+
+    return replier_qos;
 }

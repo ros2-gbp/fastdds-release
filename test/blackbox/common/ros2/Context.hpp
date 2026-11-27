@@ -26,6 +26,7 @@
 
 #include <gtest/gtest.h>
 
+#include <fastdds/dds/core/detail/DDSReturnCode.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -44,14 +45,13 @@
 #include <fastdds/dds/topic/qos/TopicQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastdds/rtps/common/Time_t.h>
-#include <fastrtps/types/TypesBase.h>
+#include <fastdds/rtps/common/Time_t.hpp>
 
 #include "./DataReaderHolder.hpp"
 #include "./DataWriterHolder.hpp"
 #include "./TopicHolder.hpp"
 #include "../BlackboxTests.hpp"
-#include "../../types/HelloWorldPubSubTypes.h"
+#include "../../types/HelloWorldPubSubTypes.hpp"
 
 namespace eprosima {
 namespace testing {
@@ -146,7 +146,7 @@ public:
         topic_holder = topics_[topic_name];
         if (!topic_holder)
         {
-            EXPECT_EQ(ReturnCode_t::RETCODE_OK, type_support.register_type(participant_, type_name));
+            EXPECT_EQ(RETCODE_OK, type_support.register_type(participant_, type_name));
             auto topic = participant_->create_topic("testing/" + topic_name, type_name, TOPIC_QOS_DEFAULT);
             ASSERT_NE(nullptr, topic);
             topic_holder = std::make_shared<TopicHolder>(participant_, topic);

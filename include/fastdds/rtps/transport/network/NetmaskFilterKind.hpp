@@ -16,12 +16,12 @@
  * @file NetmaskFilterKind.hpp
  */
 
-#ifndef _FASTDDS_RTPS_TRANSPORT_NETWORK_NETMASKFILTER_HPP_
-#define _FASTDDS_RTPS_TRANSPORT_NETWORK_NETMASKFILTER_HPP_
+#ifndef FASTDDS_RTPS_TRANSPORT_NETWORK__NETMASKFILTERKIND_HPP
+#define FASTDDS_RTPS_TRANSPORT_NETWORK__NETMASKFILTERKIND_HPP
 
 #include <ostream>
 
-#include <fastrtps/fastrtps_dll.h>
+#include <fastdds/fastdds_dll.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -34,7 +34,7 @@ enum class NetmaskFilterKind
     ON
 };
 
-RTPS_DllAPI std::ostream& operator <<(
+FASTDDS_EXPORTED_API std::ostream& operator <<(
         std::ostream& output,
         const NetmaskFilterKind& netmask_filter_kind);
 
@@ -42,4 +42,4 @@ RTPS_DllAPI std::ostream& operator <<(
 } // namespace fastdds
 } // namespace eprosima
 
-#endif // _FASTDDS_RTPS_TRANSPORT_NETWORK_NETMASKFILTER_HPP_
+#endif // FASTDDS_RTPS_TRANSPORT_NETWORK__NETMASKFILTERKIND_HPP

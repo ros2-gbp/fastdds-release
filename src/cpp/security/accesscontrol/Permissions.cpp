@@ -16,23 +16,10 @@
  * @file Permissions.cpp
  */
 
-#include <security/accesscontrol/Permissions.h>
-#include <security/accesscontrol/AccessPermissionsHandle.h>
-#include <security/accesscontrol/GovernanceParser.h>
-#include <security/accesscontrol/PermissionsParser.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <security/logging/LogTopic.h>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastdds/rtps/security/exceptions/SecurityException.h>
-#include <fastdds/rtps/attributes/RTPSParticipantAttributes.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
-#include <fastdds/rtps/security/authentication/Authentication.h>
-#include <fastrtps/utils/StringMatching.h>
-#include <fastdds/rtps/builtin/data/WriterProxyData.h>
-#include <fastdds/rtps/builtin/data/ReaderProxyData.h>
+#include <cassert>
+#include <fstream>
 
 #include <openssl/opensslv.h>
-
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
 #define OPENSSL_CONST const
@@ -45,20 +32,34 @@
 #include <openssl/err.h>
 #include <openssl/obj_mac.h>
 
-#include <security/artifact_providers/FileProvider.hpp>
-#include <security/accesscontrol/DistinguishedName.h>
+#include <fastdds/rtps/attributes/RTPSParticipantAttributes.hpp>
 
-#include <cassert>
-#include <fstream>
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/builtin/data/ReaderProxyData.hpp>
+#include <rtps/builtin/data/WriterProxyData.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/security/authentication/Authentication.h>
+#include <rtps/security/exceptions/SecurityException.h>
+#include <security/accesscontrol/AccessPermissionsHandle.h>
+#include <security/accesscontrol/DistinguishedName.h>
+#include <security/accesscontrol/GovernanceParser.h>
+#include <security/accesscontrol/Permissions.h>
+#include <security/accesscontrol/PermissionsParser.h>
+#include <security/artifact_providers/FileProvider.hpp>
+#include <security/authentication/PKIIdentityHandle.h>
+#include <security/logging/LogTopic.h>
+#include <utils/StringMatching.hpp>
 
 #define S1(x) #x
 #define S2(x) S1(x)
 #define LOCATION " (" __FILE__ ":" S2(__LINE__) ")"
 #define _SecurityException_(str) SecurityException(std::string(str) + LOCATION)
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using namespace security;
 
 /**
  * @brief Convert a signature algortihm before adding it to a PermissionsToken.
@@ -1281,7 +1282,7 @@ bool Permissions::check_remote_datawriter(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = publication_data.topicName().c_str();
+    const char* topic_name = publication_data.topic_name.c_str();
 
     if (rah.nil())
     {
@@ -1303,7 +1304,7 @@ bool Permissions::check_remote_datawriter(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + publication_data.topicName().to_string());
+            "Not found topic access rule for topic " + publication_data.topic_name.to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1314,7 +1315,7 @@ bool Permissions::check_remote_datawriter(
         {
             if (is_topic_in_criterias(topic_name, rule.publishes))
             {
-                returned_value = check_rule(topic_name, rule, publication_data.m_qos.m_partition.getNames(),
+                returned_value = check_rule(topic_name, rule, publication_data.partition.getNames(),
                                 rule.publishes, exception);
                 break;
             }
@@ -1342,7 +1343,7 @@ bool Permissions::check_remote_datareader(
 {
     bool returned_value = false;
     const AccessPermissionsHandle& rah = AccessPermissionsHandle::narrow(remote_handle);
-    const char* topic_name = subscription_data.topicName().c_str();
+    const char* topic_name = subscription_data.topic_name.c_str();
 
     relay_only = false;
 
@@ -1366,7 +1367,7 @@ bool Permissions::check_remote_datareader(
     else
     {
         exception = _SecurityException_(
-            "Not found topic access rule for topic " + subscription_data.topicName().to_string());
+            "Not found topic access rule for topic " + subscription_data.topic_name.to_string());
         EMERGENCY_SECURITY_LOGGING("Permissions", exception.what());
         return false;
     }
@@ -1375,7 +1376,7 @@ bool Permissions::check_remote_datareader(
     {
         if (is_domain_in_set(domain_id, rule.domains))
         {
-            const std::vector<std::string>& partitions = subscription_data.m_qos.m_partition.getNames();
+            const std::vector<std::string>& partitions = subscription_data.partition.getNames();
             if (is_topic_in_criterias(topic_name, rule.subscribes))
             {
                 returned_value = check_rule(topic_name, rule, partitions, rule.subscribes, exception);
@@ -1485,14 +1486,14 @@ bool Permissions::set_listener(
 }
 
 void Permissions::set_event_resource(
-        eprosima::fastrtps::rtps::ResourceEvent& service)
+        eprosima::fastdds::rtps::ResourceEvent& service)
 {
     event_resource_ = &service;
 }
 
 void Permissions::drain_expired_timers()
 {
-    std::vector<std::unique_ptr<eprosima::fastrtps::rtps::TimedEvent>> reaped;
+    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> reaped;
     {
         std::lock_guard<std::mutex> lock(expired_timers_mtx_);
         reaped.swap(expired_timers_);
@@ -1521,7 +1522,7 @@ void Permissions::arm_permissions_expiry(
     const double interval_ms = (ms <= 0) ? 1.0 : static_cast<double>(ms);
 
     AccessPermissionsHandle* phandle = &handle;
-    handle->expiry_event_.reset(new eprosima::fastrtps::rtps::TimedEvent(
+    handle->expiry_event_.reset(new eprosima::fastdds::rtps::TimedEvent(
                 *event_resource_,
                 [this, phandle]() -> bool
                 {
@@ -1545,3 +1546,7 @@ void Permissions::arm_permissions_expiry(
                 interval_ms));
     handle->expiry_event_->restart_timer();
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

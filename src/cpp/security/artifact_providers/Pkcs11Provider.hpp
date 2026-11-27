@@ -21,12 +21,20 @@
 
 #include <string>
 
-#include <openssl/types.h>
+#include <openssl/opensslv.h>
 
-#include <fastdds/rtps/security/exceptions/SecurityException.h>
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+#include <openssl/engine.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#else
+#include <openssl/types.h>
+#endif // if OPENSSL_VERSION_NUMBER < 0x30000000L
+
+#include <rtps/security/exceptions/SecurityException.h>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 namespace security {
 namespace detail {
@@ -60,7 +68,7 @@ private:
 } // namespace detail
 } //namespace security
 } //namespace rtps
-} //namespace fastrtps
+} //namespace fastdds
 } //namespace eprosima
 
 #endif  // _SECURITY_ARTIFACTPROVIDERS_PKCS11PROVIDER_HPP_

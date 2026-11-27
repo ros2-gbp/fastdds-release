@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format2.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>fastcdr</name>
-  <version>2.2.9</version>
+  <version>2.3.8</version>
   <description>
     *eProsima Fast CDR* is a C++ serialization library implementing the Common Data Representation (CDR) mechanism defined by the Object Management Group (OMG) consortium. CDR is the serialization mechanism used in DDS for the DDS Interoperability Wire Protocol (DDSI-RTPS).
   </description>
@@ -17,8 +17,7 @@
   <buildtool_depend>cmake</buildtool_depend>
   <doc_depend>doxygen</doc_depend>
 
-  <test_depend>ament_cmake_gtest</test_depend>
-  <test_depend>ament_cmake</test_depend>
+  <test_depend>libgtest-dev</test_depend>
 
   <export>
     <build_type>cmake</build_type>

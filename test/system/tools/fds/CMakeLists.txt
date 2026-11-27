@@ -37,6 +37,7 @@ if(Python3_Interpreter_FOUND)
         test_fast_discovery_several_server_ids
         test_fast_discovery_invalid_locator
         test_fast_discovery_non_existent_profile
+        test_fast_discovery_tcp_via_XML
     )
 
     if(SECURITY)
@@ -69,7 +70,7 @@ if(Python3_Interpreter_FOUND)
 
     # Calculate environment
     set(TEST_ENVIRONMENT
-        "PATH=$ENV{PATH};$<TARGET_FILE_DIR:fastcdr>;$<TARGET_FILE_DIR:fastrtps>")
+        "PATH=$ENV{PATH};$<TARGET_FILE_DIR:fastcdr>;$<TARGET_FILE_DIR:fastdds>")
 
     if(WIN32)
 
@@ -124,6 +125,37 @@ if(Python3_Interpreter_FOUND)
 
     configure_file("test_xml_discovery_server_profile.xml" "test_xml_discovery_server_profile.xml" COPYONLY)
     configure_file("test_wrong_xml_discovery_server_profile.xml" "test_wrong_xml_discovery_server_profile.xml" COPYONLY)
+    configure_file("test_xml_discovery_server_tcp.xml" "test_xml_discovery_server_tcp.xml" COPYONLY)
     unset(TEST_ENVIRONMENT)
 
 endif()
+
+# C++ Unittests
+set(CLI_MANAGER_TESTS_EXEC CliDiscoveryManagerTests)
+
+set(CLI_MANAGER_TESTS_SOURCE
+    CliDiscoveryManagerTests.cpp
+    ${PROJECT_SOURCE_DIR}/tools/fds/CliDiscoveryManager.cpp
+    )
+
+add_executable(${CLI_MANAGER_TESTS_EXEC} ${CLI_MANAGER_TESTS_SOURCE})
+
+target_compile_definitions(${CLI_MANAGER_TESTS_EXEC}
+    PRIVATE FAST_SERVER_VERSION=\"${PROJECT_VERSION}\"
+    PRIVATE FAST_SERVER_BINARY=\"$<TARGET_FILE_NAME:${PROJECT_NAME}>\" )
+
+target_include_directories( ${CLI_MANAGER_TESTS_EXEC} PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_BINARY_DIR}/include
+    ${PROJECT_SOURCE_DIR}/tools/fds
+    )
+
+target_link_libraries(
+    ${CLI_MANAGER_TESTS_EXEC}
+    fastdds
+    fastcdr
+    fastdds::optionparser
+    GTest::gtest
+    ${CMAKE_DL_LIBS})
+
+gtest_discover_tests(${CLI_MANAGER_TESTS_EXEC})

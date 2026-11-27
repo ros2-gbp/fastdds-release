@@ -19,10 +19,10 @@
 
 #include <gtest/gtest.h>
 
-#include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
-#include <fastdds/rtps/transport/UDPv6TransportDescriptor.h>
-#include <fastrtps/log/Log.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/dds/log/Log.hpp>
+#include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
+#include <fastdds/rtps/transport/UDPv6TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 #include "BlackboxTests.hpp"
 #include "DatagramInjectionTransport.hpp"
@@ -30,8 +30,8 @@
 #include "PubSubWriter.hpp"
 #include "UDPMessageSender.hpp"
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 namespace {
 enum communication_type
@@ -72,11 +72,11 @@ public:
     {
         if (use_udpv4)
         {
-            eprosima::fastrtps::rtps::IPFinder::getIP4Address(loc);
+            eprosima::fastdds::rtps::IPFinder::getIP4Address(loc);
         }
         else
         {
-            eprosima::fastrtps::rtps::IPFinder::getIP6Address(loc);
+            eprosima::fastdds::rtps::IPFinder::getIP6Address(loc);
         }
     }
 
@@ -129,7 +129,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P3)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -160,7 +160,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P0_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -191,7 +191,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_4_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -221,7 +221,7 @@ TEST_P(TransportUDP, UDPMaxInitialPeer_P5_6_P4)
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
 
     // Disallow multicast discovery
-    eprosima::fastrtps::rtps::LocatorList_t loc;
+    eprosima::fastdds::rtps::LocatorList_t loc;
     get_ip_address(&loc);
 
     if (!use_udpv4)
@@ -391,7 +391,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipant)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipant)
 {
-    Log::SetVerbosity(Log::Kind::Warning);
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -468,7 +468,7 @@ TEST_P(TransportUDP, DefaultMulticastLocatorsParticipantZeroPort)
 // Checking correct copying of participant metatraffic locators to the datawriters/datatreaders
 TEST_P(TransportUDP, MetatrafficMulticastLocatorsParticipantZeroPort)
 {
-    Log::SetVerbosity(Log::Kind::Warning);
+    eprosima::fastdds::dds::Log::SetVerbosity(eprosima::fastdds::dds::Log::Kind::Warning);
 
     size_t writer_samples = 5;
 
@@ -593,8 +593,8 @@ TEST(TransportUDP, MaliciousManipulatedDataOctetsToNextHeaderIgnore)
 
     // Set common QoS
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+            .history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
 
     // Set custom reader locator so we can send malicious data to a known location
     Locator_t reader_locator;
@@ -1485,7 +1485,7 @@ TEST(TransportUDP, MaliciousDataFragZeroFragmentSizeStaleMemory)
 
     // Set common QoS. PREALLOCATED forces reuse of the buffer freed by the legitimate sample
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .mem_policy(eprosima::fastrtps::rtps::PREALLOCATED_MEMORY_MODE)
+            .mem_policy(eprosima::fastdds::rtps::PREALLOCATED_MEMORY_MODE)
             .datasharing_off()
             .history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
@@ -1582,7 +1582,7 @@ TEST(TransportUDP, MaliciousDataFragReuseHeapOverflow)
 
     // BEST_EFFORT selects the StatelessReader; DYNAMIC_RESERVE sizes the buffer to sample_size
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .mem_policy(eprosima::fastrtps::rtps::DYNAMIC_RESERVE_MEMORY_MODE)
+            .mem_policy(eprosima::fastdds::rtps::DYNAMIC_RESERVE_MEMORY_MODE)
             .datasharing_off()
             .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS);
     writer.reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS);
@@ -1677,7 +1677,7 @@ TEST(TransportUDP, MaliciousDataFragTinySampleHeapOverflow)
 
     // DYNAMIC_RESERVE sizes the buffer to sample_size, yielding a sub-4-byte reassembly buffer
     reader.disable_builtin_transport().add_user_transport_to_pparams(udp_transport)
-            .mem_policy(eprosima::fastrtps::rtps::DYNAMIC_RESERVE_MEMORY_MODE)
+            .mem_policy(eprosima::fastdds::rtps::DYNAMIC_RESERVE_MEMORY_MODE)
             .datasharing_off()
             .reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS);
     writer.reliability(eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS);

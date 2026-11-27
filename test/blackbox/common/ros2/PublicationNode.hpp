@@ -22,6 +22,7 @@
 
 #include <gtest/gtest.h>
 
+#include <fastdds/dds/core/detail/DDSReturnCode.hpp>
 #include <fastdds/dds/core/policy/QosPolicies.hpp>
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/dds/publisher/DataWriterListener.hpp>
@@ -29,7 +30,6 @@
 #include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
-#include <fastrtps/types/TypesBase.h>
 
 #include "./Context.hpp"
 #include "./DataWriterHolder.hpp"

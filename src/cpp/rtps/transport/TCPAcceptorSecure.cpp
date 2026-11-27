@@ -17,14 +17,14 @@
 #include <chrono>
 
 #include <asio/steady_timer.hpp>
-#include <fastrtps/utils/IPLocator.h>
+#include <fastdds/utils/IPLocator.hpp>
 #include <rtps/transport/TCPTransportInterface.h>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
 
-using Locator_t = fastrtps::rtps::Locator_t;
+using Locator_t = fastdds::rtps::Locator_t;
 using Log = fastdds::dds::Log;
 
 using namespace asio;
@@ -114,5 +114,5 @@ void TCPAcceptorSecure::accept(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

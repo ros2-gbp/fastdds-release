@@ -25,9 +25,9 @@
 #include <fastdds/rtps/common/LocatorWithMask.hpp>
 #include <fastdds/rtps/transport/network/AllowedNetworkInterface.hpp>
 #include <fastdds/rtps/transport/network/NetmaskFilterKind.hpp>
-#include <fastdds/rtps/transport/TransportInterface.h>
-#include <fastdds/rtps/transport/UDPTransportDescriptor.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/rtps/transport/UDPTransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
 #include <rtps/transport/UDPChannelResource.h>
 #include <statistics/rtps/messages/OutputTrafficManager.hpp>
@@ -64,7 +64,7 @@ public:
     virtual const UDPTransportDescriptor* configuration() const = 0;
 
     bool init(
-            const fastrtps::rtps::PropertyPolicy* properties = nullptr,
+            const PropertyPolicy* properties = nullptr,
             const uint32_t& max_msg_size_no_frag = 0) override;
 
     //! Checks whether there are open and bound sockets for the given port.
@@ -90,7 +90,7 @@ public:
      */
     bool OpenOutputChannels(
             SendResourceList& sender_resource_list,
-            const fastrtps::rtps::LocatorSelectorEntry& locator_selector_entry) override;
+            const LocatorSelectorEntry& locator_selector_entry) override;
 
     /**
      * Converts a given remote locator (that is, a locator referring to a remote
@@ -123,8 +123,8 @@ public:
      * Blocking Send through the specified channel. In both modes, using a localLocator of 0.0.0.0 will
      * send through all whitelisted interfaces provided the channel is open.
      *
-     * @param send_buffer Slice into the raw data to send.
-     * @param send_buffer_size Size of the raw data. It will be used as a bounds check for the previous argument.
+     * @param buffers Vector of buffers to send.
+     * @param total_bytes Total amount of bytes to send. It will be used as a bounds check for the previous argument.
      * It must not exceed the send_buffer_size fed to this class during construction.
      * @param socket channel we're sending from.
      * @param destination_locators_begin pointer to destination locators iterator begin, the iterator can be advanced inside this fuction
@@ -138,11 +138,11 @@ public:
      * @pre Open the output channel of each remote locator by invoking \ref OpenOutputChannel function.
      */
     virtual bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
             eProsimaUDPSocket& socket,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end,
             bool only_multicast_purpose,
             bool whitelisted,
             const std::chrono::steady_clock::time_point& max_blocking_time_point);
@@ -161,7 +161,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            fastrtps::rtps::LocatorSelector& selector) const override;
+            LocatorSelector& selector) const override;
 
     bool fillMetatrafficMulticastLocator(
             Locator& locator,
@@ -173,7 +173,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator& locator,
-            const fastrtps::rtps::PortParameters& port_params,
+            const PortParameters& port_params,
             uint32_t domainId,
             LocatorList& list) const override;
 
@@ -243,7 +243,7 @@ protected:
             uint16_t port) = 0;
     virtual asio::ip::udp generate_protocol() const = 0;
     virtual bool get_ips(
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback,
             bool force_lookup) const = 0;
     virtual const std::string& localhost_name() = 0;
@@ -293,11 +293,11 @@ protected:
             const std::string&) = 0;
 
     /**
-     * Send a buffer to a destination
+     * Send a Vector of buffers to a destination
      */
     bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
             eProsimaUDPSocket& socket,
             const Locator& remote_locator,
             bool only_multicast_purpose,
@@ -313,7 +313,7 @@ protected:
      */
     void get_unknown_network_interfaces(
             const SendResourceList& sender_resource_list,
-            std::vector<fastrtps::rtps::IPFinder::info_IP>& locNames,
+            std::vector<fastdds::rtps::IPFinder::info_IP>& locNames,
             bool return_loopback = false);
 
     std::atomic_bool rescan_interfaces_ = {true};

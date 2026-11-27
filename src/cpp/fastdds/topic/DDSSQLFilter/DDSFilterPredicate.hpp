@@ -56,9 +56,9 @@ public:
     /**
      * Construct a DDSFilterPredicate.
      *
-     * @param[in]  op     Operation to perform.
-     * @param[in]  left   Left operand.
-     * @param[in]  right  Right operand.
+     * @param [in]  op     Operation to perform.
+     * @param [in]  left   Left operand.
+     * @param [in]  right  Right operand.
      */
     DDSFilterPredicate(
             OperationKind op,

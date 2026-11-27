@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fastdds/rtps/transport/TransportInterface.h>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
 
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 
 namespace eprosima {
 namespace fastdds {
 namespace rtps {
-
-using LocatorSelectorEntry = fastrtps::rtps::LocatorSelectorEntry;
 
 bool TransportInterface::OpenOutputChannels(
         SendResourceList& send_resource_list,
@@ -42,12 +40,12 @@ bool TransportInterface::OpenOutputChannels(
 
 void TransportInterface::CloseOutputChannels(
         SendResourceList& sender_resource_list,
-        const fastrtps::rtps::LocatorSelectorEntry& locator_selector_entry)
+        const LocatorSelectorEntry& locator_selector_entry)
 {
     static_cast<void>(sender_resource_list);
     static_cast<void>(locator_selector_entry);
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima

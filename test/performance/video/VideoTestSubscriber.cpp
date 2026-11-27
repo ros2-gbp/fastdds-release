@@ -18,19 +18,20 @@
  */
 #include "VideoTestSubscriber.hpp"
 
+#include "VideoTestSubscriber.hpp"
+
 #include <cmath>
 #include <fstream>
 #include <numeric>
 #include <thread>
 
+#include <fastdds/dds/log/Colors.hpp>
 #include <fastdds/dds/log/Log.hpp>
-#include <fastrtps/log/Colors.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
 #include <gtest/gtest.h>
 
 using namespace eprosima;
 using namespace eprosima::fastdds::dds;
-using namespace eprosima::fastrtps;
+using namespace eprosima::fastdds;
 
 using std::cout;
 using std::endl;
@@ -121,8 +122,8 @@ void VideoTestSubscriber::init(
         bool reliable,
         uint32_t pid,
         bool hostname,
-        const eprosima::fastrtps::rtps::PropertyPolicy& part_property_policy,
-        const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
+        const eprosima::fastdds::rtps::PropertyPolicy& part_property_policy,
+        const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
         bool large_data,
         const std::string& sXMLConfigFile,
         bool export_csv,
@@ -187,8 +188,8 @@ void VideoTestSubscriber::init(
     TypeSupport command_type;
     video_type.reset(new VideoDataType());
     command_type.reset(new TestCommandDataType());
-    ASSERT_EQ(mp_participant->register_type(video_type), ReturnCode_t::RETCODE_OK);
-    ASSERT_EQ(mp_participant->register_type(command_type), ReturnCode_t::RETCODE_OK);
+    ASSERT_EQ(mp_participant->register_type(video_type), RETCODE_OK);
+    ASSERT_EQ(mp_participant->register_type(command_type), RETCODE_OK);
 
     // Create Data Subscriber
     std::string profile_name = "subscriber_profile";
@@ -231,7 +232,7 @@ void VideoTestSubscriber::init(
     if (large_data)
     {
         datareader_qos_data.endpoint().history_memory_policy =
-                eprosima::fastrtps::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
+                eprosima::fastdds::rtps::PREALLOCATED_WITH_REALLOC_MEMORY_MODE;
     }
 
     mp_data_dr = mp_datasub->create_datareader(mp_video_topic, datareader_qos_data, &this->m_datasublistener);
@@ -366,7 +367,7 @@ void VideoTestSubscriber::CommandSubListener::on_data_available(
 {
     SampleInfo info;
     TestCommandType command;
-    if (ReturnCode_t::RETCODE_OK == datareader->take_next_sample((void*)&command, &info))
+    if (RETCODE_OK == datareader->take_next_sample((void*)&command, &info))
     {
         if (info.valid_data)
         {

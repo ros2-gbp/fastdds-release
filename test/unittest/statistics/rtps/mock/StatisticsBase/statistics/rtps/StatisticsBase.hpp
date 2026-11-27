@@ -24,11 +24,11 @@
 #include <mutex>
 #include <set>
 
-#include <fastrtps/config.h>
+#include <fastdds/config.hpp>
+#include <fastdds/rtps/common/Guid.hpp>
+#include <fastdds/rtps/common/Locator.hpp>
 
-
-#include <statistics/types/types.h>
-
+#include <statistics/types/types.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -37,28 +37,28 @@ namespace statistics {
 #ifdef FASTDDS_STATISTICS
 
 // auxiliary conversion functions
-detail::Locator_s to_statistics_type(
-        fastrtps::rtps::Locator_t locator)
+inline detail::Locator_s to_statistics_type(
+        fastdds::rtps::Locator_t locator)
 {
     return *reinterpret_cast<detail::Locator_s*>(&locator);
 }
 
-fastrtps::rtps::Locator_t to_fastdds_type(
+inline fastdds::rtps::Locator_t to_fastdds_type(
         detail::Locator_s locator)
 {
-    return *reinterpret_cast<fastrtps::rtps::Locator_t*>(&locator);
+    return *reinterpret_cast<fastdds::rtps::Locator_t*>(&locator);
 }
 
-detail::GUID_s to_statistics_type(
-        fastrtps::rtps::GUID_t guid)
+inline detail::GUID_s to_statistics_type(
+        fastdds::rtps::GUID_t guid)
 {
     return *reinterpret_cast<detail::GUID_s*>(&guid);
 }
 
-fastrtps::rtps::GUID_t to_fastdds_type(
+inline fastdds::rtps::GUID_t to_fastdds_type(
         detail::GUID_s guid)
 {
-    return *reinterpret_cast<fastrtps::rtps::GUID_t*>(&guid);
+    return *reinterpret_cast<fastdds::rtps::GUID_t*>(&guid);
 }
 
 #endif // FASTDDS_STATISTICS

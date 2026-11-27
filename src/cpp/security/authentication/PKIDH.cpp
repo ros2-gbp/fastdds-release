@@ -18,19 +18,23 @@
 
 // TODO This isn't a proper fix for compatibility with OpenSSL 3.0, but
 // suppresses the warnings until true OpenSSL 3.0 APIs can be used.
+#ifdef OPENSSL_API_COMPAT
+#undef OPENSSL_API_COMPAT
+#endif // ifdef OPENSSL_API_COMPAT
 #define OPENSSL_API_COMPAT 10101
 
 #include <security/authentication/PKIDH.h>
-#include <security/authentication/PKIIdentityHandle.h>
-#include <fastdds/rtps/security/logging/Logging.h>
-#include <fastdds/dds/log/Log.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
-#include <fastdds/rtps/builtin/data/ParticipantProxyData.h>
-#include <fastdds/rtps/resources/TimedEvent.h>
 
 #include <openssl/opensslv.h>
 
 #include <fastdds/core/policy/ParameterList.hpp>
+#include <fastdds/dds/log/Log.hpp>
+
+#include <rtps/builtin/data/ParticipantProxyData.hpp>
+#include <rtps/resources/TimedEvent.h>
+#include <rtps/security/logging/Logging.h>
+#include <rtps/messages/CDRMessage.hpp>
+#include <security/authentication/PKIIdentityHandle.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 #define IS_OPENSSL_1_1 1
@@ -63,9 +67,11 @@
 #define LOCATION " (" __FILE__ ":" S2(__LINE__) ")"
 #define _SecurityException_(str) SecurityException(std::string(str) + LOCATION)
 
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
+
+using namespace security;
 
 using ParameterList = eprosima::fastdds::dds::ParameterList;
 
@@ -504,7 +510,7 @@ static bool adjust_participant_key(
 {
     assert(cert != nullptr);
 
-    X509_NAME* cert_sn = X509_get_subject_name(cert);
+    const X509_NAME* cert_sn = X509_get_subject_name(cert);
     assert(cert_sn != nullptr);
 
     unsigned char md[SHA256_DIGEST_LENGTH];
@@ -1121,7 +1127,7 @@ ValidationResult_t PKIDH::validate_local_identity(
         password = &empty_password;
     }
 
-    std::string key_agreement_algorithm = DH_2048_256;
+    std::string key_agreement_algorithm = "AUTO";
     std::string* key_agreement_property =
             PropertyPolicyHelper::find_property(auth_properties, "preferred_key_agreement");
     if (nullptr != key_agreement_property)
@@ -1200,7 +1206,7 @@ ValidationResult_t PKIDH::validate_local_identity(
         if ((*ih)->cert_ != nullptr)
         {
             // Get subject name.
-            X509_NAME* cert_sn = X509_get_subject_name((*ih)->cert_);
+            const X509_NAME* cert_sn = X509_get_subject_name((*ih)->cert_);
             assert(cert_sn != nullptr);
             char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
             assert(cert_sn_str != nullptr);
@@ -1512,7 +1518,7 @@ ValidationResult_t PKIDH::begin_handshake_reply(
         return ValidationResult_t::VALIDATION_FAILED;
     }
 
-    X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
+    const X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
     assert(cert_sn != nullptr);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     assert(cert_sn_str != nullptr);
@@ -1942,7 +1948,7 @@ ValidationResult_t PKIDH::process_handshake_request(
         return ValidationResult_t::VALIDATION_FAILED;
     }
 
-    X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
+    const X509_NAME* cert_sn = X509_get_subject_name(rih->cert_);
     assert(cert_sn != nullptr);
     char* cert_sn_str = X509_NAME_oneline(cert_sn, 0, 0);
     assert(cert_sn_str != nullptr);
@@ -2616,14 +2622,14 @@ std::chrono::system_clock::time_point PKIDH::get_identity_expiration(
 }
 
 void PKIDH::set_event_resource(
-        eprosima::fastrtps::rtps::ResourceEvent& service)
+        eprosima::fastdds::rtps::ResourceEvent& service)
 {
     event_resource_ = &service;
 }
 
 void PKIDH::drain_expired_timers()
 {
-    std::vector<std::unique_ptr<eprosima::fastrtps::rtps::TimedEvent>> reaped;
+    std::vector<std::unique_ptr<eprosima::fastdds::rtps::TimedEvent>> reaped;
     {
         std::lock_guard<std::mutex> lock(expired_timers_mtx_);
         reaped.swap(expired_timers_);
@@ -2656,7 +2662,7 @@ void PKIDH::arm_identity_expiry(
     const double interval_ms = (ms <= 0) ? 1.0 : static_cast<double>(ms);
 
     PKIIdentityHandle* ihandle = &handle;
-    (*handle)->expiry_event_.reset(new eprosima::fastrtps::rtps::TimedEvent(
+    (*handle)->expiry_event_.reset(new eprosima::fastdds::rtps::TimedEvent(
                 *event_resource_,
                 [this, ihandle]() -> bool
                 {
@@ -2845,3 +2851,7 @@ bool PKIDH::check_guid_comes_from(
     return adjusted == original;
 
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

@@ -17,16 +17,16 @@
  *
  */
 
-#ifndef FASTRTPS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_
-#define FASTRTPS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_
+#ifndef FASTDDS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_
+#define FASTDDS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
 
-#include <fastdds/rtps/attributes/HistoryAttributes.h>
-#include <fastrtps/utils/collections/ResourceLimitedContainerConfig.hpp>
+#include <fastdds/rtps/attributes/HistoryAttributes.hpp>
+#include <fastdds/utils/collections/ResourceLimitedContainerConfig.hpp>
 
 namespace eprosima {
-namespace fastrtps {
+namespace fastdds {
 namespace rtps {
 
 static inline ResourceLimitedContainerConfig resource_limits_from_history(
@@ -65,8 +65,8 @@ static constexpr int32_t get_min_max_samples(
 }
 
 } // namespace rtps
-} // namespace fastrtps
+} // namespace fastdds
 } // namespace eprosima
 
 #endif // DOXYGEN_SHOULD_SKIP_THIS_PUBLIC
-#endif // FASTRTPS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_
+#endif // FASTDDS_RTPS_HISTORY_HISTORYATTRIBUTESEXTENSION_HPP_

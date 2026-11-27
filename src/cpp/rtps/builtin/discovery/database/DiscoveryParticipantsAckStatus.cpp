@@ -33,20 +33,20 @@ namespace rtps {
 namespace ddb {
 
 void DiscoveryParticipantsAckStatus::add_or_update_participant(
-        const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p,
+        const GuidPrefix_t& guid_p,
         ParticipantState status = ParticipantState::PENDING_SEND)
 {
     relevant_participants_map_[guid_p] = status;
 }
 
 void DiscoveryParticipantsAckStatus::remove_participant(
-        const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p)
+        const GuidPrefix_t& guid_p)
 {
     relevant_participants_map_.erase(guid_p);
 }
 
 bool DiscoveryParticipantsAckStatus::is_waiting_ack(
-        const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const
+        const GuidPrefix_t& guid_p) const
 {
     auto it = relevant_participants_map_.find(guid_p);
     if (it != relevant_participants_map_.end())
@@ -57,7 +57,7 @@ bool DiscoveryParticipantsAckStatus::is_waiting_ack(
 }
 
 bool DiscoveryParticipantsAckStatus::is_matched(
-        const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const
+        const GuidPrefix_t& guid_p) const
 {
     auto it = relevant_participants_map_.find(guid_p);
     if (it != relevant_participants_map_.end())
@@ -76,7 +76,7 @@ void DiscoveryParticipantsAckStatus::unmatch_all()
 }
 
 bool DiscoveryParticipantsAckStatus::is_relevant_participant(
-        const eprosima::fastrtps::rtps::GuidPrefix_t& guid_p) const
+        const GuidPrefix_t& guid_p) const
 {
     auto it = relevant_participants_map_.find(guid_p);
     if (it == relevant_participants_map_.end())
@@ -86,9 +86,9 @@ bool DiscoveryParticipantsAckStatus::is_relevant_participant(
     return true;
 }
 
-std::vector<eprosima::fastrtps::rtps::GuidPrefix_t> DiscoveryParticipantsAckStatus::relevant_participants() const
+std::vector<GuidPrefix_t> DiscoveryParticipantsAckStatus::relevant_participants() const
 {
-    std::vector<eprosima::fastrtps::rtps::GuidPrefix_t> res;
+    std::vector<GuidPrefix_t> res;
     for (auto it = relevant_participants_map_.begin(); it != relevant_participants_map_.end(); ++it)
     {
         res.push_back(it->first);

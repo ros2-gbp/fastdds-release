@@ -20,7 +20,7 @@
 
 #include <fastdds/dds/log/Log.hpp>
 #include <fastdds/rtps/common/CdrSerialization.hpp>
-#include <fastdds/rtps/messages/CDRMessage.h>
+#include <rtps/messages/CDRMessage.hpp>
 
 #include <openssl/aes.h>
 #include <openssl/evp.h>
@@ -38,17 +38,11 @@
 #undef max
 #endif // ifdef WIN32
 
-#if FASTCDR_VERSION_MAJOR == 1
-#define change_endianness changeEndianness
-#define get_serialized_data_length getSerializedDataLength
-#define get_state getState
-#define get_current_position getCurrentPosition
-#define get_buffer_pointer getBufferPointer
-#define set_state setState
-#endif // FASTCDR_VERSION_MAJOR == 1
+namespace eprosima {
+namespace fastdds {
+namespace rtps {
 
-using namespace eprosima::fastrtps::rtps;
-using namespace eprosima::fastrtps::rtps::security;
+using namespace security;
 
 constexpr int initialization_vector_suffix_length = 8;
 
@@ -1652,16 +1646,20 @@ bool AESGCMGMAC_Transform::serialize_SecureDataBody(
     if (!do_encryption)
     {
         // Auth only. SEC_BODY should not be created. Plain buffer should be copied instead.
+
+        // Account for padding to 4 bytes alignment
+        uint32_t final_aligned_len = submessage ? plain_buffer_len : (plain_buffer_len + 3) & ~3;
+        // Check output_buffer contains enough memory to copy the plain buffer and padding.
         if ((output_buffer.getBufferSize() - (serializer.get_current_position() - serializer.get_buffer_pointer())) <
-                plain_buffer_len)
+                final_aligned_len)
         {
             EPROSIMA_LOG_ERROR(SECURITY_CRYPTO, "Error in fastcdr trying to copy payload");
             EVP_CIPHER_CTX_free(e_ctx);
             return false;
         }
-        memcpy(serializer.get_current_position(), plain_buffer, plain_buffer_len);
-        serializer.jump(plain_buffer_len);
-
+        // Copy the plain buffer to the output buffer
+        serializer.serialize_array(plain_buffer, plain_buffer_len);
+        // Update the cipher context with the plain buffer to compute the authentication tag
         if (!EVP_EncryptUpdate(e_ctx, nullptr, &actual_size, plain_buffer, static_cast<int>(plain_buffer_len)))
         {
             EPROSIMA_LOG_ERROR(SECURITY_CRYPTO,
@@ -1670,6 +1668,23 @@ bool AESGCMGMAC_Transform::serialize_SecureDataBody(
             return false;
         }
 
+        // Add padding to the output buffer (also taken into account for the authentication tag)
+        uint32_t aligned_len = plain_buffer_len;
+        while (aligned_len < final_aligned_len)
+        {
+            uint8_t pad = 0;
+            serializer << pad;
+            if (!EVP_EncryptUpdate(e_ctx, nullptr, &actual_size, &pad, 1))
+            {
+                EPROSIMA_LOG_ERROR(SECURITY_CRYPTO,
+                        "Unable to encode the payload. EVP_EncryptUpdate function returns an error");
+                EVP_CIPHER_CTX_free(e_ctx);
+                return false;
+            }
+            aligned_len++;
+        }
+
+        // Finalize the encryption (no output is expected since we are not encrypting)
         if (!EVP_EncryptFinal(e_ctx, nullptr, &final_size))
         {
             EPROSIMA_LOG_ERROR(SECURITY_CRYPTO,
@@ -2358,11 +2373,6 @@ bool AESGCMGMAC_Transform::lookup_reader(
 
     for (auto& readerHandle : participant->Readers)
     {
-        if (!readerHandle)
-        {
-            continue;
-        }
-
         AESGCMGMAC_ReaderCryptoHandle& reader = AESGCMGMAC_ReaderCryptoHandle::narrow(*readerHandle);
 
         if (reader->Remote2EntityKeyMaterial.empty())
@@ -2394,11 +2404,6 @@ bool AESGCMGMAC_Transform::lookup_writer(
 
     for (auto& writerHandle : participant->Writers)
     {
-        if (!writerHandle)
-        {
-            continue;
-        }
-
         AESGCMGMAC_WriterCryptoHandle& writer = AESGCMGMAC_WriterCryptoHandle::narrow(*writerHandle);
 
         if (writer->Remote2EntityKeyMaterial.empty())
@@ -2419,3 +2424,7 @@ bool AESGCMGMAC_Transform::lookup_writer(
 
     return false;
 }
+
+} // namespace rtps
+} // namespace fastdds
+} // namespace eprosima

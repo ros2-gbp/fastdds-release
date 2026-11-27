@@ -17,14 +17,12 @@ if(WIN32)
 endif()
 
 set(FLOWCONTROLLER_COMMON_SOURCE
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/Log.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/OStreamConsumer.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/log/StdoutConsumer.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/fastdds/core/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/attributes/PropertyPolicy.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/LocatorWithMask.cpp
+    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/SerializedPayload.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/common/Time_t.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/flowcontrol/FlowControllerConsts.cpp
-    ${PROJECT_SOURCE_DIR}/src/cpp/rtps/flowcontrol/ThroughputControllerDescriptor.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/netmask_filter.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/network/utils/network.cpp
     ${PROJECT_SOURCE_DIR}/src/cpp/rtps/transport/network/NetmaskFilterKind.cpp
@@ -61,6 +59,7 @@ target_include_directories(FlowControllerFactoryTests PRIVATE
     )
 target_link_libraries(FlowControllerFactoryTests
     fastcdr
+    fastdds::log
     GTest::gmock
     )
 if(MSVC OR MSVC_IDE)
@@ -98,6 +97,7 @@ target_include_directories(FlowControllerPublishModesTests PRIVATE
     )
 target_link_libraries(FlowControllerPublishModesTests
     fastcdr
+    fastdds::log
     GTest::gmock
     )
 if(MSVC OR MSVC_IDE)
@@ -131,6 +131,7 @@ target_include_directories(FlowControllerSchedulersTests PRIVATE
     )
 target_link_libraries(FlowControllerSchedulersTests
     fastcdr
+    fastdds::log
     GTest::gmock
     )
 if(MSVC OR MSVC_IDE)

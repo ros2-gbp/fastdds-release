@@ -16,8 +16,8 @@
 
 #if HAVE_SECURITY
 
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -26,29 +26,24 @@
 
 #include <gtest/gtest.h>
 
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/log/Log.hpp>
+#include <fastdds/LibrarySettings.hpp>
 #include <fastdds/rtps/common/EntityId_t.hpp>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
-#include <fastrtps/xmlparser/XMLProfileManager.h>
-#include <fastrtps/utils/IPFinder.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
+#include <fastdds/rtps/transport/test_UDPv4TransportDescriptor.hpp>
+#include <fastdds/utils/IPFinder.hpp>
 
-#include <rtps/transport/test_UDPv4Transport.h>
-
+#include "../utils/filter_helpers.hpp"
+#include "PubSubParticipant.hpp"
 #include "PubSubReader.hpp"
 #include "PubSubWriter.hpp"
 #include "PubSubWriterReader.hpp"
-#include "PubSubParticipant.hpp"
 #include "UDPMessageSender.hpp"
 #include "DatagramInjectionTransport.hpp"
 
-#include "../utils/filter_helpers.hpp"
-
-using namespace eprosima::fastrtps;
-using namespace eprosima::fastrtps::rtps;
-using test_UDPv4Transport = eprosima::fastdds::rtps::test_UDPv4Transport;
-using test_UDPv4TransportDescriptor = eprosima::fastdds::rtps::test_UDPv4TransportDescriptor;
-using DatagramInjectionTransport = eprosima::fastdds::rtps::DatagramInjectionTransport;
-using DatagramInjectionTransportDescriptor = eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
+using namespace eprosima::fastdds;
+using namespace eprosima::fastdds::rtps;
 
 namespace {
 enum communication_type
@@ -256,12 +251,13 @@ public:
 
     void SetUp() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (std::get<0>(GetParam()))
         {
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_FULL;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_FULL;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -274,13 +270,14 @@ public:
 
     void TearDown() override
     {
-        LibrarySettingsAttributes library_settings;
+        eprosima::fastdds::LibrarySettings library_settings;
         switch (std::get<0>(GetParam()))
         {
             // Only need to tear down transports
             case INTRAPROCESS:
-                library_settings.intraprocess_delivery = IntraprocessDeliveryType::INTRAPROCESS_OFF;
-                xmlparser::XMLProfileManager::library_settings(library_settings);
+                library_settings.intraprocess_delivery = eprosima::fastdds::IntraprocessDeliveryType::INTRAPROCESS_OFF;
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->set_library_settings(
+                    library_settings);
                 break;
             case TRANSPORT:
             default:
@@ -551,7 +548,7 @@ TEST(Security, SecurityPlugins_basic_configuration_same_participant)
     fill_access(property_policy, "governance_only_auth.smime", "permissions.smime");
     fill_crypto(property_policy);
 
-    wreader.sub_history_depth(10).sub_reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    wreader.sub_history_depth(10).sub_reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
     wreader.pub_history_depth(10);
     wreader.property_policy(property_policy).init();
 
@@ -581,7 +578,7 @@ TEST(Security, SecurityPlugins_basic_configuration_validation_fail)
         PropertyPolicy pub_property_policy;
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
         ASSERT_TRUE(reader.isInitialized());
 
@@ -607,7 +604,7 @@ TEST(Security, SecurityPlugins_basic_configuration_validation_fail)
         fill_crypto(sub_property_policy);
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
                 property_policy(sub_property_policy).init();
 
         ASSERT_TRUE(reader.isInitialized());
@@ -633,7 +630,7 @@ TEST(Security, SecurityPlugins_basic_configuration_lossy_conditions)
     fill_crypto(sub_property_policy);
 
     reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).init();
 
     // To simulate lossy conditions, we are going to remove the default
@@ -718,7 +715,7 @@ TEST(Security, SecurityPlugins_basic_configuration_second_participant_creation_l
     // Prepare transport to check that the authentication message is sent
     auto transport = std::make_shared<test_UDPv4TransportDescriptor>();
     AuthMessageSendStatus auth_message_send_status;
-    transport->drop_data_messages_filter_ = [&auth_message_send_status](eprosima::fastrtps::rtps::CDRMessage_t& msg)
+    transport->drop_data_messages_filter_ = [&auth_message_send_status](eprosima::fastdds::rtps::CDRMessage_t& msg)
             -> bool
             {
                 auto old_pos = msg.pos;
@@ -727,11 +724,12 @@ TEST(Security, SecurityPlugins_basic_configuration_second_participant_creation_l
                 msg.pos += 2 + 2 + 4;
 
                 // Read writer entity id
-                eprosima::fastrtps::rtps::GUID_t writer_guid;
-                eprosima::fastrtps::rtps::CDRMessage::readEntityId(&msg, &writer_guid.entityId);
+                eprosima::fastdds::rtps::GUID_t writer_guid;
+                writer_guid.entityId = eprosima::fastdds::helpers::cdr_parse_entity_id(
+                    (char*)&msg.buffer[msg.pos]);
                 msg.pos = old_pos;
 
-                if (writer_guid.entityId == eprosima::fastrtps::rtps::participant_stateless_message_writer_entity_id)
+                if (writer_guid.entityId == eprosima::fastdds::rtps::participant_stateless_message_writer_entity_id)
                 {
                     auth_message_send_status.notify();
                 }
@@ -812,7 +810,7 @@ TEST(Security, SecurityPlugins_basic_configuration_ensure_same_guid_reconnection
     main_participant.property_policy(pub_property_policy).init();
     EXPECT_TRUE(main_participant.isInitialized());
 
-    eprosima::fastrtps::rtps::GuidPrefix_t guid_prefix;
+    eprosima::fastdds::rtps::GuidPrefix_t guid_prefix;
     memset(guid_prefix.value, 0xBB, sizeof(guid_prefix.value));
 
     // Perform a loop in which we create another participant, and destroy it just after it has been discovered.
@@ -975,7 +973,7 @@ TEST_P(Security, SecurityPlugins_Permissions_validation_fail_on_topic_wildcards)
         fill_crypto(sub_property_policy);
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
                 property_policy(sub_property_policy).init();
 
         fill_pub_auth(pub_property_policy);
@@ -1031,7 +1029,7 @@ TEST_P(Security, SecurityPlugins_Permissions_validation_fail_on_partition_wildca
         fill_crypto(sub_property_policy);
 
         reader.history_depth(10).
-                reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+                reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
                 property_policy(sub_property_policy).
                 partition("Partition1").init();
 
@@ -1065,13 +1063,13 @@ TEST_P(Security, SecurityPlugins_Permissions_validation_toggle_partition)
 
     // Initialize one reader on each partition
     reader_p_1.partition("Partition1").
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).
             init();
     ASSERT_TRUE(reader_p_1.isInitialized());
 
     reader_p_2.partition("Partition2").
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).
             init();
     ASSERT_TRUE(reader_p_2.isInitialized());
@@ -1155,7 +1153,7 @@ void prepare_pkcs11_nodes(
     fill_crypto(sub_property_policy);
 
     reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).init();
 
     pub_property_policy.properties().emplace_back(Property("dds.sec.auth.plugin",
@@ -1228,10 +1226,10 @@ TEST_P(Security, RemoveParticipantProxyDataonSecurityManagerLeaseExpired_validat
     //!Lambda for configuring publisher participant qos and security properties
     auto secure_participant_pub_configurator = [&governance_file,
                     &permissions_file](const std::shared_ptr<PubSubWriter<HelloWorldPubSubType>>& part,
-            const std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>& interface)
+            const std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>& transport_interface)
             {
                 part->lease_duration(3, 1);
-                part->disable_builtin_transport().add_user_transport_to_pparams(interface);
+                part->disable_builtin_transport().add_user_transport_to_pparams(transport_interface);
 
                 PropertyPolicy property_policy;
 
@@ -1247,10 +1245,10 @@ TEST_P(Security, RemoveParticipantProxyDataonSecurityManagerLeaseExpired_validat
     //!Lambda for configuring subscriber participant qos and security properties
     auto secure_participant_sub_configurator = [&governance_file,
                     &permissions_file](const std::shared_ptr<PubSubReader<HelloWorldPubSubType>>& part,
-            const std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>& interface)
+            const std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>& transport_interface)
             {
                 part->lease_duration(3, 1);
-                part->disable_builtin_transport().add_user_transport_to_pparams(interface);
+                part->disable_builtin_transport().add_user_transport_to_pparams(transport_interface);
 
                 PropertyPolicy property_policy;
 
@@ -1307,7 +1305,7 @@ TEST_P(Security, RemoveParticipantProxyDataonSecurityManagerLeaseExpired_validat
     std::cout << "Reader received at least two samples, shutting down publisher " << std::endl;
 
     //! 7.Simulate a force-quit (cntrl+c) on the publisher by dropping connection
-    test_UDPv4Transport::test_UDPv4Transport_ShutdownAllNetwork = true;
+    test_udptransport->test_transport_options->test_UDPv4Transport_ShutdownAllNetwork = true;
 
     bool pubsub_writer_undiscovered;
 
@@ -1330,8 +1328,8 @@ TEST(Security, SecureParticipantsDoNotLoseDiscoveryWithoutUserTraffic)
     const auto idle_timeout = std::chrono::seconds(6);
     const auto data_timeout = std::chrono::seconds(10);
     // Keep the lease short so loss of secure PDP liveliness shows up quickly
-    const auto lease_duration = eprosima::fastrtps::Duration_t(3, 0);
-    const auto announcement_period = eprosima::fastrtps::Duration_t(1, 0);
+    const auto lease_duration = eprosima::fastdds::dds::Duration_t(3, 0);
+    const auto announcement_period = eprosima::fastdds::dds::Duration_t(1, 0);
     // Use UDP transport to later block the fallback participant DATA(P) traffic
     auto reader_transport = std::make_shared<test_UDPv4TransportDescriptor>();
     auto writer_transport = std::make_shared<test_UDPv4TransportDescriptor>();
@@ -1404,7 +1402,8 @@ TEST(Security, SecureParticipantsDoNotLoseDiscoveryWithoutUserTraffic)
 
     // After the secure PDP endpoints are established, stop the unprotected participant DATA(P)
     // traffic, to depend on the secure liveliness maintenance path
-    test_UDPv4Transport::always_drop_participant_builtin_topic_data = true;
+    reader_transport->test_transport_options->always_drop_participant_builtin_topic_data = true;
+    writer_transport->test_transport_options->always_drop_participant_builtin_topic_data = true;
 
     // Exercise the idle scenario twice to catch both immediate loss and unstable recovery/rematch behavior
     ASSERT_NO_FATAL_FAILURE(assert_idle_period_keeps_discovery());
@@ -1453,7 +1452,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoSecureParticipantsWithDiffere
     fill_crypto(sub_property_policy);
 
     reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -1464,7 +1463,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoSecureParticipantsWithDiffere
     fill_crypto(pub_property_policy);
 
     writer.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(pub_property_policy).init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -1514,7 +1513,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoParticipantsDifferentCertific
     fill_crypto(sub_property_policy);
 
     reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(sub_property_policy).init();
 
     ASSERT_TRUE(reader.isInitialized());
@@ -1525,7 +1524,7 @@ TEST(Security, AllowUnauthenticatedParticipants_TwoParticipantsDifferentCertific
     fill_crypto(pub_property_policy);
 
     writer.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).
             property_policy(pub_property_policy).init();
 
     ASSERT_TRUE(writer.isInitialized());
@@ -1556,17 +1555,17 @@ TEST(Security, InANonSecureParticipantWithTwoSecureParticipantScenario_TheTwoSec
     CommonPermissionsConfigure(secure_reader, secure_writer, governance_file, permissions_file);
 
     secure_writer.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(secure_writer.isInitialized());
 
     non_secure_reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(non_secure_reader.isInitialized());
 
     secure_reader.history_depth(10).
-            reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS).init();
+            reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS).init();
 
     ASSERT_TRUE(secure_reader.isInitialized());
 
@@ -1707,8 +1706,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_encrypt.smime");
@@ -1721,8 +1718,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_encrypt.smime");
@@ -1735,8 +1730,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_encrypt.smime");
@@ -1749,8 +1742,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_encrypt.smime");
@@ -1860,8 +1851,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_none.smime");
@@ -1874,8 +1863,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_none.smime");
@@ -1888,8 +1875,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_none.smime");
@@ -1901,8 +1886,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_none.smime");
@@ -2012,8 +1995,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_sign.smime");
@@ -2026,8 +2007,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_sign.smime");
@@ -2040,8 +2019,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_sign.smime");
@@ -2054,8 +2031,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_va
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryDisableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_disable_access_sign.smime");
@@ -2165,8 +2140,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_encrypt.smime");
@@ -2179,8 +2152,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_encrypt.smime");
@@ -2193,8 +2164,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_encrypt.smime");
@@ -2208,8 +2177,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_encrypt.smime");
@@ -2318,8 +2285,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_none.smime");
@@ -2332,8 +2297,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_none.smime");
@@ -2346,8 +2309,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_none.smime");
@@ -2360,8 +2321,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_none.smime");
@@ -2470,8 +2429,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_sign.smime");
@@ -2484,8 +2441,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_sign.smime");
@@ -2498,8 +2453,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_sign.smime");
@@ -2512,8 +2465,6 @@ TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsDisableDiscoveryEnableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_disable_discovery_enable_access_sign.smime");
@@ -2622,8 +2573,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_encrypt.smime");
@@ -2636,8 +2585,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_encrypt.smime");
@@ -2650,8 +2597,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_encrypt.smime");
@@ -2664,8 +2609,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_encrypt.smime");
@@ -2774,8 +2717,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_none.smime");
@@ -2788,8 +2729,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_none.smime");
@@ -2802,8 +2741,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_none.smime");
@@ -2816,8 +2753,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_none.smime");
@@ -2926,8 +2861,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_sign.smime");
@@ -2940,8 +2873,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_sign.smime");
@@ -2954,8 +2885,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_sign.smime");
@@ -2968,8 +2897,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_val
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryDisableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_disable_access_sign.smime");
@@ -3078,8 +3005,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_v
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_encrypt.smime");
@@ -3092,8 +3017,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_v
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_encrypt.smime");
@@ -3106,8 +3029,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_v
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_encrypt.smime");
@@ -3120,8 +3041,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_v
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_encrypt.smime");
@@ -3230,8 +3149,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_none.smime");
@@ -3244,8 +3161,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_none.smime");
@@ -3258,8 +3173,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_none.smime");
@@ -3272,8 +3185,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_none.smime");
@@ -3382,8 +3293,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_sign.smime");
@@ -3396,8 +3305,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_sign.smime");
@@ -3410,8 +3317,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_sign.smime");
@@ -3424,8 +3329,6 @@ TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_vali
 TEST_P(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_sign.smime");
@@ -3534,8 +3437,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_va
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_encrypt.smime");
@@ -3548,8 +3449,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_va
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_encrypt.smime");
@@ -3562,8 +3461,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_va
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_encrypt.smime");
@@ -3576,8 +3473,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_va
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_encrypt.smime");
@@ -3686,8 +3581,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_none.smime");
@@ -3700,8 +3593,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_none.smime");
@@ -3714,8 +3605,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_none.smime");
@@ -3728,8 +3617,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_none.smime");
@@ -3838,8 +3725,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_sign.smime");
@@ -3852,8 +3737,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_sign.smime");
@@ -3866,8 +3749,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_sign.smime");
@@ -3880,8 +3761,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_valid
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryDisableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_disable_access_sign.smime");
@@ -3990,8 +3869,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_val
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_encrypt.smime");
@@ -4004,8 +3881,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_val
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_encrypt.smime");
@@ -4018,8 +3893,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_val
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_encrypt.smime");
@@ -4032,8 +3905,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_val
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_encrypt.smime");
@@ -4142,8 +4013,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_none.smime");
@@ -4156,8 +4025,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_none.smime");
@@ -4170,8 +4037,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_none.smime");
@@ -4184,8 +4049,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessNone_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_none.smime");
@@ -4294,8 +4157,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_validation_ok_enable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_sign.smime");
@@ -4308,8 +4169,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_validation_ok_disable_discovery_enable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_sign.smime");
@@ -4322,8 +4181,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_validation_ok_disable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_sign.smime");
@@ -4336,8 +4193,6 @@ TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_valida
 TEST_P(Security, SecurityPlugins_PermissionsSignDiscoveryEnableAccessSign_validation_ok_enable_discovery_disable_access_sign)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<HelloWorldPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<HelloWorldPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_sign_discovery_enable_access_sign.smime");
@@ -4369,8 +4224,6 @@ TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_valida
 TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessNone_validation_ok_enable_discovery_enable_access_sign_large)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_none.smime");
@@ -4404,8 +4257,6 @@ TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_val
 TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessEncrypt_validation_ok_enable_discovery_enable_access_sign_large)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_encrypt.smime");
@@ -4439,8 +4290,6 @@ TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_valida
 TEST(Security, SecurityPlugins_PermissionsEnableDiscoveryEnableAccessSign_validation_ok_enable_discovery_enable_access_sign_large)
 // *INDENT-ON*
 {
-    FASTDDS_TODO_BEFORE(3, 7, "SIGN protection is not working when combined with other protection kinds");
-    GTEST_SKIP() << "SIGN protection is not working when combined with other protection kinds";
     PubSubReader<Data1mbPubSubType> reader(TEST_TOPIC_NAME);
     PubSubWriter<Data1mbPubSubType> writer(TEST_TOPIC_NAME);
     std::string governance_file("governance_enable_discovery_enable_access_sign.smime");
@@ -4495,8 +4344,8 @@ TEST(Security, MaliciousHeartbeatIgnore)
     reader.add_to_unicast_locator_list("127.0.0.1", 7000);
 
     // Set common QoS
-    reader.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    reader.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
 
     // Configure security
     const std::string governance_file("governance_helloworld_all_enable.smime");
@@ -4608,8 +4457,8 @@ TEST_P(Security, MaliciousParticipantRemovalIgnore)
     };
 
     // Set common QoS
-    reader.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
-    writer.history_depth(10).reliability(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS);
+    reader.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
+    writer.history_depth(10).reliability(eprosima::fastdds::dds::RELIABLE_RELIABILITY_QOS);
 
     // Configure security
     const std::string governance_file("governance_helloworld_all_enable.smime");
@@ -5069,7 +4918,7 @@ TEST(Security, participant_stateless_secure_writer_pool_change_is_removed_upon_a
     auto test_transport = std::make_shared<test_UDPv4TransportDescriptor>();
 
     // Filter to drop participant stateless messages
-    test_transport->drop_data_messages_filter_ = [](eprosima::fastrtps::rtps::CDRMessage_t& msg)
+    test_transport->drop_data_messages_filter_ = [](eprosima::fastdds::rtps::CDRMessage_t& msg)
             -> bool
             {
                 auto old_pos = msg.pos;
@@ -5083,7 +4932,7 @@ TEST(Security, participant_stateless_secure_writer_pool_change_is_removed_upon_a
                     (char*)&msg.buffer[msg.pos]);
                 msg.pos = old_pos;
 
-                if (writer_entity_id == eprosima::fastrtps::rtps::participant_stateless_message_writer_entity_id)
+                if (writer_entity_id == eprosima::fastdds::rtps::participant_stateless_message_writer_entity_id)
                 {
                     // Drop the message if the message comes from participant generic message
                     return true;
@@ -5172,9 +5021,6 @@ static void security_datagram_injection_on_reader_test(
         const std::string& topic_name,
         const char* datagram_file)
 {
-    using eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
-    using eprosima::fastdds::rtps::DatagramInjectionTransport;
-
     PubSubReader<HelloWorldPubSubType> reader(topic_name);
 
     // Configure security
@@ -5209,9 +5055,6 @@ static void security_datagram_injection_on_reader_test(
  */
 TEST(Security, DatagramInjectionOnReader_23831)
 {
-    using eprosima::fastdds::rtps::DatagramInjectionTransportDescriptor;
-    using eprosima::fastdds::rtps::DatagramInjectionTransport;
-
     // Force using UDP transport
     auto udp_transport = std::make_shared<UDPv4TransportDescriptor>();
 
@@ -5335,7 +5178,7 @@ TEST(Security, ConcurrentLocalReaderRegistration_25676)
     ASSERT_NE(participant, nullptr);
 
     TypeSupport type(new HelloWorldPubSubType());
-    ASSERT_EQ(ReturnCode_t::RETCODE_OK, participant->register_type(type));
+    ASSERT_EQ(RETCODE_OK, participant->register_type(type));
 
     Subscriber* subscriber = participant->create_subscriber(SUBSCRIBER_QOS_DEFAULT);
     ASSERT_NE(subscriber, nullptr);
@@ -5617,7 +5460,7 @@ TEST(Security, RemoveParticipantAfterIdentityCertificateExpires)
     // B's reader had one matched writer (A); C was a pure reader so B's count stays at one.
     ASSERT_EQ(pubsub_reader->get_matched(), 1u);
     // C's reader had one matched writer (A); after revocation it should have zero.
-    ASSERT_EQ(expiring_reader->get_matched(), 0);
+    ASSERT_EQ(expiring_reader->get_matched(), 0u);
 
     //! 12. After rekey, A and B must still be matched and able to exchange data.
     ASSERT_TRUE(pubsub_writer->is_matched());
@@ -5951,7 +5794,7 @@ public:
     }
 
     bool init(
-            const eprosima::fastrtps::rtps::PropertyPolicy& property_policy,
+            const eprosima::fastdds::rtps::PropertyPolicy& property_policy,
             const std::string& secure_topic_name,
             const std::string& plain_topic_name,
             bool as_writer)
@@ -5977,7 +5820,7 @@ public:
         }
 
         TypeSupport type(new HelloWorldPubSubType());
-        if (ReturnCode_t::RETCODE_OK != participant_->register_type(type))
+        if (RETCODE_OK != participant_->register_type(type))
         {
             return false;
         }
@@ -5987,8 +5830,8 @@ public:
         std::string secure_name = secure_topic_name + suffix.str();
         std::string plain_name  = plain_topic_name  + suffix.str();
 
-        secure_topic_ = participant_->create_topic(secure_name, type->getName(), TOPIC_QOS_DEFAULT);
-        plain_topic_  = participant_->create_topic(plain_name,  type->getName(), TOPIC_QOS_DEFAULT);
+        secure_topic_ = participant_->create_topic(secure_name, type->get_name(), TOPIC_QOS_DEFAULT);
+        plain_topic_  = participant_->create_topic(plain_name,  type->get_name(), TOPIC_QOS_DEFAULT);
 
         if (!secure_topic_ || !plain_topic_)
         {
@@ -6123,7 +5966,7 @@ public:
         sample.index(index);
         sample.message(message);
 
-        if (!writer->write(&sample))
+        if (RETCODE_OK != writer->write(&sample))
         {
             std::cout << "[" << label << "] write failed" << std::endl;
             return false;
@@ -6134,7 +5977,7 @@ public:
         SampleInfo info;
         while (std::chrono::steady_clock::now() < deadline)
         {
-            if (ReturnCode_t::RETCODE_OK == reader->take_next_sample(&recv, &info))
+            if (RETCODE_OK == reader->take_next_sample(&recv, &info))
             {
                 if (info.valid_data)
                 {

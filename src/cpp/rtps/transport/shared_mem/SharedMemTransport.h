@@ -15,13 +15,14 @@
 #ifndef _FASTDDS_SHAREDMEM_TRANSPORT_H_
 #define _FASTDDS_SHAREDMEM_TRANSPORT_H_
 
-#include <fastdds/rtps/transport/TransportInterface.h>
-#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
+#include <fastdds/rtps/transport/TransportInterface.hpp>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.hpp>
 
 #include <rtps/transport/shared_mem/SharedMemManager.hpp>
 #include <rtps/transport/shared_mem/SharedMemLog.hpp>
 
 #include <map>
+#include <asio.hpp>
 
 namespace eprosima {
 namespace fastdds {
@@ -45,13 +46,13 @@ class SharedMemTransport : public TransportInterface
 {
 public:
 
-    RTPS_DllAPI SharedMemTransport(
+    FASTDDS_EXPORTED_API SharedMemTransport(
             const SharedMemTransportDescriptor&);
 
     const SharedMemTransportDescriptor* configuration() const;
 
     bool init(
-            const fastrtps::rtps::PropertyPolicy* properties = nullptr,
+            const PropertyPolicy* properties = nullptr,
             const uint32_t& max_msg_size_no_frag = 0) override;
 
     ~SharedMemTransport() override;
@@ -97,7 +98,7 @@ public:
      */
     bool OpenOutputChannels(
             SendResourceList& sender_resource_list,
-            const fastrtps::rtps::LocatorSelectorEntry& locator_selector_entry) override;
+            const LocatorSelectorEntry& locator_selector_entry) override;
 
     /**
      * Converts a given remote locator (that is, a locator referring to a remote
@@ -157,19 +158,19 @@ public:
     /**
      * Blocking Send through the specified channel. In both modes, using a localLocator of 0.0.0.0 will
      * send through all whitelisted interfaces provided the channel is open.
-     * @param send_buffer Slice into the raw data to send.
-     * @param send_buffer_size Size of the raw data. It will be used as a bounds check for the previous argument.
-     * It must not exceed the send_buffer_size fed to this class during construction.
+     * @param buffers Vector of buffers to send.
+     * @param send_buffer_size Total amount of bytes to send. It will be used as a bounds check for the previous
+     * argument. It must not exceed the send_buffer_size fed to this class during construction.
      * @param socket channel we're sending from.
      * @param remote_locator Locator describing the remote destination we're sending to.
      * @param only_multicast_purpose
      * @param timeout Maximum time this function will block
      */
     virtual bool send(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
-            fastrtps::rtps::LocatorsIterator* destination_locators_begin,
-            fastrtps::rtps::LocatorsIterator* destination_locators_end,
+            const std::vector<NetworkBuffer>& buffers,
+            uint32_t total_bytes,
+            LocatorsIterator* destination_locators_begin,
+            LocatorsIterator* destination_locators_end,
             const std::chrono::steady_clock::time_point& max_blocking_time_point);
 
     /**
@@ -186,7 +187,7 @@ public:
      * @param [in, out] selector Locator selector.
      */
     void select_locators(
-            fastrtps::rtps::LocatorSelector& selector) const override;
+            LocatorSelector& selector) const override;
 
     bool fillMetatrafficMulticastLocator(
             Locator& locator,
@@ -198,7 +199,7 @@ public:
 
     bool configureInitialPeerLocator(
             Locator& locator,
-            const fastrtps::rtps::PortParameters& port_params,
+            const PortParameters& port_params,
             uint32_t domainId,
             LocatorList& list) const override;
 
@@ -224,6 +225,10 @@ private:
     bool is_locator_allowed(
             const Locator&) const override;
 
+    //! Checks for whether locator is reachable.
+    bool is_locator_reachable(
+            const Locator_t&) override;
+
 protected:
 
     std::shared_ptr<SharedMemManager> shared_mem_manager_;
@@ -231,6 +236,8 @@ protected:
 private:
 
     void clean_up();
+
+    mutable std::mutex opened_ports_mutex_;
 
     std::map<uint32_t, std::shared_ptr<SharedMemManager::Port>> opened_ports_;
 
@@ -259,9 +266,15 @@ protected:
 
 private:
 
+    /**
+     * Copies a Vector of buffers into the shared_buffer.
+     * @param buffers Vector of buffers to copy.
+     * @param total_bytes Total amount of bytes of the whole list of buffers.
+     * @param max_blocking_time_point Maximum time this function will block.
+     */
     std::shared_ptr<SharedMemManager::Buffer> copy_to_shared_buffer(
-            const fastrtps::rtps::octet* send_buffer,
-            uint32_t send_buffer_size,
+            const std::vector<NetworkBuffer>& buffers,
+            const uint32_t total_bytes,
             const std::chrono::steady_clock::time_point& max_blocking_time_point);
 
     bool send(
