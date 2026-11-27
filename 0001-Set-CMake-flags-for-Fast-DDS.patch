@@ -1,4 +1,4 @@
-From e9245b566738dc8d392667783ca13443be380ea8 Mon Sep 17 00:00:00 2001
+From 385f9b0aa80f9fd7f929d010a684e43cf68fb792 Mon Sep 17 00:00:00 2001
 From: Scott K Logan <logans@cottsay.net>
 Date: Wed, 20 Jan 2021 12:08:26 -0800
 Subject: [PATCH] Set CMake flags for Fast-DDS
